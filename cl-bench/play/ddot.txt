@@ -1,0 +1,203 @@
+Path: news.laas.fr!news.cict.fr!cines.fr!ciril.fr!deine.net!newsfeed00.sul.t-online.de!newsfeed01.sul.t-online.de!t-online.de!news.belwue.de!news.uni-stuttgart.de!news.urz.uni-heidelberg.de!not-for-mail
+From: Nicolas Neuss <Nicolas.Neuss@iwr.uni-heidelberg.de>
+Newsgroups: comp.lang.lisp
+Subject: Floating-point performance of Lisp compared to C
+Date: 05 Jul 2002 12:22:35 +0200
+Organization: IWR
+Lines: 187
+Message-ID: <87hejefp90.fsf@ortler.iwr.uni-heidelberg.de>
+NNTP-Posting-Host: ortler.iwr.uni-heidelberg.de
+X-Trace: news.urz.uni-heidelberg.de 1025864555 4971 129.206.120.136 (5 Jul 2002 10:22:35 GMT)
+X-Complaints-To: usenet@news.urz.uni-heidelberg.de
+NNTP-Posting-Date: 5 Jul 2002 10:22:35 GMT
+X-Newsreader: Gnus v5.7/Emacs 20.7
+Xref: news.laas.fr comp.lang.lisp:80424
+
+Hello, Lispers.
+
+In spite of Erik's nice signature I have chosen for this message, too,
+I'm still interested in low-level performance of my programs.  In my
+case (I'm doing numerical analysis for partial differential
+equations), it is especially the floating point performance which
+matters.  I'm using CMUCL and it doesn't perform badly in comparison
+with C, at least on my computer (some of you will remember that they
+helped me with my first steps in CL exactly at this problem).
+
+Now, what I would like to have is some more data, about how Lisp
+implementations run this program.  Especially, I would be interested
+with CMUCL on SUN workstations, ACL, Lispworks, ... on X86 and other
+architectures.  If someone would like to test it, please go ahead.
+I'm very interested in the results.  Please always report the results
+for the C program
+
+Nicolas.
+
+P.S.: The demo versions for commercial Lisps will probably not
+allocate the memory needed by the program.  Also: don't be too
+disappointed if your Lisp does not perform very well.  Floating-point
+performance ist not of highest importance for most of applications.
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;  mflop.lisp
+;;;;  (C) Nicolas Neuss (Nicolas.Neuss@iwr.uni-heidelberg.de)
+;;;;  mflop.lisp is in the public domain.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defconstant +N-long+ #x100000)  ; does not fit in secondary cache
+(defconstant +N-short+ #x100)    ; fits in primary cache
+
+(defparameter *mflop-delta* 5.0
+  "Time interval in seconds over which we measure performance.")
+
+(defun make-double-float-array (size &optional (initial 0.0d0))
+   (make-array size :element-type 'double-float :initial-element initial))
+
+(defun ddot (x y n)
+  (declare (type fixnum n)
+	   (type (simple-array double-float (*)) x y))
+  (declare (optimize (safety 0) (space 0) (debug 0) (speed 3)))
+  (loop for i fixnum from 0 below n
+	summing (* (aref x i) (aref y i)) double-float))
+
+(defun daxpy (x y n)
+  (declare (type fixnum n)
+	   (type (simple-array double-float (*)) x y))
+  (declare (optimize (safety 0) (space 0) (debug 0) (speed 3)))
+  (loop with s double-float = 0.3d0
+	for i from 0 below n do
+	(setf (aref x i) (+ (* s (aref y i))))))
+
+(defun test (fn size)
+  (let ((x (make-double-float-array +N-long+))
+	(y (make-double-float-array +N-long+)))
+    (format
+     t "~A-~A: ~$ MFLOPS~%"
+     fn
+     (if (= size +N-long+) "long" "short")
+     (loop with after = 0
+	   for before = (get-internal-run-time) then after
+	   and count = 1 then (* count 2)
+	   do
+	   (loop repeat count do (funcall fn x y size))
+	   (setq after (get-internal-run-time))
+	   (when (> (/ (- after before) internal-time-units-per-second)
+		    *mflop-delta*)
+	     (return (/ (* 2 size count internal-time-units-per-second)
+			(* 1e6 (- after before)))))))))
+
+(defun mflop-test ()
+  "Returns several numbers characteristic for floating point efficiency of
+your CL implementation.  Please compare these numbers to those obtained by
+the C version in mflop.c."
+  (test 'ddot +N-long+)
+  (test 'ddot +N-short+)
+  (test 'daxpy +N-long+)
+  (test 'daxpy +N-short+))
+
+#+ignore (mflop-test)
+
+
+
+/**********************************************************************
+  mflop.c -- performance testing
+  (C) Nicolas Neuss (Nicolas.Neuss@iwr.uni-heidelberg.de)
+  mflop.c is public domain.
+**********************************************************************/
+
+/* Reasonable compilation lines are
+   Linux:          gcc -O3 mflop.c
+   IRIS Octane:    cc -Ofast mflop.c
+   Sparc Ultra II: cc -fast mflop.c
+   IBM RS6000/590: xlc -O3 -qarch=pwrx -qtune=pwrx mflop.c */
+
+#include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define MFLOP_DELTA 5.0 /* time interval over which we measure performance */
+#define Nlong 1000000   /* does not fit in secondary cache */
+#define Nshort 256      /* fits in primary cache */
+
+#define CURRENT_TIME (((double)clock()) / ((double)CLOCKS_PER_SEC))
+
+double ddot (double *x, double *y, int n) {
+	int j;
+	double s = 0.0;
+	for (j=0; j<n; j++)
+		s += x[j]*y[j];
+	return s;
+}
+double daxpy (double *x, double *y, int n) {
+	int j;
+	double s = 0.1;
+	for (j=0; j<n; j++)
+		y[j] += s*x[j];
+	return 0.0;
+}
+typedef double testfun (double *, double *, int n);
+
+void test (testfun f, char *name, int n) {
+	int i, nr;
+	double start_time, end_time;
+	double s = 0.0;
+	double *x = (double *) malloc(sizeof(double)*Nlong);
+	double *y = (double *) malloc(sizeof(double)*Nlong);
+	for (i=0; i<Nlong; i++)
+		x[i] = 0.0; y[i] = 0.9;
+	nr = 1;
+	do {
+		nr = 2*nr;
+		start_time = CURRENT_TIME;
+		for (i=0; i<nr; i++)
+			s += f(x, y, n);
+		end_time = CURRENT_TIME;
+	} while (end_time-start_time<MFLOP_DELTA);
+	printf ("%s%s %4.2f MFLOPS\n", name, ((n==Nlong) ? "-long":"-short"),
+			1.0e-6*2*n*(s+nr/(end_time-start_time)));
+}
+
+int main (void) {
+	test(ddot, "ddot", Nlong);
+	test(ddot, "ddot", Nshort);
+	test(daxpy, "daxpy", Nlong);
+	test(daxpy, "daxpy", Nshort);
+	return 0;
+}
+
+
+
+
+Sample results for my Toshiba TECRA 8000 Laptop:
+
+CMUCL:
+* ;;; Evaluate mflop-test
+DDOT-long: 42.01 MFLOPS
+DDOT-short: 108.90 MFLOPS
+DAXPY-long: 23.46 MFLOPS
+DAXPY-short: 136.26 MFLOPS
+NIL
+
+gcc -O3 mflop-neu.c; a.out
+ddot-long 62.75 MFLOPS
+ddot-short 178.36 MFLOPS
+daxpy-long 22.82 MFLOPS
+daxpy-short 119.70 MFLOPS
+
+
+Speed disadvantage of CMUCL:
+
+ddot-long: 1.7
+ddot-short: 0.61
+daxpy-long: 1.0
+daxpy-short: 0.9
+
+
+
+-- 
+
+  Performance is the last refuge of the miserable programmer.
+           -- Erik Naggum
+
+

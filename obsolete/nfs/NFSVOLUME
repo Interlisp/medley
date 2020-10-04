@@ -1,0 +1,45 @@
+(DEFINE-FILE-INFO PACKAGE "NFS" READTABLE "XCL")
+(il:filecreated "18-Apr-90 18:00:50" "{piglet/n}<piglet>nfs>sources>NFSVOLUME;11" 5881   
+
+      il:|changes| il:|to:|  (il:functions find-volume)
+
+      il:|previous| il:|date:| "13-Oct-89 16:01:54" "{piglet/n}<piglet>nfs>sources>NFSVOLUME;10")
+
+
+; Copyright (c) 1989, 1990 by Xerox Corporation.  All rights reserved.
+
+(il:prettycomprint il:nfsvolumecoms)
+
+(il:rpaqq il:nfsvolumecoms ((il:functions read-auto-entry auto-whitespacep find-volume find-volume-lookup create-volume-map make-volume-hash) (il:variables *nfs-volume-map* *volume-map-name* *auto-mount-names*) (il:addvars (il:\\systemcachevars *nfs-volume-map*) (*nfs-cache-vars* *nfs-volume-map*)) (il:p (export (quote (find-volume read-volume-map *volume-map-name* *auto-mount-names*)))) (il:prop (il:makefile-environment il:filetype) il:nfsvolume)))
+
+(defun read-auto-entry (line) (il:* il:|;;| "Reads a line from an auto.mumble map and returns (host . path), or NIL if the line is malformed.") (il:* il:|;;| "Line is of the form <whitespace> host:path <whitespace> <anything>, but <whitespace> can be \"edge of line\".") (let ((colon (position #\: line))) (and colon (let* ((end (position-if (quote auto-whitespacep) line :start colon)) (host (subseq line (1+ (or (position-if (quote auto-whitespacep) line :end colon :from-end t) -1)) colon)) (path (subseq line (1+ colon) end)) (pathcolon (position #\: path)) (dirpath (cond (pathcolon (il:* il:\; "Path is actually mountpoint:rest-of-path.  We don't care about this subtlety") (concatenate (quote string) (subseq path 0 pathcolon) "/" (subseq path (if (eql (char path (1+ pathcolon)) #\/) (+ 2 pathcolon) (1+ pathcolon))))) (t path)))) (il:* il:|;;| "Entry now broken into host and directory.  On Maiko, this is enough, since the local file system will further munge these strings beyond our control.  On D machine, parse into (devicename . parsed-path) so we don't have to do this work every time") (if (eq il:\\machinetype il:\\maiko) (cons host dirpath) (cons (il:pack* (string-upcase host) "/N") (parse-dir-string (escape-uppercase-chars dirpath 1 nil t))))))))
+
+(defun auto-whitespacep (c) (or (eq c #\Space) (eq c #\Tab)))
+
+(defun find-volume (volname &optional dirlst) (il:* il:|;;| "Returns a cons of 2 values: a host name and a parsed directory path (i.e. dirs in reverse order) describing where to find the volume VOLNAME.  NIL if not in map.  If DIRLST is supplied, it is destructively modified (if possible) and the returned directory path is the concatenation of the volume location and rest of DIRLST.") (let ((hash (or *nfs-volume-map* (create-volume-map))) host entry) (cond ((eq hash t) nil) ((eq (setq entry (find-volume-lookup volname hash)) t) (il:* il:\; "Not found ") nil) ((and (consp entry) (not (hash-table-p (setq host (car entry))))) (il:* il:\; "Normal case, Entry = (\"host\" . \"/path...\")") (cond (dirlst (cons host (nconc (butlast dirlst 1) (cdr entry)))) (t entry))) ((cdr dirlst) (il:* il:|;;| "Handle automount entry.  Next dir is pseudo, something to be looked up somehow.  Skip this if not enough more dirs to look at.  In particular, on Maiko, the host os handles automount, so the call to find-volume passes dirlst = nil.") (let ((tail (il:nleft dirlst 2))) (il:* il:\; "CAR of this is the next dir") (cond (host (il:* il:\; "Look up next dir in this table") (and (not (eq t (setq entry (find-volume-lookup (car tail) entry)))) (cons (car entry) (nconc (nbutlast dirlst 2) (cdr entry))))) ((eq entry :net) (il:* il:\; "Host is next dir") (cons (il:pack* (string-upcase (car tail)) "/N") (nbutlast dirlst 2)))))))))
+
+(defun find-volume-lookup (volname map) (il:* il:|;;| "Look up volname in map, which is a pair (hashtable . mapname).  This may do a yp lookup.") (let ((entry (gethash volname (car map)))) (cond (entry) (t (il:* il:\; "Not looked up yet") (setf (gethash volname (car map)) (or (and (setq entry (yp:yp-match (cdr map) (downcase-unquoted-chars volname))) (read-auto-entry entry)) t))))))
+
+(defun create-volume-map nil (il:* il:|;;| "Creates the hash array mapping volume name to (host path).") (setq *nfs-volume-map* (and *volume-map-name* (let ((map (make-volume-hash *volume-map-name*))) (when (consp map) (dolist (other *auto-mount-names*) (il:* il:\; "More things to add to map") (setf (gethash (car other) (car map)) (case (cdr other) (:net (il:* il:\; "Special case: /net/foo means look on host foo") :net) (t (il:* il:\; "Name of a map") (make-volume-hash (cdr other))))))) map))))
+
+(defun make-volume-hash (mapname) (il:* il:|;;| "Return an object for caching entries in MAPNAME.  Value is (hashtable . mapname).  Keys in the hash table are to be keys in the map.  ") (let ((test (block testblk (yp:read-map mapname (function (lambda (key line) (il:* il:\; "Map is readable, so get out now") (return-from testblk nil))))))) (cond ((and test (symbolp test)) (il:* il:\; "error return") (format il:promptwindow "~&Can't read YP map ~A because: ~A" mapname test) nil) (t (il:* il:\; "map is ok, so return a hash pair") (cons (il:hasharray 10 nil (quote il:string-equal-hashbits) (quote string-equal)) mapname)))))
+
+(defglobalparameter *nfs-volume-map* nil "Maintains map from volume name to host & path")
+
+(defvar *volume-map-name* "auto.volume" "Name of the YP map used to map volumes to hosts")
+
+(defvar *auto-mount-names* nil "A-list of names to do 'automount' for.  Car is the pseudo-volume name, cdr is the yp map.")
+
+(il:addtovar il:\\systemcachevars *nfs-volume-map*)
+
+(il:addtovar *nfs-cache-vars* *nfs-volume-map*)
+
+(export (quote (find-volume read-volume-map *volume-map-name* *auto-mount-names*)))
+
+(il:putprops il:nfsvolume il:makefile-environment (:package "NFS" :readtable "XCL"))
+
+(il:putprops il:nfsvolume il:filetype :compile-file)
+(il:putprops il:nfsvolume il:copyright ("Xerox Corporation" 1989 1990))
+(il:declare\: il:dontcopy
+  (il:filemap (nil)))
+il:stop

@@ -1,0 +1,484 @@
+(DEFINE-FILE-INFO PACKAGE "YP" READTABLE "XCL" BASE 10)
+(IL:FILECREATED " 3-Jun-93 14:37:24" IL:|{DSK}<project>medley2.0>nfs>YPIMPL.;7| 25855  
+
+      IL:|changes| IL:|to:|  (IL:FUNCTIONS MAIKO-BROADCAST-FOR-SERVERS)
+
+      IL:|previous| IL:|date:| " 7-Oct-92 12:41:01" IL:|{DSK}<project>medley2.0>nfs>YPIMPL.;6|)
+
+
+; Copyright (c) 1988, 1989, 1990, 1992, 1993 by Xerox Corporation.  All rights reserved.
+
+(IL:PRETTYCOMPRINT IL:YPIMPLCOMS)
+
+(IL:RPAQQ IL:YPIMPLCOMS
+          (
+           (IL:* IL:|;;| "Meat of YP.  Separate file to avoid recompiling the rpc def all the time")
+
+           (EVAL-WHEN (EVAL)
+                  (IL:PROPS (IL:YPIMPL IL:MAKEFILE-ENVIRONMENT)
+                         (IL:YPIMPL IL:FILETYPE)))
+           (IL:P (EXPORT '(YP YP-RESTART *YP-DOMAIN* *YP-SERVERS* *YP-NET-HINTS* *GIDS-FROM-USER-MAP*
+                              YP-CALL YP-MATCH GET-UID GET-USER-GIDS GROUP-GID UID-NAME GID-NAME 
+                              HOST-ADDRESS HOST-NAME READ-MAP INTEGER-FROM-STRING)))
+           (EVAL-WHEN (EVAL COMPILE)
+                  (IL:P (PROCLAIM '(GLOBAL IL:\\IP.HOSTNUMBERS IL:\\IP.HOSTNAMES IL:\\10MBLOCALNDB 
+                                          IL:\\IP.DEFAULT.GATEWAY IL:NETWORKOSTYPES))
+                        (PROCLAIM '(SPECIAL IL:PROMPTWINDOW))))
+           (IL:VARIABLES *UID-TO-NAME-TABLE* *GID-TO-NAME-TABLE* *GIDS-FROM-USER-MAP* *YP-DOMAIN* 
+                  *YP-SERVERS* *YP-NET-HINTS* *YP-PROGRAM* *YP-LOCK* *BROADCASTING*)
+           (IL:ADDVARS (IL:SYSTEMINITVARS (*YP-DOMAIN*)
+                              (*YP-NET-HINTS*)))
+           (IL:FUNCTIONS YP-RESTART READ-YP-INIT-FILE BROADCAST-FOR-SERVERS 
+                  MAIKO-BROADCAST-FOR-SERVERS D-BROADCAST-FOR-SERVERS)
+           (IL:FUNCTIONS YP-CALL YP-MATCH UID-NAME GID-NAME GROUP-GID GET-UID GET-USER-GIDS 
+                  HOST-ADDRESS RECORD-HOST-ADDRESS HOST-NAME READ-MAP INTEGER-FROM-STRING)
+           (EVAL-WHEN (LOAD)
+                  (IL:APPENDVARS (IL:RESTARTETHERFNS YP-RESTART))
+                  (IL:P 
+                        (IL:* IL:|;;| "Read the YP.INIT file right now so it's in the world when saved out.  Don't look for servers yet; we wouldn't use them if we did.")
+
+                        (YP-RESTART)))))
+
+
+
+(IL:* IL:|;;| "Meat of YP.  Separate file to avoid recompiling the rpc def all the time")
+
+(EVAL-WHEN (EVAL)
+
+(IL:PUTPROPS IL:YPIMPL IL:MAKEFILE-ENVIRONMENT (:PACKAGE "YP" :READTABLE "XCL" :BASE 10))
+
+(IL:PUTPROPS IL:YPIMPL IL:FILETYPE :COMPILE-FILE)
+)
+
+(EXPORT '(YP YP-RESTART *YP-DOMAIN* *YP-SERVERS* *YP-NET-HINTS* *GIDS-FROM-USER-MAP* YP-CALL YP-MATCH
+             GET-UID GET-USER-GIDS GROUP-GID UID-NAME GID-NAME HOST-ADDRESS HOST-NAME READ-MAP 
+             INTEGER-FROM-STRING))
+(EVAL-WHEN (EVAL COMPILE)
+
+(PROCLAIM '(GLOBAL IL:\\IP.HOSTNUMBERS IL:\\IP.HOSTNAMES IL:\\10MBLOCALNDB IL:\\IP.DEFAULT.GATEWAY 
+                  IL:NETWORKOSTYPES))
+
+(PROCLAIM '(SPECIAL IL:PROMPTWINDOW))
+)
+
+(DEFVAR *UID-TO-NAME-TABLE* (MAKE-HASH-TABLE))
+
+(DEFVAR *GID-TO-NAME-TABLE* (MAKE-HASH-TABLE))
+
+(DEFVAR *GIDS-FROM-USER-MAP* NIL
+   "Name of map that returns list of GIDs given user name.  If NIL, we invert (painfully) group.byname."
+)
+
+(DEFVAR *YP-DOMAIN* NIL)
+
+(DEFVAR *YP-SERVERS* NIL)
+
+(DEFVAR *YP-NET-HINTS* NIL)
+
+(DEFVAR *YP-PROGRAM* NIL
+   "Pointer to YP program object.  Set by YP-RESTART")
+
+(DEFGLOBALVAR *YP-LOCK* (IL:CREATE.MONITORLOCK "YP calls"))
+
+(DEFVAR *BROADCASTING* NIL
+   "True inside broadcast for servers call")
+
+(IL:ADDTOVAR IL:SYSTEMINITVARS (*YP-DOMAIN*)
+                                   (*YP-NET-HINTS*))
+
+(DEFUN YP-RESTART (&OPTIONAL EVENT)
+
+   (IL:* IL:|;;| "Called by around exit events and restart.ether.  Clear our knowledge of yp servers and start afresh")
+
+   (CASE EVENT
+       ((IL:AFTERLOGOUT IL:AFTERMAKESYS IL:AFTERSYSOUT IL:AFTERSAVEVM IL:RESTART NIL) 
+          (SETQ *YP-PROGRAM* (RPC2:FIND-RPC-PROGRAM :NAME 'YP))
+                                                             (IL:* IL:\; "Cache this")
+          (RPC2:CLEAR-CACHE *YP-PROGRAM*)                    (IL:* IL:\; "Forget about old sockets")
+          (DOLIST (S *YP-SERVERS*)                           (IL:* IL:\; "Close old streams")
+              (WHEN (THIRD S)
+                  (RPC2:CLOSE-RPCSTREAM (THIRD S))
+                  (RPLACD (CDR S)
+                         NIL)))
+          (SETQ *YP-SERVERS* NIL)
+          (CLRHASH *UID-TO-NAME-TABLE*)
+          (WHEN (OR (NULL *YP-NET-HINTS*)
+                    (NULL *YP-DOMAIN*))
+
+              (IL:* IL:|;;| "If we haven't a clue, read the file.")
+
+              (READ-YP-INIT-FILE T)))))
+
+(DEFUN READ-YP-INIT-FILE (NOWARNING)
+   (COND
+      ((PROBE-FILE "{dsk}yp.init")
+       (WITH-OPEN-FILE (YPINITFILE "{dsk}yp.init")
+              (DECLARE (SPECIAL IL:PROMPTWINDOW))
+              (FORMAT IL:PROMPTWINDOW "~&Reading ~A" (NAMESTRING YPINITFILE))
+              (SETQ *YP-DOMAIN* (READ YPINITFILE)
+                    *YP-NET-HINTS*
+                    (READ YPINITFILE))))
+      ((AND (NULL *YP-DOMAIN*)
+            (NOT NOWARNING))
+       (WARN "No YP.INIT file found.  You need to set yp:*yp-domain* in order to use yp."))))
+
+(DEFUN BROADCAST-FOR-SERVERS ()
+   (COND
+      ((NULL *YP-DOMAIN*)
+       (FORMAT IL:PROMPTWINDOW "~&YP:*YP-DOMAIN* is not set.")
+       NIL)
+      ((COND
+          ((EQ (IL:MACHINETYPE)
+               'IL:MAIKO)
+           (MAIKO-BROADCAST-FOR-SERVERS))
+          (T (D-BROADCAST-FOR-SERVERS))))
+      (T (FORMAT IL:PROMPTWINDOW "~&Couldn't find YP server for domain ~A." *YP-DOMAIN*)
+         NIL)))
+
+(DEFUN MAIKO-BROADCAST-FOR-SERVERS ()          (IL:* IL:\; "Edited  3-Jun-93 14:36 by rmk:")
+
+   (IL:* IL:|;;| "On Sun, we can't do broadcast call.  Just ask the local machine who a YP host is.  NLSETQ to avoid end-of-stream error (perhaps due to some sort of network delays?).  Try again 4 times before simply returning NIL.")
+
+   (IL:FOR I SERVER IL:FROM 1 IL:TO 4
+      IL:WHEN (SETQ SERVER (LET ((S (IL:CREATE-PROCESS-STREAM (CONCATENATE 'STRING "ypwhich -d "
+                                                                         *YP-DOMAIN*))))
+                                    (UNWIND-PROTECT
+                                        (LET ((SERVER (CAR (IL:NLSETQ (READ-LINE S)))))
+                                             (COND
+                                                ((AND SERVER (> (LENGTH SERVER)
+                                                                0)
+                                                      (NOT (POSITION #\Space SERVER)))
+
+                                                 (IL:* IL:|;;| 
+                                         "Assume any non-null response that's just one word is ok.")
+
+                                                 (FORMAT IL:PROMPTWINDOW "~&Using YP server ~A." 
+                                                        SERVER)
+                                                 (PUSH (SETQ SERVER (LIST *YP-DOMAIN* SERVER))
+                                                       *YP-SERVERS*)
+                                                 SERVER)))
+                                        (IL:UNIX-STREAM-CLOSE S)))) IL:DO (RETURN SERVER)))
+
+(DEFUN D-BROADCAST-FOR-SERVERS ()
+   (FORMAT IL:PROMPTWINDOW "~&Searching for YP server for domain ~A... " *YP-DOMAIN*)
+   (LET ((*BROADCASTING* T)
+         (HINTS *YP-NET-HINTS*)
+         (ARGS (LIST *YP-DOMAIN*)))
+        (WHEN IL:\\10MBLOCALNDB                              (IL:* IL:\; 
+                                    "Assume YP servers are only on 10mb nets.  Try local net first")
+            (PUSH 0 HINTS))
+        (DOTIMES (I 2)
+            (DOLIST (HINT HINTS)
+                (MULTIPLE-VALUE-BIND (RESULTS PORT ADDRESS)
+                       (LET ((RPC2:*MSEC-UNTIL-TIMEOUT* 1000)
+                             (RPC2:*MSEC-BETWEEN-TRIES* 300))(IL:* IL:\; 
+                              "Bind these in here so they don't affect the call to host-name below")
+                            (CONDITION-CASE (RPC2:CALL-VIA-PORTMAPPER HINT 'YP 
+                                                   'SERVE-DOMAIN-P-NO-NACK ARGS)
+                                   (RPC2:RPC-TIMEOUT NIL)))
+                       (WHEN ADDRESS
+                           (LET ((SERVER (LIST *YP-DOMAIN* ADDRESS)))
+                                (PUSH SERVER *YP-SERVERS*)
+                                (RPC2:CACHE-SOCKET *YP-PROGRAM* ADDRESS PORT)
+                                (FORMAT IL:PROMPTWINDOW " found ~a~%" (OR (HOST-NAME ADDRESS)
+                                                                          (IL:\\IP.ADDRESS.TO.STRING
+                                                                           ADDRESS)))
+                                (RETURN-FROM D-BROADCAST-FOR-SERVERS SERVER))))))
+
+        (IL:* IL:|;;| "Failed after 2 tries")
+
+        NIL))
+
+(DEFUN YP-CALL (PROC ARGS)
+
+   (IL:* IL:|;;| "Ask a YP server to do the call PROC on ARGS")
+
+   (IL:WITH.MONITOR *YP-LOCK*
+       (PROG ((RESTARTED *BROADCASTING*)
+              SERVER)
+         RESTART
+             (RETURN
+              (COND
+                 ((SETQ SERVER (COND
+                                  ((AND *YP-SERVERS* (EQ (CAAR *YP-SERVERS*)
+                                                         *YP-DOMAIN*))
+                                                             (IL:* IL:\; 
+                                                           "Small optimization for this usual case")
+                                   (CAR *YP-SERVERS*))
+                                  ((NULL *YP-DOMAIN*)
+                                   NIL)
+                                  ((ASSOC *YP-DOMAIN* *YP-SERVERS* :TEST #'STRING-EQUAL))
+                                  (T (BROADCAST-FOR-SERVERS))))
+                  (LET ((STRM (THIRD SERVER)))
+                       (WHEN (NULL STRM)                     (IL:* IL:\; "Cache an RPC stream here")
+                           (RPLACD (CDR SERVER)
+                                  (LIST (SETQ STRM (RPC2:OPEN-RPCSTREAM
+                                                    'RPC2:UDP
+                                                    (SECOND SERVER)
+                                                    'YP NIL #'(LAMBDA (STREAM COUNT)
+                                                             (IL:* IL:\; 
+                                      "If this call times out, we want to search for other servers")
+                                                                     (THROW 'YP-RESTART 'YP-RESTART))
+                                                    )))))
+                       (LET ((RESULT (HANDLER-BIND ((RPC2:RPC-ERROR
+                                                     (IF RESTARTED
+                                                         #'(LAMBDA (CONDITION)
+                                                             (IL:* IL:\; 
+                                                           "If get RPC error again, just report it")
+                                                                  (FORMAT IL:PROMPTWINDOW 
+                                                                    "~&YP call ~A failed because: ~A"
+                                                                         PROC CONDITION)
+                                                                  (THROW 'YP-RESTART NIL))
+                                                         #'(LAMBDA (CONDITION)
+                                                             (IL:* IL:\; 
+                                 "If get RPC error (e.g., no such program), give up on this server")
+                                                                  (THROW 'YP-RESTART 'YP-RESTART)))))
+                                            (CATCH 'YP-RESTART
+                                                   (RPC2:PERFORM-RPC NIL NIL *YP-PROGRAM* PROC STRM 
+                                                          ARGS NIL)))))
+                            (COND
+                               ((NOT (EQ RESULT 'YP-RESTART))(IL:* IL:\; "Valid result")
+                                RESULT)
+                               (RESTARTED                    (IL:* IL:\; 
+                                                "Already tried restarting once, so just return nil")
+                                      (FORMAT IL:PROMPTWINDOW "~&YP server timed out ~A call" PROC)
+                                      NIL)
+                               (T                            (IL:* IL:\; 
+                                                   "No response from server, so try another server")
+                                  (SETQ RESTARTED T)
+                                  (SETQ *YP-SERVERS* (DELETE SERVER *YP-SERVERS*))
+                                  (RPC2:CLOSE-RPCSTREAM STRM)
+                                  (GO RESTART)))))))))))
+
+(DEFUN YP-MATCH (MAP DATA &OPTIONAL (DOMAIN *YP-DOMAIN*))
+
+   (IL:* IL:|;;| "Call YP's MATCH-KEY procedure with the specified map, data and domain.  Returns NIL or a string of data")
+
+   (DESTRUCTURING-BIND (STATUS VALUE-DATA)
+          (YP-CALL 'MATCH-KEY (LIST DOMAIN MAP DATA))
+          (AND (EQ STATUS 'T)
+               VALUE-DATA)))
+
+(DEFUN UID-NAME (UID)
+   (OR (GETHASH UID *UID-TO-NAME-TABLE*)
+       (SETF (GETHASH UID *UID-TO-NAME-TABLE*)
+             (LET ((LINE (YP-MATCH "passwd.byuid" (WRITE-TO-STRING UID :BASE 10 :RADIX NIL))))
+                  (AND LINE (SUBSEQ LINE 0 (POSITION #\: LINE)))))))
+
+(DEFUN GID-NAME (GID)
+   (OR (GETHASH GID *GID-TO-NAME-TABLE*)
+       (SETF (GETHASH GID *GID-TO-NAME-TABLE*)
+             (LET ((LINE (YP-MATCH "group.bygid" (WRITE-TO-STRING GID :BASE 10 :RADIX NIL))))
+                  (AND LINE (SUBSEQ LINE 0 (POSITION #\: LINE)))))))
+
+(DEFUN GROUP-GID (GROUP-NAME)
+   (LET ((LINE (YP-MATCH "group.byname" GROUP-NAME))
+         COLON)
+
+        (IL:* IL:|;;| "Format of response data is \"group:*:gid:\"")
+
+        (AND LINE (SETQ COLON (POSITION #\: LINE))
+             (SETQ COLON (POSITION #\: LINE :START (1+ COLON)))
+             (INTEGER-FROM-STRING LINE (1+ COLON)
+                    (POSITION #\: LINE :START (1+ COLON))))))
+
+(DEFUN GET-UID (&OPTIONAL (USER-NAME (CAR (IL:\\INTERNAL/GETPASSWORD 'IL:--NFS-- NIL NIL NIL NIL
+                                                     'IL:UNIX))))
+   "Return values UID, GID, HOMEDIR"
+   (LET* ((UNAME (STRING-DOWNCASE (STRING USER-NAME)))
+          (LINE (YP-MATCH "passwd.byname" (IF (> (LENGTH UNAME)
+                                                     8)
+                                                  (SUBSEQ UNAME 0 8)
+                                                  UNAME))))
+         (COND
+            (LINE 
+                  (IL:* IL:|;;| "Format is \"name:encryptedpasswd:uid:gid:fullname:homedir:shell\"")
+
+                  (LET* ((FIRSTCOLON (POSITION #\: LINE))
+                         (SECONDCOLON (POSITION #\: LINE :START (1+ FIRSTCOLON)))
+                         (THIRDCOLON (POSITION #\: LINE :START (1+ SECONDCOLON)))
+                         (FOURTHCOLON (POSITION #\: LINE :START (1+ THIRDCOLON)))
+                         (FIFTHCOLON (POSITION #\: LINE :START (1+ FOURTHCOLON)))
+                         (SIXTHCOLON (POSITION #\: LINE :START (1+ FIFTHCOLON))))
+                        (VALUES (INTEGER-FROM-STRING LINE (1+ SECONDCOLON)
+                                       THIRDCOLON)
+                               (INTEGER-FROM-STRING LINE (1+ THIRDCOLON)
+                                      FOURTHCOLON)
+                               (SUBSEQ LINE (1+ FIFTHCOLON)
+                                      SIXTHCOLON)))))))
+
+(DEFUN GET-USER-GIDS (USER-NAME)
+   (UNLESS (STRINGP USER-NAME)
+       (SETQ USER-NAME (STRING USER-NAME)))
+   (LET
+    ((GIDS
+      (COND
+         (*GIDS-FROM-USER-MAP*                               (IL:* IL:\; 
+                                                     "There's already a nice inverted map, use it.")
+                (LET ((ENTRY (YP-MATCH *GIDS-FROM-USER-MAP* (IF (> (LENGTH USER-NAME)
+                                                                       8)
+                                                                    (SUBSEQ USER-NAME 0 8)
+                                                                    USER-NAME))))
+                     (AND ENTRY (LET ((*READ-BASE* 10))
+                                     (READ-FROM-STRING ENTRY)))))
+         (T
+
+          (IL:* IL:|;;| "Ugh, have to invert group.bygid manually.  I.e., enumerate it, and search for user-name in each entry.")
+
+          (LET
+           ((NAME-LENGTH (LENGTH USER-NAME)))
+           (READ-MAP
+            "group.bygid"
+            #'(LAMBDA (KEY LINE)
+
+                     (IL:* IL:|;;| 
+ "Format of LINE is \"groupname:*:id:members\", where members is list of users separated by commas")
+
+                     (LET ((COLON (POSITION #\: LINE)))
+                          (AND COLON (SETQ COLON (POSITION #\: LINE :START (1+ COLON)))
+                               (SETQ COLON (POSITION #\: LINE :START (1+ COLON)))
+                                                             (IL:* IL:\; 
+                                       "Proper format so far, so search for username among members")
+                               (LET ((START (+ COLON 2))
+                                     END)
+                                    (LOOP (UNLESS (SETQ START (IL:STRPOS USER-NAME LINE START))
+                                                             (IL:* IL:\; 
+                                      "Gosh, I'd use SEARCH instead, but STRPOS is 10 times faster")
+                                              (RETURN NIL))
+                                          (SETQ END (+ START NAME-LENGTH))
+                                          (CASE (CHAR LINE (- START 2))
+                                              ((#\: #\,)     (IL:* IL:\; 
+                                                           "Good, name started on name boundary")
+                                                 (WHEN (OR (>= END (LENGTH LINE))
+                                                           (EQL (CHAR LINE (1- END))
+                                                                #\,))
+                                                             (IL:* IL:\; 
+                                                           "Good, name ends on name boundary")
+                                                     (RETURN (INTEGER-FROM-STRING KEY)))))
+                                          (SETQ START END))))))))))))
+    (IF (LISTP GIDS)
+        GIDS
+        (FORMAT IL:PROMPTWINDOW "~&Couldn't find group IDs for user ~A because ~A" USER-NAME GIDS))))
+
+(DEFUN HOST-ADDRESS (HOSTNAME)
+   (LET ((LINE (YP-MATCH "hosts.byname" (STRING-DOWNCASE (STRING HOSTNAME)))))
+        (IF LINE
+            (LET* ((WSPOS (IL:STRPOSL '(#\Space #\Tab #\Linefeed #\Newline)
+                                 LINE))
+                   (ADDRESS (IL:\\IP.READ.STRING.ADDRESS (IL:SUBSTRING LINE 1 (AND WSPOS (1- WSPOS)))
+                                   )))
+                  (COND
+                     ((AND ADDRESS (NOT (EQL ADDRESS 0)))    (IL:* IL:\; 
+                                                           "Guard against malformed entries")
+                      (RECORD-HOST-ADDRESS (IL:MKATOM (IL:U-CASE HOSTNAME))
+                             ADDRESS)
+                      ADDRESS))))))
+
+(DEFUN RECORD-HOST-ADDRESS (HOSTSYMBOL ADDRESS)
+
+   (IL:* IL:|;;| "No-op unless for D machine")
+
+   (IL:* IL:|;;| "(SETF (GETHASH HOSTSYMBOL IL:\\\\IP.HOSTNAMES) (IL:|create| IL:HOSTS.TXT.ENTRY IL:HTE.ADDRESSES IL:_ (LIST ADDRESS) IL:HTE.TYPE IL:_ 'IL:HOST IL:HTE.NAMES IL:_ (LIST HOSTSYMBOL) IL:HTE.MACHINE.TYPE IL:_ 'IL:SUN IL:HTE.OS.TYPE IL:_ 'IL:UNIX)) (PUSHNEW (CONS HOSTSYMBOL 'IL:UNIX) IL:NETWORKOSTYPES :KEY 'CAR) (PUSHNEW (CONS ADDRESS HOSTSYMBOL) IL:\\\\IP.HOSTNUMBERS :KEY 'CAR)")
+
+   NIL)
+
+(DEFUN HOST-NAME (ADDRESS)
+   (LET* ((STRING (YP-MATCH "hosts.byaddr" (ETYPECASE ADDRESS
+                                                   (INTEGER (IL:\\IP.ADDRESS.TO.STRING ADDRESS))
+                                                   (STRING ADDRESS)
+                                                   (SYMBOL (STRING ADDRESS)))))
+          SHORTNAME)
+         (WHEN STRING
+             (DO* ((NAME)
+                   (LENGTH MOST-POSITIVE-FIXNUM)
+                   (THISNAME)
+                   (THISLENGTH)
+                   (LASTWS NIL WS)
+                   (WS (IL:STRPOSL '(#\Space #\Tab #\Newline #\Linefeed)
+                              STRING)
+                       (IL:STRPOSL '(#\Space #\Tab #\Newline #\Linefeed)
+                              STRING
+                              (1+ WS))))
+                  ((NULL WS)
+                   (SETQ SHORTNAME (IF (< (LENGTH (SETQ THISNAME (IL:SUBSTRING STRING (1+ LASTWS))))
+                                          LENGTH)
+                                       THISNAME
+                                       NAME)))
+                (WHEN (AND LASTWS (< (SETQ THISLENGTH (LENGTH (SETQ THISNAME (IL:SUBSTRING
+                                                                              STRING
+                                                                              (1+ LASTWS)
+                                                                              (1- WS)))))
+                                     LENGTH))
+                      (SETQ NAME THISNAME LENGTH THISLENGTH)))
+             (LET ((HOSTSYMBOL (IL:MKATOM (STRING-UPCASE SHORTNAME))))
+                  (PUSHNEW (CONS (IF (INTEGERP ADDRESS)
+                                     ADDRESS
+                                     (SETQ ADDRESS (IL:\\IP.READ.STRING.ADDRESS ADDRESS)))
+                                 HOSTSYMBOL)
+                         IL:\\IP.HOSTNUMBERS :KEY 'CAR)
+                  (UNLESS (GETHASH HOSTSYMBOL IL:\\IP.HOSTNAMES)
+                         (RECORD-HOST-ADDRESS HOSTSYMBOL ADDRESS))
+                  HOSTSYMBOL))))
+
+(DEFUN READ-MAP (MAPNAME &OPTIONAL (PREDICATE 'LIST))
+
+   (IL:* IL:|;;| "Collect all the elements of a YP map.  If PREDICATE is supplied, then it is called for each item (args: key line) and the non-NIL values returned from it are collected into a list.  Otherwise, returns a list of ALL items, each in the form (key line). ")
+
+   (LOOP (BLOCK RETRY
+             (RETURN-FROM READ-MAP
+                    (LET* ((ARGS (LIST *YP-DOMAIN* MAPNAME ""))
+                           (PROC 'FIRST-PAIR)
+                           VALUE)
+                          (WITH-COLLECTION (LOOP (DESTRUCTURING-BIND
+                                                  (STATUS VALUE-DATA KEY-DATA)
+                                                  (YP-CALL PROC ARGS)
+                                                  (CASE STATUS
+                                                      ((T)   (IL:* IL:\; "Good response")
+                                                         (SETF (THIRD ARGS)
+                                                               KEY-DATA)
+                                                         (WHEN (SETQ VALUE (FUNCALL PREDICATE 
+                                                                                  KEY-DATA VALUE-DATA
+                                                                                  ))
+                                                               (COLLECT VALUE)))
+                                                      (:NO-MORE 
+                                                             (IL:* IL:\; 
+                                                           "No more entries, we're done")
+                                                         (RETURN))
+                                                      ((NIL) (IL:* IL:\; "No response ")
+                                                         (CERROR "Retry YP call" 
+                                                                "YP server not responding for map ~A"
+                                                                MAPNAME)
+                                                             (IL:* IL:\; 
+                                                         "Continue from error means try over again")
+                                                         (RETURN-FROM RETRY))
+                                                      (OTHERWISE 
+                                                             (IL:* IL:\; 
+                                                           "Some sort of error return")
+                                                         (RETURN-FROM READ-MAP STATUS))))
+                                                 (SETQ PROC 'NEXT-PAIR))))))))
+
+(DEFUN INTEGER-FROM-STRING (STR &OPTIONAL START END)
+
+   (IL:* IL:|;;| "Like PARSE-INTEGER but returns NIL on failure instead of erroring")
+
+   (MULTIPLE-VALUE-BIND (N J)
+          (PARSE-INTEGER STR :JUNK-ALLOWED T :START (OR START 0)
+                 :END
+                 (OR END (SETQ END (LENGTH STR))))
+          (AND (EQL J END)
+               N)))
+(EVAL-WHEN (LOAD)
+
+(IL:APPENDTOVAR IL:RESTARTETHERFNS YP-RESTART)
+
+
+
+(IL:* IL:|;;| "Read the YP.INIT file right now so it's in the world when saved out.  Don't look for servers yet; we wouldn't use them if we did.")
+
+
+(YP-RESTART)
+)
+(IL:PUTPROPS IL:YPIMPL IL:COPYRIGHT ("Xerox Corporation" 1988 1989 1990 1992 1993))
+(IL:DECLARE\: IL:DONTCOPY
+  (IL:FILEMAP (NIL)))
+IL:STOP

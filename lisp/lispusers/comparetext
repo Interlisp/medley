@@ -1,0 +1,660 @@
+(DEFINE-FILE-INFO READTABLE "INTERLISP" PACKAGE "INTERLISP")
+(FILECREATED "23-Dec-98 17:05:12" {DSK}<project>medley3.5>lispusers>comparetext.;3 39844  
+
+      changes to%:  (FNS IMCOMPARE.HASH IMCOMPARE.COLLECT.HASH.CHUNKS)
+                    (VARS COMPARETEXTCOMS)
+
+      previous date%: "18-Nov-93 14:43:00" {DSK}<project>medley3.5>lispusers>comparetext.;1)
+
+
+(* ; "
+Copyright (c) 1984, 1985, 1993, 1998 by Xerox Corporation.  All rights reserved.
+")
+
+(PRETTYCOMPRINT COMPARETEXTCOMS)
+
+(RPAQQ COMPARETEXTCOMS
+       ((DECLARE%: EVAL@COMPILE (FILES (LOADCOMP)
+                                       GRAPHER))
+        (FNS COMPARETEXT IMCOMPARE.BOXNODE IMCOMPARE.CHUNKS IMCOMPARE.COLLECT.HASH.CHUNKS 
+             IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH IMCOMPARE.FIND.TEDIT.TEXT.OBJECT IMCOMPARE.HASH
+             IMCOMPARE.LEFTBUTTONFN IMCOMPARE.LENGTHEN.ATOM IMCOMPARE.MERGE.CONNECTED.CHUNKS 
+             IMCOMPARE.MERGE.UNCONNECTED.CHUNKS IMCOMPARE.MIDDLEBUTTONFN IMCOMPARE.SHOW.DIST 
+             IMCOMPARE.UPDATE.SYMBOL.TABLE)
+        (P (MOVD 'COMPARETEXT 'IMCOMPARE))
+        (VARS (IMCOMPARE.LAST.NODE NIL)
+              (IMCOMPARE.LAST.GRAPH.WINDOW NIL)
+              (IMCOMPARE.HASH.TYPE.MENU NIL))
+        (RECORDS IMCOMPARE.CHUNK IMCOMPARE.SYMB)
+        (FILES GRAPHER)))
+(DECLARE%: EVAL@COMPILE 
+
+(FILESLOAD (LOADCOMP)
+       GRAPHER)
+)
+(DEFINEQ
+
+(COMPARETEXT
+  [LAMBDA (NEWFILENAME OLDFILENAME HASH.TYPE GRAPH.REGION)
+                                                             (* mjs " 8-Jan-84 21:06")
+
+         (* Compares the two files, and produces a graph showing their corresponding 
+       chunks. The courseness of the "chunking" is determined by HASH.TYPE, which may 
+       be PARA, LINE, or WORD. HASH.TYPE = NIL defaults to PARA.
+       The file difference graph is displayed at GRAPHREGION.
+       If GRAPH.REGION = NIL, the user is asked to specify a region.
+       If GRAPH.REGION = T, a standard region is used.)
+
+    (PROG ((NEWFILE (FINDFILE NEWFILENAME T))
+           (OLDFILE (FINDFILE OLDFILENAME T)))
+          (if (AND OLDFILE NEWFILE)
+              then                                       (* compare the two "chunks" 
+                                                           consisting of the entire text of the 
+                                                           two files)
+                    (IMCOMPARE.CHUNKS (create IMCOMPARE.CHUNK
+                                                 FILENAME _ NEWFILE
+                                                 FILEPTR _ 0
+                                                 CHUNKLENGTH _ (GETFILEINFO NEWFILE 'LENGTH))
+                           (create IMCOMPARE.CHUNK
+                                  FILENAME _ OLDFILE
+                                  FILEPTR _ 0
+                                  CHUNKLENGTH _ (GETFILEINFO OLDFILE 'LENGTH))
+                           HASH.TYPE
+                           (if (EQ GRAPH.REGION T)
+                               then (create REGION
+                                               LEFT _ 25
+                                               BOTTOM _ 25
+                                               WIDTH _ 500
+                                               HEIGHT _ 150)
+                             elseif GRAPH.REGION
+                             else (CLRPROMPT)
+                                   (printout PROMPTWINDOW 
+                                          "Please specify a window for the file difference graph" T)
+                                   (GETREGION)))
+            else (printout T "Can't find both files: " NEWFILENAME " & " OLDFILENAME 
+                            " --- IMCOMPARE aborted" T])
+
+(IMCOMPARE.BOXNODE
+  [LAMBDA (NODE WINDOW)                                  (* rmk%: "14-Dec-84 13:40")
+    (if IMCOMPARE.LAST.NODE
+        then (RESET/NODE/BORDER IMCOMPARE.LAST.NODE 'INVERT IMCOMPARE.LAST.GRAPH.WINDOW)
+              (SETQ IMCOMPARE.LAST.NODE NIL)
+              (SETQ IMCOMPARE.LAST.GRAPH.WINDOW NIL))
+    (if NODE
+        then (RESET/NODE/BORDER NODE 'INVERT WINDOW)
+              (SETQ IMCOMPARE.LAST.NODE NODE)
+              (SETQ IMCOMPARE.LAST.GRAPH.WINDOW WINDOW])
+
+(IMCOMPARE.CHUNKS
+  [LAMBDA (NEWFILE.SPEC.CHUNK OLDFILE.SPEC.CHUNK HASH.TYPE GRAPH.REGION)
+                                                             (* rmk%: " 8-Sep-84 00:06")
+
+         (* this is the main text-comparison function.
+       It compares the text in the two chunks <which may be small pieces of files, or 
+       entire files> and produces a graph showing how the sub-chunks of the two main 
+       chunks are related. The two main chunks may be in the same file, and the file 
+       may actually be an open Tedit textstream.
+       The main chunks are broken down according to HASH.TYPE, which may be PARA 
+       <chunk by paragraph>, LINE, or WORD. HASH.TYPE = NIL defaults to PARA.
+       The file difference graph is displayed at GRAPH.REGION.)
+
+         (* this text comparison algorithm is originally from the article 
+       "A Technique for Isolating Differences Between Files" by Paul Heckel, in CACM, 
+       V21, %#4, April 1978 --- major difference is that I use lists instead of arrays)
+
+    (PROG ((CHUNK.SYMBOL.TABLE (HASHARRAY 500))
+           NEWFILE.CHUNK.LIST OLDFILE.CHUNK.LIST)
+
+         (* * collect lists of chunks from each of the main chunks, dividing them 
+       according to HASH.TYPE)
+
+          (SETQ NEWFILE.CHUNK.LIST (IMCOMPARE.COLLECT.HASH.CHUNKS NEWFILE.SPEC.CHUNK HASH.TYPE))
+          (SETQ OLDFILE.CHUNK.LIST (IMCOMPARE.COLLECT.HASH.CHUNKS OLDFILE.SPEC.CHUNK HASH.TYPE))
+
+         (* * update the chunk symbol table. For each hash value, this table records the 
+       number of "new" chunks with that hash value, the number of "old" chunks with 
+       that value, and a pointer to the place in OLD.CHUNK.LIST <not to an OLD chunk 
+       itself>.)
+
+          (IMCOMPARE.UPDATE.SYMBOL.TABLE NEWFILE.CHUNK.LIST CHUNK.SYMBOL.TABLE NIL)
+          (IMCOMPARE.UPDATE.SYMBOL.TABLE OLDFILE.CHUNK.LIST CHUNK.SYMBOL.TABLE T)
+
+         (* * For every new chunk whose hash value matches EXACTLY ONE old chunk's 
+       value, "connect" it to the old chunk by setting the new chunk's OTHERCHUNK 
+       field to point to the appropriate place in the old chunk list <not the old 
+       chunk directly>. Also, make sure that OTHERCHUNK of the matching old chunk is 
+       non-NIL, so that unconnected old chunks will be merged correctly.)
+
+          (for NEW.CHUNK in NEWFILE.CHUNK.LIST bind SYMB
+             do (SETQ SYMB (GETHASH (fetch (IMCOMPARE.CHUNK HASHVALUE) of NEW.CHUNK)
+                                      CHUNK.SYMBOL.TABLE))
+                   (if (AND (EQ 1 (fetch (IMCOMPARE.SYMB NEWCOUNT) of SYMB))
+                                (EQ 1 (fetch (IMCOMPARE.SYMB OLDCOUNT) of SYMB)))
+                       then (replace (IMCOMPARE.CHUNK OTHERCHUNK) of NEW.CHUNK
+                                   with (fetch (IMCOMPARE.SYMB OLDPTR) of SYMB))
+                             (replace (IMCOMPARE.CHUNK OTHERCHUNK)
+                                of (CAR (fetch (IMCOMPARE.SYMB OLDPTR) of SYMB))
+                                with T)))
+
+         (* * merge connected chunks forward)
+
+          (IMCOMPARE.MERGE.CONNECTED.CHUNKS NEWFILE.CHUNK.LIST NIL)
+
+         (* * merge connected chunks backwards)
+
+          (SETQ NEWFILE.CHUNK.LIST (DREVERSE NEWFILE.CHUNK.LIST))
+          (SETQ OLDFILE.CHUNK.LIST (DREVERSE OLDFILE.CHUNK.LIST))
+          (IMCOMPARE.MERGE.CONNECTED.CHUNKS NEWFILE.CHUNK.LIST T)
+          (SETQ NEWFILE.CHUNK.LIST (DREVERSE NEWFILE.CHUNK.LIST))
+          (SETQ OLDFILE.CHUNK.LIST (DREVERSE OLDFILE.CHUNK.LIST))
+
+         (* * merge unconnected chunks)
+
+          (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS NEWFILE.CHUNK.LIST)
+          (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS OLDFILE.CHUNK.LIST)
+
+         (* * now, the file comparison is complete.
+       Format and display the file difference graph)
+
+          (IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH NEWFILE.SPEC.CHUNK OLDFILE.SPEC.CHUNK 
+                 HASH.TYPE GRAPH.REGION NEWFILE.CHUNK.LIST OLDFILE.CHUNK.LIST])
+
+(IMCOMPARE.COLLECT.HASH.CHUNKS
+  [LAMBDA (CHUNK HASH.TYPE)                              (* ; "Edited 23-Dec-98 16:54 by rmk:")
+                                                             (* mjs " 8-Jan-84 20:57")
+
+         (* * returns a list of the chunks in CHUNK as hashed of type HASH.TYPE)
+
+    (LET (STREAM END.OF.CHUNK.PTR CHUNK.LIST)
+         [SETQ STREAM (OPENSTREAM (fetch (IMCOMPARE.CHUNK FILENAME) of CHUNK)
+                             'INPUT
+                             'OLD
+                             '((TYPE TEXT]
+         (SETFILEPTR STREAM (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK))
+         (SETQ END.OF.CHUNK.PTR (IPLUS (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK)
+                                       (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK)))
+         (SETQ CHUNK.LIST (until (IGEQ (GETFILEPTR STREAM)
+                                           END.OF.CHUNK.PTR) collect (IMCOMPARE.HASH STREAM 
+                                                                                END.OF.CHUNK.PTR 
+                                                                                HASH.TYPE)))
+         (CLOSEF STREAM)
+         CHUNK.LIST])
+
+(IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH
+  [LAMBDA (NEWFILE.SPEC.CHUNK OLDFILE.SPEC.CHUNK HASH.TYPE GRAPH.REGION NEWFILE.CHUNK.LIST 
+                 OLDFILE.CHUNK.LIST)                     (* mjs "11-Jul-85 09:10")
+
+         (* * format and display the graph)
+
+    (PROG ((NEWFILENAME (fetch (IMCOMPARE.CHUNK FILENAME) of NEWFILE.SPEC.CHUNK))
+           (OLDFILENAME (fetch (IMCOMPARE.CHUNK FILENAME) of OLDFILE.SPEC.CHUNK))
+           (OLD.CHUNK.NODE.FROM.NODES NIL)
+           (BORDERSIZE 1)
+           GRAPH.WINDOW NEW.CHUNK.NODES OLD.CHUNK.NODES OLD.CHUNK.XCOORD NEW.CHUNK.XCOORD 
+           YCOORD.INCREMENT DIFF.GRAPH)
+
+         (* * set up GRAPH.WINDOW. This is done first so you can get the width and 
+       height of strings to be printed in the window.)
+
+          [SETQ GRAPH.WINDOW (CREATEW GRAPH.REGION (CONCAT "Text File Differences, hashed by "
+                                                          (SELECTQ HASH.TYPE
+                                                              ((PARA NIL) 
+                                                                   "Paragraph")
+                                                              (LINE "Line")
+                                                              (WORD "Word")
+                                                              (SHOULDNT]
+          (WINDOWPROP GRAPH.WINDOW 'IMPARE.HASH.TYPE HASH.TYPE)
+          [WINDOWADDPROP GRAPH.WINDOW 'CLOSEFN (FUNCTION (LAMBDA (WINDOW)
+                                                           (if (EQ WINDOW 
+                                                                       IMCOMPARE.LAST.GRAPH.WINDOW)
+                                                               then (SETQ 
+                                                                         IMCOMPARE.LAST.GRAPH.WINDOW
+                                                                         NIL)
+                                                                     (SETQ IMCOMPARE.LAST.NODE NIL]
+          (SETQ NEW.CHUNK.XCOORD (IQUOTIENT (STRINGWIDTH NEWFILENAME GRAPH.WINDOW)
+                                        2))
+          [SETQ OLD.CHUNK.XCOORD (IPLUS NEW.CHUNK.XCOORD (IMAX 100 (IPLUS NEW.CHUNK.XCOORD
+                                                                          (IQUOTIENT (STRINGWIDTH
+                                                                                      OLDFILENAME 
+                                                                                      GRAPH.WINDOW)
+                                                                                 2)
+                                                                          20]
+          [SETQ YCOORD.INCREMENT (IMINUS (IPLUS 2 (ITIMES 2 BORDERSIZE)
+                                                (fetch (REGION HEIGHT) of (STRINGREGION
+                                                                                   NEWFILENAME 
+                                                                                   GRAPH.WINDOW]
+
+         (* * collect new-chunk graph nodes, while accumulating 
+       OLD.CHUNK.NODE.FROM.NODES, assoc list from old-chunks to new-chunks)
+
+          (SETQ NEW.CHUNK.NODES (for NEW.CHUNK in NEWFILE.CHUNK.LIST as Y from 
+                                                                                     YCOORD.INCREMENT
+                                   by YCOORD.INCREMENT bind CORRESPONDING.OLD.CHUNK
+                                   collect (SETQ CORRESPONDING.OLD.CHUNK
+                                                (CAR (fetch (IMCOMPARE.CHUNK OTHERCHUNK)
+                                                        of NEW.CHUNK)))
+                                         (if CORRESPONDING.OLD.CHUNK
+                                             then (SETQ OLD.CHUNK.NODE.FROM.NODES
+                                                       (CONS (CONS CORRESPONDING.OLD.CHUNK NEW.CHUNK)
+                                                             OLD.CHUNK.NODE.FROM.NODES))) 
+                                                             (* Start out with 2 point white 
+                                                           border, so we can invert it)
+                                         (NODECREATE NEW.CHUNK (IMCOMPARE.LENGTHEN.ATOM
+                                                                (PACK* (fetch (IMCOMPARE.CHUNK
+                                                                                   FILEPTR)
+                                                                          of NEW.CHUNK)
+                                                                       ":"
+                                                                       (fetch (IMCOMPARE.CHUNK
+                                                                                   CHUNKLENGTH)
+                                                                          of NEW.CHUNK))
+                                                                12)
+                                                (create POSITION
+                                                       XCOORD _ NEW.CHUNK.XCOORD
+                                                       YCOORD _ Y)
+                                                (if CORRESPONDING.OLD.CHUNK
+                                                    then (LIST CORRESPONDING.OLD.CHUNK)
+                                                  else NIL)
+                                                NIL DEFAULTFONT -2)))
+          (SETQ OLD.CHUNK.NODES (for OLD.CHUNK in OLDFILE.CHUNK.LIST as Y from 
+                                                                                     YCOORD.INCREMENT
+                                   by YCOORD.INCREMENT bind CORRESPONDING.NEW.CHUNK
+                                   collect (SETQ CORRESPONDING.NEW.CHUNK (CDR (ASSOC OLD.CHUNK 
+                                                                            OLD.CHUNK.NODE.FROM.NODES
+                                                                                         )))
+                                         (NODECREATE OLD.CHUNK (IMCOMPARE.LENGTHEN.ATOM
+                                                                (PACK* (fetch (IMCOMPARE.CHUNK
+                                                                                   FILEPTR)
+                                                                          of OLD.CHUNK)
+                                                                       ":"
+                                                                       (fetch (IMCOMPARE.CHUNK
+                                                                                   CHUNKLENGTH)
+                                                                          of OLD.CHUNK))
+                                                                12 "-")
+                                                (create POSITION
+                                                       XCOORD _ OLD.CHUNK.XCOORD
+                                                       YCOORD _ Y)
+                                                NIL
+                                                (if CORRESPONDING.NEW.CHUNK
+                                                    then (LIST CORRESPONDING.NEW.CHUNK)
+                                                  else NIL)
+                                                DEFAULTFONT -2)))
+          (SETQ DIFF.GRAPH (create GRAPH
+                                  DIRECTEDFLG _ T
+                                  SIDESFLG _ T
+                                  GRAPHNODES _
+                                  (NCONC (LIST (NODECREATE NEWFILE.SPEC.CHUNK NEWFILENAME
+                                                      (create POSITION
+                                                             XCOORD _ NEW.CHUNK.XCOORD
+                                                             YCOORD _ 0)
+                                                      NIL NIL DEFAULTFONT -2))
+                                         NEW.CHUNK.NODES
+                                         (LIST (NODECREATE OLDFILE.SPEC.CHUNK OLDFILENAME
+                                                      (create POSITION
+                                                             XCOORD _ OLD.CHUNK.XCOORD
+                                                             YCOORD _ 0)
+                                                      NIL NIL DEFAULTFONT -2))
+                                         OLD.CHUNK.NODES)))
+          (SHOWGRAPH DIFF.GRAPH GRAPH.WINDOW (FUNCTION IMCOMPARE.LEFTBUTTONFN)
+                 (FUNCTION IMCOMPARE.MIDDLEBUTTONFN)
+                 T NIL])
+
+(IMCOMPARE.FIND.TEDIT.TEXT.OBJECT
+  [LAMBDA (FILE)                                         (* mjs " 2-Jan-84 16:19")
+
+         (* returns the Tedit text object of the first Tedit window which is currently 
+       looking at FILE, if there is one. Returns NIL if none is found.)
+
+    (PROG ((TEDIT.TEXT.OBJECT NIL))
+          (for X in (OPENWINDOWS) bind POSS.TOBJ POSS.FILENAME
+             when (SETQ POSS.TOBJ (WINDOWPROP X 'TEXTOBJ)) repeatuntil TEDIT.TEXT.OBJECT
+             do (SETQ POSS.FILENAME (FULLNAME (fetch (TEXTOBJ TXTFILE) of POSS.TOBJ)))
+                   (if (EQ FILE POSS.FILENAME)
+                       then (SETQ TEDIT.TEXT.OBJECT POSS.TOBJ)))
+          (RETURN TEDIT.TEXT.OBJECT])
+
+(IMCOMPARE.HASH
+  [LAMBDA (STREAM EOF.PTR HASH.TYPE)                     (* ; "Edited 23-Dec-98 16:58 by rmk:")
+
+         (* reads caracters from STREAM and creates a hash value for the "next" "chunk" 
+       A chunk is a paragraph ending in two consecutive CRs <HASH.TYPE = NIL or PARA>, 
+       a line ending in a CR <HASH.TYPE = LINE>, or a word ending in any white space 
+       character space <HASH.TYPE = WORD>. In computing the hash value, white space is 
+       ignored. IMCOMPARE.HASH automatically stops before reading char number EOF.PTR 
+       Returns an IMCOMPARE.CHUNK containing the hash value, the file pointer of the 
+       beginning of the chunk, the length of the chunk, and the fullname of the stream)
+
+         (* Note%: Most of the time in COMPARETEXT is spent reading in and hashing 
+       chunks, so this function was optimizes for speed, at the expense of length)
+
+    (PROG ((BEGIN.FILE.PTR (GETFILEPTR STREAM))
+           (EOLC (GETFILEINFO STREAM 'EOL))
+           (HASHNUM 0)
+           FILE.PTR C)
+          (SETQ FILE.PTR BEGIN.FILE.PTR)
+          (SELECTQ HASH.TYPE
+              ((NIL PARA) 
+
+         (* Paragraph chunks end with two consecutive EOL's.
+       In order to detect this without slowing down the gobbling of normal chars, 
+       LAST.EOL.POS is set to the filepos of the last EOL detected.
+       This is only checked when another EOL comes along.)
+
+                   (PROG ((LAST.EOL.POS -5))
+                     loop
+                         (if (IGEQ FILE.PTR EOF.PTR)
+                             then (GO return))
+                         (SETQ FILE.PTR (ADD1 FILE.PTR))
+                         (SELCHARQ (SETQ C (BIN STREAM))
+                              (CR 
+
+         (* If this is the second consecutive CR, this is the end of the chunk.
+       Otherwise, reset LAST.EOL.POS)
+
+                                  (SELECTQ EOLC
+                                      (CR (if (IEQP LAST.EOL.POS (SUB1 (GETFILEPTR STREAM)))
+                                              then (GO endchunk)
+                                            else (SETQ LAST.EOL.POS (GETFILEPTR STREAM))))
+                                      (CRLF (if (IGEQ FILE.PTR EOF.PTR)
+                                                then (GO return))
+                                            (SELCHARQ (\PEEKBIN STREAM T)
+                                                 (LF (SETQ FILE.PTR (ADD1 FILE.PTR))
+                                                     (BIN STREAM)
+                                                     (if (IEQP LAST.EOL.POS (IDIFFERENCE
+                                                                                 (GETFILEPTR STREAM)
+                                                                                 2))
+                                                         then (GO endchunk)
+                                                       else (SETQ LAST.EOL.POS (GETFILEPTR STREAM
+                                                                                          ))))
+                                                 NIL))
+                                      NIL))
+                              (LF [COND
+                                     ((EQ EOLC 'LF)
+                                      (if (IEQP LAST.EOL.POS (SUB1 (GETFILEPTR STREAM)))
+                                          then (GO endchunk)
+                                        else (SETQ LAST.EOL.POS (GETFILEPTR STREAM])
+                              ((SPACE TAB))
+                              (SETQ HASHNUM (ROT (ROT (ROT (LOGXOR HASHNUM C)
+                                                           1 16)
+                                                      1 16)
+                                                 1 16)))
+                         (GO loop)))
+              (LINE                                          (* Line chunks end on a single CR.)
+                    (PROG NIL
+                      loop
+                          (if (IGEQ FILE.PTR EOF.PTR)
+                              then (GO return))
+                          (SETQ FILE.PTR (ADD1 FILE.PTR))
+                          (SELCHARQ (SETQ C (BIN STREAM))
+                               (CR (SELECTQ EOLC
+                                       (CR (GO endchunk))
+                                       (LF)
+                                       (CRLF (if (IGEQ FILE.PTR EOF.PTR)
+                                                 then (GO return))
+                                             (SELCHARQ (\PEEKBIN STREAM T)
+                                                  (LF (SETQ FILE.PTR (ADD1 FILE.PTR))
+                                                      (BIN STREAM)
+                                                      (GO endchunk))
+                                                  NIL))
+                                       (SHOULDNT)))
+                               (LF (AND (EQ EOLC 'LF)
+                                        (GO endchunk)))
+                               ((SPACE TAB))
+                               (SETQ HASHNUM (ROT (ROT (ROT (LOGXOR HASHNUM C)
+                                                            1 16)
+                                                       1 16)
+                                                  1 16)))
+                          (GO loop)))
+              (WORD                                          (* word chunks end on any white 
+                                                           space)
+                    (PROG NIL
+                      loop
+                          (if (IGEQ FILE.PTR EOF.PTR)
+                              then (GO return))
+                          (SETQ FILE.PTR (ADD1 FILE.PTR))
+                          (SELCHARQ (SETQ C (BIN STREAM))
+                               ((CR SPACE TAB LF) 
+                                    (GO endchunk))
+                               (SETQ HASHNUM (ROT (ROT (ROT (LOGXOR HASHNUM C)
+                                                            1 16)
+                                                       1 16)
+                                                  1 16)))
+                          (GO loop)))
+              (HELP (CONCAT "Unrecognize HASHTYPE " HASH.TYPE)
+                    "
+   Should be PARA, LINE, or WORD"))
+      endchunk
+                                                             (* flush all white space before next 
+                                                           chunk)
+          (if (IGEQ FILE.PTR EOF.PTR)
+              then (GO return))
+          (SETQ FILE.PTR (ADD1 FILE.PTR))
+          (SELCHARQ (BIN STREAM)
+               ((CR SPACE TAB LF) 
+                    (GO endchunk))
+               (PROGN (SETQ FILE.PTR (SUB1 FILE.PTR))
+                      (SETFILEPTR STREAM FILE.PTR)))
+      return
+          (RETURN (create IMCOMPARE.CHUNK
+                         HASHVALUE _ HASHNUM
+                         FILEPTR _ BEGIN.FILE.PTR
+                         CHUNKLENGTH _ (IDIFFERENCE FILE.PTR BEGIN.FILE.PTR)
+                         FILENAME _ (FULLNAME STREAM])
+
+(IMCOMPARE.LEFTBUTTONFN
+  [LAMBDA (GNODE WINDOW)                                 (* mjs " 2-Apr-85 14:21")
+    (if GNODE
+        then (IMCOMPARE.BOXNODE GNODE WINDOW)
+              (PROG ((NODEID (fetch (GRAPHNODE NODEID) of GNODE))
+                     (FILEPTR 1)
+                     (CHUNKLENGTH 0)
+                     (TEDIT.TEXT.OBJECT NIL)
+                     FILE)
+                    (SETQ FILE (fetch (IMCOMPARE.CHUNK FILENAME) of NODEID))
+                    (SETQ FILEPTR (fetch (IMCOMPARE.CHUNK FILEPTR) of NODEID))
+                    (SETQ CHUNKLENGTH (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of NODEID))
+                    (SETQ TEDIT.TEXT.OBJECT (IMCOMPARE.FIND.TEDIT.TEXT.OBJECT FILE))
+                    (if TEDIT.TEXT.OBJECT
+                        then (TEDIT.SETSEL TEDIT.TEXT.OBJECT (IMAX 1 (IDIFFERENCE FILEPTR 25))
+                                        0
+                                        'LEFT)
+                              (TEDIT.NORMALIZECARET TEDIT.TEXT.OBJECT)
+                              (TEDIT.SETSEL TEDIT.TEXT.OBJECT FILEPTR CHUNKLENGTH 'LEFT)
+                              (TEDIT.NORMALIZECARET TEDIT.TEXT.OBJECT)
+                              (TTY.PROCESS (WINDOWPROP (CAR (fetch (TEXTOBJ \WINDOW) of
+                                                                                         
+                                                                                    TEDIT.TEXT.OBJECT
+                                                                   ))
+                                                  'PROCESS))
+                      else (TEDIT FILE NIL NIL (LIST 'SEL (LIST FILEPTR CHUNKLENGTH])
+
+(IMCOMPARE.LENGTHEN.ATOM
+  [LAMBDA (X MIN.LENGTH EXTENDER)                        (* mjs "30-Dec-83 15:11")
+
+         (* makes sure that the atom X is at least MIN.LENGTH characters long, by 
+       concatinating the first character of EXTENDER
+       (or space, if not given) to the front)
+
+    (PROG ((C (CHCON X)))
+          (SETQ EXTENDER (if EXTENDER
+                             then (CHCON1 EXTENDER)
+                           else (CHARCODE SPACE)))
+          (while (ILESSP (LENGTH C)
+                            MIN.LENGTH) do (SETQ C (CONS EXTENDER C)))
+          (RETURN (PACKC C])
+
+(IMCOMPARE.MERGE.CONNECTED.CHUNKS
+  [LAMBDA (NEW.CHUNK.LIST BACKWARDS.FLG)                 (* mjs " 6-Jan-84 10:35")
+    (while NEW.CHUNK.LIST bind NEW.CHUNK OLD.CHUNK.PTR
+       do (SETQ NEW.CHUNK (CAR NEW.CHUNK.LIST))
+             (SETQ OLD.CHUNK.PTR (fetch (IMCOMPARE.CHUNK OTHERCHUNK) of NEW.CHUNK))
+             (if [OR (NULL (CDR NEW.CHUNK.LIST))
+                         (NULL OLD.CHUNK.PTR)
+                         (NULL (CDR OLD.CHUNK.PTR))
+                         (NOT (EQP (fetch (IMCOMPARE.CHUNK HASHVALUE) of (CADR NEW.CHUNK.LIST
+                                                                                       ))
+                                   (fetch (IMCOMPARE.CHUNK HASHVALUE) of (CADR OLD.CHUNK.PTR]
+                 then (SETQ NEW.CHUNK.LIST (CDR NEW.CHUNK.LIST))
+               else 
+
+         (* next chunks have same hash, so "murge" them into current chunks by adding 
+       their chunk lengths to the current chunks, and splicing out the next chunks)
+
+                     [replace (IMCOMPARE.CHUNK CHUNKLENGTH) of NEW.CHUNK
+                        with (IPLUS (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of NEW.CHUNK)
+                                        (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of (CADR 
+                                                                                       NEW.CHUNK.LIST
+                                                                                              ]
+                     [replace (IMCOMPARE.CHUNK CHUNKLENGTH) of (CAR OLD.CHUNK.PTR)
+                        with (IPLUS (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of (CAR 
+                                                                                        OLD.CHUNK.PTR
+                                                                                             ))
+                                        (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of (CADR 
+                                                                                        OLD.CHUNK.PTR
+                                                                                              ]
+                     [if BACKWARDS.FLG
+                         then                            (* if the list is backwards, copy 
+                                                           next fileptr)
+                               (replace (IMCOMPARE.CHUNK FILEPTR) of NEW.CHUNK
+                                  with (fetch (IMCOMPARE.CHUNK FILEPTR) of (CADR 
+                                                                                       NEW.CHUNK.LIST
+                                                                                             )))
+                               (replace (IMCOMPARE.CHUNK FILEPTR) of (CAR OLD.CHUNK.PTR)
+                                  with (fetch (IMCOMPARE.CHUNK FILEPTR) of (CADR 
+                                                                                        OLD.CHUNK.PTR
+                                                                                             ] 
+                                                             (* splice chunks out of new and old 
+                                                           list)
+                     (RPLACD NEW.CHUNK.LIST (CDDR NEW.CHUNK.LIST))
+                     (RPLACD OLD.CHUNK.PTR (CDDR OLD.CHUNK.PTR])
+
+(IMCOMPARE.MERGE.UNCONNECTED.CHUNKS
+  [LAMBDA (CHUNK.LST)                                    (* mjs " 5-JAN-84 13:58")
+    (while CHUNK.LST bind CHUNK do (SETQ CHUNK (CAR CHUNK.LST))
+                                              (if (OR (NULL (CDR CHUNK.LST))
+                                                          (fetch (IMCOMPARE.CHUNK OTHERCHUNK)
+                                                             of CHUNK)
+                                                          (fetch (IMCOMPARE.CHUNK OTHERCHUNK)
+                                                             of (CADR CHUNK.LST)))
+                                                  then (SETQ CHUNK.LST (CDR CHUNK.LST))
+                                                else     (* both current chunk and next chunk 
+                                                           have no OTHERCHUNK, so merge them)
+                                                      [replace (IMCOMPARE.CHUNK CHUNKLENGTH)
+                                                         of CHUNK
+                                                         with (IPLUS (fetch (IMCOMPARE.CHUNK
+                                                                                     CHUNKLENGTH)
+                                                                            of CHUNK)
+                                                                         (fetch (IMCOMPARE.CHUNK
+                                                                                     CHUNKLENGTH)
+                                                                            of (CADR CHUNK.LST] 
+                                                             (* splice chunks out of new and old 
+                                                           list)
+                                                      (RPLACD CHUNK.LST (CDDR CHUNK.LST])
+
+(IMCOMPARE.MIDDLEBUTTONFN
+  [LAMBDA (GNODE WINDOW)                                 (* mjs " 6-Jan-84 11:37")
+
+         (* This function is called if the MIDDLE mouse button is pressed over a graph 
+       node. The selected node is IMCOMPARE-ed with the last node selected <which is 
+       boxed>. The type of hashing used <PARA, LINE, or WORD> is selected from a 
+       pop-up menu. If none of the hashing types is selected, the current node is 
+       boxed. The pop-up menu is always located a little above the current cursor 
+       position, so a quick double-MIDDLE-click is an easy way to change the current 
+       boxed node.)
+
+    (if GNODE
+        then (PROG (INNER.HASH.TYPE)
+                       (CLRPROMPT)
+                       (printout PROMPTWINDOW "Please select the type of hashing you wish." T)
+                       [SETQ INNER.HASH.TYPE
+                        (MENU (if (type? MENU IMCOMPARE.HASH.TYPE.MENU)
+                                  then IMCOMPARE.HASH.TYPE.MENU
+                                else (SETQ IMCOMPARE.HASH.TYPE.MENU
+                                          (create MENU
+                                                 ITEMS _ '(PARA LINE WORD)
+                                                 MENUOFFSET _
+                                                 (create POSITION
+                                                        XCOORD _ 20
+                                                        YCOORD _ -20]
+                       (if (NULL INNER.HASH.TYPE)
+                           then                          (* if no hash type is selected, just 
+                                                           box the current node and return)
+                                 (IMCOMPARE.BOXNODE GNODE WINDOW)
+                                 (RETURN))
+                       (if (NULL IMCOMPARE.LAST.NODE)
+                           then (CLRPROMPT)
+                                 (PRIN1 "You must select another graph node first." PROMPTWINDOW)
+                                 (RETURN))
+                       (printout PROMPTWINDOW "Comparing chunks by " INNER.HASH.TYPE T)
+                       (IMCOMPARE.CHUNKS (fetch (GRAPHNODE NODEID) of IMCOMPARE.LAST.NODE
+                                                    )
+                              (fetch (GRAPHNODE NODEID) of GNODE)
+                              INNER.HASH.TYPE
+                              (WINDOWPROP WINDOW 'REGION])
+
+(IMCOMPARE.SHOW.DIST
+  [LAMBDA (LST MAX)                                      (* mjs "30-Dec-83 15:13")
+    (PROG ((WINDOW (CREATEW))
+           MAX.Y X MAX.X)
+          (SETQ MAX.X (WINDOWPROP WINDOW 'WIDTH))
+          (SETQ MAX.Y (WINDOWPROP WINDOW 'HEIGHT))
+          (for SAMPLE in LST do (SETQ X (FTIMES MAX.X (FQUOTIENT SAMPLE MAX)))
+                                           (DRAWLINE X 0 X MAX.Y 1 'PAINT WINDOW])
+
+(IMCOMPARE.UPDATE.SYMBOL.TABLE
+  [LAMBDA (CHUNK.LIST CHUNK.SYMBOL.TABLE OLD.CHUNK.FLG)  (* mjs " 8-Jan-84 21:01")
+
+         (* * update the chunk symbol table. For each hash value, this table records the 
+       number of "new" chunks with that hash value, the number of "old" chunks with 
+       that value, and a pointer to the place in OLD.CHUNK.LIST <not to an OLD chunk 
+       itself>.)
+
+    (for CHUNK.PTR on CHUNK.LIST bind CHUNK SYMB
+       do (SETQ CHUNK (CAR CHUNK.PTR))
+             (SETQ SYMB (if (GETHASH (fetch (IMCOMPARE.CHUNK HASHVALUE) of CHUNK)
+                                       CHUNK.SYMBOL.TABLE)
+                          else (PUTHASH (fetch (IMCOMPARE.CHUNK HASHVALUE) of CHUNK)
+                                          (create IMCOMPARE.SYMB
+                                                 NEWCOUNT _ 0
+                                                 OLDCOUNT _ 0
+                                                 OLDPTR _ NIL)
+                                          CHUNK.SYMBOL.TABLE)))
+             (if OLD.CHUNK.FLG
+                 then                                    (* increment old-chunk count)
+                       (replace (IMCOMPARE.SYMB OLDCOUNT) of SYMB
+                          with (ADD1 (fetch (IMCOMPARE.SYMB OLDCOUNT) of SYMB))) 
+
+         (* smash old-chunk pointer. Note that it must point to the LIST of old-chunks, 
+       rather than to the individual one)
+
+                       (replace (IMCOMPARE.SYMB OLDPTR) of SYMB with CHUNK.PTR)
+               else                                      (* increment new-chunk count)
+                     (replace (IMCOMPARE.SYMB NEWCOUNT) of SYMB
+                        with (ADD1 (fetch (IMCOMPARE.SYMB NEWCOUNT) of SYMB])
+)
+
+(MOVD 'COMPARETEXT 'IMCOMPARE)
+
+(RPAQQ IMCOMPARE.LAST.NODE NIL)
+
+(RPAQQ IMCOMPARE.LAST.GRAPH.WINDOW NIL)
+
+(RPAQQ IMCOMPARE.HASH.TYPE.MENU NIL)
+(DECLARE%: EVAL@COMPILE
+
+(RECORD IMCOMPARE.CHUNK (HASHVALUE FILEPTR CHUNKLENGTH FILENAME . OTHERCHUNK)
+                            FILEPTR _ 1 CHUNKLENGTH _ 0)
+
+(RECORD IMCOMPARE.SYMB (NEWCOUNT OLDCOUNT . OLDPTR))
+)
+
+(FILESLOAD GRAPHER)
+(PUTPROPS COMPARETEXT COPYRIGHT ("Xerox Corporation" 1984 1985 1993 1998))
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL (1365 39345 (COMPARETEXT 1375 . 3770) (IMCOMPARE.BOXNODE 3772 . 4288) (IMCOMPARE.CHUNKS 
+4290 . 8476) (IMCOMPARE.COLLECT.HASH.CHUNKS 8478 . 9707) (IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH 9709
+ . 18575) (IMCOMPARE.FIND.TEDIT.TEXT.OBJECT 18577 . 19340) (IMCOMPARE.HASH 19342 . 26603) (
+IMCOMPARE.LEFTBUTTONFN 26605 . 28341) (IMCOMPARE.LENGTHEN.ATOM 28343 . 28981) (
+IMCOMPARE.MERGE.CONNECTED.CHUNKS 28983 . 32479) (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS 32481 . 34436) (
+IMCOMPARE.MIDDLEBUTTONFN 34438 . 37010) (IMCOMPARE.SHOW.DIST 37012 . 37458) (
+IMCOMPARE.UPDATE.SYMBOL.TABLE 37460 . 39343)))))
+STOP

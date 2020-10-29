@@ -1,0 +1,668 @@
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
+(FILECREATED "22-Aug-94 12:59:34" {DSK}<king>export>lispcore>lafite>parc-94>LAFITEDECLS.;2 37889  
+
+      changes to%:  (VARS LAFITEDECLSCOMS)
+                    (RECORDS LAFITEMSG)
+
+      previous date%: "21-Jun-89 12:10:42" {DSK}<king>export>lispcore>lafite>parc-94>LAFITEDECLS.;1
+)
+
+
+(* ; "
+Copyright (c) 1985, 1986, 1987, 1988, 1989, 1994 by Xerox Corporation.  All rights reserved.
+")
+
+(PRETTYCOMPRINT LAFITEDECLSCOMS)
+
+(RPAQQ LAFITEDECLSCOMS ((RECORDS LAFITEOPS LAFITEMODEDATA LAFITEMSG MAILFOLDER FOLDERGROUP 
+                                   DEFAULTHOST&DIR MAILSERVER MAILSERVEROPS OPENEDMAILBOX OUTBOX 
+                                   PROFILEVAR)
+                            (COMS                            (* ; 
+                                                      "characteristics of standard Laurel messages")
+                                  (CONSTANTS (LAFITEBASICSTAMPLENGTH 19)
+                                         (LAFITESTAMPLENGTH 24)
+                                         (DELETEDFLAG (CHARCODE D))
+                                         (UNDELETEDFLAG (CHARCODE U))
+                                         (SEENFLAG (CHARCODE S))
+                                         (UNSEENFLAG (CHARCODE U))
+                                         (DUPLICATEMARK 128)))
+                            (COMS                            (* ; "Stuff for table of contents")
+                                  (CONSTANTS LAFITETOCPASSWORD LAFITETOCHEADERLENGTH))
+                            (COMS                            (* ; 
+                                         "Browser status values.  %"Ready%" values have low bit 1.")
+                                  (CONSTANTS LAS.READY LAS.LOGGED.OUT)
+                                  (CONSTANTS LAS.PARSING LAS.FLUSHED LAS.OUT.OF.DATE))
+                            (COMS                            (* ; 
+                                          "Bits for figuring out which menu to use on Update, etc.")
+                                  (CONSTANTS (\HARDCOPY.MENU.BIT 1)
+                                         (\UPDATE.MENU.BIT 2)
+                                         (\TOC.MENU.BIT 4)
+                                         (\EXPUNGE.MENU.BIT 8)
+                                         (\SORT.MENU.BIT 16)
+                                         (\EXPUNGE&SORT.MENU.BIT 32)
+                                         (\CLOSE.MENU.BIT 64)
+                                         (\SHRINK.MENU.BIT 128)))
+                            (COMS                            (* ; 
+                                            "For iterating over the selected messages of a browser")
+                                  (I.S.OPRS SELECTEDIN))
+                            (MACROS WORDIN FIXPIN WORDOUT FIXPOUT UCASECODE NTHMESSAGE .LAFITEMENU. 
+                                   MAYBEVERIFYMSG UNSEENMARKP)
+                            (COMS (GLOBALVARS * LAFITEGLOBALS)
+                                  [P (CL:PROCLAIM '(CL:SPECIAL *LAFITE-MODE-DATA* 
+                                                          *UPPER-CASE-FILE-NAMES* \#DISPLAYLINES]
+                                                             (* ; 
+     "LAFITE.PROCLAMATIONS are exported to user in file LAFITE--these are the documented variables")
+                                  (P * LAFITE.PROCLAMATIONS))
+                            (COMS                            (* ; 
+                                "For debugging with Masterscope, here are fns not called from code")
+                                  (VARS LAFITE.CALLED.FROM.LITERALS LAFITE.PROGRAMMER.ENTRIES)
+                                  (COMMANDS WHONOTLAFITE CHECKLAFITE))
+                            (DECLARE%: DONTEVAL@COMPILE (TEMPLATES WINDOWPROP WINDOWADDPROP 
+                                                               WINDOWDELPROP PROCESSPROP TEXTPROP))))
+(DECLARE%: EVAL@COMPILE
+
+(RECORD LAFITEOPS (LAFITEMODE MODEINDEX SENDPARSER SENDER ANSWERER AUTHENTICATOR MESSAGEP 
+                             MESSAGE-FROM-SELFP LOGIN))
+
+(RECORD LAFITEMODEDATA (LAFITEOPS (FULLUSERNAME CREDENTIALS UNPACKEDUSERNAME SHORTUSERNAME 
+                                             FROMFIELD)
+                                  MAILSERVERS))
+
+(DATATYPE LAFITEMSG ((PARSED? FLAG)                      (* ; 
+     "True if we have parsed the message, and thus filled in the fields DATE, FROM, SUBJECT below.")
+                         (DELETED? FLAG)                     (* ; 
+                                                           "True if message marked for deletion")
+                         (SEEN? FLAG)                        (* ; "True if message is examined.")
+                         (DATEKNOWN? FLAG)                   (* ; 
+                        "True if DATE field correctly parsed into IDATE [formerly formatted? flag]")
+                         (DATEFETCHED? FLAG)                 (* ; 
+                                             "True if IDATE field contains a date (could be guess)")
+                         (MODEBITS BITS 3)                   (* ; 
+                                                           "Mode in which the message was received")
+                         (MARKCHAR BYTE)                     (* ; "Arbitrary mark byte")
+                         (%# WORD)                           (* ; "Ordinal number of message")
+                         (BEGIN POINTER)                     (* ; "Start of the whole message")
+                         (MESSAGELENGTH POINTER)             (* ; "Lengfth of whole message")
+                         (STAMPLENGTH WORD)                  (* ; 
+                                                      "Number of bytes in file header (usually 24)")
+                         (TOCLENGTH WORD)                    (* ; 
+                                                     "Number of bytes this message consumes on toc")
+                         (MESSAGELENGTHCHANGED? FLAG)        (* ; 
+"True if we have decided that the true length of this message is different from what the file says")
+                         (SELECTED? FLAG)                    (* ; "True if msg currently selected")
+                         (MSGFROMMECHECKED? FLAG)            (* ; 
+                                         "True if we have tested whether this message is from self")
+                         (MSGFROMMETRUTH FLAG)               (* ; "Is it?")
+                         (DATE POINTER)                      (* ; 
+                                                           "The fields of the parse (strings)")
+                         (NIL FLAG)
+                         (MARKSCHANGEDINFILE? FLAG)
+                         (MARKSCHANGEDINTOC? FLAG)
+                         (NIL FLAG)
+                         (FROM POINTER)
+                         (SUBJECT POINTER)
+                         (TO POINTER)
+                         (IDATE FIXP)                        (* ; 
+                                                           "Integer form of DATE (for sorting)")
+                         )
+
+                        (* ;; "BEGIN is the only absolute pointer into the message file -- all other positions are relative to BEGIN -- see the ACCESSFNS")
+
+                        (BLOCKRECORD LAFITEMSG ((PARSED&DELETED&SEENBITS BITS 3)
+                                                             (* ; "For toc version 8")
+                                                (DATEBITS BITS 2)
+                                                             (* ; "For toc version 10")
+                                                (NIL BITS 3)
+                                                (NIL BYTE)
+                                                (NIL WORD)))
+                        (BLOCKRECORD LAFITEMSG ((MSGFLAGBITS BITS 8)
+                                                (NIL BYTE)
+                                                (NIL WORD)
+                                                (NIL BITS 4)
+                                                (NIL POINTER)
+                                                (NIL BITS 4)
+                                                (NIL POINTER)
+                                                (NIL WORD)
+                                                (NIL WORD)
+                                                (NIL BITS 4)
+                                                (NIL POINTER)
+                                                (NIL BITS 1)
+                                                (MARKSCHANGEDBITS BITS 2)
+                                                (NIL BITS 1)
+                                                (NIL 3 POINTER)
+                                                (IDATEHI WORD)
+                                                (IDATELO WORD)))
+                        [ACCESSFNS LAFITEMSG ((END (+ (fetch (LAFITEMSG MESSAGELENGTH)
+                                                         of DATUM)
+                                                      (fetch (LAFITEMSG BEGIN) of DATUM)))
+                                              (START (+ (fetch (LAFITEMSG BEGIN) of DATUM)
+                                                        (fetch (LAFITEMSG STAMPLENGTH)
+                                                           of DATUM)))
+                                              (MSGFROMMEP (COND
+                                                             ((fetch (LAFITEMSG MSGFROMMECHECKED?
+                                                                                ) of DATUM)
+                                                              (fetch (LAFITEMSG MSGFROMMETRUTH)
+                                                                 of DATUM))
+                                                             (T (LA.MSGFROMMEP DATUM)))
+                                                     (PROG1 (replace (LAFITEMSG MSGFROMMETRUTH)
+                                                               of DATUM with NEWVALUE)
+                                                         (replace (LAFITEMSG MSGFROMMECHECKED?)
+                                                            of DATUM with T)))
+                                              (MARKSCHANGED? (NEQ 0 (fetch (LAFITEMSG 
+                                                                                     MARKSCHANGEDBITS
+                                                                                      ) of DATUM)
+                                                                  )
+                                                     (replace (LAFITEMSG MARKSCHANGEDBITS)
+                                                        of DATUM with 3))
+                                              (MODE (CL:NTH (fetch (LAFITEMSG MODEBITS)
+                                                               of DATUM)
+:q                                                           *LAFITE-WELL-KNOWN-MODES*)
+                                                    (replace (LAFITEMSG MODEBITS) of DATUM
+                                                       WITH (OR (CL:POSITION NEWVALUE 
+                                                                           *LAFITE-WELL-KNOWN-MODES*)
+                                                                    0])
+
+(DATATYPE MAILFOLDER ((BROWSERPROMPTDIRTY FLAG)          (* ; 
+                                                        "Something's been printed in prompt window")
+                          (BROWSERPROMPTGREW FLAG)           (* ; 
+                                                           "Browser prompt window has expanded")
+                          (FOLDERNEEDSUPDATE FLAG)           (* ; "Something changed")
+                          (FOLDERNEEDSEXPUNGE FLAG)          (* ; "True if deleted msgs")
+                          (FOLDERBEINGUPDATED FLAG)          (* ; "True during Update cmd")
+                          (BROWSERSTATUS BITS 3)             (* ; "Ready, etc.")
+                          (FULLFOLDERNAME POINTER)           (* ; "Full name of actual file")
+                          (FOLDEROKTOSHRINK FLAG)            (* ; 
+                        "Kludge to allow you to call SHRINKW without invoking the Update? question")
+                          (FOLDERGETSMAIL FLAG)              (* ; "True if GetMail ok")
+                          (FOLDEROUTOFORDER FLAG)            (* ; "True if folder has been sorted")
+                          (NIL 5 FLAG)
+                          (VERSIONLESSFOLDERNAME POINTER)    (* ; "Versionless for conflict check")
+                          (SHORTFOLDERNAME POINTER)          (* ; "Normal name displayed to user")
+                          (FOLDERSTREAM POINTER)             (* ; "Stream open on the file, or NIL")
+                          (MESSAGEDESCRIPTORS POINTER)       (* ; "Array of LAFITEMSG")
+                          (FOLDERLOCK POINTER)               (* ; "Monitor lock for all access")
+                          (%#OFMESSAGES WORD)
+                          (TOCLASTMESSAGE# WORD)             (* ; 
+                                                           "Last message that is in TOC file")
+                          (BROWSERFONTHEIGHT WORD)           (* ; "Cached info about browser font")
+                          (BROWSERFONTASCENT WORD)
+                          (BROWSERFONTDESCENT WORD)
+                          (BROWSERMAXXPOS WORD)              (* ; "For extent computations")
+                          (ORDINALXPOS WORD)                 (* ; "Where msg # starts")
+                          (DATEXPOS WORD)                    (* ; "Where msg date starts")
+                          (FROMXPOS WORD)                    (* ; "Where msg From starts")
+                          (FROMMAXXPOS WORD)                 (* ; "Beyond here, From is truncated")
+                          (SUBJECTXPOS WORD)                 (* ; "Where msg subject starts")
+                          (BROWSERDIGITWIDTH WORD)
+                          (FIRSTSELECTEDMESSAGE WORD)        (* ; 
+                                                           "First/last msgs currently selected")
+                          (LASTSELECTEDMESSAGE WORD)
+                          (FIRSTCHANGEDMESSAGE WORD)         (* ; 
+                                                "First message with any change--not currently used")
+                          (CURRENTPROMPTLINE WORD)           (* ; 
+                                                  "Value of \currentdisplayline for browser prompt")
+                          (CURRENTDISPLAYEDSTREAM POINTER)   (* ; 
+                           "The backing core file for the current message (not used interestingly)")
+                          (BROWSEREXTENT POINTER)
+                          (BROWSERORIGIN POINTER)
+                          (FOLDERDISPLAYREGION POINTER)      (* ; 
+                                             "Region of display window (valid when browser shrunk)")
+                          (BROWSERWINDOW POINTER)            (* ; 
+                                                         "The browser window and various pieces...")
+                          (BROWSERMENU POINTER)
+                          (BROWSERMENUWINDOW POINTER)
+                          (BROWSERPROMPTWINDOW POINTER)
+                          (ORIGINALBROWSERTITLE POINTER)     (* ; 
+                                               "Original title before we added %"default move to%"")
+                          (FOLDERDISPLAYWINDOWS POINTER)     (* ; "WIndows currently displaying messages from this folder.  First element is %"primary%" display window, or NIL")
+                          (FOLDEREOFPTR POINTER)             (* ; "Length of file")
+                          (DEFAULTMOVETOFILE POINTER)        (* ; "Folder we last moved to, or NIL")
+                          (CURRENTDISPLAYEDMESSAGE POINTER)  (* ; 
+                                            "Message descriptor of most recently displayed message")
+                          (BROWSERUPDATEFROMHERE POINTER)    (* ; 
+        "First potentially changed message, from which redisplay needs to occur when icon expands.")
+                          (BROWSERLAYOUT POINTER)            (* ; 
+                            "The element of LAFITEBROWSERLAYOUTS used to build this window, if any")
+                          (FOLDERCREATIONDATE POINTER)       (* ; "the ICREATIONDATE of the file")
+                          (HARDCOPYMESSAGES POINTER)         (* ; 
+                                                         "List of msg descriptors being hardcopied")
+                          (HARDCOPYSTREAM POINTER)           (* ; 
+                                                           "A Textstream for pending hardcopy")
+                          )
+                         (BLOCKRECORD MAILFOLDER ((NIL 5 FLAG)
+                                                  (NIL BITS 2)
+                                                  (BROWSERREADYBIT FLAG)
+                                                             (* ; 
+                                                           "Low bit of status on means ready")
+                                                  ))
+                         [ACCESSFNS MAILFOLDER ((BROWSERREADY (fetch (MAILFOLDER BROWSERREADYBIT)
+                                                                 of DATUM)
+                                                       (REPLACE (MAILFOLDER BROWSERSTATUS)
+                                                          OF DATUM WITH (COND
+                                                                                   (NEWVALUE 
+                                                                                          LAS.READY)
+                                                                                   (T LAS.PARSING])
+
+(RECORD FOLDERGROUP (FGNAME (FGTOPLEVEL . FGSUBGROUPS) . FGFOLDERS))
+
+(RECORD DEFAULTHOST&DIR (PACKEDHOST&DIR . UNPACKEDHOST&DIR)
+                            (PROPRECORD UNPACKEDHOST&DIR (DEFAULTDIR DEFAULTHOST DEFAULTDEV)))
+
+(RECORD MAILSERVER (MAILSERVEROPS MAILPORT MAILSERVERNAME CONTINUANCE NEWMAILP . MAILSTATE))
+
+(RECORD MAILSERVEROPS (POLLNEWMAIL OPENMAILBOX NEXTMESSAGE RETRIEVEMESSAGE CLOSEMAILBOX 
+                                 SERVERPORTFROMNAME))
+
+(RECORD OPENEDMAILBOX (MAILBOX . PROPERTIES)
+                          (PROPRECORD PROPERTIES (%#OFMESSAGES)))
+
+(RECORD OUTBOX (OBWINDOW OBSIZE OBHEIGHT OBDESCENT OBORIGIN OBITEMS))
+
+(RECORD PROFILEVAR (PFVARNAME PFRECONCILIATIONFN PFLOADFN PFDUMPFN))
+)
+
+(/DECLAREDATATYPE 'LAFITEMSG
+       '(FLAG FLAG FLAG FLAG FLAG (BITS 3)
+              BYTE WORD POINTER POINTER WORD WORD FLAG FLAG FLAG FLAG POINTER FLAG FLAG FLAG FLAG 
+              POINTER POINTER POINTER FIXP)
+       '((LAFITEMSG 0 (FLAGBITS . 0))
+         (LAFITEMSG 0 (FLAGBITS . 16))
+         (LAFITEMSG 0 (FLAGBITS . 32))
+         (LAFITEMSG 0 (FLAGBITS . 48))
+         (LAFITEMSG 0 (FLAGBITS . 64))
+         (LAFITEMSG 0 (BITS . 82))
+         (LAFITEMSG 0 (BITS . 135))
+         (LAFITEMSG 1 (BITS . 15))
+         (LAFITEMSG 2 POINTER)
+         (LAFITEMSG 4 POINTER)
+         (LAFITEMSG 6 (BITS . 15))
+         (LAFITEMSG 7 (BITS . 15))
+         (LAFITEMSG 4 (FLAGBITS . 0))
+         (LAFITEMSG 4 (FLAGBITS . 16))
+         (LAFITEMSG 4 (FLAGBITS . 32))
+         (LAFITEMSG 4 (FLAGBITS . 48))
+         (LAFITEMSG 8 POINTER)
+         (LAFITEMSG 8 (FLAGBITS . 0))
+         (LAFITEMSG 8 (FLAGBITS . 16))
+         (LAFITEMSG 8 (FLAGBITS . 32))
+         (LAFITEMSG 8 (FLAGBITS . 48))
+         (LAFITEMSG 10 POINTER)
+         (LAFITEMSG 12 POINTER)
+         (LAFITEMSG 14 POINTER)
+         (LAFITEMSG 16 FIXP))
+       '18)
+
+(/DECLAREDATATYPE 'MAILFOLDER
+       '(FLAG FLAG FLAG FLAG FLAG (BITS 3)
+              POINTER FLAG FLAG FLAG FLAG FLAG FLAG FLAG FLAG POINTER POINTER POINTER POINTER POINTER
+              WORD WORD WORD WORD WORD WORD WORD WORD WORD WORD WORD WORD WORD WORD WORD WORD POINTER
+              POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER
+              POINTER POINTER POINTER POINTER POINTER POINTER)
+       '((MAILFOLDER 0 (FLAGBITS . 0))
+         (MAILFOLDER 0 (FLAGBITS . 16))
+         (MAILFOLDER 0 (FLAGBITS . 32))
+         (MAILFOLDER 0 (FLAGBITS . 48))
+         (MAILFOLDER 0 (FLAGBITS . 64))
+         (MAILFOLDER 0 (BITS . 82))
+         (MAILFOLDER 2 POINTER)
+         (MAILFOLDER 2 (FLAGBITS . 0))
+         (MAILFOLDER 2 (FLAGBITS . 16))
+         (MAILFOLDER 2 (FLAGBITS . 32))
+         (MAILFOLDER 2 (FLAGBITS . 48))
+         (MAILFOLDER 1 (FLAGBITS . 0))
+         (MAILFOLDER 1 (FLAGBITS . 16))
+         (MAILFOLDER 1 (FLAGBITS . 32))
+         (MAILFOLDER 1 (FLAGBITS . 48))
+         (MAILFOLDER 4 POINTER)
+         (MAILFOLDER 6 POINTER)
+         (MAILFOLDER 8 POINTER)
+         (MAILFOLDER 10 POINTER)
+         (MAILFOLDER 12 POINTER)
+         (MAILFOLDER 14 (BITS . 15))
+         (MAILFOLDER 15 (BITS . 15))
+         (MAILFOLDER 16 (BITS . 15))
+         (MAILFOLDER 17 (BITS . 15))
+         (MAILFOLDER 18 (BITS . 15))
+         (MAILFOLDER 19 (BITS . 15))
+         (MAILFOLDER 20 (BITS . 15))
+         (MAILFOLDER 21 (BITS . 15))
+         (MAILFOLDER 22 (BITS . 15))
+         (MAILFOLDER 23 (BITS . 15))
+         (MAILFOLDER 24 (BITS . 15))
+         (MAILFOLDER 25 (BITS . 15))
+         (MAILFOLDER 26 (BITS . 15))
+         (MAILFOLDER 27 (BITS . 15))
+         (MAILFOLDER 28 (BITS . 15))
+         (MAILFOLDER 29 (BITS . 15))
+         (MAILFOLDER 30 POINTER)
+         (MAILFOLDER 32 POINTER)
+         (MAILFOLDER 34 POINTER)
+         (MAILFOLDER 36 POINTER)
+         (MAILFOLDER 38 POINTER)
+         (MAILFOLDER 40 POINTER)
+         (MAILFOLDER 42 POINTER)
+         (MAILFOLDER 44 POINTER)
+         (MAILFOLDER 46 POINTER)
+         (MAILFOLDER 48 POINTER)
+         (MAILFOLDER 50 POINTER)
+         (MAILFOLDER 52 POINTER)
+         (MAILFOLDER 54 POINTER)
+         (MAILFOLDER 56 POINTER)
+         (MAILFOLDER 58 POINTER)
+         (MAILFOLDER 60 POINTER)
+         (MAILFOLDER 62 POINTER)
+         (MAILFOLDER 64 POINTER))
+       '66)
+
+
+
+(* ; "characteristics of standard Laurel messages")
+
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ LAFITEBASICSTAMPLENGTH 19)
+
+(RPAQQ LAFITESTAMPLENGTH 24)
+
+(RPAQ DELETEDFLAG (CHARCODE D))
+
+(RPAQ UNDELETEDFLAG (CHARCODE U))
+
+(RPAQ SEENFLAG (CHARCODE S))
+
+(RPAQ UNSEENFLAG (CHARCODE U))
+
+(RPAQQ DUPLICATEMARK 128)
+
+
+(CONSTANTS (LAFITEBASICSTAMPLENGTH 19)
+       (LAFITESTAMPLENGTH 24)
+       (DELETEDFLAG (CHARCODE D))
+       (UNDELETEDFLAG (CHARCODE U))
+       (SEENFLAG (CHARCODE S))
+       (UNSEENFLAG (CHARCODE U))
+       (DUPLICATEMARK 128))
+)
+
+
+
+(* ; "Stuff for table of contents")
+
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ LAFITETOCPASSWORD 45610)
+
+(RPAQQ LAFITETOCHEADERLENGTH 10)
+
+
+(CONSTANTS LAFITETOCPASSWORD LAFITETOCHEADERLENGTH)
+)
+
+
+
+(* ; "Browser status values.  %"Ready%" values have low bit 1.")
+
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ LAS.READY 1)
+
+(RPAQQ LAS.LOGGED.OUT 3)
+
+
+(CONSTANTS LAS.READY LAS.LOGGED.OUT)
+)
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ LAS.PARSING 0)
+
+(RPAQQ LAS.FLUSHED 2)
+
+(RPAQQ LAS.OUT.OF.DATE 4)
+
+
+(CONSTANTS LAS.PARSING LAS.FLUSHED LAS.OUT.OF.DATE)
+)
+
+
+
+(* ; "Bits for figuring out which menu to use on Update, etc.")
+
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ \HARDCOPY.MENU.BIT 1)
+
+(RPAQQ \UPDATE.MENU.BIT 2)
+
+(RPAQQ \TOC.MENU.BIT 4)
+
+(RPAQQ \EXPUNGE.MENU.BIT 8)
+
+(RPAQQ \SORT.MENU.BIT 16)
+
+(RPAQQ \EXPUNGE&SORT.MENU.BIT 32)
+
+(RPAQQ \CLOSE.MENU.BIT 64)
+
+(RPAQQ \SHRINK.MENU.BIT 128)
+
+
+(CONSTANTS (\HARDCOPY.MENU.BIT 1)
+       (\UPDATE.MENU.BIT 2)
+       (\TOC.MENU.BIT 4)
+       (\EXPUNGE.MENU.BIT 8)
+       (\SORT.MENU.BIT 16)
+       (\EXPUNGE&SORT.MENU.BIT 32)
+       (\CLOSE.MENU.BIT 64)
+       (\SHRINK.MENU.BIT 128))
+)
+
+
+
+(* ; "For iterating over the selected messages of a browser")
+
+(DECLARE%: EVAL@COMPILE 
+
+[I.S.OPR 'SELECTEDIN NIL '(bind ($$MESSAGES _ (fetch (MAILFOLDER MESSAGEDESCRIPTORS)
+                                                     of BODY))
+                                 ($$MSG# _ (SUB1 (fetch (MAILFOLDER FIRSTSELECTEDMESSAGE)
+                                                    of BODY)))
+                                 ($$MSGLAST _ (fetch (MAILFOLDER LASTSELECTEDMESSAGE)
+                                                 of BODY)) until (IGREATERP (add $$MSG# 1
+                                                                                           )
+                                                                                $$MSGLAST)
+                             when (fetch (LAFITEMSG SELECTED?) of (SETQ I.V.
+                                                                               (NTHMESSAGE $$MESSAGES
+                                                                                      $$MSG#]
+)
+(DECLARE%: EVAL@COMPILE 
+
+(PROGN (PUTPROPS WORDIN DMACRO (= . \WIN))
+       (PUTPROPS WORDIN MACRO (= . \WIN)))
+
+[PUTPROPS FIXPIN DMACRO (OPENLAMBDA (STREAM)
+                               (\MAKENUMBER (WORDIN STREAM)
+                                      (WORDIN STREAM]
+
+(PUTPROPS WORDOUT DMACRO (= . \WOUT))
+
+[PUTPROPS FIXPOUT DMACRO (OPENLAMBDA (STREAM N)
+                                (PROGN (WORDOUT STREAM (LRSH N 16))
+                                       (WORDOUT STREAM (LOGAND N 65535]
+
+[PUTPROPS UCASECODE MACRO (OPENLAMBDA (CHAR)
+                                 (COND
+                                    ((AND (IGEQ CHAR (CHARCODE a))
+                                          (ILEQ CHAR (CHARCODE z)))
+                                     (LOGAND CHAR 95))
+                                    (T CHAR]
+
+(PUTPROPS NTHMESSAGE MACRO (= . ELT))
+
+[PUTPROPS .LAFITEMENU. MACRO ((NAME ITEMS TITLE)
+                              (PROGN (DECLARE (GLOBALVARS NAME))
+                                     (OR NAME (SETQ NAME (\LAFITE.CREATE.MENU ITEMS TITLE]
+
+[PUTPROPS MAYBEVERIFYMSG MACRO ((MSG MAILFOLDER)
+                                (AND LAFITEVERIFYFLG (\LAFITE.VERIFYMSG MSG MAILFOLDER]
+
+[PUTPROPS UNSEENMARKP MACRO (OPENLAMBDA (MK)
+                                   (OR (EQ MK UNSEENMARK)
+                                       (EQ MK HEARDMARK]
+)
+
+(RPAQQ LAFITEGLOBALS 
+       (*LAFITE-WELL-KNOWN-MODES* ANOTHERFOLDERMENUITEM AROUNDEXITFNS BackgroundMenu 
+              BackgroundMenuCommands FORWARDMARK HARDCOPYBATCHMARK HARDCOPYMARK HEARDMARK 
+              LA.CROSSCURSOR LA.SELECTION.BITMAP LAFITE.PERSONAL.VARS LAFITE.UPDATE.MENU.HASH 
+              LAFITE.USER.INFO LAFITEEOL LAFITEFOLDERSMENU LAFITEFORMSMENU LAFITEITEMBUSYSHADE 
+              LAFITEMAILFOLDERS LAFITEMAINMENU LAFITEMULTIPLEFOLDERSMENU LAFITEPROFILERDTBL 
+              LAFITESTATUSWINDOW LAFITESUBBROWSEMENU LAFITESUBQUITMENU LAFITESYSTEMDATE 
+              LAFITEVERSION# LASTMOUSEBUTTONS LASTMOUSEX LASTMOUSEY LOGINHOST/DIR PROMPTWINDOW 
+              SCREENHEIGHT SCREENWIDTH SEENMARK UNSEENMARK UNSUPPLIEDFIELDSTR UPPERCASEARRAY 
+              WINDOWTITLEFONT \ACTIVELAFITEFOLDERS \AFTERLOGINFNS \LAFITE.ACTIVE \LAFITE.ACTIVE.MODES
+              \LAFITE.BROWSELOCK \LAFITE.CURRENT.USER \LAFITE.HARDCOPYLOCK \LAFITE.LAST.STATUS 
+              \LAFITE.MAILSERVERLOCK \LAFITE.MAINLOCK \LAFITE.MODE.CHOICES \LAFITE.OUTBOX 
+              \LAFITE.PROFILELOCK \LAFITE.PSEUDO.DEVICES \LAFITE.READY \LAFITE.TEMPFILES 
+              \LAFITEDEFAULTHOST&DIR \LAFITEMODE \LAFITEPROFILECHANGED \LAFITEPROFILEDATE 
+              \LAPARSE.DONT.DISPLAY.HEADERS \LAPARSE.DONT.FORWARD.HEADERS 
+              \LAPARSE.DONT.HARDCOPY.HEADERS LAFITE.FOLDER.STRUCTURE LAFITE.SPACER.MENU.ITEM))
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS *LAFITE-WELL-KNOWN-MODES* ANOTHERFOLDERMENUITEM AROUNDEXITFNS BackgroundMenu 
+       BackgroundMenuCommands FORWARDMARK HARDCOPYBATCHMARK HARDCOPYMARK HEARDMARK LA.CROSSCURSOR 
+       LA.SELECTION.BITMAP LAFITE.PERSONAL.VARS LAFITE.UPDATE.MENU.HASH LAFITE.USER.INFO LAFITEEOL 
+       LAFITEFOLDERSMENU LAFITEFORMSMENU LAFITEITEMBUSYSHADE LAFITEMAILFOLDERS LAFITEMAINMENU 
+       LAFITEMULTIPLEFOLDERSMENU LAFITEPROFILERDTBL LAFITESTATUSWINDOW LAFITESUBBROWSEMENU 
+       LAFITESUBQUITMENU LAFITESYSTEMDATE LAFITEVERSION# LASTMOUSEBUTTONS LASTMOUSEX LASTMOUSEY 
+       LOGINHOST/DIR PROMPTWINDOW SCREENHEIGHT SCREENWIDTH SEENMARK UNSEENMARK UNSUPPLIEDFIELDSTR 
+       UPPERCASEARRAY WINDOWTITLEFONT \ACTIVELAFITEFOLDERS \AFTERLOGINFNS \LAFITE.ACTIVE 
+       \LAFITE.ACTIVE.MODES \LAFITE.BROWSELOCK \LAFITE.CURRENT.USER \LAFITE.HARDCOPYLOCK 
+       \LAFITE.LAST.STATUS \LAFITE.MAILSERVERLOCK \LAFITE.MAINLOCK \LAFITE.MODE.CHOICES 
+       \LAFITE.OUTBOX \LAFITE.PROFILELOCK \LAFITE.PSEUDO.DEVICES \LAFITE.READY \LAFITE.TEMPFILES 
+       \LAFITEDEFAULTHOST&DIR \LAFITEMODE \LAFITEPROFILECHANGED \LAFITEPROFILEDATE 
+       \LAPARSE.DONT.DISPLAY.HEADERS \LAPARSE.DONT.FORWARD.HEADERS \LAPARSE.DONT.HARDCOPY.HEADERS 
+       LAFITE.FOLDER.STRUCTURE LAFITE.SPACER.MENU.ITEM)
+)
+
+(CL:PROCLAIM '(CL:SPECIAL *LAFITE-MODE-DATA* *UPPER-CASE-FILE-NAMES* \#DISPLAYLINES))
+
+
+
+(* ; "LAFITE.PROCLAMATIONS are exported to user in file LAFITE--these are the documented variables")
+
+
+(RPAQQ LAFITE.PROCLAMATIONS 
+       [(CL:PROCLAIM '(GLOBAL ANSWERMARK BROWSERMARKXPOSITION DEFAULTMAILFOLDERNAME 
+                             LAFITE.2COLUMN.MENU.MIN.ITEMS LAFITE.AUTO.MOVE.MENU 
+                             LAFITE.BACKGROUND.ITEM LAFITE.BROWSER.ICON.PREFERENCE 
+                             LAFITE.BROWSER.LAYOUTS LAFITE.DISPLAY.SIZE LAFITE.DONT.DISPLAY.HEADERS 
+                             LAFITE.DONT.FORWARD.HEADERS LAFITE.DONT.HARDCOPY.HEADERS 
+                             LAFITE.DUMMY.HALF.SHADE LAFITE.DUMMY.SHADE LAFITE.EDITOR.LAYOUTS 
+                             LAFITE.EDITOR.SIZE LAFITE.EXTRA.DISPLAY.COMMANDS LAFITE.EXTRA.MOVE.ITEMS
+                             LAFITE.FOLDER.ICON LAFITE.FOLDER.MENU.FONT LAFITE.HOST.ABBREVS 
+                             LAFITE.LOOKS.SUBCOMMANDS LAFITE.MIDDLE.UPDATE LAFITE.PROFILE.VARS 
+                             LAFITE.SIGNATURE LAFITE.USE.ALL.MODES LAFITEBROWSERFONT 
+                             LAFITEBROWSERICONMENU LAFITEBROWSERICONMENUITEMS LAFITEBROWSERMENUITEMS
+                             LAFITEBROWSERREGION LAFITEBUFFERSIZE LAFITEBUSYWAITTIME LAFITECLOSEITEM
+                             LAFITECOMMANDMENUITEMS LAFITEDEFAULTHOST&DIR LAFITEDELETEDLINEHEIGHT 
+                             LAFITEDISPLAYAFTERDELETEFLG LAFITEDISPLAYFONT LAFITEDISPLAYREGION 
+                             LAFITEDL.EXT LAFITEDLDIRECTORIES LAFITEENDOFMESSAGEFONT 
+                             LAFITEENDOFMESSAGESTR LAFITEEXTRAMENUFLG LAFITEEXTRAMENUITEMS 
+                             LAFITEFIXEDWIDTHFONT LAFITEFORM.EXT LAFITEFORMFILES LAFITEFROMFRACTION 
+                             LAFITEHARDCOPY.MIN.TOC LAFITEHARDCOPYBATCHFLG LAFITEHARDCOPYBATCHSHADE 
+                             LAFITEHARDCOPYFONT LAFITEHARDCOPYSEPARATOR LAFITEIFFROMMETHENSEENFLG 
+                             LAFITEINFO.NAME LAFITEMAIL.EXT LAFITEMENUFONT LAFITEMENUVARS 
+                             LAFITEMINFROMCHARS LAFITEMODEDEFAULT LAFITEMODELST 
+                             LAFITEMOVETOCONFIRMFLG LAFITEMSGICONFONT LAFITENEWPAGEFLG 
+                             LAFITESHOWMODEFLG LAFITESTATUSWINDOWMINWIDTH LAFITESTATUSWINDOWPOSITION
+                             LAFITESUBBROWSEMENUITEMS LAFITESUBQUITMENUITEMS LAFITETITLEFONT 
+                             LAFITETOC.EXT LAFITEUPDATEMENUITEMS MOVETOMARK))
+        (CL:PROCLAIM '(CL:SPECIAL LAFITEVERIFYFLG])
+
+(CL:PROCLAIM '(GLOBAL ANSWERMARK BROWSERMARKXPOSITION DEFAULTMAILFOLDERNAME 
+                     LAFITE.2COLUMN.MENU.MIN.ITEMS LAFITE.AUTO.MOVE.MENU LAFITE.BACKGROUND.ITEM 
+                     LAFITE.BROWSER.ICON.PREFERENCE LAFITE.BROWSER.LAYOUTS LAFITE.DISPLAY.SIZE 
+                     LAFITE.DONT.DISPLAY.HEADERS LAFITE.DONT.FORWARD.HEADERS 
+                     LAFITE.DONT.HARDCOPY.HEADERS LAFITE.DUMMY.HALF.SHADE LAFITE.DUMMY.SHADE 
+                     LAFITE.EDITOR.LAYOUTS LAFITE.EDITOR.SIZE LAFITE.EXTRA.DISPLAY.COMMANDS 
+                     LAFITE.EXTRA.MOVE.ITEMS LAFITE.FOLDER.ICON LAFITE.FOLDER.MENU.FONT 
+                     LAFITE.HOST.ABBREVS LAFITE.LOOKS.SUBCOMMANDS LAFITE.MIDDLE.UPDATE 
+                     LAFITE.PROFILE.VARS LAFITE.SIGNATURE LAFITE.USE.ALL.MODES LAFITEBROWSERFONT 
+                     LAFITEBROWSERICONMENU LAFITEBROWSERICONMENUITEMS LAFITEBROWSERMENUITEMS 
+                     LAFITEBROWSERREGION LAFITEBUFFERSIZE LAFITEBUSYWAITTIME LAFITECLOSEITEM 
+                     LAFITECOMMANDMENUITEMS LAFITEDEFAULTHOST&DIR LAFITEDELETEDLINEHEIGHT 
+                     LAFITEDISPLAYAFTERDELETEFLG LAFITEDISPLAYFONT LAFITEDISPLAYREGION LAFITEDL.EXT 
+                     LAFITEDLDIRECTORIES LAFITEENDOFMESSAGEFONT LAFITEENDOFMESSAGESTR 
+                     LAFITEEXTRAMENUFLG LAFITEEXTRAMENUITEMS LAFITEFIXEDWIDTHFONT LAFITEFORM.EXT 
+                     LAFITEFORMFILES LAFITEFROMFRACTION LAFITEHARDCOPY.MIN.TOC LAFITEHARDCOPYBATCHFLG
+                     LAFITEHARDCOPYBATCHSHADE LAFITEHARDCOPYFONT LAFITEHARDCOPYSEPARATOR 
+                     LAFITEIFFROMMETHENSEENFLG LAFITEINFO.NAME LAFITEMAIL.EXT LAFITEMENUFONT 
+                     LAFITEMENUVARS LAFITEMINFROMCHARS LAFITEMODEDEFAULT LAFITEMODELST 
+                     LAFITEMOVETOCONFIRMFLG LAFITEMSGICONFONT LAFITENEWPAGEFLG LAFITESHOWMODEFLG 
+                     LAFITESTATUSWINDOWMINWIDTH LAFITESTATUSWINDOWPOSITION LAFITESUBBROWSEMENUITEMS 
+                     LAFITESUBQUITMENUITEMS LAFITETITLEFONT LAFITETOC.EXT LAFITEUPDATEMENUITEMS 
+                     MOVETOMARK))
+
+(CL:PROCLAIM '(CL:SPECIAL LAFITEVERIFYFLG))
+
+
+
+(* ; "For debugging with Masterscope, here are fns not called from code")
+
+
+(RPAQQ LAFITE.CALLED.FROM.LITERALS 
+       (GV.CLOSEMAILBOX GV.INIT.MAIL.USER GV.MAKEANSWERFORM GV.NEXTMESSAGE GV.OPENMAILBOX 
+              GV.POLLNEWMAIL GV.PORTFROMNAME GV.RETRIEVEMESSAGE LAFITE.COMPUTE.CACHED.VARS 
+              LAFITE.GRAB.DATE LAFITE.ON.FROM.BACKGROUND LAFITE.PARSE.DATE.FIELD.ONLY 
+              LAFITE.READ.FORMAT LAFITE.READ.LINE.FOR.TOC LAFITE.READ.NAME.FIELD 
+              LAFITE.READ.ONE.LINE.FOR.TOC LAFITE.RENAME.GROUP MAKELAFITESUPPORTFORM 
+              MAKELISPSUPPORTFORM SET.LAFITE.MODE.INTERACTIVELY \GV.MESSAGE.FROM.SELF.P \GV.MESSAGE.P
+              \GV.SEND.PARSE \GV.SENDMESSAGE \LAFITE.ANSWER \LAFITE.BROWSE \LAFITE.BROWSE.FORGET 
+              \LAFITE.BROWSE.PROC \LAFITE.CANCEL.HARDCOPY \LAFITE.COPYTO \LAFITE.DELETE 
+              \LAFITE.DELETE.GROUP \LAFITE.DESCRIBE.FOLDER \LAFITE.DISPLAY \LAFITE.EDIT.HIERARCHY 
+              \LAFITE.ENABLE.MOVE.MENU \LAFITE.EXPUNGE.PROC \LAFITE.FIND \LAFITE.FIND.AGAIN 
+              \LAFITE.FIND.RELATED \LAFITE.FIND.RELATED.BACKWARD \LAFITE.FORWARD \LAFITE.GC.FOLDERS 
+              \LAFITE.GETMAIL \LAFITE.GETMAIL.FROM.ICON \LAFITE.GLOBAL.INIT \LAFITE.GO.TO.FIRST 
+              \LAFITE.GO.TO.INTERACTIVE \LAFITE.GO.TO.LAST \LAFITE.HARDCOPY 
+              \LAFITE.HARDCOPY.FROM.DISPLAY \LAFITE.HARDCOPYONLY.PROC \LAFITE.LOGIN.NORESTART 
+              \LAFITE.MERGE.FOLDERS \LAFITE.MERGE.NAMELISTS \LAFITE.MERGE.STRUCTURES 
+              \LAFITE.MESSAGEFORM \LAFITE.MOVETO \LAFITE.NOTICE.FOLDERS \LAFITE.QUIT \LAFITE.QUIT 
+              \LAFITE.REAUTHENTICATE \LAFITE.REHIDE.HEADERS \LAFITE.RENAME.FOLDER \LAFITE.RESTART 
+              \LAFITE.RESTORE.MOVE.MENU \LAFITE.SET.DEFAULT.LOOKS \LAFITE.SET.FIXED.LOOKS 
+              \LAFITE.SET.LOOKS.FROM.MENU \LAFITE.SORT.BY.DATE.REGION \LAFITE.UNCACHE.FOLDER 
+              \LAFITE.UNCACHE.MESSAGEFORM \LAFITE.UNDELETE \LAFITE.UNHIDE.HEADERS \LAFITE.UPDATE 
+              \LAFITE.UPDATE.PROC \LAFITE.UPDATE.PROC \MAILOBJ.EXPAND \MAILOBJ.FB \MAILOBJ.HARDCOPY 
+              \MAILOBJ.INIT \MAILOBJ.PUT.FILE \MAILOBJ.VIEW \NS.READ.ENVELOPE.ITEM 
+              \NS.WRITE.ENVELOPE.ITEM \NSMAIL.AUTHENTICATE \NSMAIL.LOGIN \NSMAIL.MAKEANSWERFORM 
+              \NSMAIL.MESSAGE.FROM.SELF.P \NSMAIL.MESSAGE.P \NSMAIL.SEND \NSMAIL.SEND.PARSE 
+              \SENDMSG.CHANGE.MODE \SENDMSG.DELIVER \SENDMSG.SAVE.FORM))
+
+(RPAQQ LAFITE.PROGRAMMER.ENTRIES 
+       (LAFITEDEFAULTHOST&DIR LOAD-LAFITE LAFITE.SENDMESSAGE BUILD.LAFITE.LAYOUTS 
+              LAB.SELECTED.MESSAGES LAFITE.DELETE.MESSAGES LAFITE.MOVE.MESSAGES 
+              LAFITE.HARDCOPY.MESSAGES LAFITE.OBTAIN.FOLDER MAILSCAVENGE MS.EXPAND GV.READTOC 
+              GV.WRITETOC GV.DELETEMESSAGE))
+
+(DEFCOMMAND (WHONOTLAFITE :HISTORY) NIL 
+   '((CL:SET-DIFFERENCE (CL:SET-DIFFERENCE (%. WHO ON ANY IN LAFITEFILES IS NOT CALLED)
+                               LAFITE.CALLED.FROM.LITERALS)
+            LAFITE.PROGRAMMER.ENTRIES)))
+
+(DEFCOMMAND (CHECKLAFITE :HISTORY) NIL '[(FOR FILE IN LAFITEFILES
+                                            DO (EVAL `(%. CHECK ,FILE])
+(DECLARE%: DONTEVAL@COMPILE 
+
+(SETTEMPLATE 'WINDOWPROP '(EVAL PROP EVAL . PPE))
+
+(SETTEMPLATE 'WINDOWADDPROP '(EVAL PROP EVAL EVAL . PPE))
+
+(SETTEMPLATE 'WINDOWDELPROP '(EVAL PROP EVAL . PPE))
+
+(SETTEMPLATE 'PROCESSPROP '(EVAL PROP EVAL . PPE))
+
+(SETTEMPLATE 'TEXTPROP '(EVAL PROP EVAL . PPE))
+)
+(PUTPROPS LAFITEDECLS COPYRIGHT ("Xerox Corporation" 1985 1986 1987 1988 1989 1994))
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL)))
+STOP

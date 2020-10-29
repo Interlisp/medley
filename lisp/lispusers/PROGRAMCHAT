@@ -1,0 +1,145 @@
+(DEFINE-FILE-INFO §READTABLE "INTERLISP" §PACKAGE "INTERLISP")
+(FILECREATED "20-Feb-87 08:14:49" {ERIS}<LISPUSERS>LYRIC>PROGRAMCHAT.;1 7246   
+
+      previous date%: "10-Nov-86 13:35:59" {INDIGO}<GSLWS>KOTO>LIBRARY>PROGRAMCHAT.;2)
+
+
+(* "
+Copyright (c) 1985, 1986, 1987 by Xerox Corporation.  All rights reserved.
+")
+
+(PRETTYCOMPRINT PROGRAMCHATCOMS)
+
+(RPAQQ PROGRAMCHATCOMS ((FNS OPENCHATSTREAM PROGRAMCHAT PROGRAMCHAT.LOGIN PROGRAMCHAT.OUTPUT)
+                        (VARS NETWORKLOGINFO)))
+(DEFINEQ
+
+(OPENCHATSTREAM
+  (LAMBDA (HOST)                                             (* ejs%: "23-Feb-85 19:22")
+    (PROG (OPENFUNCTION)
+          (COND
+             ((BOUNDP 'CHAT.PROTOCOLTYPES)
+              (COND
+                 ((for PROTOCOL in CHAT.PROTOCOLTYPES thereis (SETQ OPENFUNCTION (APPLY* (CDR 
+                                                                                             PROTOCOL
+                                                                                              )
+                                                                                        HOST)))
+                  (RETURN (APPLY* (CADR OPENFUNCTION)
+                                 (CAR OPENFUNCTION))))))
+             ((BOUNDP 'CHAT.PROTOCOLS)
+              (COND
+                 ((for PROTOCOL in CHAT.PROTOCOLS thereis (SETQ OPENFUNCTION (APPLY* PROTOCOL HOST)))
+                  (RETURN (APPLY* (CADR OPENFUNCTION)
+                                 (CAR OPENFUNCTION))))))))))
+
+(PROGRAMCHAT
+  (LAMBDA (HOST CMDSTREAM LOGSTREAM)                         (* DSB " 9-Nov-86 13:02")
+    (PROG ((STREAMPAIR (OPENCHATSTREAM HOST))
+           INCHAT OUTCHAT)
+          (COND
+             (STREAMPAIR (SETQ INCHAT (CAR STREAMPAIR))
+                    (SETQ OUTCHAT (CDR STREAMPAIR))
+                    (SETFILEINFO OUTCHAT 'ENDOFSTREAMOP (FUNCTION CHAT.ENDOFSTREAMOP))
+                    (SETFILEINFO INCHAT 'ENDOFSTREAMOP (FUNCTION CHAT.ENDOFSTREAMOP))
+                    (ADD.PROCESS `(PROGRAMCHAT.OUTPUT (QUOTE %, INCHAT)
+                                         (QUOTE %, LOGSTREAM)))
+                    (BLOCK)
+                    (PROGRAMCHAT.LOGIN HOST INCHAT OUTCHAT)
+                    (COND
+                       ((STRINGP CMDSTREAM)
+                        (SETQ CMDSTREAM (OPENSTRINGSTREAM CMDSTREAM 'INPUT))))
+                    (COND
+                       ((NULL LOGSTREAM)
+                        (SETQ LOGSTREAM (OPENSTREAM '{NULL} 'OUTPUT))))
+                    (while (AND (OPENP OUTCHAT 'OUTPUT)
+                                (NOT (EOFP CMDSTREAM))) do (BOUT OUTCHAT (BIN CMDSTREAM))
+                                                           (BLOCK)
+                       finally (COND
+                                  ((EOFP CMDSTREAM)
+                                   (CLOSEF CMDSTREAM)
+                                   (BOUT OUTCHAT (CHARCODE CR))
+                                   (PROGRAMCHAT.LOGIN HOST INCHAT OUTCHAT 'LOGOUT)
+                                   (FORCEOUTPUT OUTCHAT T)
+                                   (until (NOT (OPENP INCHAT 'INPUT)) do (BLOCK)
+                                      finally (CLOSEF OUTCHAT))))))))))
+
+(PROGRAMCHAT.LOGIN
+  (LAMBDA (HOST INSTREAM OUTSTREAM OPTION)                   (* ejs%: "24-Jan-85 18:52")
+          
+          (* * Login to HOST. If a job already exists on HOST, Attach to it unless OPTION 
+          overrides.)
+
+    (PROG ((LOGINFO (CDR (ASSOC (OR (GETOSTYPE HOST)
+                                    'IFS)
+                                NETWORKLOGINFO)))
+           NAME/PASS COM)
+          (OR LOGINFO (RETURN))
+          (SETQ NAME/PASS (\INTERNAL/GETPASSWORD HOST))
+          (SETQ COM (COND
+                       (OPTION)
+                       ((ASSOC 'ATTACH LOGINFO)
+                        (OR (CHAT.LOGINFO INSTREAM HOST (CAR NAME/PASS))
+                            'LOGIN))
+                       (T 
+          
+          (* Don't know how to do anything but login, so silly to try anything else)
+
+                          'LOGIN)))
+          (COND
+             ((NULL (SETQ LOGINFO (ASSOC COM LOGINFO)))
+              (printout PROMPTWINDOW T "Login option " COM " not implemented for this type of host"))
+             (T (for X in (CDR LOGINFO) do (SELECTQ X
+                                               (CR (BOUT OUTSTREAM (CHARCODE CR))
+                                                   (FORCEOUTPUT OUTSTREAM))
+                                               (USERNAME (PRIN3 (CAR NAME/PASS)
+                                                                OUTSTREAM))
+                                               (PASSWORD (PRIN3 (\DECRYPT.PWD (CDR NAME/PASS))
+                                                                OUTSTREAM))
+                                               (WAIT         (* Some systems do not permit 
+                                                             typeahead)
+                                                     (COND
+                                                        ((NOT (CHAT.FLUSH&WAIT INSTREAM))
+                                                             (* Couldn't sync, so wait longer.)
+                                                         (DISMISS CHAT.WAIT.TIME)))
+                                                     (DISMISS CHAT.WAIT.TIME))
+                                               (PRIN3 X OUTSTREAM)))
+                (FORCEOUTPUT OUTSTREAM))))))
+
+(PROGRAMCHAT.OUTPUT
+  (LAMBDA (INCHATSTREAM LOGSTREAM)                           (* ejs%: "23-Feb-85 19:18")
+    (bind CH while (AND (NEQ CH -1)
+                        (OPENP INCHATSTREAM 'INPUT)) do (SETQ CH (BIN INCHATSTREAM))
+                                                        (COND
+                                                           ((NEQ CH -1)
+                                                            (COND
+                                                               (LOGSTREAM (BOUT LOGSTREAM CH)))))
+       finally (COND
+                  ((OPENP INCHATSTREAM)
+                   (CLOSEF INCHATSTREAM))))))
+)
+
+(RPAQQ NETWORKLOGINFO 
+       ((TENEX (LOGIN "LOGIN " USERNAME " " PASSWORD " 
+")
+               (ATTACH "ATTACH " USERNAME " " PASSWORD " 
+")
+               (WHERE "WHERE " USERNAME CR "ATTACH " USERNAME " " PASSWORD CR)
+               (LOGOUT "LOGOUT" CR))
+        (TOPS20 (LOGIN "LOGIN " USERNAME CR PASSWORD CR)
+               (ATTACH "ATTACH " USERNAME "" CR PASSWORD CR)
+               (WHERE "LOGIN " USERNAME CR PASSWORD CR)
+               (LOGOUT "LOGOUT" CR))
+        (UNIX (LOGIN WAIT CR WAIT USERNAME CR WAIT PASSWORD CR WAIT WAIT WAIT WAIT CR)
+              (LOGOUT WAIT CR "logout" CR))
+        (IFS (LOGIN "Login " USERNAME " " PASSWORD CR)
+             (ATTACH)
+             (LOGOUT "Quit" CR))
+        (VMS (LOGIN USERNAME CR PASSWORD CR)
+             (LOGOUT "LOGOUT" CR))
+        (NS (LOGIN "Logon" CR USERNAME CR PASSWORD CR)
+            (LOGOUT "LOGOFF" CR))))
+(PUTPROPS PROGRAMCHAT COPYRIGHT ("Xerox Corporation" 1985 1986 1987))
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL (503 6265 (OPENCHATSTREAM 513 . 1533) (PROGRAMCHAT 1535 . 3283) (PROGRAMCHAT.LOGIN 3285
+ . 5599) (PROGRAMCHAT.OUTPUT 5601 . 6263)))))
+STOP

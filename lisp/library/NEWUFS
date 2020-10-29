@@ -1,0 +1,257 @@
+(DEFINE-FILE-INFO READTABLE "INTERLISP" PACKAGE "INTERLISP")
+(FILECREATED " 5-Feb-90 13:03:20" "{piglet/n}<piglet>vanmelle>lispusers>NEWUFS;16" 40458  
+
+      changes to%:  (FNS \UFS.DIRECTORY.NAME)
+
+      previous date%: " 6-Nov-89 14:44:17" "{piglet/n}<piglet>vanmelle>lispusers>NEWUFS;14")
+
+
+(* "
+Copyright (c) 1989, 1990 by Xerox Corporation.  All rights reserved.
+")
+
+(PRETTYCOMPRINT NEWUFSCOMS)
+
+(RPAQQ NEWUFSCOMS ((COMS (* ; "UFS changes") (FNS \UFSParseNameString \UFSMakeUnixFormatName \UFSOpenFile \UFSWritePages \UFSTruncateFile \UFSCloseFile \UFSGetFileName \UFSDeleteFile \UFSRenameFile \UFSParse-Directory \UFSDirectoryNameP \UFSGetFileInfo \UFSSetFileInfo \UFSGenerateFiles \UFSFindFile \UFSError \UFSGetFileType \UFS.TYPE.FROM.PROTECTION \UFSCreateDevice \UFSEventFn) (VARS (DEFAULTFILETYPELIST (QUOTE ((C . TEXT) (H . TEXT) (LISP . TEXT) (LSP . TEXT) (O . BINARY) (OUT . BINARY) (LCOM . BINARY) (DFASL . BINARY) (DCOM . BINARY) (SKETCH . BINARY) (DISPLAYFONT . BINARY) (WD . BINARY) (IP . BINARY) (RST . BINARY) (BIN . BINARY) (MAIL . BINARY) (MAIL-LAFITE-TOC . BINARY)))))) (COMS (* ; "DSK changes (plus lots of deletions)") (FNS \DSKCreateDevice)) (COMS (* ; "My additions") (DECLARE%: EVAL@COMPILE DONTCOPY (FILES (LOADCOMP FROM "{Eris}<LispCore>Sources>") UFS) (* ; "Load this old guy before we redefine UFSSTREAM") (RECORDS UFSSTREAM UFSGFS) (MACROS \UFS.DEFAULT.DIR \UFS.FILE.RECOGNIZER \UFS.DIRECTORY.RECOGNIZER) (CONSTANTS (\UFS.BINARY.BITS 3657) (\UFS.MAIN.BINARY.BIT 64))) (FNS \UFS.CREATE.DEVICE \UFS.OPENP \UFS.PARSE.BODY \UFS.RECOGNIZE.FILE \UFS.DIRECTORY.NAME \UFS.CREATE.PROPS \UFS.NEXTFILEFN \UFS.FILEINFOFN \UFS.SET.FILE.TYPE)) (COMS (* ; "The essential ufsnfs stuff.  First two fns should have generic versions in UFS") (FNS \UFS.ADJUST.HOST \DSK.HOME.DIR \UFS.FULLNAME \UFSNFS.HOSTNAMEP \MAKE.UFSNFS.DEVICE) (INITVARS (*NFS-HACK-ENABLED* T) (*NFS-USE-SLASHES* NIL) (*NFS-AUTO-MOUNT-VOLUME* "/net/")) (DECLARE%: EVAL@COMPILE DOCOPY (P (CL:PROCLAIM (QUOTE (CL:SPECIAL *NFS-HACK-ENABLED* *NFS-USE-SLASHES*))) (CL:PROCLAIM (QUOTE (GLOBAL *NFS-AUTO-MOUNT-VOLUME*)))))) (GLOBALVARS \DSKdevice \DSKtopMonitor \UFSdevice \UFStopMonitor \DSKDefaultConnDir \UFSDefaultConnDir) (DECLARE%: DONTEVAL@LOAD DOCOPY (P (COND (\DSKdevice (\REMOVEDEVICE \DSKdevice) (SETQ \DSKdevice NIL))) (AND (EQ (MACHINETYPE) (QUOTE MAIKO)) (\DSKOpenDevice)) (\MAKE.UFSNFS.DEVICE)))))
+
+
+
+(* ; "UFS changes")
+
+(DEFINEQ
+
+(\UFSParseNameString
+(LAMBDA (FILE) (* ; "Edited  3-Nov-89 18:11 by bvm") (* ;; "Like UNPACKFILENAME.STRING, with embellishments. ") (\UFS.ADJUST.HOST (UNPACKFILENAME.STRING (\UFSMakeUnixFormatName (MKSTRING FILE)))))
+)
+
+(\UFSMakeUnixFormatName
+(LAMBDA (FILE) (* ; "Edited  3-Nov-89 18:10 by bvm") (* ;; "Given a file name in INTERLISP format {host}<dir>subdir...>name.ext;ver,") (* ;; "convert the directory part to unix /dir/subdir/.../ format. . ") (DECLARE (GLOBALVARS \UFSDefaultDelimiter)) (LET* ((OLDFILE (MKSTRING FILE)) (LEN (NCHARS OLDFILE)) (NEWFILE (ALLOCSTRING LEN)) (NEWINDEX -1) (LASTSLASH -2) (SLASHCHAR (CL:CHAR \UFSDefaultDelimiter 0)) C) (* ;; "Change all %">%" and %"<%"  to %"/%" and remove duplicate %"/%"s so that we don't misinterpret /foo//bar as being a relative spec (ugh).") (for I from 0 to (SUB1 LEN) do (CASE (SETQ C (CL:CHAR OLDFILE I)) ((#\/ #\> #\<) (* ; "Make this a slash, suppress it if we already had one") (if (> NEWINDEX LASTSLASH) then (CL:SETF (CL:CHAR NEWFILE (SETQ LASTSLASH (add NEWINDEX 1))) SLASHCHAR))) (T (* ; "Just copy it") (CL:SETF (CL:CHAR NEWFILE (add NEWINDEX 1)) C)))) (if (EQ NEWINDEX (SUB1 LEN)) then (* ; "nothing removed") NEWFILE else (SUBSTRING NEWFILE 1 (ADD1 NEWINDEX)))))
+)
+
+(\UFSOpenFile
+(LAMBDA (FILE ACCESS RECOG OTHERINFO FDEV OLDSTREAM) (* ; "Edited  6-Nov-89 14:42 by bvm") (* ;;; "Open a file.") (WITH.MONITOR (\UFSGetMonitor FDEV) (PROG ((ACC (SELECTQ ACCESS (INPUT ACCESS-INPUT) (OUTPUT ACCESS-OUTPUT) (BOTH ACCESS-BOTH) (APPEND ACCESS-APPEND) ACCESS-OTHER)) (REC (SELECTQ RECOG (OLD RECOG-OLD) (OLDEST RECOG-OLDEST) (NEW RECOG-NEW) (OLD/NEW RECOG-NEW-OLD) (SELECTQ ACCESS (INPUT RECOG-OLD) (OUTPUT RECOG-NEW) ((BOTH APPEND) RECOG-NEW-OLD) RECOG-OTHER))) (EOF-FN (FUNCTION \EOSERROR)) (ERRNO (CREATECELL \FIXP)) (TYPE (FASSOC (QUOTE TYPE) OTHERINFO)) OTHER FILEID BYTESIZE CDATE FULLNAME CINFO STRM EOF DEVFILEP) (SETQ FULLNAME (if (type? STREAM FILE) then (COND ((fetch (UFSSTREAM FILEID) of FILE) (* ; "Already open--this really ought to be an error") (RETURN FILE)) (T (fetch (UFSSTREAM UNIXNAME) of FILE))) else (\UFS.RECOGNIZE.FILE FILE RECOG FDEV))) (COND ((NOT FULLNAME) (RETURN NIL)) ((AND (NULL OLDSTREAM) (EQ (fetch (FDEV DEVICENAME) of FDEV) (QUOTE DSK)) (SETQ OTHER (\UFS.OPENP FULLNAME FDEV)) (SELECTQ ACCESS (INPUT (* ; "ok if other file is also input") (DIRTYABLE OTHER)) T)) (* ; "Access conflict.  Don't check this when just revalidating, of course.  I also don't mess with this on UNIX device--let user get in trouble...") (CL:ERROR (QUOTE XCL:FILE-WONT-OPEN) :PATHNAME (\UFS.FULLNAME FULLNAME FDEV)))) (SETQ CDATE (CREATECELL \FIXP)) (SETQ BYTESIZE (CREATECELL \FIXP)) (SETQ FILEID (OR (\UFSOpenFile-C FULLNAME REC ACC CDATE BYTESIZE FDEV ERRNO) (RETURN (\UFSError FULLNAME ERRNO FDEV)))) (SETQ EOF (if (= (SETQ BYTESIZE (IPLUS BYTESIZE 0)) -1) then (SETQ EOF-FN (SETQ DEVFILEP (FUNCTION \DEVICEFILE.EOSERROR))) (SETQ BYTESIZE 0) elseif (EQ ACCESS (QUOTE OUTPUT)) then (* ;; "Overwriting, so eof = 0.  We'll want to truncate the file if it already existed.  We could do that at close time, but due to bug in emulator, BYTESIZE came back 0 even if it wasn't really.  Workaround: explicitly truncate now.") (\UFSGetSize-C FILEID (SETQ BYTESIZE 0) ERRNO) (* ; "Take this call out if emulator gets fixed") 0 else BYTESIZE)) (SETQ STRM (create STREAM FULLFILENAME _ (\UFS.FULLNAME FULLNAME FDEV T) DEVICE _ FDEV EPAGE _ (FOLDLO EOF BYTESPERPAGE) EOFFSET _ (IMOD EOF BYTESPERPAGE) VALIDATION _ CDATE ENDOFSTREAMOP _ EOF-FN)) (replace (UFSSTREAM FILEID) of STRM with FILEID) (replace (UFSSTREAM CDATE) of STRM with (if (SETQ CINFO (FASSOC (QUOTE CREATIONDATE) OTHERINFO)) then (IDATE (CADR CINFO)) else 0)) (replace (UFSSTREAM UNIXNAME) of STRM with (SETQ FULLNAME (CONCAT FULLNAME))) (* ; "Save the unix name for closef & getfileinfo.  Copy it so we don't hold onto the 256-byte buffer used by recognize file.") (replace (UFSSTREAM LASTPAGE) of STRM with (FOLDLO BYTESIZE BYTESPERPAGE)) (* ; "Remember these for truncatefile") (replace (UFSSTREAM LASTOFFSET) of STRM with (IMOD BYTESIZE BYTESPERPAGE)) (if (NULL TYPE) then (* ; "Look at type of (possibly) old file.  Note that we don't do this when caller said (TYPE NIL)") (SETQ TYPE (\UFSGetFileType FULLNAME FDEV)) elseif (AND (NEQ (SETQ TYPE (CADR TYPE)) (QUOTE TEXT)) (NOT DEVFILEP) (SELECTQ ACCESS (OUTPUT T) (BOTH (EQ BYTESIZE 0)) NIL)) then (* ; "Apparently new output file with explicit non-text type specified, so set it to binary") (\UFS.SET.FILE.TYPE FULLNAME (QUOTE BINARY) FDEV)) (replace (STREAM EOLCONVENTION) of STRM with (SELECTQ TYPE ((NIL TEXT) LF.EOLC) (PROGN (* ; "BINARY") CR.EOLC))) (RETURN STRM))))
+)
+
+(\UFSWritePages
+(LAMBDA (STRM FIRSTPAGE BUFFERS) (* ; "Edited 16-Oct-89 17:11 by bvm") (* ;;; "ARG0 -- stream :  {stream} data type. ") (* ;;; "ARG1 -- FIRSTPAGE :  the 1st page number of file to write. ") (* ;;; "ARG2 -- buffers : {VMEMPAGEP} or list of {VMEMPAGEP}.") (LET ((EPAGE (fetch (STREAM EPAGE) of STRM)) (LASTPHYSPAGE (fetch (UFSSTREAM LASTPAGE) of STRM)) (ERRNO (CREATECELL \FIXP))) (for BUF inside BUFFERS as PAGENO from FIRSTPAGE bind (FILEID _ (fetch (UFSSTREAM FILEID) of STRM)) SIZE do (COND ((\UFSWritePages-C FILEID PAGENO BUF (SETQ SIZE (COND ((EQL PAGENO EPAGE) (* ; "Writing last page, so length is shorter.") (fetch (STREAM EOFFSET) of STRM)) (T BYTESPERPAGE))) ERRNO) (if (>= PAGENO LASTPHYSPAGE) then (* ; "Keep track of actual file length written so far") (replace (UFSSTREAM LASTPAGE) of STRM with (SETQ LASTPHYSPAGE PAGENO)) (if (> SIZE (fetch (UFSSTREAM LASTOFFSET) of STRM)) then (replace (UFSSTREAM LASTOFFSET) of STRM with SIZE)))) (T (* ; "Failure") (OR (\UFSError STRM ERRNO) (CL:ERROR (QUOTE XCL:SIMPLE-DEVICE-ERROR) :MESSAGE (CL:FORMAT NIL "Write failed for ~A because error#~D" (CL:NAMESTRING STRM) ERRNO))))))))
+)
+
+(\UFSTruncateFile
+(LAMBDA (STREAM PAGE# OFFSET) (* ; "Edited 24-Mar-89 17:38 by bvm") (* ;;; "Used to shorten or lengthen STREAM.  If lengthening, pad the file with nulls.  Used by SETEOFPTR and FORCEOUTPUT.") (\UPDATEOF STREAM) (OR (FIXP PAGE#) (SETQ PAGE# (fetch (STREAM EPAGE) of STREAM))) (OR (FIXP OFFSET) (SETQ OFFSET (fetch (STREAM EOFFSET) of STREAM))) (* ; "Truncate size was set to PAGE# and OFFSET") (PROG ((LASTPHYSPAGE (fetch (UFSSTREAM LASTPAGE) of STREAM)) (curEof (+ (UNFOLD (fetch (STREAM EPAGE) of STREAM) BYTESPERPAGE) (fetch (STREAM EOFFSET) of STREAM))) (needSize (+ (UNFOLD PAGE# BYTESPERPAGE) OFFSET)) (ERRNO (CREATECELL \FIXP))) (if (> needSize curEof) then (* ; "Push 0 to extend file.") (LET ((FILEPTR (\GETFILEPTR STREAM))) (\SETFILEPTR STREAM curEof) (to (- needSize curEof) do (\BOUT STREAM 0)) (\SETFILEPTR STREAM FILEPTR)) elseif (OR (< PAGE# LASTPHYSPAGE) (AND (EQL PAGE# LASTPHYSPAGE) (< OFFSET (fetch (UFSSTREAM LASTOFFSET) of STREAM)))) then (* ;; "Call c to shorten file.  We keep track of the file's eof, so that we don't call C when nothing has changed, thereby bogusly changing the creationdate (of course, if you fix C, then this is no longer necessary).") (OR (\UFSGetSize-C (fetch (UFSSTREAM FILEID) of STREAM) needSize ERRNO) (RETURN (\UFSError STREAM ERRNO))) (replace (UFSSTREAM LASTPAGE) of STREAM with PAGE#) (replace (UFSSTREAM LASTOFFSET) of STREAM with OFFSET) else (RETURN)) (* ;; "Set new value to stream") (replace (STREAM EPAGE) of STREAM with PAGE#) (replace (STREAM EOFFSET) of STREAM with OFFSET) (LET ((DT (CREATECELL \FIXP))) (* ;; "Set new validation value. UNIX mtime is updated, so Lisp stream validation must be updated.") (if (\UFSGetFileInfo-C (fetch (UFSSTREAM UNIXNAME) of STREAM) ATTR-WDATE DT (fetch (STREAM DEVICE) of STREAM) ERRNO) then (replace (STREAM VALIDATION) of STREAM with DT)))))
+)
+
+(\UFSCloseFile
+(LAMBDA (STREAMFILE) (* ; "Edited 28-Feb-89 11:07 by bvm") (* ; "return stream") (* ;;; "Closes the specified stream.") (* * WITH.MONITOR \UFStopMonitor) (* ;;; "Write out and dispense with buffers for this stream.") (\CLEARMAP STREAMFILE) (LET ((DEVICE (fetch (STREAM DEVICE) of STREAMFILE)) (CDATE 0) (ERRNO (CREATECELL \FIXP))) (if (DIRTYABLE STREAMFILE) then (* ; "Open for output") (FDEVOP (QUOTE TRUNCATEFILE) DEVICE STREAMFILE) (SETQ CDATE (fetch (UFSSTREAM CDATE) of STREAMFILE))) (if (\UFSCloseFile-C (OR (fetch (UFSSTREAM UNIXNAME) of STREAMFILE) (LET ((FULLNAME (fetch (STREAM FULLFILENAME) of STREAMFILE))) (* ;; "This is strictly so that if you load this patch file using maiko dsk, you don't die when you close the file") (SUBSTRING FULLNAME (ADD1 (STRPOS \UFSDeviceDelimiter FULLNAME))))) (fetch (UFSSTREAM FILEID) of STREAMFILE) CDATE DEVICE ERRNO) then (replace (UFSSTREAM FILEID) of STREAMFILE with NIL) (replace (UFSSTREAM CDATE) of STREAMFILE with NIL) (* ; "Clear open-file state") STREAMFILE else (\UFSError (fetch (STREAM FULLFILENAME) of STREAMFILE) ERRNO))))
+)
+
+(\UFSGetFileName
+(LAMBDA (FILENAME RECOG DEV) (* ; "Edited 24-Feb-89 16:20 by bvm") (* ;; "Recognize filename, return full name") (\UFS.FULLNAME (\UFS.RECOGNIZE.FILE FILENAME RECOG DEV) DEV T))
+)
+
+(\UFSDeleteFile
+(LAMBDA (FILENAME DEV) (* ; "Edited 24-Feb-89 16:23 by bvm") (* ; "return deleted file name") (* ; "if error, return NIL") (WITH.MONITOR (\UFSGetMonitor DEV) (LET ((NAME (\UFS.RECOGNIZE.FILE FILENAME (QUOTE OLDEST) DEV))) (COND ((AND NAME (NOT (\UFS.OPENP NAME DEV))) (* ; "file found and not open, so try to delete") (LET ((ERRNO (CREATECELL \FIXP))) (COND ((\UFSDeleteFile-C NAME DEV ERRNO) (* ; "Success") (\UFS.FULLNAME NAME DEV T)) (T (* ; "Failure") (\UFSError NAME ERRNO DEV)))))))))
+)
+
+(\UFSRenameFile
+(LAMBDA (OLD-DEVICE OLD-NAME NEW-DEVICE NEW-NAME) (* ; "Edited 24-Feb-89 16:31 by bvm") (if (NEQ OLD-DEVICE NEW-DEVICE) then (* ;; "Call the generic rename function. ") (LET ((FILE (\GENERIC.RENAMEFILE OLD-DEVICE OLD-NAME NEW-DEVICE NEW-NAME))) (COND ((AND FILE (EQ \MACHINETYPE \MAIKO) FileTypeConfirmFlg) (* ; "print warnig message") (\UFStoOtherRenameMess OLD-DEVICE OLD-NAME NEW-DEVICE NEW-NAME))) FILE) else (* ;; "UNIX file system rename.") (LET ((OLDUNIXNAME (\UFS.RECOGNIZE.FILE OLD-NAME (QUOTE OLD) OLD-DEVICE))) (if (AND OLDUNIXNAME (NOT (\UFS.OPENP OLDUNIXNAME OLD-DEVICE))) then (* ; "Old file is found and not open, so proceed") (LET ((NEWUNIXNAME (\UFS.RECOGNIZE.FILE NEW-NAME (QUOTE NEW) NEW-DEVICE)) (ERRNO (CREATECELL \FIXP))) (COND ((\UFSRenameFile-C OLDUNIXNAME NEWUNIXNAME NEW-DEVICE ERRNO) (\UFS.FULLNAME NEWUNIXNAME NEW-DEVICE)) (T (\UFSError (CONCAT OLDUNIXNAME " or " NEWUNIXNAME) ERRNO) NIL)))))))
+)
+
+(\UFSParse-Directory
+(LAMBDA (PARSE DEV) (* ; "Edited  1-Mar-89 14:45 by bvm") (LET ((DIRECTORY (LISTGET PARSE (QUOTE DIRECTORY)))) (COND (DIRECTORY (if (NEQ (NTHCHAR DIRECTORY -1) \UFSDefaultDelimiterChar) then (* ; "absolute pathname") (CONCAT \UFSDefaultDelimiter DIRECTORY \UFSDefaultDelimiter) elseif (> (NCHARS DIRECTORY) 0) then (* ; "relative pathname") (SELECTQ (NTHCHAR DIRECTORY 1) ((/ ~ %.) DIRECTORY) (CONCAT (\UFS.DEFAULT.DIR DEV) DIRECTORY)) else (* ; "Naked / = top-level dir") DIRECTORY)) (T (\UFS.DEFAULT.DIR DEV)))))
+)
+
+(\UFSDirectoryNameP
+(LAMBDA (DIRSPEC DEV) (* ; "Edited  1-Mar-89 14:27 by bvm") (* ;;; "Device function that returns the directory's full name if it exists.") (LET ((PARSED (\UFSParseNameString DIRSPEC))) (* ; "Assure that name has directory syntax first, then do recognition.") (AND (NOT (LISTGET PARSED (QUOTE NAME))) (SETQ PARSED (\UFS.DIRECTORY.NAME (\UFSParse-Directory PARSED DEV) DEV)) (\UFS.FULLNAME PARSED DEV))))
+)
+
+(\UFSGetFileInfo
+(LAMBDA (STREAM ATTRIBUTE DEVICE) (* ; "Edited 10-Oct-89 15:40 by bvm") (* ;;; "Get the value of the attribute for a file.") (* ;;; "Allocate buffer to store the value.") (* ;;; "If attribute is AUTHOR, the type of the buffer is STRING.") (* ;;; "Otherwise the type of the buffer is FIXP.") (WITH.MONITOR (\UFSGetMonitor DEVICE) (LET ((FILENAME (if (type? STREAM STREAM) then (fetch (UFSSTREAM UNIXNAME) of STREAM) else (\UFS.RECOGNIZE.FILE STREAM (QUOTE OLD) DEVICE))) (ERRNO (CREATECELL \FIXP)) BUFFER NAMESIZE) (if FILENAME then (SELECTQ ATTRIBUTE (LENGTH (SETQ BUFFER (CREATECELL \FIXP)) (if (\UFSGetFileInfo-C FILENAME ATTR-LENGTH BUFFER DEVICE ERRNO) then BUFFER else (\UFSError FILENAME ERRNO DEVICE))) (SIZE (SETQ BUFFER (CREATECELL \FIXP)) (if (\UFSGetFileInfo-C FILENAME ATTR-LENGTH BUFFER DEVICE ERRNO) then (FOLDHI BUFFER BYTESPERPAGE) else (\UFSError FILENAME ERRNO DEVICE))) (TYPE (\UFSGetFileType FILENAME DEVICE)) ((CREATIONDATE WRITEDATE) (SETQ BUFFER (CREATECELL \FIXP)) (if (\UFSGetFileInfo-C FILENAME ATTR-WDATE BUFFER DEVICE ERRNO) then (GDATE BUFFER) else (\UFSError FILENAME ERRNO DEVICE))) (READDATE (SETQ BUFFER (CREATECELL \FIXP)) (if (\UFSGetFileInfo-C FILENAME ATTR-RDATE BUFFER DEVICE ERRNO) then (GDATE BUFFER) else (\UFSError FILENAME ERRNO DEVICE))) ((ICREATIONDATE IWRITEDATE) (SETQ BUFFER (CREATECELL \FIXP)) (if (\UFSGetFileInfo-C FILENAME ATTR-WDATE BUFFER DEVICE ERRNO) then BUFFER else (\UFSError FILENAME ERRNO DEVICE))) (IREADDATE (SETQ BUFFER (CREATECELL \FIXP)) (if (\UFSGetFileInfo-C FILENAME ATTR-RDATE BUFFER DEVICE ERRNO) then BUFFER else (\UFSError FILENAME ERRNO DEVICE))) (AUTHOR (SETQ BUFFER (ALLOCSTRING MAX-UNAME-LEN)) (if (SETQ NAMESIZE (\UFSGetFileInfo-C FILENAME ATTR-AUTHOR BUFFER DEVICE ERRNO)) then (CL:SUBSEQ BUFFER 0 NAMESIZE) else (\UFSError FILENAME ERRNO DEVICE))) (PROTECTION (SETQ BUFFER (CREATECELL \FIXP)) (if (\UFSGetFileInfo-C FILENAME ATTR-PROTECTION BUFFER DEVICE ERRNO) then BUFFER else (\UFSError FILENAME ERRNO DEVICE))) (ALL (SETQ BUFFER (\UFS.CREATE.PROPS)) (if (SETQ NAMESIZE (\UFSGetFileInfo-C FILENAME ATTR-ALL BUFFER DEVICE ERRNO)) then (LET ((ALIST (ASSOC (QUOTE AUTHOR) BUFFER))) (* ; "Copy string out of buffer") (RPLACD ALIST (CL:SUBSEQ (CDR ALIST) 1 NAMESIZE)) BUFFER) else (\UFSError FILENAME ERRNO DEVICE))) NIL)))))
+)
+
+(\UFSSetFileInfo
+(LAMBDA (STREAM ATTRIBUTE VALUE DEVICE) (* ; "Edited 10-Oct-89 15:54 by bvm") (* ;;; "Get the VALUE of the ATTRIBUTE for a file.") (* ;;; "Allocate buffer to store the value.") (* ;;; "If attribute is AUTOR, the type of the buffer is STRING.") (* ;;; " Otherwise the type of the buffer is FIXP.") (WITH.MONITOR (\UFSGetMonitor DEVICE) (LET ((FILENAME (if (type? STREAM STREAM) then (fetch (UFSSTREAM UNIXNAME) of STREAM) else (\UFS.RECOGNIZE.FILE STREAM (QUOTE OLD) DEVICE))) (ERRNO (CREATECELL \FIXP)) BUFFER NAMESIZE PATHNAME) (if FILENAME then (SELECTQ ATTRIBUTE (TYPE (AND VALUE (\UFS.SET.FILE.TYPE FILENAME VALUE DEVICE))) ((CREATIONDATE WRITEDATE) (if (AND (STRINGP VALUE) (SETQ VALUE (IDATE VALUE))) then (OR (\UFSSetFileInfo-C FILENAME ATTR-WDATE VALUE DEVICE ERRNO) (\UFSError FILENAME ERRNO DEVICE)) else (ERROR "Invalid argument" VALUE))) ((ICREATIONDATE IWRITEDATE) (if (FIXP VALUE) then (OR (\UFSSetFileInfo-C FILENAME ATTR-WDATE VALUE DEVICE ERRNO) (\UFSError FILENAME ERRNO DEVICE)) else (ERROR "Invalid argument" VALUE))) (PROTECTION (if (FIXP VALUE) then (OR (\UFSSetFileInfo-C FILENAME ATTR-PROTECTION VALUE DEVICE ERRNO) (\UFSError FILENAME ERRNO DEVICE)) else (ERROR "Invalid argument" VALUE))) NIL)))))
+)
+
+(\UFSGenerateFiles
+(LAMBDA (FDEV PATTERN DESIREDPROPS) (* ; "Edited  2-Mar-89 14:06 by bvm") (* ;;; "Returns a file-generator object that will generate exactly those files in the sys-dir of FDEV whose names match PATTERN.") (WITH.MONITOR (\UFSGetMonitor FDEV) (PROG ((PARSED (\UFSParseNameString PATTERN)) DIRECTORY FILTER FILELIST POS SLPOS) (SETQ DIRECTORY (\UFSParse-Directory PARSED FDEV)) (SETQ FILTER (\UFS.PARSE.BODY PARSED)) (COND ((OR (NULL DIRECTORY) (NULL (SETQ POS (STRPOS "*" DIRECTORY)))) (* ; "Normal directory")) ((SETQ SLPOS (CL:POSITION (CL:CHAR \UFSDefaultDelimiter 0) DIRECTORY :END (SUB1 POS) :FROM-END T)) (* ;; "There is at least one directory before the *, so call that much the directory and add the directory to the filter.  This will be a waste of time until the C code is willing to handle it, though.") (SETQ FILTER (CONCAT (SUBSTRING DIRECTORY (+ SLPOS 2)) FILTER)) (SETQ DIRECTORY (SUBSTRING DIRECTORY 1 (ADD1 SLPOS)))) (T (* ;; "No slash before the *!  Note that \UFSParse-Directory will ALWAYS ensure there is a slash before the * unless the pattern itself started with . or ~, in which case the caller just loses-- we can't handle %"~*/%", etc.") (RETURN (\NULLFILEGENERATOR)))) (if (NOT (SETQ DIRECTORY (\UFS.DIRECTORY.NAME DIRECTORY FDEV))) then (* ; "No such directory.  We go thru this recognition step so that \UFSFindFile gives us name in the correct case") (PRINTOUT PROMPTWINDOW T "Can't enumerate " PATTERN " because no such directory") (RETURN (\NULLFILEGENERATOR))) (* ;; "Generate a list of all the files that match the spec.") (* ;; "(\UFS.SORT.FILES FILELIST) -- not needed, C sorts them") (* ;; "Finally return the file generator object.") (RETURN (create FILEGENOBJ NEXTFILEFN _ (FUNCTION \UFS.NEXTFILEFN) FILEINFOFN _ (FUNCTION \UFS.FILEINFOFN) GENFILESTATE _ (create UFSGFS MOREFILES _ (SETQ FILELIST (\UFSFindFile DIRECTORY FILTER FDEV)) DEV _ FDEV DIRECTORY _ DIRECTORY ERRNO&ALLPROPS _ (AND FILELIST DESIREDPROPS (CONS (CREATECELL \FIXP) (\UFS.CREATE.PROPS)))))))))
+)
+
+(\UFSFindFile
+(LAMBDA (DIRECTORY FILTER DEVICE) (* ; "Edited  2-Mar-89 13:59 by bvm") (PROG ((ERRNO (CREATECELL \FIXP)) (START 1) BUFFER FILELIST DIRSIZE) (* ;; "Count the proper size of buffer") (SETQ DIRSIZE (OR (\UFSDirSize-C DIRECTORY FILTER DEVICE ERRNO) (RETURN (\UFSError DIRECTORY ERRNO DEVICE)))) (* ;; "Allocate (ADD1 DIRSIZE) byte to save the 1byte for C string terminator, '\0'.") (SETQ BUFFER (ALLOCSTRING (ADD1 DIRSIZE))) (OR (SETQ DIRSIZE (\UFSReadDir-C DIRECTORY FILTER BUFFER DEVICE ERRNO)) (RETURN (\UFSError DIRECTORY ERRNO DEVICE))) (if (> DIRSIZE 0) then (SETQ BUFFER (SUBSTRING BUFFER 1 DIRSIZE)) (* ; "Need to do this because STRPOS doesn't take an END arg.") (BLOCK) (while (< START DIRSIZE) do (* ;; "Files come back from C in reverse order so that we can just cons them onto this list and have them in the right order.  Separator between files is \, which means we're in trouble if user has a file containing that character.") (push FILELIST (SUBSTRING BUFFER START (SUB1 (SETQ START (OR (STRPOS "\" BUFFER START) (ADD1 DIRSIZE)))))) (add START 1))) (RETURN FILELIST)))
+)
+
+(\UFSError
+(LAMBDA (PATHNAME ERRNO DEV) (* ; "Edited  3-Mar-89 11:58 by bvm") (* ;; "If DEV is supplied, we combine it with PATHNAME to get a real name.") (* ;; "Note that codes not explicitly listed here do not signal an error (!!).  This may be reasonable for code zero (file not found), but others???") (PROG ((NO (IPLUS ERRNO 0))) (* ;; "errno is fixp cell, catinated to smallp, NO") (if DEV then (SETQ PATHNAME (\UFS.FULLNAME PATHNAME DEV))) (SELECTQ NO (1 (ERROR "Not owner" PATHNAME)) (5 (* ; "I/O error") (CL:ERROR (QUOTE XCL:SIMPLE-DEVICE-ERROR) :MESSAGE PATHNAME)) (13 (* ; "Permission denied") (CL:ERROR (QUOTE XCL:FS-PROTECTION-VIOLATION) :PATHNAME PATHNAME)) (23 (* ; "File table overflow") (CL:ERROR (QUOTE XCL:FILE-WONT-OPEN) :PATHNAME PATHNAME)) (24 (* ; "LISPERROR 15 is no longer supported (LISPERROR %"TOO MANY FILES OPEN%" |pathname|)") (ERROR "TOO MANY FILES OPEN" PATHNAME)) (27 (ERROR "File too large" PATHNAME)) (28 (* ; "No space left on device") (CL:ERROR (QUOTE XCL:FS-RESOURCES-EXCEEDED) :PATHNAME PATHNAME)) (29 (* ; "Illegal seek") (CL:ERROR (QUOTE XCL:SIMPLE-DEVICE-ERROR) :MESSAGE PATHNAME)) (30 (* ; "Read only file system") (CL:ERROR (QUOTE XCL:FS-PROTECTION-VIOLATION) :PATHNAME PATHNAME)) (60 (* ; "Connect request or NFS request failed") (ERROR "Connection timed out" PATHNAME)) (66 (ERROR "Directory not empty" PATHNAME)) (100 (ERROR "Connection timed out" PATHNAME)) NIL)))
+)
+
+(\UFSGetFileType
+(LAMBDA (UNIXNAME DEVICE) (* ; "Edited  6-Nov-89 14:44 by bvm") (LET ((PROTECTION (CREATECELL \FIXP)) (ERRNO (CREATECELL \FIXP))) (if (\UFSGetFileInfo-C UNIXNAME ATTR-PROTECTION PROTECTION DEVICE ERRNO) then (* ; "Succeeded in fetching protection.") (\UFS.TYPE.FROM.PROTECTION PROTECTION UNIXNAME))))
+)
+
+(\UFS.TYPE.FROM.PROTECTION
+(LAMBDA (PROTECTION UNIXNAME) (* ; "Edited  6-Nov-89 14:35 by bvm") (* ;; "Given that file UNIXNAME has protection bits PROTECTION, return its file type.") (* ;; "There is precious little to base type on.  We assume files with execute bits are binary.  Others we guess from extension.  Note that if files with a particular extension are not necessarily always the same type (e.g., TEDIT files can be either binary or text), it is best to leave that extension off of DEFAULTFILETYPELIST and force the system to infer it somehow if it must.") (if (NULL PROTECTION) then (* ; "Guess nothing about a file we can't stat") NIL elseif (BITTEST PROTECTION \UFS.BINARY.BITS) then (QUOTE BINARY) else (* ; "Guess from the extension") (LET ((TYPE (UNPACKFILENAME.STRING UNIXNAME (QUOTE EXTENSION)))) (* ;; "If extension not on list, don't guess a type") (COND ((EQ (NCHARS TYPE) 0) (* ; "Handle null extension specially") (CDR (CL:ASSOC NIL DEFAULTFILETYPELIST))) (T (CDR (CL:ASSOC TYPE DEFAULTFILETYPELIST :TEST (QUOTE STRING-EQUAL))))))))
+)
+
+(\UFSCreateDevice
+(LAMBDA NIL (* ; "Edited 27-Feb-89 18:28 by bvm") (* ;;; "Creates and remembers the local hard disk file device, but does not open the device or any of its associated directories.") (if (AND (BOUNDP (QUOTE \UFSdevice)) (type? FDEV \UFSdevice)) then \UFSdevice else (SETQ \UFSdevice (\UFS.CREATE.DEVICE (QUOTE UNIX) (FUNCTION \UFSEventFn)))))
+)
+
+(\UFSEventFn
+(LAMBDA (Dev Event) (* ; "Edited 27-Feb-89 16:08 by bvm") (WITH.MONITOR \UFStopMonitor (SELECTQ Event ((AFTERLOGOUT AFTERSYSOUT AFTERMAKESYS AFTERSAVEVM) (\UFSCloseDevice) (SELECTQ (MACHINETYPE) ((MAIKO) (\UFSOpenDevice) (* ;; "revalidate open streams (should probably move this into the SELECTQ above) ") (\UNVISIBLE.PAGED.REVALIDATEFILELST Dev) (\PAGED.REVALIDATEFILELST Dev)) NIL)) ((BEFORELOGOUT) (\UNVISIBLE.FLUSH.OPEN.STREAMS Dev) (* ; "flush output buffers.") (\FLUSH.OPEN.STREAMS Dev)) NIL)))
+)
+)
+
+(RPAQQ DEFAULTFILETYPELIST ((C . TEXT) (H . TEXT) (LISP . TEXT) (LSP . TEXT) (O . BINARY) (OUT . BINARY) (LCOM . BINARY) (DFASL . BINARY) (DCOM . BINARY) (SKETCH . BINARY) (DISPLAYFONT . BINARY) (WD . BINARY) (IP . BINARY) (RST . BINARY) (BIN . BINARY) (MAIL . BINARY) (MAIL-LAFITE-TOC . BINARY)))
+
+
+
+(* ; "DSK changes (plus lots of deletions)")
+
+(DEFINEQ
+
+(\DSKCreateDevice
+(LAMBDA NIL (* ; "Edited 27-Feb-89 18:29 by bvm") (* ;;; "Creates and remembers the local hard disk file device, but does not open the device or any of its associated directories.") (if (AND (BOUNDP (QUOTE \DSKdevice)) (type? FDEV \DSKdevice)) then \DSKdevice else (SETQ \DSKdevice (\UFS.CREATE.DEVICE (QUOTE DSK) (FUNCTION \DSKEventFn)))))
+)
+)
+
+
+
+(* ; "My additions")
+
+(DECLARE%: EVAL@COMPILE DONTCOPY 
+
+(FILESLOAD (LOADCOMP FROM "{Eris}<LispCore>Sources>") UFS)
+
+(DECLARE%: EVAL@COMPILE
+
+(ACCESSFNS UFSSTREAM ((* ;; "Overlay for the STREAM record to allow mnemonic access to stream fields for ufs streams.") (FILEID (fetch F1 of DATUM) (replace F1 of DATUM with NEWVALUE)) (* ; "Unix file handle") (CDATE (fetch F2 of DATUM) (replace F2 of DATUM with NEWVALUE)) (* ; "IDate given to openstream") (UNIXNAME (fetch F5 of DATUM) (replace F5 of DATUM with NEWVALUE)) (* ; "The name by which Unix knows this file") (LASTPAGE (fetch F10 of DATUM) (replace F10 of DATUM with NEWVALUE)) (LASTOFFSET (fetch FW9 of DATUM) (replace FW9 of DATUM with NEWVALUE)))
+)
+
+(RECORD UFSGFS (THISFILE MOREFILES DEV DIRECTORY ATTRVALID . ERRNO&ALLPROPS) (RECORD ERRNO&ALLPROPS (ERRNO . ALLPROPS))
+ (* ; "GENFILESTATE for UFS directory enumeration"))
+)
+
+(DECLARE%: EVAL@COMPILE 
+
+(PUTPROPS \UFS.DEFAULT.DIR MACRO ((DEV) (SELECTQ (fetch (FDEV DEVICENAME) of DEV) (DSK \DSKDefaultConnDir) (UNIX \UFSDefaultConnDir) NIL)))
+
+(PUTPROPS \UFS.FILE.RECOGNIZER MACRO ((DEV) (* ;; "Return a function that will do name recognition for this device") (SELECTQ (fetch (FDEV DEVICENAME) of DEV) (DSK (FUNCTION \DSKGetFileName-C)) (UNIX (FUNCTION \UFSGetFileName-C)) (FUNCTION SHOULDNT))))
+
+(PUTPROPS \UFS.DIRECTORY.RECOGNIZER MACRO ((DEV) (SELECTQ (fetch (FDEV DEVICENAME) of DEV) (DSK (FUNCTION \DSKDirectoryNameP-C)) (UNIX (FUNCTION \UFSDirectoryNameP-C)) (FUNCTION SHOULDNT))))
+)
+
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ \UFS.BINARY.BITS 3657)
+
+(RPAQQ \UFS.MAIN.BINARY.BIT 64)
+
+
+(CONSTANTS (\UFS.BINARY.BITS 3657) (\UFS.MAIN.BINARY.BIT 64))
+)
+)
+(DEFINEQ
+
+(\UFS.CREATE.DEVICE
+(LAMBDA (NAME EVENTFN) (* ; "Edited 27-Feb-89 18:28 by bvm") (\MAKE.PMAP.DEVICE (create FDEV NODIRECTORIES _ T DEVICENAME _ NAME CLOSEFILE _ (FUNCTION \UFSCloseFile) DELETEFILE _ (FUNCTION \UFSDeleteFile) RENAMEFILE _ (FUNCTION \UFSRenameFile) TRUNCATEFILE _ (FUNCTION \UFSTruncateFile) GETFILEINFO _ (FUNCTION \UFSGetFileInfo) GETFILENAME _ (FUNCTION \UFSGetFileName) OPENFILE _ (FUNCTION \UFSOpenFile) READPAGES _ (FUNCTION \UFSReadPages) SETFILEINFO _ (FUNCTION \UFSSetFileInfo) WRITEPAGES _ (FUNCTION \UFSWritePages) REOPENFILE _ (FUNCTION \UFSOpenFile) GENERATEFILES _ (FUNCTION \UFSGenerateFiles) EVENTFN _ EVENTFN DIRECTORYNAMEP _ (FUNCTION \UFSDirectoryNameP) HOSTNAMEP _ (FUNCTION NILL) OPENP _ (FUNCTION \GENERIC.OPENP) REGISTERFILE _ (FUNCTION \ADD-OPEN-STREAM) UNREGISTERFILE _ (FUNCTION \GENERIC-UNREGISTER-STREAM))))
+)
+
+(\UFS.OPENP
+(LAMBDA (UNIXNAME DEV) (* ; "Edited  3-Mar-89 11:47 by bvm") (* ;; "Returns first open file having specified unix name") (for S in (fetch (FDEV OPENFILELST) of DEV) bind (COMPAREFN _ (if (EQ (fetch (FDEV DEVICENAME) of DEV) (QUOTE DSK)) then (* ; "We're case-insensitive, and it seems like not all functions return the correct Unix case") (FUNCTION STRING-EQUAL) else (* ; "Exact") (FUNCTION STREQUAL))) thereis (CL:FUNCALL COMPAREFN UNIXNAME (fetch (UFSSTREAM UNIXNAME) of S))))
+)
+
+(\UFS.PARSE.BODY
+(LAMBDA (PARSEDNAME) (* ; "Edited  1-Mar-89 14:24 by bvm") (* ;; "PARSEDNAME Is the output of unpackfilename.  Extract the pieces that make up name.ext;version and return them as a single string.") (CONCAT (OR (LISTGET PARSEDNAME (QUOTE NAME)) "") (LET ((TYPE (LISTGET PARSEDNAME (QUOTE EXTENSION)))) (COND ((AND TYPE (> (NCHARS TYPE) 0)) (CONCAT \UFSBeforeType TYPE)) (T ""))) (LET ((VERSION (LISTGET PARSEDNAME (QUOTE VERSION)))) (COND ((AND VERSION (> (NCHARS VERSION) 0)) (CONCAT \UFSBeforeVersion VERSION)) (T "")))))
+)
+
+(\UFS.RECOGNIZE.FILE
+(LAMBDA (FILENAME RECOG DEV) (* ; "Edited 24-Feb-89 16:44 by bvm") (* ;; "Perform recognition on FILENAME, returning the unix name for the file, or NIL.") (WITH.MONITOR (\UFSGetMonitor DEV) (LET ((NAMEAREA (ALLOCSTRING MAX-PATHNAME-LEN)) (PATHNAME (\UFSParseNameString FILENAME)) (ERRNO (CREATECELL \FIXP)) RVAL) (SETQ RVAL (CL:FUNCALL (\UFS.FILE.RECOGNIZER DEV) (CONCAT (\UFSParse-Directory PATHNAME DEV) (\UFS.PARSE.BODY PATHNAME)) (SELECTQ RECOG (OLD RECOG-OLD) (OLDEST RECOG-OLDEST) (NEW RECOG-NEW) (OLD/NEW RECOG-NEW-OLD) (NON RECOG-NON) RECOG-NEW-OLD) NAMEAREA ERRNO)) (COND ((FIXP RVAL) (SUBSTRING NAMEAREA 1 RVAL)) (T (\UFSError FILENAME ERRNO))))))
+)
+
+(\UFS.DIRECTORY.NAME
+(LAMBDA (DIRSTRING DEV) (* ; "Edited  5-Feb-90 12:58 by bvm") (* ;;; "DIRSTRING is the output of \UFSParse-Directory.  Return the real name of the directory if it exists.") (WITH.MONITOR (\UFSGetMonitor DEV) (LET* ((NAMEAREA (ALLOCSTRING MAX-PATHNAME-LEN)) (ERRNO (CREATECELL \FIXP)) (RECFN (\UFS.FILE.RECOGNIZER DEV)) (DSKP (EQ (fetch DEVICENAME of DEV) (QUOTE DSK))) DID-NON DIRNAME RVAL) (if (<= (NCHARS DIRSTRING) 1) then (* ; "must be / --accept it") DIRSTRING else (* ; "Remove trailing slash") (SETQ RVAL (if (AND DSKP (NOT (AND (FMEMB (CL:CHAR (SETQ DIRNAME (SUBSTRING DIRSTRING 1 -2)) 0) (QUOTE (#\~ #\.))) (NOT (STRPOS \UFSDefaultDelimiter DIRNAME))))) then (* ; "Normal case: try recognizing the dir just as a file, i.e., without the final slash") (CL:FUNCALL RECFN DIRNAME RECOG-OLD NAMEAREA ERRNO) else (* ; "When given a relative name with no subdir, have to do funny %"NON%" recog on the original string just to expand it.  Take this route with {UNIX}, too, since it's less work, and {UNIX} requires no recognition.") (SETQ DID-NON T) (CL:FUNCALL RECFN DIRSTRING RECOG-NON NAMEAREA ERRNO))) (COND ((AND (OR (FIXP RVAL) (NOT DID-NON)) (CL:FUNCALL (\UFS.DIRECTORY.RECOGNIZER DEV) (SETQ DIRNAME (if (FIXP RVAL) then (if (NOT DID-NON) then (LET ((SLASH (CHCON1 \UFSDefaultDelimiter))) (if (if (EQ (NTHCHARCODE NAMEAREA (SUB1 RVAL)) (CHARCODE ";")) then (* ; "Recognized it as foo.;1--turn back into a reasonable directory name") (if (NEQ (NTHCHARCODE NAMEAREA (SETQ RVAL (- RVAL 2))) (CHARCODE ".")) then (* ; "oops, directory name must have an internal dot, meaning the name ends only in %";1%", not %".;1%"") (add RVAL 1)) T elseif (NEQ (NTHCHARCODE NAMEAREA RVAL) SLASH) then (* ; "I don't think this case ever happens, since DSK recog-old always puts a .;n on even if no versioned file, but play it safe") (add RVAL 1) T) then (* ; "Put the slash back on.  Don't have to do this when dirstring = ~/, because the RECOG-NON code did it.") (RPLCHARCODE NAMEAREA RVAL SLASH)))) (SUBSTRING NAMEAREA 1 RVAL) else (* ; "Recognizing the dir as a file failed.  Stupid C code does the wrong thing with automount--there could still be something there when dir = /net/randomhost/.  We'll just have to accept the alphabetic case given") DIRSTRING)) ERRNO)) DIRNAME))))))
+)
+
+(\UFS.CREATE.PROPS
+(LAMBDA NIL (* ; "Edited  2-Mar-89 12:10 by bvm") (* ;; "Returns a data structure suitable for passing to the GetFileInfo ALL routine") (BQUOTE ((LENGTH (\,@ (CREATECELL \FIXP))) (WDATE (\,@ (CREATECELL \FIXP))) (RDATE (\,@ (CREATECELL \FIXP))) (PROTECTION (\,@ (CREATECELL \FIXP))) (AUTHOR (\,@ (ALLOCSTRING MAX-UNAME-LEN))))))
+)
+
+(\UFS.NEXTFILEFN
+(LAMBDA (GENFILESTATE NAMEONLY) (* ; "Edited  2-Mar-89 14:03 by bvm") (LET ((FILES (fetch (UFSGFS MOREFILES) of GENFILESTATE)) NEWNAME UNIXNAME) (if (NULL FILES) then (* ; "Generator exhausted") NIL else (SETQ NEWNAME (CAR FILES)) (replace (UFSGFS MOREFILES) of GENFILESTATE with (CDR FILES)) (replace (UFSGFS ATTRVALID) of GENFILESTATE with NIL) (* ; "Invalidate attribute structure so that GenerateFileInfo will fetch fresh ones.") (replace (UFSGFS THISFILE) of GENFILESTATE with (SETQ UNIXNAME (CONCAT (fetch (UFSGFS DIRECTORY) of GENFILESTATE) NEWNAME))) (if NAMEONLY then NEWNAME else (\UFS.FULLNAME UNIXNAME (fetch (UFSGFS DEV) of GENFILESTATE))))))
+)
+
+(\UFS.FILEINFOFN
+(LAMBDA (GENFILESTATE ATTRIBUTE) (* ; "Edited  6-Nov-89 14:36 by bvm") (* ;;; "FILEINFOFN for UFS--return the value of the specified ATTRIBUTE.  We fetch the attributes exactly once per file, and thereafter just fetch out of the ALLPROPS structure.  Since we re-use the ALLPROPS structure, we have to be careful to COPY the values that come out.") (LET ((VALID (fetch (UFSGFS ATTRVALID) of GENFILESTATE)) ALLPROPS) (if (NOT VALID) then (* ; "Have to fetch them") (LET ((FDEV (fetch (UFSGFS DEV) of GENFILESTATE)) (ERRNO (fetch (UFSGFS ERRNO&ALLPROPS) of GENFILESTATE)) NAMESIZE) (BLOCK) (SETQ ALLPROPS (CDR ERRNO)) (SETQ ERRNO (CAR ERRNO)) (replace (UFSGFS ATTRVALID) of GENFILESTATE with (SETQ VALID (if (SETQ NAMESIZE (WITH.MONITOR (\UFSGetMonitor FDEV) (* ;; "we want to keep as little as possible within the with.monitor.") (\UFSGetFileInfo-C (fetch (UFSGFS THISFILE) of GENFILESTATE) ATTR-ALL ALLPROPS FDEV ERRNO))) then (* ; "Success.  Stash NAMESIZE inside ERRNO so we have it if caller asks for AUTHOR") (replace (FIXP LONUM) of ERRNO with NAMESIZE) T else (* ; "Failed to get attributes") :ERROR)))) else (SETQ ALLPROPS (fetch (UFSGFS ALLPROPS) of GENFILESTATE))) (if (EQ VALID T) then (* ; "Success") (BLOCK) (SELECTQ ATTRIBUTE ((LENGTH PROTECTION) (* ; "Copy numeric value") (+ 0 (CDR (ASSOC ATTRIBUTE ALLPROPS)))) (SIZE (FOLDHI (CDR (ASSOC (QUOTE LENGTH) ALLPROPS)) BYTESPERPAGE)) ((CREATIONDATE WRITEDATE) (GDATE (CDR (ASSOC (QUOTE WDATE) ALLPROPS)))) (READDATE (GDATE (CDR (ASSOC (QUOTE RDATE) ALLPROPS)))) ((ICREATIONDATE IWRITEDATE) (+ 0 (CDR (ASSOC (QUOTE WDATE) ALLPROPS)))) (IREADDATE (+ 0 (CDR (ASSOC (QUOTE RDATE) ALLPROPS)))) (AUTHOR (* ; "Copy the string out of the buffer") (CL:SUBSEQ (CDR (ASSOC (QUOTE AUTHOR) ALLPROPS)) 0 (fetch (FIXP LONUM) of (fetch (UFSGFS ERRNO) of GENFILESTATE)))) (TYPE (\UFS.TYPE.FROM.PROTECTION (CDR (ASSOC (QUOTE PROTECTION) ALLPROPS)) (fetch (UFSGFS THISFILE) of GENFILESTATE))) NIL))))
+)
+
+(\UFS.SET.FILE.TYPE
+(LAMBDA (UNIXNAME TYPE DEVICE) (* ; "Edited 10-Oct-89 15:31 by bvm") (* ;; "Set file's %"type%" to TYPE.  We distinguish TEXT from BINARY by the executable bits in the mode--execute access => BINARY.  This is pretty feeble, but there's no place else to remember it.  This is the same scheme that D-machine NFS uses.") (LET ((PROTECTION (CREATECELL \FIXP)) (ERRNO (CREATECELL \FIXP))) (if (\UFSGetFileInfo-C UNIXNAME ATTR-PROTECTION PROTECTION DEVICE ERRNO) then (* ; "Succeeded in fetching protection.  Set or clear bits as appropriate") (if (if (EQ TYPE (QUOTE TEXT)) then (if (BITTEST PROTECTION \UFS.BINARY.BITS) then (SETQ PROTECTION (LOGAND PROTECTION (LOGXOR \UFS.BINARY.BITS -1)))) else (if (NOT (BITTEST PROTECTION \UFS.BINARY.BITS)) then (SETQ PROTECTION (LOGOR PROTECTION \UFS.MAIN.BINARY.BIT)))) then (\UFSSetFileInfo-C UNIXNAME ATTR-PROTECTION PROTECTION DEVICE ERRNO) else (* ; "Mode is already correctly set") T))))
+)
+)
+
+
+
+(* ; "The essential ufsnfs stuff.  First two fns should have generic versions in UFS")
+
+(DEFINEQ
+
+(\UFS.ADJUST.HOST
+(LAMBDA (FIELDS) (* ; "Edited 17-Oct-89 14:15 by bvm") (if *NFS-HACK-ENABLED* then (LET* ((HOST (LISTGET FIELDS (QUOTE HOST))) (HOSTLEN (NCHARS HOST)) (DIR (LISTGET FIELDS (QUOTE DIRECTORY))) DIRLEN REALHOST GENERICP) (if (OR (AND (EQL (CL:CHAR HOST (- HOSTLEN 2)) #\/) (FMEMB (CL:CHAR HOST (- HOSTLEN 1)) (QUOTE (#\N #\n)))) (SETQ GENERICP (STRING-EQUAL HOST "NFS"))) then (* ;; "Change {pooh/n}<stuff> into {dsk}/net/pooh/stuff/.  Note that it is very important that we lowercase the hostname here, otherwise file recognition takes forever!") (SETQ DIR (if (AND DIR (> (SETQ DIRLEN (NCHARS DIR)) 0)) then (* ; "There is a dir to play with") (LET ((DIRSTART 0) DIREND HOME VOLEND FOUND) (if (EQ (CL:CHAR DIR 0) #\~) then (* ; "Home dir spec") (SETQ GENERICP T) (* ; "We assume that all ~ names want to ignore the actual host given.  This will let ~fred work when fred's home is /net/...") (SETQ DIREND (CL:POSITION #\/ DIR)) (if (SETQ HOME (if (OR (< DIRLEN 2) (EQ DIREND 1)) then (* ; "Naked ~ means logged in home dir") (\DSK.HOME.DIR) else (CL:MULTIPLE-VALUE-BIND (UID GID HOMEDIR) (YP:GET-UID (L-CASE (SUBSTRING DIR 2 DIREND))) HOMEDIR))) then (SETQ DIR (if (OR (NULL DIREND) (EQ DIREND (SUB1 DIRLEN))) then (* ; "top level of home dir") HOME else (CONCAT HOME (SUBSTRING DIR (ADD1 DIREND) (if (EQ (CL:CHAR DIR (SUB1 DIRLEN)) #\/) then (* ; "No longer relative") (SUB1 DIRLEN) else DIRLEN))))) (SETQ DIRSTART 1))) (SETQ VOLEND (CL:POSITION #\/ DIR :START DIRSTART)) (if (SETQ FOUND (NFS:FIND-VOLUME (SUBSTRING DIR (ADD1 DIRSTART) VOLEND))) then (* ; "Returned (host . path).") (SETQ REALHOST (CAR FOUND)) (if VOLEND then (CONCAT (CDR FOUND) (SUBSTRING DIR (ADD1 VOLEND))) else (CDR FOUND)) elseif (EQ DIRSTART 0) then (* ; "Need to get a / in here") (CONCAT "/" DIR) else DIR)) else (* ; "No dir") "")) (LISTPUT FIELDS (QUOTE DIRECTORY) (if (AND GENERICP (NOT REALHOST)) then (* ; "Treat {nfs}<xxx> like {dsk}<xxx> if we couldn't find the volume") (SUBSTRING DIR 2) else (CONCAT (SUBSTRING *NFS-AUTO-MOUNT-VOLUME* 2) (OR REALHOST (L-CASE (SUBSTRING HOST 1 (- HOSTLEN 2)))) DIR))) (LISTPUT FIELDS (QUOTE HOST) (QUOTE DSK))))) FIELDS)
+)
+
+(\DSK.HOME.DIR
+(LAMBDA NIL (* ; "Edited  3-Apr-89 17:16 by bvm") (* ;; "Returns the expansion of %"~/%".  Leaves off the trailing / to be consistent with the values in yppasswd.") (WITH.MONITOR \DSKtopMonitor (LET ((NAMEAREA (ALLOCSTRING MAX-PATHNAME-LEN)) RVAL) (AND (FIXP (SETQ RVAL (\DSKGetFileName-C \DSKDefaultConnDir RECOG-NON NAMEAREA (CREATECELL \FIXP)))) (SUBSTRING NAMEAREA 1 (SUB1 RVAL))))))
+)
+
+(\UFS.FULLNAME
+(LAMBDA (NAME DEV ATOMP) (* ; "Edited 28-Mar-89 12:48 by bvm") (if NAME then (* ; "Pass NIL thru transparently") (LET ((DEVNAME (fetch (FDEV DEVICENAME) of DEV))) (SETQ NAME (if (AND (EQ DEVNAME (QUOTE DSK)) *NFS-HACK-ENABLED* (STRPOS *NFS-AUTO-MOUNT-VOLUME* NAME 1 NIL T)) then (LET* ((RESTPOS (ADD1 (NCHARS *NFS-AUTO-MOUNT-VOLUME*))) (HOSTEND (STRPOS "/" NAME RESTPOS))) (CONCAT "{" (SUBSTRING NAME RESTPOS (AND HOSTEND (SUB1 HOSTEND))) "/n}" (if (NOT HOSTEND) then "" elseif (NOT (STRPOS "/" NAME (ADD1 HOSTEND))) then (* ; "No further directory, i.e. this is root on the remote file system.  Thus, make NO directory") (OR (SUBSTRING NAME (ADD1 HOSTEND)) "") elseif *NFS-USE-SLASHES* then (* ; "Leave as is") (SUBSTRING NAME HOSTEND) else (* ; "Convert to <> syntax") (CONCAT "<" (CL:SUBSTITUTE #\> #\/ (SUBSTRING NAME (ADD1 HOSTEND))))))) else (CONCAT "{" DEVNAME "}" NAME)))) (if (AND ATOMP *UPPER-CASE-FILE-NAMES*) then (* ;; "Ought to be (mkatom (u-case name)) but there are other bugs in DSK that this provokes") (MKATOM NAME) else NAME)))
+)
+
+(\UFSNFS.HOSTNAMEP
+(LAMBDA (HOST) (* ; "Edited  6-Apr-89 11:27 by bvm") (if (AND (EQ \MACHINETYPE \MAIKO) *NFS-HACK-ENABLED* (OR (EQ HOST (QUOTE NFS)) (AND (EQ (NTHCHARCODE HOST -2) (CHARCODE /)) (FMEMB (NTHCHARCODE HOST -1) (CHARCODE (N n)))))) then (\GETDEVICEFROMNAME (QUOTE DSK) T)))
+)
+
+(\MAKE.UFSNFS.DEVICE
+(LAMBDA NIL (* ; "Edited 28-Feb-89 12:58 by bvm") (\DEFINEDEVICE NIL (create FDEV DEVICENAME _ "UFSNFS" EVENTFN _ (FUNCTION NILL) HOSTNAMEP _ (FUNCTION \UFSNFS.HOSTNAMEP))))
+)
+)
+
+(RPAQ? *NFS-HACK-ENABLED* T)
+
+(RPAQ? *NFS-USE-SLASHES* NIL)
+
+(RPAQ? *NFS-AUTO-MOUNT-VOLUME* "/net/")
+(DECLARE%: EVAL@COMPILE DOCOPY 
+
+(CL:PROCLAIM (QUOTE (CL:SPECIAL *NFS-HACK-ENABLED* *NFS-USE-SLASHES*)))
+
+(CL:PROCLAIM (QUOTE (GLOBAL *NFS-AUTO-MOUNT-VOLUME*)))
+)
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS \DSKdevice \DSKtopMonitor \UFSdevice \UFStopMonitor \DSKDefaultConnDir \UFSDefaultConnDir)
+)
+(DECLARE%: DONTEVAL@LOAD DOCOPY 
+
+(COND (\DSKdevice (\REMOVEDEVICE \DSKdevice) (SETQ \DSKdevice NIL)))
+
+(AND (EQ (MACHINETYPE) (QUOTE MAIKO)) (\DSKOpenDevice))
+
+(\MAKE.UFSNFS.DEVICE)
+)
+(PUTPROPS NEWUFS COPYRIGHT ("Xerox Corporation" 1989 1990))
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL (2425 24279 (\UFSParseNameString 2435 . 2658) (\UFSMakeUnixFormatName 2660 . 3681) (
+\UFSOpenFile 3683 . 7109) (\UFSWritePages 7111 . 8266) (\UFSTruncateFile 8268 . 10133) (\UFSCloseFile 
+10135 . 11239) (\UFSGetFileName 11241 . 11440) (\UFSDeleteFile 11442 . 11954) (\UFSRenameFile 11956 . 
+12900) (\UFSParse-Directory 12902 . 13443) (\UFSDirectoryNameP 13445 . 13873) (\UFSGetFileInfo 13875
+ . 16201) (\UFSSetFileInfo 16203 . 17449) (\UFSGenerateFiles 17451 . 19477) (\UFSFindFile 19479 . 
+20580) (\UFSError 20582 . 22000) (\UFSGetFileType 22002 . 22325) (\UFS.TYPE.FROM.PROTECTION 22327 . 
+23389) (\UFSCreateDevice 23391 . 23756) (\UFSEventFn 23758 . 24277)) (24632 25008 (\DSKCreateDevice 
+24642 . 25006)) (26680 35538 (\UFS.CREATE.DEVICE 26690 . 27546) (\UFS.OPENP 27548 . 28045) (
+\UFS.PARSE.BODY 28047 . 28592) (\UFS.RECOGNIZE.FILE 28594 . 29278) (\UFS.DIRECTORY.NAME 29280 . 31579)
+ (\UFS.CREATE.PROPS 31581 . 31934) (\UFS.NEXTFILEFN 31936 . 32614) (\UFS.FILEINFOFN 32616 . 34579) (
+\UFS.SET.FILE.TYPE 34581 . 35536)) (35634 39784 (\UFS.ADJUST.HOST 35644 . 37805) (\DSK.HOME.DIR 37807
+ . 38215) (\UFS.FULLNAME 38217 . 39285) (\UFSNFS.HOSTNAMEP 39287 . 39580) (\MAKE.UFSNFS.DEVICE 39582
+ . 39782)))))
+STOP

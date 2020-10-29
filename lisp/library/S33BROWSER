@@ -1,0 +1,1512 @@
+(DEFINE-FILE-INFO PACKAGE "S33" READTABLE "XCL")
+(il:filecreated "25-May-91 01:39:38" il:|{IE:PARC:XEROX}<LISPUSERS>MEDLEY>S33BROWSER.;3| 88178  
+
+      il:|changes| il:|to:|  (il:functions make-query-menu make-query-field-pair query-select-domain
+                                    query-select-field handle-search-button construct-search-spec 
+                                    query-select-fieldtype)
+                             (il:vars il:s33browsercoms)
+                             (il:variables *search-fields* *search-type-menu* *search-types*)
+
+      il:|previous| il:|date:| " 2-Apr-90 15:39:26" il:|{IE:PARC:XEROX}<LISPUSERS>MEDLEY>S33BROWSER.;1|
+)
+
+
+; Copyright (c) 1989, 1990, 1991 by Xerox Corporation.  All rights reserved.
+
+(il:prettycomprint il:s33browsercoms)
+
+(il:rpaqq il:s33browsercoms
+          (
+           (il:* il:|;;| "Maintenance of the System 33 Browser")
+
+           (il:p (export '(make-browser browser-prompt browser-prompt-clear browser-prompt-for-input
+                                 *attribute-values* *browser-field-specs* *min-browser-size* 
+                                 *browser-icon* *browser-menu-items* *browser-prompt-font* 
+                                 *browser-prompt-lines* *browser-separator-font* 
+                                 *browser-title-menu-items* *default-search-domain* 
+                                 *description-window-size* *initial-query-attributes* *text-font*)))
+           (il:structures description)
+           (il:coms                                          (il:* il:\; 
+                                                           "Basic browser functionality")
+                  (il:functions make-browser compute-browser-layout make-query-menu get-plain-font 
+                         make-query-field-pair query-select-domain query-select-field 
+                         query-select-fieldtype make-blank-menu-item query-select-value start-editing
+                         query-menu-limitchars add-query-menu-pair handle-browser-title 
+                         make-centered-string make-centered-bitmap browser-selection)
+                  (il:functions print-browser-item make-compact-date copy-browser-item)
+                  (il:functions clear-browser prune-browser remove-query tb-header-item-p))
+           (il:vars *begin-typing-bitmap* *more-fields-bitmap* *menu-choice-bitmap* 
+                  *empty-field-bitmap*)
+           (il:globalvars *begin-typing-bitmap* *more-fields-bitmap* *menu-choice-bitmap* 
+                  *empty-field-bitmap*)
+           (il:variables *browser-menu-items* *browser-prompt-font* *browser-prompt-lines* 
+                  *reuse-description-window* *browser-field-specs* *search-types* *search-type-menu*
+                  *search-fields* *browser-icon* *description-attributes* *initial-query-attributes*
+                  *browser-separator-font* *browser-title-menu* *browser-title-menu-items* 
+                  *default-search-domain* *search-domains* *description-attribute-menu* 
+                  *when-selected-shade* *attribute-values* *format-values* *min-browser-size*)
+           (il:functions handle-search-button construct-search-spec make-progress-region 
+                  show-progress erase-progress-box drawbox get-fmitem-label)
+           (il:functions browser-commandfn do-browser-command clear-abort handle-abort-button 
+                  find-menu-item)
+           (il:functions browser-display browser-hardcopy browser-show-cache browser-locate)
+           (il:functions browser-view-description get-window-for-description 
+                  detach-description-window)
+           (il:coms                                          (il:* il:\; "Presenting Text")
+                  (il:functions show-text display-text change-text-font describe-font 
+                         cleanup-text-window)
+                  (il:variables *text-font*))
+           (il:functions browser-prompt browser-prompt-clear browser-prompt-for-input)
+           (il:prop (il:filetype il:makefile-environment)
+                  il:s33browser)))
+
+
+
+(il:* il:|;;| "Maintenance of the System 33 Browser")
+
+
+(export '(make-browser browser-prompt browser-prompt-clear browser-prompt-for-input 
+                *attribute-values* *browser-field-specs* *min-browser-size* *browser-icon* 
+                *browser-menu-items* *browser-prompt-font* *browser-prompt-lines* 
+                *browser-separator-font* *browser-title-menu-items* *default-search-domain* 
+                *description-window-size* *initial-query-attributes* *text-font*))
+
+(defstruct (description (:type list))
+   id
+   file-locations
+   props
+   image-locations)
+
+
+
+(il:* il:\; "Basic browser functionality")
+
+
+(defun make-browser (&optional region)
+
+   (il:* il:|;;| "Create a system 33 browser.  Structure from top to bottom: prompt window, query spec (a freemenu), browser commands, tablebrowser.")
+
+   (il:add.process '(query-server-options))
+   (let* ((qmenu (make-query-menu))
+          (qreg (il:windowprop qmenu 'il:region))
+          (cmenu (il:menuwindow (record-create menu :items (prog1 *browser-menu-items*
+                                                               (when nil
+                                                             (il:* il:\; 
+                                                           "just for Masterscope to analyze")
+                                                                   (browser-view-description)
+                                                                   (browser-hardcopy)
+                                                                   (browser-display)
+                                                                   (browser-show-cache)
+                                                             (il:* il:\; "From titlebar menu:")
+                                                                   (clear-browser)
+                                                                   (prune-browser)
+                                                                   (remove-query)
+                                                                   (detach-description-window)
+                                                                   (query-server-options)
+                                                                   (change-text-font)
+                                                                   (change-server)))
+                                       :menurows 1 :centerflg t :whenselectedfn 'browser-commandfn 
+                                       :menufont (get-plain-font t))))
+          (creg (il:windowprop cmenu 'il:region))
+          (fixedheight (+ (* (il:fontprop *browser-prompt-font* 'il:height)
+                             *browser-prompt-lines*)
+                          (record-fetch region height qreg)
+                          (record-fetch region height creg)))
+          (w (il:createw (progn                              (il:* il:\; 
+                                  "Create browser window from all of region minus the fixed parts.")
+                                (unless region
+                                    (setq region
+                                          (il:getregion
+                                           (max (record-fetch region width creg)
+                                                (record-fetch region width qreg)
+                                                (il:widthifwindow (+ (apply #'+ (mapcar #'cadr 
+                                                                                *browser-field-specs*
+                                                                                       ))
+                                                                     il:tb.left.margin))
+                                                (car *min-browser-size*))
+                                           (max (+ fixedheight (il:heightifwindow
+                                                                (* 4 (il:fontprop il:defaultfont
+                                                                            'il:height))
+                                                                t))
+                                                (cdr *min-browser-size*)))))
+                                (setf (record-fetch region height region)
+                                      (- (record-fetch region height region)
+                                         fixedheight))
+                                region)
+                    "System 33 Browser"))
+          (b (il:tb.make.browser nil w '(il:printfn print-browser-item il:copyfn copy-browser-item)))
+          )
+         (setf (record-fetch tablebrowser tbtitleeventfn b)
+               'handle-browser-title)
+         (il:attachwindow cmenu w 'il:top)
+         (il:attachwindow qmenu w 'il:top)
+         (il:getpromptwindow w *browser-prompt-lines* *browser-prompt-font*)
+         (il:windowprop w 'il:iconfn #'(lambda (window oldicon position)
+                                              (or oldicon (il:iconw *browser-icon* nil position))))
+         (il:windowaddprop w 'il:reshapefn 'compute-browser-layout t)
+         (compute-browser-layout w)
+         b))
+
+(defun compute-browser-layout (window &optional x y)
+
+   (il:* il:|;;| "Compute the layout for this window based on its current width and font.  Optional args are for when we're called as a reshapefn")
+
+   (let* ((charwidth (il:charwidth (il:charcode "8")
+                            window))
+          (windowwidth (il:windowprop window 'il:width))
+          (variablewidths 0)
+          guess)
+         (setq guess (mapcar #'(lambda (spec)
+                                      (let* ((maxwidth (third spec))
+                                             (minwidth (second spec))
+                                             (actualmin (round (* minwidth charwidth))))
+                                            (decf windowwidth actualmin)
+                                            (list* (first spec)
+                                                   actualmin
+                                                   (cond
+                                                      (maxwidth 
+                                                             (il:* il:\; "This item is expandable")
+                                                             (incf variablewidths minwidth)
+                                                             (list maxwidth minwidth))))))
+                            *browser-field-specs*))
+         (do ((changed nil nil))
+             ((or (<= windowwidth 0)
+                  (dolist (spec guess (not changed))
+
+                      (il:* il:|;;| "There was space left over.  Apportion it to the variable items.  Iterate until we've used it all up.  The only reason we really need to have this test for changed is in case every field is bounded.")
+
+                      (let ((max (third spec))
+                            extra)
+                           (when (and max (> (setq extra (round (* windowwidth (fourth spec))
+                                                                variablewidths))
+                                             0))
+                               (let ((newwidth (+ (second spec)
+                                                  extra)))
+
+                                    (il:* il:|;;| 
+                                  "Assign extra width to this item proportionally to its min width")
+
+                                    (setq changed t)
+                                    (cond
+                                       ((and (not (eq max t))
+                                             (> newwidth (setq max (round (* max charwidth)))))
+                                                             (il:* il:\; "limit max width")
+                                        (decf windowwidth (- max (second spec)))
+                                        (decf variablewidths (second spec))
+                                        (setf (cddr spec)
+                                              nil)           (il:* il:\; 
+                                                           "Take me out of the running")
+                                        (setf (second spec)
+                                              max))
+                                       (t (setf (second spec)
+                                                newwidth)
+                                          (decf windowwidth extra))))))))))
+         (il:windowprop window '*browser-field-specs* guess)))
+
+(defun make-query-menu (&optional oldmenu)
+
+   (il:* il:|;;| "Create a query freemenu for use with System 33 browser.  If OLDMENU is given, copy it and add another field-pattern line.")
+
+   (let* ((plainfont (get-plain-font))
+          (boldfont (get-plain-font t))
+          (boldheight (il:fontprop boldfont 'il:height))
+          (heightdifference (- boldheight (il:fontprop plainfont 'il:height)))
+          (bmbottom (ash (- (+ boldheight 4)
+                            (il:bitmapheight *menu-choice-bitmap*))
+                         -1))
+          (bmwidth (+ 2 (il:bitmapwidth *menu-choice-bitmap*)))
+          (attrwidth (apply 'max (mapcar #'(lambda (str)
+                                                  (il:stringwidth str boldfont))
+                                        *description-attributes*)))
+          (emptybm (make-centered-bitmap *empty-field-bitmap* attrwidth boldheight))
+          (n -2)
+          (w (il:freemenu `((il:props il:columnspace 14 il:font ,boldfont)
+                            ((il:label "Search!" il:id search-button il:left
+                                    ,(+ bmwidth (ash (- attrwidth (il:stringwidth "Search!" boldfont)
+                                                        )
+                                                     -1))
+                                    il:selectedfn handle-search-button il:message 
+                                    "Perform the database search specified by the fields below"))
+                            ((il:props il:columnspace 2)     (il:* il:\; "Domain = PARC line.")
+                             (il:label ,(make-centered-string "Domain" attrwidth boldfont)
+                                    type il:state il:downfn query-select-domain il:box 1 il:left
+                                    ,bmwidth il:maxwidth ,attrwidth il:message 
+                                    "Specifies the domain in which to search." il:id domain il:links
+                                    (il:display domain-text))
+                             (il:label ,(if oldmenu
+                                            (il:fm.itemprop (il:fm.getitem 'domain-text nil oldmenu)
+                                                   'il:label)
+                                            (or *default-search-domain* (car *search-domains*)
+                                                "PARC"))
+                                    type il:edit il:id domain-text il:font ,plainfont il:bottom
+                                    ,heightdifference il:left ,(+ 2 bmwidth)
+                                                             (il:* il:\; 
+                                                           "So it lines up with patterns")
+                                    ))
+                            ,@(cond
+                                 (oldmenu (il:bind item pattern
+                                             il:while (setq item (il:fm.getitem (incf n 4)
+                                                                            nil oldmenu))
+                                             il:collect  (il:* il:\; "Copy the existing fields")
+                                                   (make-query-field-pair
+                                                    attrwidth boldfont plainfont heightdifference 
+                                                    bmbottom bmwidth emptybm n (il:fm.itemprop
+                                                                                item
+                                                                                'il:state)
+                                                    (il:fm.itemprop (il:fm.getitem (+ n 2)
+                                                                           nil oldmenu)
+                                                           'il:label))))
+                                 (t                          (il:* il:\; 
+                                                "Starting from scratch, supply some default items.")
+                                    (prog1 (mapcar #'(lambda (fieldname)
+                                                            (make-query-field-pair attrwidth 
+                                                                   boldfont plainfont 
+                                                                   heightdifference bmbottom bmwidth
+                                                                   emptybm (incf n 3)
+                                                                   fieldname))
+                                                  *initial-query-attributes*)
+                                           (incf n 3))))
+                            ,(make-query-field-pair attrwidth boldfont plainfont heightdifference
+                                    bmbottom bmwidth emptybm n nil nil t))
+                    "System 33 Query Specification"))
+          (reg (il:windowregion w)))
+
+         (il:* il:|;;| "The HEIGHTDIFFERENCE hacking is to get the baselines of the bold and plain fonts to line up (odd that they don't already).  BMBOTTOM is so that *MENU-CHOICE-BITMAP* will be centered if we ever use it.")
+
+         (il:windowprop w 'il:fm.dontreshape t)
+         (il:windowprop w '*empty-field-bitmap* emptybm)
+         (let ((h (record-fetch region height reg)))         (il:* il:\; 
+                                         "Don't let window shape any smaller than this, or taller.")
+              (il:windowprop w 'il:minsize (cons (record-fetch region width reg)
+                                                 h))
+              (il:windowprop w 'il:maxsize (cons il:max.smallp h)))
+         w))
+
+(defun get-plain-font (&optional bold)
+
+   (il:* il:|;;| 
+ "Return the plain font to use in System 33 query menu.  If BOLD true, return bold version")
+
+   (if bold
+       (il:fontcopy (get-plain-font)
+              'il:weight
+              'il:bold)
+       (let ((font (il:fontcreate 'il:modern 10)))
+            (cond
+               ((> (il:fontheight font)
+                   13)                                       (il:* il:\; "Yes, this is the one I had in mind (10 pt coerced by NSDisplaysizes to 12, which is actually 14 high)")
+                font)
+               (t                                            (il:* il:\; 
+                                         "The \"real\" 12 pt display font is about the right size.")
+                  (il:fontcreate 'il:modern 12))))))
+
+(defun make-query-field-pair (fieldwidth boldfont plainfont heightdifference bmbottom bmwidth 
+                                        emptybm n &optional fieldname value lastpairp (fieldtype
+                                                                                       "equal"))
+
+   (il:* il:|;;| "Create freemenu spec for a field/value pair.  N is the index of this pair (they go by 4's).  Fieldname is the label (defaults to emptybm) and value the value string (defaults to empty).  See make-query-menu for the other arguments.")
+
+   (let ((choices (and fieldname (cdr (assoc fieldname *attribute-values* :test 'string-equal)))))
+        `((il:props il:columnspace 2)
+          ,@(and lastpairp                                   (il:* il:\; 
+                                                           "Put a little arrow for more at the end")
+                 `((il:label ,*more-fields-bitmap* il:selectedfn add-query-menu-pair il:bottom
+                          ,bmbottom il:message "Produce another field-value pair to fill in.")))
+          (il:label ,(if fieldname
+                         (make-centered-string fieldname fieldwidth boldfont)
+                         emptybm)
+                 type il:state il:downfn query-select-field il:box 1 il:maxwidth ,fieldwidth 
+                 il:initstate ,fieldname il:message 
+                 "Specifies the attribute (field) within which to search." il:id ,n
+                 ,@(and (not lastpairp)                      (il:* il:\; 
+                                                     "Didn't put in the down arrow, so leave space")
+                        `(il:left ,bmwidth)))
+          (il:label ,(cond
+                        ((not fieldname)
+                         "")
+                        (choices *menu-choice-bitmap*)
+                        (t (make-centered-string fieldtype fieldwidth il:italicfont)))
+                 type il:state il:downfn query-select-fieldtype il:box 1 il:maxwidth ,fieldwidth 
+                 il:initstate ,fieldtype il:message "Specifies the searchtype." il:id
+                 ,(+ n 3))
+          (il:label ,(or value "")
+                 type il:edit il:id ,(+ 2 n)
+                 il:font
+                 ,plainfont il:bottom ,(+ 2 heightdifference)
+                 il:limitchars query-menu-limitchars))))
+
+(defun query-select-domain (item window buttons)
+   (query-server-options)
+   (let ((d (il:menu (record-create menu :items *search-domains* :menufont (get-plain-font)
+                            :title "Domain" :centerflg t))))
+        (when d
+            (il:fm.changestate item d window)
+            (setq *search-type-menu* nil)
+            (setq *description-attribute-menu* nil))))
+
+(defun query-select-field (item window buttons)
+   (let* ((domain (il:fm.itemprop (il:fm.getitem 'domain-text nil window)
+                         'il:label))
+          (field (il:menu (or *description-attribute-menu*
+                              (setq *description-attribute-menu*
+                                    (record-create menu :items
+                                           (let* ((other `(("*other*" :other 
+                                                                  "Type in your own field name")
+                                                           (,(make-blank-menu-item)
+                                                            :empty "Erase this field")))
+                                                  (x (cdr (assoc domain *search-fields* :test
+                                                                 #'string-equal)))
+                                                  (tail (il:nth x 20)))
+                                                 (cond
+                                                    (tail (append (ldiff x tail)
+                                                                 other))
+                                                    (x)
+                                                    (t (append *description-attributes* other))))
+                                           :title "Field Name" :menufont (get-plain-font)
+                                           :changeoffsetflg t))))))
+         (when field
+
+             (il:* il:|;;| 
+           "Selected a field.  Change the label and state, and start editing the pattern")
+
+             (case field
+                 (:empty                                     (il:* il:\; "means erase it")
+                    (setq field nil))
+                 (:other                                     (il:* il:\; "take type in")
+                    (unless (setq field (browser-prompt-for-input (il:mainwindow window)
+                                               "Field name: "))
+                           (return-from query-select-field))
+
+                    (il:* il:|;;| "Remember this field for future queries.")
+
+                    (unless (member field *description-attributes* :test 'string-equal)
+                        (setq *description-attributes* (cons field *description-attributes*))
+                        (setq *description-attribute-menu* nil))))
+             (let* ((id (1+ (il:fm.itemprop item 'il:id)))
+                    (choiceitem (il:fm.getitem id nil window))
+                    (edititem (il:fm.getitem (1+ id)
+                                     nil window))
+                    (choices (and field (cdr (assoc field *attribute-values* :test 'string-equal)))))
+                   (il:fm.changelabel item (if field
+                                               (make-centered-string field (il:fm.itemprop
+                                                                                item
+                                                                                'il:maxwidth)
+                                                      (get-plain-font t))
+                                               (il:windowprop window '*empty-field-bitmap*))
+                          window)                            (il:* il:\; "Fill in field name")
+                   (il:fm.changestate item field window)
+                   (il:fm.changelabel edititem "" window)    (il:* il:\; "Clear the value")
+                   (when field (start-editing edititem window))
+                   field))))
+
+(defun query-select-fieldtype (item window buttons)
+   (let* ((domain (il:fm.itemprop (il:fm.getitem 'domain-text nil window)
+                         'il:label))
+          (type (il:menu (or *search-type-menu* (setq *search-type-menu*
+                                                      (record-create
+                                                       menu :items
+                                                       (or (cdr (assoc domain *search-types* :test
+                                                                       #'string-equal))
+                                                           '("equal" "wildcard" "prefix"))
+                                                       :title "search type" :menufont (
+                                                                                     get-plain-font
+                                                                                       )
+                                                       :changeoffsetflg t))))))
+         (when type
+
+             (il:* il:|;;| 
+           "Selected a field type.  Change the label and state, and start editing the pattern")
+
+             (let* ((id (il:fm.itemprop item 'il:id))
+                    (edititem (il:fm.getitem (- id 1)
+                                     nil window)))
+                   (il:fm.changelabel item (make-centered-string type (il:fm.itemprop
+                                                                           item
+                                                                           'il:maxwidth)
+                                                  (get-plain-font t))
+                          window)                            (il:* il:\; "Fill in field name")
+                   (il:fm.changestate item type window)
+                   (il:fm.changelabel edititem "" window)    (il:* il:\; "Clear the value")
+                   (start-editing edititem window)
+                   type))))
+
+(defun make-blank-menu-item ()
+   (let* ((width (* 4 (il:charwidth (il:charcode "X")
+                             (get-plain-font))))
+          (bm (il:bitmapcreate width 1)))
+         (il:bltshade il:blackshade bm 0 0 width 1)
+         bm))
+
+(defun query-select-value (item window buttons)
+
+   (il:* il:|;;| "Called by button going down on the \"menu choice\" item in a field-value pair.  We offer a menu of values to fill in the field.")
+
+   (let ((choices (il:fm.itemprop item 'values))
+         (edititem (il:fm.getitem (1+ (il:fm.itemprop item 'il:id))
+                          nil window)))
+        (cond
+           (choices                                          (il:* il:\; 
+                                                           "There's something to offer")
+                  (let ((menu (il:fm.itemprop item 'values-menu))
+                        value)
+                       (unless menu
+                           (il:fm.itemprop item 'values-menu (setq menu (record-create menu :items 
+                                                                               choices :menufont
+                                                                               (get-plain-font)
+                                                                               :centerflg t 
+                                                                               :changeoffsetflg t))))
+                       (cond
+                          ((or (null (setq value (il:menu menu)))
+                               (string-equal value "*other*"))
+                                                             (il:* il:\; "Let user type a value")
+                           (start-editing edititem window value))
+                          (t                                 (il:* il:\; "Change value to this")
+                             (il:fm.endedit window)
+                             (il:fm.changelabel edititem value window)))))
+           (t                                                (il:* il:\; 
+                                                           "Just start editing the text item")
+              (start-editing edititem window t)))))
+
+(defun start-editing (item window &optional clearflg)
+
+   (il:* il:|;;| "Replacement for IL:FM.EDITITEM that avoids its bug wherein if the window currently is editing something, it gives the tty away.  Problem is that typically we get called from within the freemenu process, which means there's no way to finish the editing without losing control.")
+
+   (il:add.process `(il:fm.edititem ',item ',window ',clearflg)))
+
+(defun query-menu-limitchars (item window char)
+
+   (il:* il:|;;| 
+ "Called when a character is typed at a pattern field.  Returns T if char is legal.")
+
+   (il:* il:|;;| "CHAR is an Interlisp Char, ie., usually a symbol!!!")
+
+   (case char
+       ((il:\
+ il:Â)                                                       (il:* il:\; 
+                                                           "Go to next item, or add a new one")
+       (if (il:fm.getitem (1+ (il:fm.itemprop item 'il:id))
+                  nil window)
+           (il:fm.skipnext window)
+           (add-query-menu-pair item window))
+       nil)
+       (otherwise t)))
+
+(defun add-query-menu-pair (item menuwindow &optional buttons)
+   (declare (ignore item buttons))
+
+   (il:* il:|;;| "Extend MENUWINDOW by adding another field/pattern pair.  ITEM and BUTTONS are so this can be called as a when-selectedfn from the \"new pair\" button.")
+
+   (let* ((mainw (il:mainwindow menuwindow))
+          (promptw (il:getpromptwindow mainw))
+          (newmenuw (make-query-menu menuwindow))
+          newreg coercedreg)
+         (il:detachwindow promptw mainw)
+         (il:closew promptw)
+         (il:detachwindow menuwindow mainw)
+         (il:closew menuwindow)
+         (il:attachwindow newmenuw mainw 'il:top)
+         (il:getpromptwindow mainw *browser-prompt-lines* *browser-prompt-font*)
+         (when (not (equal (setq newreg (il:windowregion mainw))
+                           (setq coercedreg (il:makewithinregion (copy-list newreg)))))
+
+             (il:* il:|;;| "This moved the window off screen, so bring it back")
+
+             (il:relmovew mainw (cons 0 (- (record-fetch region bottom coercedreg)
+                                           (record-fetch region bottom newreg)))))))
+
+(defun handle-browser-title (window browser)
+
+   (il:* il:|;;| "Called when button goes down in title bar")
+
+   (let ((command (il:menu (or *browser-title-menu*
+                               (setq *browser-title-menu*
+                                     (record-create menu :items *browser-title-menu-items* :centerflg
+                                            t :changeoffsetflg t :menufont (get-plain-font t)))))
+                ))
+        (when command (funcall command window browser))))
+
+(defun make-centered-string (str maxwidth font)
+
+   (il:* il:|;;| "Pack enough spaces on the from of STR so that when we print it in FONT it will be centered in a region of MAXWIDTH.  Gross hack to get around inability of FREEMENU to center labels in their regions")
+
+   (let ((pad (floor (- maxwidth (il:stringwidth str font))
+                     (* (il:charwidth (il:charcode il:space)
+                               font)
+                        2))))
+        (if (> pad 0)
+            (concatenate 'string (make-string pad :initial-element #\Space)
+                   str)
+            str)))
+
+(defun make-centered-bitmap (bm fieldwidth fieldheight)
+
+   (il:* il:|;;| "Another kludge.  Make a copy of BM which when printed left-justified will look centered in FIELDWIDTH")
+
+   (let* ((w (il:bitmapwidth bm))
+          (h (il:bitmapheight bm))
+          (fatw (+ w (floor (- fieldwidth w)
+                            2)))
+          (fatbm (il:bitmapcreate fatw fieldheight)))
+         (il:bitblt bm 0 0 fatbm (- fatw w)
+                (floor (- fieldheight h)
+                       2)
+                w h)
+         fatbm))
+
+(defun browser-selection (window browser lastprop)
+                                                        (il:* il:\; "Edited 17-Feb-88 14:04 by bvm")
+
+   (il:* il:|;;| "Return list of items selected in BROWSER.  If LASTPROP is specified, choose exactly one of the items, based on the idea that the item in window's LASTPROP property was most recently accessed, so if that one is selected, go on to the next.  Returns NIL if no selected item, or selection has run out.")
+
+   (let ((items (il:tb.collect.items browser 'il:selected)))
+        (cond
+           ((null items)
+            (browser-prompt window "No item is selected")
+            nil)
+           ((null lastprop)                                  (il:* il:\; "return them all")
+            items)
+           (t (prog ((lastitem (and (not (eq lastprop t))
+                                    (il:windowprop window lastprop)))
+                     item nextitem tail)
+                    (cond
+                       ((null (cdr items))
+
+                        (il:* il:|;;| "Only one selected, so choose that one item, or go on to the next if that one was most recently displayed/edited.")
+
+                        (cond
+                           ((eq (setq item (car items))
+                                lastitem)                    (il:* il:\; 
+                                                           "Advance selection to next item")
+                            (do ((n (1+ (record-fetch tableitem ti# item))
+                                    (1+ n)))
+                                ()
+                              (cond
+                                 ((not (setq nextitem (il:tb.nth.item browser n)))
+                                  (browser-prompt window "That was the last item.")
+                                  (return-from browser-selection nil))
+                                 ((not (record-fetch tableitem tiunselectable nextitem))
+                                  (il:tb.unselect.item browser item)
+                                  (return (il:tb.select.item browser (setq item nextitem)))))))))
+                       (t                                    (il:* il:\; 
+                                                           "Cycle thru a group of selected ars.")
+                          (cond
+                             ((null (setq tail (il:memb lastitem items)))
+                                                             (il:* il:\; 
+                                                       "None recently displayed, so show the first")
+                              (setq item (car items)))
+                             ((cdr tail)                     (il:* il:\; "Choose the next")
+                              (setq item (cadr tail)))
+                             (t (il:windowprop window lastprop nil)
+                                (return (browser-prompt window 
+                      "That was the last selected item.~%Click again to cycle back to the first one."
+                                               ))))))
+                    (when item                               (il:* il:\; 
+                                                           "Make sure selection is visible")
+                        (il:tb.normalize.item browser item))
+                    (return item))))))
+
+(defun print-browser-item (browser item window)
+   (let
+    ((descr (record-fetch tableitem tidata item)))
+    (cond
+       ((stringp descr)                                      (il:* il:\; 
+                                             "A title item--print the string and a separating line")
+        (let* ((x (il:dspxposition nil window))
+               (y (il:dspyposition nil window))
+               (y2 (+ y (floor (record-fetch tablebrowser tbfontascent browser)
+                               2))))
+              (il:tb.clear.line browser item)
+              (il:drawline x y2 (il:dsprightmargin nil window)
+                     y2 1 nil window)
+              (il:moveto (+ x 50)
+                     y window)
+              (il:dspfont (prog1 (il:dspfont *browser-separator-font* window)
+                                                             (il:* il:\; 
+                                                           "String printed in italic font")
+                              (princ descr window))
+                     window)))
+       (t (let* ((props (description-props descr))
+                 (origx (il:dspxposition nil window))
+                 (x origx)
+                 (lastx x))
+                (dolist (spec (or (il:windowprop window '*browser-field-specs*)
+                                  *browser-field-specs*))
+
+                    (il:* il:|;;| "SPEC = (fieldname xpos)")
+
+                    (let ((width (second spec))
+                          (value (assoc (first spec)
+                                        props)))
+                         (when value                         (il:* il:\; "Something to print here")
+                                                             (il:* il:\; 
+                                                   "First clear from end of previous field to here")
+                             (cond
+                                ((<= x origx)                (il:* il:\; 
+                                                           "First field, nothing to clear")
+                                 )
+                                ((< x (+ lastx 7))           (il:* il:\; "Previous field too long, will chop.  We allow previous field to get within 1 (gacha 10) character width if that's the whole thing.")
+                                 (il:tb.clear.line browser item (- x 14)
+                                        14))
+                                (t (il:tb.clear.line browser item lastx (- x lastx))))
+                             (il:dspxposition x window)
+                             (princ (cond
+                                       ((eq (car value)
+                                            :creation-date)  (il:* il:\; 
+                                                           "Get a short version of date to print")
+                                        (or (third value)
+                                            (cadr (rplacd (cdr value)
+                                                         (list (make-compact-date (second value))
+                                                               )))))
+                                       (t (second value)))
+                                    window)
+                             (setq lastx (il:dspxposition nil window)))
+                         (setq x (+ x width))))              (il:* il:\; 
+                                                           "Finally, clear the rest of the line")
+                (il:tb.clear.line browser item lastx))))))
+
+(defun make-compact-date (str)
+
+   (il:* il:|;;| "Turn full date & time string into just the date in canonical form")
+
+   (let ((dt (il:idate str 0)))                              (il:* il:\; 
+                         "These days IDATE is smart enough to strip the first part of \"Mon, ...\"")
+        (if dt
+            (il:gdate dt (il:dateformat il:no.time))
+            str)))
+
+(defun copy-browser-item (browser item)
+
+   (il:* il:|;;| "Copy selection function for browser items -- copy the title")
+
+   (let ((descr (record-fetch tableitem tidata item)))
+        (cond
+           ((stringp descr)                                  (il:* il:\; "The query spec line")
+            (il:bksysbuf descr))
+           (t                                                (il:* il:\; "A doc-id thing")
+              (let* ((props (description-props descr))
+                     (title (cadr (assoc :title props)))
+                     (author (cadr (assoc :author props))))
+                    (when (or title author)
+                        (when title (il:bksysbuf title))
+                        (il:bksysbuf "|")
+                        (when author (il:bksysbuf author)))
+                    (il:bksysbuf "{DescID: ")
+                    (il:bksysbuf (string-from-doc-id (description-id descr)))
+                    (il:bksysbuf "}"))))))
+
+(defun clear-browser (window browser)
+   (il:tb.replace.items browser nil))
+
+(defun prune-browser (window browser)
+
+   (il:* il:|;;| "Remove selected items from browser")
+
+   (dolist (item (il:tb.collect.items browser 'il:selected))
+       (il:tb.remove.item browser item)))
+
+(defun remove-query (window browser)
+
+   (il:* il:|;;| "Remove whole queries from browser--all those that contain a selected item")
+
+   (do ((item))
+       ((null (setq item (il:tb.find.item browser 'il:selected))))
+
+     (il:* il:|;;| 
+   "Find the header line before and after this selected item, then delete everything in between.")
+
+     (let* ((i (record-fetch tableitem ti# item))
+            (start (il:tb.find.item browser 'tb-header-item-p 1 i t))
+            (end (il:tb.find.item browser 'tb-header-item-p i)))
+           (setq end (if end
+                         (1- (record-fetch tableitem ti# end))
+                         (il:tb.number.of.items browser)))   (il:* il:\; 
+                                                 "Work up to, but not including, next query header")
+           (setq start (if start
+                           (record-fetch tableitem ti# start)
+                           1))                               (il:* il:\; 
+           "Actually, START should never be nil, since there's always a header item to start with.")
+           (il:while (>= end start) il:do (il:tb.remove.item browser (il:tb.nth.item browser
+                                                                                    end))
+                                              (decf end)))))
+
+(defun tb-header-item-p (browser item)
+   (record-fetch tableitem tiunselectable item))
+
+(il:rpaqq *begin-typing-bitmap* #*(13 13)@A@@@AH@@AL@@AN@@AO@@AOH@AO@@AN@@AL@@AH@@A@@@@@@@@@@)
+
+(il:rpaqq *more-fields-bitmap* 
+                                #*(16 15)COOHD@@DHCHBHCHCHCHCHCHCHCHCIOOCHONCHGLCHCHCHA@CD@@GCOONAOOL)
+
+(il:rpaqq *menu-choice-bitmap* 
+                                #*(16 15)COOHD@@DH@@BHONCHONCH@@CHONCHONCH@@CHONCHONCH@@CD@@GCOONAOOL)
+
+(il:rpaqq *empty-field-bitmap* #*(40 11)@@CL@B@D@@@@@@D@@B@D@@@@@@DDCBAL@@@@@HOLDJBDA@@@@LDDIBDDC@@@ONDDJBDDGO@@@LDDLJDLC@@@@HDEIBMEA@@@@@DFFCBF@@@@@@D@@@@@@@@@@@D@@@@@@@@@
+)
+(il:declare\: il:doeval@compile il:dontcopy
+
+(il:globalvars *begin-typing-bitmap* *more-fields-bitmap* *menu-choice-bitmap* *empty-field-bitmap*)
+)
+
+(defglobalparameter *browser-menu-items*
+   '(("Describe" browser-view-description "Look at the description file for the selected document")
+     ("Display" browser-display "Display the document in a window in default format."
+            (il:subitems ("Display as image" (browser-display ("RS:75(64-80).PZ:1.ais"))
+                                
+                            "Display document as an image at screen resolution (75 pixels per inch)."
+                                (il:subitems ("Scaled by 2" (browser-display 2)
+                                                    
+                                              "Display the image scaled down by 2 in each dimension."
+                                                    )
+                                       ("Scaled by 4" (browser-display 4)
+                                              "Display the image scaled down by 4 in each dimension."
+                                              )
+                                       ("Full size" (browser-display ("PZ:1.ais"))
+                                              "Display the image full scale.")
+                                       ("Screen Resolution" (browser-display (
+                                                                              "RS:75(64-80).PZ:1.ais"
+                                                                                  ))
+                                              
+                                       "Display the image at screen resolution (75 pixels per inch)."
+                                              )
+                                       ("Thumbnail Sketch" (browser-display (
+                                                                "PX:100[64-200]:100[64-200].PZ:1.ais"
+                                                                                 ))
+                                              "View a tiny image of the selected document")))
+                   ("Display as text" (browser-display ("text" "tedit"))
+                          "Display document as text (may do text recognition).")
+                   ("Display cached format" browser-show-cache 
+    "List formats in which the server happens to have cached this document, and lets you choose one."
+                          )
+                   ("Specify Format" (browser-display :ask)
+                          "Prompts for the format in which to retrieve the selected document.")))
+     ("Hardcopy" browser-hardcopy "Send image(s) to a printer" (il:subitems ("to non-default printer"
+                                                                             (browser-hardcopy
+                                                                              t)
+                                                                             
+                                     "Prompts for the printer to which to send the selected document"
+                                                                             )))
+     ("Abort" :abort "Abort the current System 33 operation.")))
+
+(defvar *browser-prompt-font* nil
+   "Font for browser prompt window, NIL to use defaultfont")
+
+(defvar *browser-prompt-lines* 2
+   "Number of lines in browser prompt window by default")
+
+(defvar *reuse-description-window* nil
+   "If true, display new descriptions and text documents in the existing description window")
+
+(defglobalparameter *browser-field-specs*
+   '((:creation-date 10)
+     (:title 32 t)
+     (:author 12 16)
+     (:dimensions 12)
+     (:format 5 8))
+   "How fields are layed out in browser: (fieldname minwidth maxwidth), widths in chars.")
+
+(defvar *search-types* '(("default" "equal" ">" "<" "wildcard"))
+                           "Known System 33 search domains")
+
+(defglobalvar *search-type-menu* nil
+   "Cache for menu search types*")
+
+(defvar *search-fields* '(("default" "equal" ">" "<" "wildcard"))
+                            "Known System 33 search domains")
+
+(defvar *browser-icon* 
+                           '#*(53 52)OOOOOOOOOOOOOH@@OOOOOOOOOOOOOH@@L@@@@@@@@@@@AH@@L@@@@@@@@@@@AH@@L@@@@@@@@@@@AH@@LAH@@@@@@@@@AH@@LBD@@@@@@@@@AH@@LB@HILGAIKC@AH@@LBAHJBLBDLLHAH@@LAHHJ@DDHHHHAH@@L@DHILDE@HHHAH@@L@DIHBDFDHHHAH@@LBDJJBEDHHHJAH@@LAHDILFC@HHLAH@@L@@@H@@@@@@@AH@@L@@A@@@@@@@@AH@@L@@F@@@@@@@@AH@@L@@@@@@@@@@@AH@@L@@ON@@@AOL@AH@@L@COOH@@GOO@AH@@L@GOOL@@OOOHAH@@L@OOON@AOOOLAH@@LANGON@CLOOLAH@@LCHCON@G@GOLAH@@LC@AON@F@COLAH@@L@@AOL@@@COHAH@@L@@AOL@@@COHAH@@L@@AOH@@@CO@AH@@L@@AO@@@@CN@AH@@L@@CL@@@@GH@AH@@L@@GO@@@@ON@AH@@L@COOL@@GOOHAH@@L@COON@@GOOLAH@@L@@GOO@@@OONAH@@L@@AOO@@@CONAH@@L@@@OOH@@AOOAH@@L@@@GOH@@@OOAH@@L@@@GOH@@@OOAH@@L@@@COH@@@GOAH@@L@@@COH@@@GOAH@@L@@@CO@@@@GNAH@@LCH@CO@G@@GNAH@@LGN@GN@OL@OLAH@@LGOHGL@OO@OHAH@@LGOOOH@OOOO@AH@@LCOON@@GOOL@AH@@L@OO@@@AON@@AH@@L@@@@@@@@@@@AH@@L@@@@@@@@@@@AH@@L@@@@@@@@@@@AH@@OOOOOOOOOOOOOH@@OOOOOOOOOOOOOH@@
+                           "Icon for System33 browser.")
+
+(defglobalparameter *description-attributes*
+   '("Comment" "DescCreateDate" "DescCreator" "DocCreateDate" "DocCreator" "DocFormat" "DocType" 
+           "EntrySoftware" "Keyword" "OriginalFileName" "Text" "Title")
+   "Attributes of description files against which you can search.")
+
+(defvar *initial-query-attributes* '("Title")
+                                       "Attributes to put in query menu to start with")
+
+(defvar *browser-separator-font* (il:fontcreate 'timesroman 10 'il:italic)
+                                     "Font in which the separator lines in browser are printed.")
+
+(defglobalvar *browser-title-menu* nil
+   "Cache for System33 browser title menu")
+
+(defglobalparameter *browser-title-menu-items*
+   '(("Clear Browser" 'clear-browser "Discard all search results from this window")
+     ("Remove Selection" 'prune-browser "Discard the selected search results")
+     ("Remove Entire Query" 'remove-query 
+            "Discard all the output of the query containing the selection.")
+     ("Detach Text Window" 'detach-description-window "Detaches the window displaying description files or text documents so that you can save it independently of this browser."
+            )
+     ("Recache Search Options" '(lambda (&rest ignore)
+                                       (query-server-options t))
+            "Ask the server again what the possible domains and document formats are.")
+     ("Change Text Font" 'change-text-font 
+            "Change the font used for displaying descriptions and plain-text documents.")
+     ("Change Server" 'change-server "Use a different server for System33 queries.")))
+
+(defvar *default-search-domain* "PARC"
+   "The default domain to search in.")
+
+(defvar *search-domains* '("PARC" "TEST" "GROLIER" "NYTIMES")
+                             "Known System 33 search domains")
+
+(defglobalvar *description-attribute-menu* nil
+   "Cache for menu from *DESCRIPTION-ATTRIBUTES*")
+
+(defglobalparameter *when-selected-shade* 4672
+   "Texture with which to shade selected commands in browser")
+
+(defglobalparameter *attribute-values*
+   '(("DocType" "abstract" "cartoon" "code" "color" "diagram" "documentation" "drawing" "graphic" 
+            "icon" "photo" "picture" "pixels" "scanned" "screen" "text" "*other*")
+     ("PixelDepth" "1" "4" "8" "24" "*other*"))
+   "A-list showing possible values of selected attributes")
+
+(defvar *format-values*
+   '("ais" "cais" "crast" "crtext" "desc" "form" "man" "mtek" "opaque" "rast" "res" "text" "tioga" 
+           "umtek")
+   "Possible values for the DocFormat attribute")
+
+(defglobalvar *min-browser-size* '(450 . 250)
+                                     "Minimum size (width . height) to prompt for System 33 browser.")
+
+(defun handle-search-button (item menuwindow buttons)
+
+   (il:* il:|;;| "Called when the Search! button is pressed.")
+
+   (let* ((window (il:mainwindow menuwindow))
+          (browser (il:windowprop window 'il:tablebrowser))
+          (nmatches 0)
+          spec args heading error progress-region)
+         (browser-prompt-clear window)
+         (setq spec (il:bind item pattern il:for i il:from 1 il:by 4
+                       il:while (setq item (il:fm.getitem i nil menuwindow))
+                       il:when (> (length (setq pattern (get-fmitem-label (+ i 2)
+                                                                   menuwindow)))
+                                      0) il:collect      (il:* il:\; "Make a list of (attr search pattern) pairs.  Lines come with 3 items: attr, menuchoice icon, pattern")
+                                               (unless (setq item (il:fm.itemprop item 'il:state))
+                                                   (browser-prompt window 
+                                                        "No field name specified for pattern \"~A\"."
+                                                          pattern)
+                                                   (return-from handle-search-button))
+                                               (list item pattern (il:fm.itemprop (il:fm.getitem
+                                                                                   (+ i 3)
+                                                                                   nil menuwindow)
+                                                                         'il:state))))
+         (unless spec
+             (browser-prompt window "Search specification is empty")
+             (return-from handle-search-button))
+         (setq args (cons (get-fmitem-label 'domain-text menuwindow)
+                          (construct-search-spec spec))) (il:* il:\; 
+                                   "Args to descriptionsearch are domain type1 field1 pattern1 ...")
+         (il:tb.insert.item browser
+                (setq heading (record-create tableitem :tidata
+                                     (apply #'concatenate 'string
+                                            (mapcon #'(lambda (pair)
+
+                                                             (il:* il:|;;| 
+                                   "Want to build a string that looks like k1 = pat1; k2 = pat2...")
+
+                                                             (list* (first (first pair))
+                                                                    " "
+                                                                    (third (first pair))
+                                                                    " "
+                                                                    (second (first pair))
+                                                                    (and (cdr pair)
+                                                                         (list "; "))))
+                                                   spec))
+                                     :tiunselectable t)))    (il:* il:\; 
+                          "Append heading item telling what search the items that follow belong to")
+         (setq progress-region (make-progress-region menuwindow 'search-button))
+         (unwind-protect
+             (progn (il:windowprop window 'query-busy t)     (il:* il:\; "This lets Abort see us")
+                    (cond
+                       ((setq error (locate "descriptionsearch" args :mapfn
+                                           #'(lambda (loc)
+                                                    (il:tb.insert.item browser (record-create
+                                                                                tableitem :tidata
+                                                                                (
+                                                                              description-from-id-loc
+                                                                                 loc)))
+                                                    (incf nmatches)
+                                                    (il:block)
+                                                             (il:* il:\; 
+                      "Block in case nobody else is--otherwise user can't get to the abort button.")
+                                                    nil)
+                                           :progressfn
+                                           #'(lambda (progress)
+                                                             (il:* il:\; 
+                                                  "If user hasn't aborted yet, update progress bar")
+                                                    (or (clear-abort window)
+                                                        (show-progress progress menuwindow 
+                                                               progress-region)))
+                                           :formats
+                                           '("desc")))
+                        (if (null (car error))               (il:* il:\; 
+                                "Abort returns (NIL \"User abort\"), locate returns (code string).")
+                            (browser-prompt window "Search aborted~@[ after ~D items~]."
+                                   (and (> nmatches 0)
+                                        nmatches))
+                            (browser-prompt window "Search failed~@[ after ~D items~]: ~A"
+                                   (and (> nmatches 0)
+                                        nmatches)
+                                   (cadr error))))
+                       ((eql nmatches 0)
+                        (browser-prompt window "No matches found"))
+                       (t (il:tb.unselect.all.items browser)
+                          (let ((firstitem (il:tb.nth.item browser (1+ (record-fetch tableitem ti# 
+                                                                              heading)))))
+                                                             (il:* il:\; 
+                                                    "Select first match and make sure it's visible")
+                               (il:tb.select.item browser firstitem)
+                               (il:tb.normalize.item browser firstitem))
+                          (browser-prompt window "~D item~:P found" nmatches))))
+
+             (il:* il:|;;| "On the way out, dispose of the progress box.")
+
+             (erase-progress-box menuwindow progress-region)
+             (il:windowprop window 'query-busy nil)
+             (clear-abort window)                        (il:* il:\; 
+                                                           "Just in case we didn't notice earlier")
+             )))
+
+(defun construct-search-spec (pairs)
+
+   (il:* il:|;;| 
+ "Return a list (op1 field1 pattern1 op2 ....).  Argument is list of (field  pattern op) pairs.")
+
+   (with-collection
+    (flet ((do-one (field pat prefix op)
+                  (setq pat (string-trim '(#\Space)
+                                   pat))
+                  (collect (concatenate 'string prefix
+                                  (or op (let* ((star (position #\* pat))
+                                                (matchtype (cond
+                                                              ((null star)
+                                                               "equal")
+                                                              ((eql star (1- (length pat)))
+                                                               (setq pat (subseq pat 0
+                                                                                (1- (length pat))))
+                                                               "prefix")
+                                                              (t "wildcard"))))
+                                               matchtype))))
+                  (collect field)
+                  (collect pat)))
+          (dolist (pair pairs)
+              (let ((field (first pair))
+                    (pattern (second pair))
+                    (method (third pair))
+                    (start 0)
+                    prevop op)
+                   (dotimes (i (length pattern))
+
+                       (il:* il:|;;| "Look for logical operators.  E.g., field = foo | bar turns into equal field foo or.equal field bar.")
+
+                       (when (case (char pattern i)
+                                 (#\&                        (il:* il:\; 
+ "This could be \"and.\", but it turns out that the default match types already imply conjunction.")
+                                    (setq op nil)
+                                    t)
+                                 (#\| (setq op "or."))
+                                 (t (setq op nil)))
+                           (do-one field (subseq pattern start i)
+                                  prevop method)
+                           (setq prevop op)
+                           (setq start (1+ i))))
+
+                   (il:* il:|;;| "Now process the last segment (possibly the whole thing)")
+
+                   (do-one field (if (eql start 0)
+                                     pattern
+                                     (subseq pattern start))
+                          prevop method))))))
+
+(defun make-progress-region (window search-label)
+
+   (il:* il:|;;| "Makes a region in which to indicate progress of this locate operation.  SEARCH-LABEL is the id of the item to the right of which the region is drawn")
+
+   (il:movetoupperleft window)
+   (let* ((clip (il:dspclippingregion nil window))
+          (itemreg (il:fm.itemprop (il:fm.getitem search-label nil window)
+                          'il:region))
+          (left (+ (record-fetch region pright itemreg)
+                   10))
+          (right (- (record-fetch region pright clip)
+                    10))
+          (bottom (record-fetch region bottom itemreg))
+          (height (min (record-fetch region height itemreg)
+                       (- (record-fetch region top clip)
+                          bottom))))
+
+         (il:* il:|;;| 
+       "Draw a box to the right of the Search! button which we will gray out to show progress")
+
+         (drawbox window (1- left)
+                (1- bottom)
+                right
+                (+ bottom height))
+         (il:createregion left bottom (- right left)
+                height)))
+
+(defun show-progress (progress window progress-region)
+
+   (il:* il:|;;| "Update the pregres-region of window to show how much has been done.")
+
+   (let ((done (progress-report-work-done progress))
+         (pending (progress-report-work-pending progress)))
+        (unless (or (< done 0)
+                    (< pending 0))
+            (il:bltshade il:grayshade window (record-fetch region left progress-region)
+                   (record-fetch region bottom progress-region)
+                   (round (* done (record-fetch region width progress-region))
+                          (+ done pending))
+                   (record-fetch region height progress-region)
+                   'il:replace))))
+
+(defun erase-progress-box (window progress-region)
+   (il:bltshade il:whiteshade window (1- (record-fetch region left progress-region))
+          (1- (record-fetch region bottom progress-region))
+          (+ 2 (record-fetch region width progress-region))
+          (+ 2 (record-fetch region height progress-region))
+          'il:replace))
+
+(defun drawbox (stream left bottom right top &optional operation thickness)
+   (or thickness (setq thickness 1))
+   (il:drawline left bottom left top thickness nil stream)
+   (il:drawline left bottom right bottom thickness nil stream)
+   (il:drawline left top right top thickness nil stream)
+   (il:drawline right bottom right top thickness nil stream))
+
+(defun get-fmitem-label (id window)
+
+   (il:* il:|;;| "Retrieve the label (string contents) of the item ID in freemenu WINDOW")
+
+   (il:fm.itemprop (il:fm.getitem id nil window)
+          'il:label))
+
+(defun browser-commandfn (item menu button)
+
+   (il:* il:|;;| 
+ "WHENSELECTEDFN for the System 33 browser menu.  Spawn a process to do the actual work")
+
+   (let* ((mainw (il:mainwindow (il:wfrommenu menu)))
+          (browser (il:windowprop mainw 'il:tablebrowser))
+          (command (second item)))
+         (if (eq command :abort)
+             (handle-abort-button item menu mainw)       (il:* il:\; "Special kludge")
+             (il:add.process `(do-browser-command ',mainw ',browser ',command ',item
+                                     ',menu
+                                     ',button)
+                    'il:name
+                    (concatenate 'string "S33-" (first item))
+                    'il:beforeexit
+                    'il:don\'t))))
+
+(defun do-browser-command (window browser fn item menu button)
+
+   (il:* il:|;;| "Started up in its own process to perform the action specified by the menu item.  Menu functions get called with arglist (window browser button).")
+
+   (cond
+      ((il:windowprop window 'browser-busy t)                (il:* il:\; "Indicate browser is busy")
+       (il:tb.browser.busy browser))
+      (t (browser-prompt-clear window)
+         (setq item (find-menu-item item (record-fetch menu :items menu)))
+                                                             (il:* il:\; 
+                                                    "Get the main menu item if this was a subitem.")
+         (let ((il:*upper-case-file-names* nil))
+              (unwind-protect
+                  (progn (il:shadeitem item menu *when-selected-shade*)
+                         (cond
+                            ((consp fn)                      (il:* il:\; 
+                                                           "Specifies function and extra arg")
+                             (funcall (car fn)
+                                    window browser button (cadr fn)))
+                            (t (funcall fn window browser button))))
+                  (il:shadeitem item menu il:whiteshade)
+                  (il:windowprop window 'browser-busy nil)
+                  (clear-abort window)                   (il:* il:\; 
+                                                           "Just in case we didn't notice earlier")
+                  )))))
+
+(defun clear-abort (window)
+
+   (il:* il:|;;| "If the abort button has been pressed, clear it and return :ABORT")
+
+   (let ((aborted (il:windowprop window :abort nil)))
+        (when aborted
+            (il:shadeitem (car aborted)
+                   (cadr aborted)
+                   il:whiteshade)
+            :abort)))
+
+(defun handle-abort-button (item menu window)
+   (cond
+      ((or (il:windowprop window 'query-busy)
+           (il:windowprop window 'browser-busy))             (il:* il:\; 
+                                                           "Yes, there's something to abort")
+       (il:windowprop window :abort (list item menu))
+       (il:shadeitem item menu *when-selected-shade*))
+      (t (browser-prompt-clear window)
+         (browser-prompt window "No operation is in progress"))))
+
+(defun find-menu-item (item items)
+
+   (il:* il:|;;| 
+ "Returns the member of ITEMS that is either eq to ITEM or contains ITEM somehow as a subitem.")
+
+   (or (car (member item items))
+       (find item items :test #'(lambda (item elt)
+                                       (let ((subitems (cdr (fourth elt))))
+                                            (and subitems (find-menu-item item subitems)))))))
+
+(defun browser-display (window browser button &optional formats)
+   (let ((item (browser-selection window browser t))
+         (*reuse-description-window* (eq button 'il:left)))
+        (when item
+            (display-from-descr (record-fetch tableitem tidata item)
+                   window formats))))
+
+(defun browser-hardcopy (window browser button &optional selectit)
+   (let ((item (browser-selection window browser t))
+         printer)
+        (when (and item (or (not selectit)
+                            (setq printer (il:|GetPrinterName|))))
+            (map-presentations #'(lambda (file format descr browserwindow)
+                                        (browser-prompt browserwindow "Sending ~A file to ~A..."
+                                               (major-format format)
+                                               (or printer "default printer"))
+                                        (il:send.file.to.printer (open-exact-file file)
+                                               printer
+                                               (let* ((props (description-props descr))
+                                                      (date (cadr (assoc :creation-date props))))
+                                                     (list 'il:document.name (cadr (assoc :title 
+                                                                                          props))
+                                                           'il:document.creation.date
+                                                           (and date (il:idate date)))))
+                                        (browser-prompt browserwindow " done.")
+                                                             (il:* il:\; 
+                  "Now explicitly return, in case the silly converter sent us more than one thing?")
+                                        (return-from browser-hardcopy))
+                   (record-fetch tableitem tidata item)
+                   window
+                   '("ip" "tedit")))))
+
+(defun browser-show-cache (window browser button)
+   (let
+    ((item (browser-selection window browser t)))
+    (when item
+        (let
+         ((descr (record-fetch tableitem tidata item)))
+         (let*
+          ((props (description-props descr))
+           (id (cadr (assoc :data-id props)))
+           (native-format (cadr (assoc :format props)))
+           presentations)
+          (cond
+             ((null id)                                      (il:* il:\; "No image for this")
+              (browser-prompt window "~%~A has no document id!" (or (cadr (assoc :title
+                                                                                     (
+                                                                                    description-props
+                                                                                      descr)))
+                                                                        "Item")))
+             ((setq presentations (browser-locate window "retrieve-lookup" nil 
+                                                             (il:* il:\; " no program arguments")
+                                         "Lookup" :handle (doc-id-from-string id)
+                                         :result-types *retrieve-result-types*))
+              (when (consp presentations)                    (il:* il:\; 
+                                                           "Non-list => error was handled")
+                  (browser-prompt window "Selected ~@[~A ~]document is cached in ~D format~:P.~%"
+                         native-format (length presentations))
+                  (let ((how (il:menu (record-create menu :items
+                                             (mapcar #'(lambda (p)
+                                                              (file-location-file-format
+                                                               (car (id-loc-file-loc p))))
+                                                    presentations)
+                                             :title "Format" :centerflg t :menufont (get-plain-font
+                                                                                     t)))))
+                       (when how
+                           (display-from-descr descr window (list how))))))
+             (t                                              (il:* il:\; 
+                                                     "Render returned NIL?  Dunno how this happens")
+                (browser-prompt window 
+                       "There are no conversions cached for the selected ~@[~A ~]document." 
+                       native-format))))))))
+
+(defun browser-locate (window program args operation &rest locatekeys)
+
+   (il:* il:|;;| "Call locate in an environment where we pay attention to the abort button.  If error or abort, print suitable message and return :abort.  Operation is string describing op for messages.")
+
+   (unwind-protect
+       (let ((result (apply 'locate program args :progressfn #'(lambda (progress)
+                                                             (il:* il:\; "Check for abort")
+                                                                      (clear-abort window))
+                            locatekeys)))
+            (cond
+               ((integerp (car result))                      (il:* il:\; "Error case")
+                (browser-prompt window "~A failed: ~A" operation (cadr result))
+                :abort)
+               ((and result (null (car result)))             (il:* il:\; "The abort case")
+                (browser-prompt window "~A aborted." operation)
+                :abort)
+               (t result)))
+       (clear-abort window)))
+
+(defun browser-view-description (window browser button)
+   (let ((item (browser-selection window browser 'last-described)))
+        (when item
+            (let* ((descr (record-fetch tableitem tidata item))
+                   (*reuse-description-window* (eq button 'il:left))
+                   (fileloc (car (description-file-locations descr)))
+                   (start (file-location-start-byte fileloc))
+                   (nbytes (file-location-nbytes fileloc))
+                   (core (il:openstream "{nodircore}" 'il:both)))
+                  (with-open-stream (descstream (open-exact-file fileloc))
+                         (cond
+                            ((or (> start 0)
+                                 (>= nbytes 0))              (il:* il:\; "Copy just part of file")
+                             (file-position descstream start)
+                             (il:copychars descstream core (and (>= nbytes 0)
+                                                                nbytes)))
+                            (t                               (il:* il:\; 
+                         "Copy whole file.  COPYCHARS because the eol conventions may be different")
+                               (il:copychars descstream core))))
+                  (display-text core (get-window-for-description
+                                          window
+                                          (concatenate 'string "Description of "
+                                                 (cadr (assoc :title (description-props descr)))))
+                         t)
+                  (il:windowprop window 'last-described item)))))
+
+(defun get-window-for-description (mainwindow title)
+
+   (il:* il:|;;| "Return a window to display a description file (or random text).")
+
+   (let (w reg where)
+        (cond
+           ((and *reuse-description-window* (setq w (il:windowprop mainwindow 'description-window)))
+                                                             (il:* il:\; "re-use cached window")
+            (il:clearw w)
+            (il:windowprop mainwindow 'last-described nil)   (il:* il:\; 
+                                               "Window no longer contains description of any item.")
+            (il:windowprop w 'il:title title))
+           (t (setq w (let ((height (cdr *description-window-size*)))
+                           (il:createw (cond
+                                          ((and *reuse-description-window*
+                                                (< (+ height (record-fetch region height
+                                                                    (setq reg (il:windowregion 
+                                                                                     mainwindow))))
+                                                   il:screenheight))
+
+                                           (il:* il:|;;| "Attach to search window in reasonable place.  Don't do this if new window region would be taller than screen.")
+
+                                           (setq where
+                                                 (if (or (> (record-fetch region bottom reg)
+                                                            height)
+                                                         (> (+ height (record-fetch region top reg))
+                                                            il:screenheight))
+                                                     'il:bottom
+                                                     'il:top))
+
+                                           (il:* il:|;;| 
+                                         "Attachwindow will move this region to the right place.")
+
+                                           (record-create region :left 0 :bottom 0 :width
+                                                  (record-fetch region width reg)
+                                                  :height height))
+                                          (t                 (il:* il:\; "Prompt for region")
+                                             (il:getboxregion (car *description-window-size*)
+                                                    height)))
+                                  title nil where)))
+              (when *reuse-description-window*
+                  (when where
+                      (il:attachwindow w mainwindow where nil 'il:localclose))
+                  (il:windowprop mainwindow 'description-window w)
+                  (il:windowaddprop w 'il:closefn #'(lambda (w)
+                                                           (cleanup-text-window w)
+                                                           (when (eq w (il:windowprop mainwindow
+                                                                              'description-window))
+
+                                                        (il:* il:|;;| 
+          "Clear last-described cache.  Don't do this if we've been detached from the main window.")
+
+                                                                 )
+                                                           (il:windowprop mainwindow 'last-described
+                                                                  nil)
+                                                           (il:windowprop mainwindow 
+                                                                  'description-window nil)))
+                  (il:windowaddprop w 'il:shrinkfn
+                         #'(lambda (w)                       (il:* il:\; "Close file being displayed in descr window.  I'm not sure why tedit-close-on-shrink doesn't catch this.")
+                                  (let ((ts (il:windowprop w 'il:textobj)))
+                                       (when (and ts (setq ts (record-fetch textobj txtfile ts))
+                                                  (streamp ts)
+                                                  (il:openp ts))
+                                             (close ts))))))))
+        w))
+
+(defun detach-description-window (mainwindow browser)
+   (browser-prompt-clear mainwindow)
+   (let ((descwindow (il:windowprop mainwindow 'description-window nil)))
+        (cond
+           (descwindow                                       (il:* il:\; 
+                                                           "There's something to play with")
+                  (il:detachwindow descwindow mainwindow)
+                  (il:windowprop mainwindow 'il:mainwindow nil)
+                                                             (il:* il:\; 
+                                                           "detachwindow should have done this")
+                  (il:windowprop mainwindow 'last-described nil)
+                                                             (il:* il:\; 
+                                                           "Forget it has a description")
+                  (browser-prompt mainwindow "Move window to place of your choice.")
+                  (il:movew descwindow)                      (il:* il:\; 
+                                                           "Get user to move it somewhere")
+                  (browser-prompt-clear mainwindow))
+           (t (browser-prompt mainwindow "There is no text window attached right now.")))))
+
+
+
+(il:* il:\; "Presenting Text")
+
+
+(defun show-text (file format descr browserwindow major-format unformattedp)
+   (let* ((props (description-props descr))
+          (title (cadr (assoc :title props)))
+          (orig-format (cadr (assoc :format props))))
+         (browser-prompt browserwindow "Displaying ~@[~A document ~]in ~A format."
+                (and (not (string-equal orig-format major-format))
+                     orig-format)
+                major-format)
+         (display-text (open-exact-file file)
+                (get-window-for-description browserwindow (or title "Text from System 33"))
+                unformattedp)))
+
+(defun display-text (text window &optional unformattedp)
+
+   (il:* il:|;;| "Display file TEXT (a file name or open input stream) in read-only WINDOW.")
+
+   (let ((props '(il:readonly t)))
+        (cleanup-text-window window)
+        (il:opentextstream text window nil nil (if unformattedp
+                                                   `(il:font ,*text-font* il:clearget t ,@props)
+                                                   props))))
+
+(defun change-text-font (window browser)
+   (declare (global il:tedit.known.fonts il:tedit.face.menu il:tedit.size.menu))
+
+   (il:* il:|;;| "Interactively change Text font.  Much of this is cribbed from TEdit, so that the interface looks similar to the tedit \"Looks\" command interaction.")
+
+   (setq window (il:mainwindow window))
+   (let ((oldspec (record-fetch fontdescriptor fontdevicespec (il:fontcreate *text-font*)))
+         family face size)
+        (describe-font window oldspec "Current font is")
+        (setq family (il:menu (record-create menu :items (append il:tedit.known.fonts
+                                                                (list (list "Other" :other)))
+                                     :title "Family:" :centerflg t :menufont (get-plain-font
+                                                                              t))))
+        (when (and (eq family :other)
+                   (setq family (browser-prompt-for-input window "Font name: ")))
+
+            (il:* il:|;;| "Add to known font list")
+
+            (setq il:tedit.known.fonts (append il:tedit.known.fonts
+                                              `((,family ',(setq family (il:mkatom (string-upcase
+                                                                                    family))))))))
+        (setq face (il:menu il:tedit.face.menu))
+        (setq size (il:menu il:tedit.size.menu))
+        (when (or family face size)
+            (let* ((newspec (list (or family (first oldspec))
+                                  (or size (second oldspec))
+                                  (if (null face)
+                                      (third oldspec)
+                                      (list (case face
+                                                ((il:|Bold| il:|Bold Italic|) 'il:bold)
+                                                (otherwise 'il:medium))
+                                            (case face
+                                                ((il:|Italic| il:|Bold Italic|) 'il:italic)
+                                                (otherwise 'il:regular))
+                                            'il:regular))))
+                   (newfont (ignore-errors (apply 'il:fontcreate newspec))))
+                  (cond
+                     (newfont (setq *text-font* newfont)
+                            (describe-font window newspec "Text font changed to")
+                            (let ((descwindow (il:windowprop window 'description-window))
+                                  ts)
+
+                                 (il:* il:|;;| 
+        "Redisplay the attached description window if it is displaying unformatted text right now.")
+
+                                 (when (and descwindow (setq ts (il:windowprop descwindow
+                                                                       'il:textobj))
+                                            (not (il:tedit.formattedfilep ts))
+                                            (setq ts (record-fetch textobj txtfile ts)))
+                                       (display-text ts descwindow t))))
+                     (t (describe-font window newspec "Could not find font")))))))
+
+(defun describe-font (window spec prefix)
+
+   (il:* il:|;;| "Translate font SPEC to English, preceded by PREFIX")
+
+   (il:* il:|;;| "SPEC = (family size face)")
+
+   (browser-prompt-clear window)
+   (browser-prompt window "~A ~A ~D" prefix (first spec)
+          (second spec))
+   (when (eq (first (third spec))
+             'il:bold)
+         (browser-prompt window " Bold"))
+   (when (eq (second (third spec))
+             'il:italic)
+         (browser-prompt window " Italic")))
+
+(defun cleanup-text-window (window)
+
+   (il:* il:|;;| "Close any text stream that happens to be displayed here")
+
+   (let ((oldts (il:windowprop window 'il:textstream)))
+        (when oldts                                          (il:* il:\; "Clean up after self")
+            (close oldts))))
+
+(defglobalvar *text-font* (get-plain-font)
+                              "Font to use when displaying descriptions and text docs.")
+
+(defun browser-prompt (window format-string &rest args)
+
+   (il:* il:|;;| "Print to WINDOW's prompt window using format on the args")
+
+   (let ((*print-base* 10))
+        (apply 'format (cond
+                          (window (il:getpromptwindow window))
+                          (t (terpri il:promptwindow)
+                             il:promptwindow))
+               format-string args)))
+
+(defun browser-prompt-clear (window)
+   (il:clearw (if window
+                  (il:getpromptwindow window)
+                  il:promptwindow)))
+
+(defun browser-prompt-for-input (window prompt &optional default)
+                                                       (il:* il:\; "Edited  4-Feb-88 23:10 by bvm:")
+
+   (il:* il:|;;| 
+ "Prompt for input for browser WINDOW with question PROMPT offering default answer DEFAULT.")
+
+   (let ((pwindow (il:getpromptwindow window))
+         result)
+        (il:clearw pwindow)
+        (setq result (car (il:nlsetq (il:ttyinpromptforword prompt default nil pwindow nil
+                                            'il:tty
+                                            (il:charcode (il:cr))))))
+        (cond
+           ((null result)
+            (princ "... aborted" pwindow)))
+        (terpri pwindow)
+        result))
+
+(il:putprops il:s33browser il:filetype :compile-file)
+
+(il:putprops il:s33browser il:makefile-environment (:package "S33" :readtable "XCL"))
+(il:putprops il:s33browser il:copyright ("Xerox Corporation" 1989 1990 1991))
+(il:declare\: il:dontcopy
+  (il:filemap (nil)))
+il:stop

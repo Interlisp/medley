@@ -1,0 +1,64 @@
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "XCL" BASE 10)
+(FILECREATED "25-Feb-94 16:50:33" |{DSK}<users>nilsson>mnw>MAIKOBITBLT.;1| 8778   
+
+      |changes| |to:|  (VARS MAIKOBITBLTCOMS)
+
+      |previous| |date:| "14-Jun-90 16:57:27" |{DSK}<king>export>lispcore>sources>MAIKOBITBLT.;1|)
+
+
+; Copyright (c) 1988, 1989, 1990, 1994 by Venue & Xerox Corporation.  All rights reserved.
+
+(PRETTYCOMPRINT MAIKOBITBLTCOMS)
+
+(RPAQQ MAIKOBITBLTCOMS (
+                            (* |;;| "this file has some optimizations for BITBLT on MAIKO; while PILOTBITBLT opcode still works, these functions directly implement some higher level operations")
+
+                            (FNS \\MAIKO.BITBLTSUB \\MAIKO.BLTCHAR \\MAIKO.PUNTBLTCHAR 
+                                 \\MAIKO.BITBLT.BITMAP \\MAIKO.BLTSHADE.BITMAP)
+                            
+                            (* |;;| "Save the old \\BITBLT.BITMAP, because it handles the OPERATION - MERGE  case, where the C code doesn't.")
+
+                            (P (MOVD '\\BITBLT.BITMAP '\\MAIKO.OLDBITBLT.BITMAP))
+                            (ADDVARS (\\MAIKO.MOVDS (\\MAIKO.BLTCHAR \\MEDW.BLTCHAR)
+                                            (\\MAIKO.BITBLTSUB \\BITBLTSUB)
+                                            (\\MAIKO.BITBLT.BITMAP \\BITBLT.BITMAP)
+                                            (\\MAIKO.BLTSHADE.BITMAP \\BLTSHADE.BITMAP)))))
+
+
+
+(* |;;| 
+"this file has some optimizations for BITBLT on MAIKO; while PILOTBITBLT opcode still works, these functions directly implement some higher level operations"
+)
+
+(DEFINEQ
+
+(\\MAIKO.BITBLTSUB  (LAMBDA (PILOTBBT |SourceBitMap| SLX STY |DestinationBitMap| DLX DTY HEIGHT |SourceType|                  |Operation| |Texture| |WindowXOffset| |WindowYOffset|)                                                             (* \; "Edited 29-Jun-88 16:24 by ")    (* |;;| "replaces \\BITBLTSUB on Maiko")    ((OPCODES SUBRCALL 69 13)     PILOTBBT |SourceBitMap| SLX STY |DestinationBitMap| DLX DTY HEIGHT |SourceType| |Operation|      |Texture| |WindowXOffset| |WindowYOffset|)))
+
+(\\MAIKO.BLTCHAR  (LAMBDA (CHARCODE DISPLAYSTREAM DISPLAYDATA)    ((OPCODES SUBRCALL 135 3)     CHARCODE DISPLAYSTREAM DISPLAYDATA)))
+
+(\\MAIKO.PUNTBLTCHAR  (LAMBDA (CHARCODE DISPLAYSTREAM DISPLAYDATA)           (* \; "Edited 29-Jun-88 16:04 by ")    (* |;;| "puts a character on a display stream. This function will be called when \\maiko.bltchar failed. Punt from subr call")    (DECLARE (LOCALVARS . T))    (PROG (LOCAL1 RIGHT LEFT CURX CHAR8CODE)          (SETQ CHAR8CODE (\\CHAR8CODE CHARCODE))      CRLP          (COND             ((NOT (EQ (|ffetch| (\\DISPLAYDATA DDCHARSET) |of| DISPLAYDATA)                       (\\CHARSET CHARCODE)))              (\\CHANGECHARSET.DISPLAY DISPLAYDATA (\\CHARSET CHARCODE))))          (COND             ((|ffetch| (\\DISPLAYDATA |DDSlowPrintingCase|) |of| DISPLAYDATA)              (RETURN (\\SLOWBLTCHAR CHARCODE DISPLAYSTREAM))))          (SETQ CURX (|ffetch| (\\DISPLAYDATA DDXPOSITION) |of| DISPLAYDATA))          (SETQ RIGHT (IPLUS CURX (\\DSPGETCHARIMAGEWIDTH CHAR8CODE DISPLAYDATA)))          (COND             ((IGREATERP RIGHT (|ffetch| (\\DISPLAYDATA |DDRightMargin|) |of| DISPLAYDATA))                                                             (* \;                                                            "would go past right margin, force a cr")              (COND                 ((IGREATERP CURX (|ffetch| (\\DISPLAYDATA |DDLeftMargin|) |of| DISPLAYDATA))                                                             (* \;        "don't bother CR if position is at left margin anyway.  This also serves to break the loop.")                  (\\DSPPRINTCR/LF (CHARCODE EOL)                         DISPLAYSTREAM)                      (* \;                        "reuse the code in the test of this conditional rather than repeat it here.")                  (GO CRLP)))))                              (* \;                                                            "update the display stream x position.")          (|freplace| (\\DISPLAYDATA DDXPOSITION) |of| DISPLAYDATA             |with| (IPLUS CURX (\\DSPGETCHARWIDTH CHAR8CODE DISPLAYDATA)))                                                             (* \;                                       "transforms an x coordinate into the destination coordinate.")          (SETQ LOCAL1 (|ffetch| (\\DISPLAYDATA DDXOFFSET) |of| DISPLAYDATA))          (SETQ CURX (IPLUS CURX LOCAL1))          (SETQ RIGHT (IPLUS RIGHT LOCAL1))          (COND             ((IGREATERP RIGHT (SETQ LOCAL1 (|ffetch| (\\DISPLAYDATA |DDClippingRight|)                                               |of| DISPLAYDATA)))                                                             (* \;                                                 "character overlaps right edge of clipping region.")              (SETQ RIGHT LOCAL1)))          (SETQ LEFT (COND                        ((IGREATERP CURX (SETQ LOCAL1 (|ffetch| (\\DISPLAYDATA |DDClippingLeft|)                                                         |of| DISPLAYDATA)))                         CURX)                        (T LOCAL1)))          (RETURN (COND                     ((AND (ILESSP LEFT RIGHT)                           (NOT (EQ (|fetch| (PILOTBBT PBTHEIGHT) |of| (SETQ LOCAL1                                                                                (|ffetch|                                                                                 (\\DISPLAYDATA                                                                                  DDPILOTBBT)                                                                                   |of|                                                                                          DISPLAYDATA)                                                                                ))                                    0)))                      (.WHILE.TOP.DS. DISPLAYSTREAM ((OPCODES SUBRCALL 70 6)                                                     LOCAL1 DISPLAYDATA CHAR8CODE CURX LEFT RIGHT))                      T))))))
+
+(\\MAIKO.BITBLT.BITMAP  (LAMBDA (SOURCEBITMAP SOURCELEFT SOURCEBOTTOM DESTBITMAP DESTINATIONLEFT DESTINATIONBOTTOM WIDTH                  HEIGHT SOURCETYPE OPERATION TEXTURE CLIPPINGREGION CLIPPEDSOURCELEFT                  CLIPPEDSOURCEBOTTOM)                    (* \; "Edited 14-Jun-90 16:47 by TS")    (* |;;| "SUN version of \\BITBLT.BITMAP.  For all but the MERGE case, use C code.  For the MERGE case, use the old code.")    (* |;;| "Jun-14 Now,C function, bitblt_bitmap , has PUNT case for MREGE case(Takeshi)")    (* |;;| "\\MAIKO.OLDBITBLT.BITMAP is obsolete, \\PUNT.BITBLT.BITMAP is there.")    (* |;;| "")    (* |;;| "(COND ((EQ SOURCETYPE 'MERGE) (\\\\MAIKO.OLDBITBLT.BITMAP SOURCEBITMAP SOURCELEFT SOURCEBOTTOM DESTBITMAP DESTINATIONLEFT DESTINATIONBOTTOM WIDTH HEIGHT SOURCETYPE OPERATION TEXTURE CLIPPINGREGION CLIPPEDSOURCELEFT CLIPPEDSOURCEBOTTOM)) (T (SUBRCALL BITBLT.BITMAP SOURCEBITMAP SOURCELEFT SOURCEBOTTOM DESTBITMAP DESTINATIONLEFT DESTINATIONBOTTOM WIDTH HEIGHT SOURCETYPE OPERATION TEXTURE CLIPPINGREGION CLIPPEDSOURCELEFT CLIPPEDSOURCEBOTTOM)))")    (SUBRCALL BITBLT.BITMAP SOURCEBITMAP SOURCELEFT SOURCEBOTTOM DESTBITMAP DESTINATIONLEFT            DESTINATIONBOTTOM WIDTH HEIGHT SOURCETYPE OPERATION TEXTURE CLIPPINGREGION            CLIPPEDSOURCELEFT CLIPPEDSOURCEBOTTOM)))
+
+(\\MAIKO.BLTSHADE.BITMAP  (LAMBDA (TEXTURE DESTINATIONBITMAP DESTINATIONLEFT DESTINATIONBOTTOM WIDTH HEIGHT OPERATION                  CLIPPINGREGION)                         (* \; "Edited 14-Jun-90 16:49 by TS")    (DECLARE (LOCALVARS . T))    (* |;;| "C function, bitshade_bitmap , has PUNT case \\PUNT.BLTSHADE.BITMAP(Takeshi)")    (SUBRCALL BLTSHADE.BITMAP TEXTURE DESTINATIONBITMAP DESTINATIONLEFT DESTINATIONBOTTOM WIDTH            HEIGHT OPERATION CLIPPINGREGION)))
+)
+
+
+
+(* |;;| 
+"Save the old \\BITBLT.BITMAP, because it handles the OPERATION - MERGE  case, where the C code doesn't."
+)
+
+
+(MOVD '\\BITBLT.BITMAP '\\MAIKO.OLDBITBLT.BITMAP)
+
+(ADDTOVAR \\MAIKO.MOVDS (\\MAIKO.BLTCHAR \\MEDW.BLTCHAR)
+                            (\\MAIKO.BITBLTSUB \\BITBLTSUB)
+                            (\\MAIKO.BITBLT.BITMAP \\BITBLT.BITMAP)
+                            (\\MAIKO.BLTSHADE.BITMAP \\BLTSHADE.BITMAP))
+(PUTPROPS MAIKOBITBLT COPYRIGHT ("Venue & Xerox Corporation" 1988 1989 1990 1994))
+(DECLARE\: DONTCOPY
+  (FILEMAP (NIL (1600 8233 (\\MAIKO.BITBLTSUB 1610 . 2130) (\\MAIKO.BLTCHAR 2132 . 2272) (
+\\MAIKO.PUNTBLTCHAR 2274 . 6375) (\\MAIKO.BITBLT.BITMAP 6377 . 7729) (\\MAIKO.BLTSHADE.BITMAP 7731 . 
+8231)))))
+STOP

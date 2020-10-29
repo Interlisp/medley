@@ -1,0 +1,60 @@
+(DEFINE-FILE-INFO READTABLE "XCL" PACKAGE "RPC2")
+(il:filecreated "18-Jan-91 16:18:16" "{piglet/n}<piglet>vanmelle>lispusers>RWALLSERVER.;11" 11374  
+
+      il:|changes| il:|to:|  (il:vars il:rwallservercoms)
+
+      il:|previous| il:|date:| "23-May-90 12:18:17" 
+"{piglet/n}<piglet>vanmelle>lispusers>RWALLSERVER.;10")
+
+
+; Copyright (c) 1989, 1990, 1991 by Xerox Corporation.  All rights reserved.
+
+(il:prettycomprint il:rwallservercoms)
+
+(il:rpaqq il:rwallservercoms ((il:prop (il:filetype il:makefile-environment) il:rwallserver) (il:functions rwall-server parse-rpc-call rwall-notify rwall-notify-print) (il:coms (il:* il:\; "User accessible in IL") (il:functions il:rwall-shutdown) (il:variables il:*rwall-window* il:*rwall-region* il:*rwall-font*)) (eval-when (il:load) (il:p (il:changename (quote il:\\maiko.10mbwatcher) (quote il:promptprint) (quote rwall-notify)) (cond ((il:getd (quote il:\\maiko.console-log-print)) (il:changename (quote il:\\maiko.console-log-print) (quote il:prin1) (quote rwall-notify)) (il:changename (quote il:\\maiko.console-log-print) (quote il:freshline) (quote il:nill)))) (unless (eq (il:machinetype) (quote il:maiko)) (let ((il:p (il:find.process (quote rwall-server)))) (cond (il:p (il:restart.process il:p)) (t (il:add.process (quote (rwall-server)) (quote il:restartable) (quote il:hardreset)))))))) (eval-when (eval compile) (il:files (il:source) il:tcpexports) (il:files (il:sysload) il:rpcdecls))))
+
+(il:putprops il:rwallserver il:filetype :compile-file)
+
+(il:putprops il:rwallserver il:makefile-environment (:readtable "XCL" :package "RPC2"))
+
+(defun rwall-server nil (il:* il:|;;| "Herewith is the body of a very simple RPC server that has been special cased to only handle portmapper.indirect calls on rwall.wall.") (let ((rpcstream (make-rpc-stream :methods *udp-rpc-methods* :ipsocket (il:udp.open.socket *portmapper-socket*) :inbyteptr 0))) (pushnew (quote il:rwall-shutdown) il:aroundexitfns) (il:* il:\; "Will kill self if we wake up on Sun") (unwind-protect (prog* ((socket (rpc-stream-ipsocket rpcstream)) (event (record-fetch ipsocket ipsevent socket)) packet str) lp (cond ((setq packet (il:udp.get socket)) (il:* il:\; "Set up RPCSTREAM for reading") (setf (rpc-stream-instream rpcstream) packet (rpc-stream-inbyteptr rpcstream) (+ *udp-fixed-overhead-bytes* (unfold (il:|fetch| (il:ip il:ipheaderlength) il:|of| packet) *bytes-per-cell*))) (multiple-value-bind (xid prog version proc auth verf) (ignore-errors (parse-rpc-call rpcstream)) (when xid (il:* il:\; "Success") (il:* il:|;;| "All that follows is special case code for rwall.") (when (and (eql prog 100000) (eql version 2) (eql proc 5) (il:* il:\; "Call to Portmapper.Indirect") (setq str (ignore-errors (il:* il:\; "Just in case someone is sending us trash") (and (eql (getunsigned rpcstream) 100008) (eql (getunsigned rpcstream) 1) (eql (getunsigned rpcstream) 2) (progn (il:* il:|;;| "Call on rwall.wall.  Single argument is a string.  Since this is inside portmapper.indirect, what follows is a string encoding the string, so skip the wrapping string's length.") (getunsigned rpcstream) (xdr-read-string rpcstream)))))) (il:* il:|;;| "Now that we have the rwall args, let's reply.  In a real rpc server, we wouldn't do this until we called the server procedure (rwall-notify in this case), since we'd need to make sure it succeeded and what value to return.  Here it doesn't matter, so we reply first to increase our responsiveness and reduce the likelihood of a retransmission.") (let (length) (setf (rpc-stream-instream rpcstream) nil (rpc-stream-outstream rpcstream) packet) (il:\\ip.setupip packet (record-fetch ip ipsourceaddress packet) (record-fetch ip ipid packet) socket (quote il:free)) (udp-initialize rpcstream nil) (putunsigned rpcstream xid) (putunsigned rpcstream *rpc-msg-reply*) (putunsigned rpcstream *rpc-reply-accepted*) (encode-authentication rpcstream nil) (putunsigned rpcstream *rpc-accept-success*) (putunsigned rpcstream 0) (il:* il:\; "Port") (xdr-write-string rpcstream "") (il:* il:\; "Result") (setq length (rpc-stream-outbyteptr rpcstream)) (setf (record-fetch udp udplength packet) (+ (record-fetch udp udplength packet) (- length (record-fetch ip iptotallength packet))) (il:* il:\; "Too bad incf doesn't work") (record-fetch ip iptotallength packet) length (record-fetch udp udpdestport packet) (record-fetch udp udpsourceport packet) (record-fetch udp udpsourceport packet) *portmapper-socket*) (il:udp.send socket packet)) (il:* il:|;;| "Finally, handle the procedure") (rwall-notify str)))) (when (rpc-stream-instream rpcstream) (il:* il:\; "If we didn't reply, free the packet here") (setf (rpc-stream-instream rpcstream) nil) (il:\\release.etherpacket packet))) (t (il:await.event event))) (go lp)) (il:* il:|;;| "Cleanup afterwards") (il:setq il:aroundexitfns (il:dremove (quote il:rwall-shutdown) il:aroundexitfns)) (close-rpcstream rpcstream))))
+
+(defun parse-rpc-call (rpcstream) (il:* il:|;;| "Parses a call message.  If all goes well, returns 6 values: xid, prog, version, proc, cred, verf, leaving RPCSTREAM positioned ready to read the procedure-dependent arguments.  Otherwise, returns NIL.") (macrolet ((getunsigned nil (il:* il:\; "Small optimization") (quote (funcall ufn rpcstream)))) (let* ((ufn (rpc-method getunsigned rpcstream)) (xid (getunsigned))) (cond ((and (eql (getunsigned) *rpc-msg-call*) (eql (getunsigned) *rpc-version*)) (il:* il:\; "A call on the correct version of RPC.") (values xid (getunsigned) (getunsigned) (getunsigned) (decode-authentication rpcstream) (decode-authentication rpcstream)))))))
+
+(defun rwall-notify (str) (il:* il:|;;| "This is the actual sole wall procedure--it takes a message as a string and displays it, either in prompt window or special scrollable tedit window.  This routine is also used on Maiko to display console messages, which accounts for some of the extra hair.") (prog ((hadbell (not (eq (il:machinetype) (quote il:maiko)))) (trash (quote (#\Linefeed #\Newline #\Bell #\Null))) (start 0) (end (length str)) window) top (loop (unless (< start end) (il:* il:\; "No message??") (return-from rwall-notify)) (il:* il:|;;| "Drop leading newlines for prompt window printing.  Null is for Maiko, which turned lf's into nulls.  Bell is also added by Sun to broadcast messages.") (case (char str start) ((#\Linefeed #\Newline #\Null) (incf start)) (#\Bell (il:* il:\; "Get rid of repeated bells, but notice that there was at least one") (setq hadbell t) (incf start)) (otherwise (return)))) (when (and (> (- end start) 30) (string-equal str "Broadcast Message at " :start1 start :end1 (+ start 21)) (digit-char-p (char str (+ start 21))) (digit-char-p (char str (+ start 25))) (string-equal str " ..." :start1 (+ start 26) :end1 (+ start 30))) (il:* il:\; "Maiko rwall messages look like this.  Get rid of space consuming glop") (incf start 30) (go top)) (when (and hadbell (not (position #\Bell str :start start))) (il:flashwindow) (il:* il:\; "Give a mild alert") (il:prin3 #\Bell il:promptwindow)) (il:* il:\; "Message is preceded by date in form \"day-of-week time\"") (cond ((or il:*rwall-window* il:*rwall-region*) (il:* il:|;;| "Need to put it in a Tedit window ") (unless (setq window il:*rwall-window*) (il:* il:|;;| "but window doesn't exist yet") (setq window (il:createw (if (eq il:*rwall-region* t) (let ((reg (copy-list (il:windowregion il:promptwindow)))) (il:* il:\; "Stick the window directly above or below prompt window") (setf (record-fetch region bottom reg) (if (< (record-fetch region bottom reg) (record-fetch region height reg)) (il:* il:\; "Prompt window is too close to bottom, so put our window above it") (+ (record-fetch region bottom reg) (record-fetch region height reg)) (- (record-fetch region bottom reg) (record-fetch region height reg)))) (unless (>= (record-fetch region left reg) il:scrollbarwidth) (il:* il:\; "make sure window can be scrolled") (setf (record-fetch region left reg) il:scrollbarwidth)) reg) il:*rwall-region*) "Remote Notifications")) (il:windowaddprop window (quote il:closefn) (function (lambda (w) (il:* il:\; "Save the region for later resurrection") (setq il:*rwall-region* (il:windowregion w)) (setq il:*rwall-window* nil)))) (let ((font (il:fontcreate (or il:*rwall-font* il:defaultfont)))) (il:opentextstream "" window nil nil (il:bquote (il:promptwindow il:don\'t il:font (il:\\\, font) il:paralooks (il:tabs (nil ((il:\\\, (il:stringwidth "Thu 12:59: " font))))))))) (setq il:*rwall-window* window)) (setq window (il:textstream window)) (il:tedit.insert window "
+" (1+ (il:geteofptr window)))) (t (il:* il:\; "Use global prompt window") (terpri il:promptwindow))) (rwall-notify-print (let* ((d (il:date (il:dateformat il:no.seconds il:day.of.week il:day.short))) (n (length d))) (il:* il:\; "D = dd-mon-yy hh:mm (day)") (format nil "~A ~A: " (subseq d (- n 4) (- n 1)) (subseq d (- n 11) (- n 6)))) window) (do ((newlinep nil t) (eolp (function (lambda (c) (or (eql c #\Newline) (eql c #\Linefeed)))) (il:* il:\; "This silliness is to fool the compiler into not consing the closure object on every iteration")) (i)) ((null (setq i (position-if eolp str :start start))) (il:* il:\; "Last piece now") (when (< start end) (rwall-notify-print (subseq str start) window newlinep))) (rwall-notify-print (subseq str start i) window newlinep) (loop (il:* il:|;;| "Skip over extra eol garbage") (unless (< (incf i) end) (return)) (case (char str i) (#\Newline (il:* il:|;;| "Skip over repeated newlines (Sun pads with these?)")) ((#\Linefeed #\Null) (il:* il:\; "Get rid of the linefeed (turned into null on Maiko) following the cr") (incf i) (return)) (otherwise (return)))) (setq start i))))
+
+(defun rwall-notify-print (msg textstream &optional newlinep) (when newlinep (cond (textstream (il:tedit.insert textstream "
+	" (1+ (il:geteofptr textstream)))) (t (terpri il:promptwindow) (il:spaces 11 il:promptwindow)))) (if textstream (il:tedit.insert textstream msg (1+ (il:geteofptr textstream))) (il:prin3 msg il:promptwindow)))
+
+
+
+(il:* il:\; "User accessible in IL")
+
+
+(defun il:rwall-shutdown (&optional il:event) (cond ((case il:event ((nil) t) ((il:afterlogout il:aftermakesys il:aftersysout il:aftersavevm) (eq (il:machinetype) (quote il:maiko))) (t nil)) (il:* il:\; "Kill me off") (il:del.process "RWALL-SERVER"))))
+
+(defvar il:*rwall-window* nil "Window in which RWALL notices appear")
+
+(defvar il:*rwall-region* nil "Region in which to create RWall's window, or NIL to use PROMPTWINDOW")
+
+(defvar il:*rwall-font* nil "Font for RWall window, or NIL for default TEdit font")
+(eval-when (il:load)
+
+(il:changename (quote il:\\maiko.10mbwatcher) (quote il:promptprint) (quote rwall-notify))
+
+(cond ((il:getd (quote il:\\maiko.console-log-print)) (il:changename (quote il:\\maiko.console-log-print) (quote il:prin1) (quote rwall-notify)) (il:changename (quote il:\\maiko.console-log-print) (quote il:freshline) (quote il:nill))))
+
+(unless (eq (il:machinetype) (quote il:maiko)) (let ((il:p (il:find.process (quote rwall-server)))) (cond (il:p (il:restart.process il:p)) (t (il:add.process (quote (rwall-server)) (quote il:restartable) (quote il:hardreset))))))
+)
+(eval-when (eval compile)
+
+(il:filesload (il:source) il:tcpexports)
+
+
+(il:filesload (il:sysload) il:rpcdecls)
+)
+(il:putprops il:rwallserver il:copyright ("Xerox Corporation" 1989 1990 1991))
+(il:declare\: il:dontcopy
+  (il:filemap (nil)))
+il:stop

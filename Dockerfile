@@ -16,9 +16,9 @@ EXPOSE 5900
 RUN apt-get update && apt-get install -y tightvncserver
 RUN mkdir /app
 WORKDIR /app
-COPY loadups ./
+COPY basics ./
 COPY --from=0 /build/linux.x86_64/* ./
 
 RUN adduser --disabled-password --gecos "" medley
 USER medley
-ENTRYPOINT USER=medley Xvnc -geometry 1270x720 :0 & DISPLAY=:0 /app/ldex -g 1280x720 xfull35.sysout
+ENTRYPOINT USER=medley Xvnc -geometry 1270x720 :0 & DISPLAY=:0 /app/ldex -g 1280x720 full.sysout

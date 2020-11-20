@@ -1,0 +1,384 @@
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
+(FILECREATED " 6-Aug-93 17:14:21" {DSK}<archive>lafite>sources>nsmail.;34 48519  
+
+      changes to%:  (VARS NSMAILCOMS) (FILES LLNSDECLS) (FNS \NSMAIL.MESSAGE.FROM.SELF.P \NSMAIL.PARSE1 \NSMAIL.MAKE.MAILSERVERS)
+
+      previous date%: "26-May-92 11:56:11" {DSK}<archive>lafite>sources>nsmail.;30)
+
+
+(* ; "
+Copyright (c) 1984, 1985, 1986, 1987, 1988, 1989, 1990, 1992, 1993 by Xerox Corporation.  All rights reserved.
+")
+
+(PRETTYCOMPRINT NSMAILCOMS)
+
+(RPAQQ NSMAILCOMS ((* ;; "Stuff used by both NEWNSMAIL & OLDNSMAIL") (COMS (* ; "Support of authentication") (FNS \NSMAIL.LOGIN NS.FINDMAILBOXES \NSMAIL.MAKE.MAILSERVERS \NSMAIL.FIX.MAILBOX.LOCATIONS)) (COMS (* ; "Utilities") (FNS \NSMAIL.CHECK.SERIALIZED.VERSION \NSMAIL.READ.SERIALIZED.CONTENT \NSMAIL.DISCARD.SERIALIZED.CONTENT \NSMAIL.READ.STRING.AS.STREAM) (* ; "Error handling") (FNS \NSMAIL.COURIER.OPEN \NSMAIL.ERRORHANDLER \NSMAIL.SIGNAL.ERROR) (INITVARS (NSMAILDEBUGFLG) (NSMAIL.HEADER.ORDER (QUOTE (Date Sender From Subject In-Reply-to To cc Message-ID Reply-to))))) (COMS (* ; "Handling attachments as a special kind of image object") (FNS \MAILOBJ.CREATE \MAILOBJ.TYPE.NAME \MAILOBJ.NS.TO.LISP.NAME \MAILOBJ.DISPLAY \MAILOBJ.GET \MAILOBJ.IMAGEBOX \MAILOBJ.PUT \MAILOBJ.INIT) (FNS \MAILOBJ.BUTTONEVENTFN \MAILOBJ.DO.COMMAND \MAILOBJ.HARDCOPY \MAILOBJ.FB \MAILOBJ.PUT.FILE \MAILOBJ.VIEW \MAILOBJ.MUNGE.NAME \MAILOBJ.COPY.BODY \MAILOBJ.EXPAND \MAILOBJ.COPY.CHILD \MAILOBJ.COPY.SEQUENCE \MAILOBJ.EXTRACT.TEXT \MAILOBJ.PARSE.ATTRIBUTES) (ADDVARS (FILING.TYPES (VIEWPOINT 4353) (RES 4428) (XEROX860 5120) (REFERENCE 4427) (MAILFOLDER 4417))) (VARS MAILOBJ.REFERENCE.FIELD) (INITVARS (MAILOBJ.WINDOWOFFSET 16) (MAILOBJ.SKIPCHAR (CHARCODE "."))) (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS MAILOBJ) (CONSTANTS \MAILOBJ.REFERENCE.LAST.FILED)) (DECLARE%: DONTEVAL@LOAD DOCOPY (P (\MAILOBJ.INIT) (AND (EQ MAKESYSNAME :LYRIC) (FILESLOAD (SYSLOAD) NSRANDOM))))) (COMS (FNS \NSMAIL.WRITE.ATTRIBUTE) (DECLARE%: EVAL@COMPILE DOCOPY (VARS \NSMAIL.ATTRIBUTES))) (COMS (* ; "sending mail") (FNS \NSMAIL.PARSE.REFERENCE \NSMAIL.EXPAND.DL \NSMAIL.PARSE \NSMAIL.PARSE1 NS.REMOVEDUPLICATES \NSMAIL.GUESS.FILE.TYPE COURIER.WRITE.STREAM.UNSPECIFIED \NSMAIL.SEND.STREAM.AS.STRING) (FILES LAFITEMAIL) (* ; "for LAFITE.MAKE.PARSE.TABLE") (VARS NSMAIL.PARSEFIELDS (\LAPARSE.NSMAIL (LAFITE.MAKE.PARSE.TABLE NSMAIL.PARSEFIELDS))) (GLOBALVARS \LAPARSE.NSMAIL) (INITVARS (NSMAIL.NET.HINT) (*NSMAIL-MAX-NOTE-LENGTH* 8000) (*NSMAIL-CACHE-TIMEOUT* 14400000) (*NSMAIL-GENEROUS-SELF-TEST* T) (LAFITEDL.EXT "DL")) (P (CL:PROCLAIM (QUOTE (GLOBAL NSMAIL.NET.HINT *NSMAIL-MAX-NOTE-LENGTH* *NSMAIL-CACHE-TIMEOUT* *NSMAIL-GENEROUS-SELF-TEST*)))) (FNS \NSMAIL.MESSAGE.P \NSMAIL.MESSAGE.FROM.SELF.P \NSMAIL.MAKEANSWERFORM \NSMAIL.PRINT.NAMES)) (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS NSMAILBOX NSMAILSTATE NSMAILPARSE) (CONSTANTS \NSMAIL.SOCKET \SERIALIZED.FILE.VERSION \SERIALIZED.FILE.VERSIONS \NSMAIL.TEXT.BODYTYPE \NSMAIL.EMPTY.BODYTYPE \NSMAIL.REFERENCE.BODYTYPE MAX.BULK.SEGMENT.LENGTH) (MACROS \NSMAIL.ATTRIBUTE.TYPE \NSMAIL.WRITE.ATTRIBUTE \NSMAIL.WRITE.ATTRIBUTE.MACRO) (PROP INFO \NSMAIL.ATTRIBUTE.TYPE) (GLOBALVARS *NSMAIL-OP-VECTOR* DEFAULTICONFONT FILING.TYPES MAILOBJ.REFERENCE.FIELD MAILOBJ.SKIPCHAR MAILOBJ.WINDOWOFFSET NSMAIL.HEADER.ORDER NSMAIL.NET.HINT NSMAILDEBUGFLG NSPRINT.WATCHERFLG NSWIZARDFLG \MAILOBJ.IMAGEFNS \NSFILING.ATTRIBUTES \NSMAIL.ATTRIBUTES) (FILES (SOURCE) LAFITEDECLS LLNSDECLS) (* ;; "LLNSDECLS to get NSADDRESS, needed by \NSMAIL.SIGNAL.ERROR") (LOCALVARS . T))))
+
+
+
+(* ;; "Stuff used by both NEWNSMAIL & OLDNSMAIL")
+
+
+
+
+(* ; "Support of authentication")
+
+(DEFINEQ
+
+(\NSMAIL.LOGIN
+(LAMBDA NIL (* ; "Edited  7-Jun-88 19:37 by bvm") (if (LAFITE.PROMPT.FOR.LOGIN (QUOTE |NS::|)) then (* ; "Got the login, now authenticate") (\LAFITE.GET.USER.DATA (QUOTE NS) NIL T) (\LAFITE.WAKE.WATCHER)))
+)
+
+(NS.FINDMAILBOXES
+(LAMBDA (USERNAME) (* ; "Edited 18-Jul-88 12:55 by bvm") (LET ((MAILBOXENTRY (CH.RETRIEVE.ITEM (PARSE.NSNAME USERNAME) (CH.PROPERTY (QUOTE MAILBOXES)) (QUOTE MAILBOX.VALUES)))) (AND MAILBOXENTRY (for MB in (COURIER.FETCH (CLEARINGHOUSE . MAILBOX.VALUES) MAIL.SERVICE of (CADR MAILBOXENTRY)) when (SETQ MB (COND ((LOOKUP.NS.SERVER MB NIL T)) (T (PRINTOUT PROMPTWINDOW T "Cannot find address for mail server " MB) NIL))) collect MB))))
+)
+
+(\NSMAIL.MAKE.MAILSERVERS
+(LAMBDA (SERVERS FULLNAME CREDENTIALS) (* ; "Edited 16-Aug-89 16:05 by bvm") (* ;; "Return a list of mail server info for insertion in the MAILSERVERS slot of NS mode.  Each element of SERVERS is of the form (name . addresses)") (if (NULL SERVERS) then (printout PROMPTWINDOW T "There are no mail servers for user " (NSNAME.TO.STRING FULLNAME T)) NIL else (for PAIR in SERVERS bind (FIRSTTIME _ T) collect (create MAILSERVER MAILPORT _ (CADR PAIR) MAILSERVERNAME _ (CAR PAIR) MAILSERVEROPS _ *NSMAIL-OP-VECTOR* MAILSTATE _ (create NSMAILSTATE STATENAME _ FULLNAME STATEADDRESS _ (CADR PAIR) STATECREDENTIALS _ CREDENTIALS STATETIMER _ (if FIRSTTIME then (* ; "Only need a timer on the first server") (SETQ FIRSTTIME NIL) (SETUPTIMER *NSMAIL-CACHE-TIMEOUT*)))))))
+)
+
+(\NSMAIL.FIX.MAILBOX.LOCATIONS
+(LAMBDA NIL (* ; "Edited 16-Aug-89 16:21 by bvm") (* ;; "Called when we think user's mailboxes may have moved.  If they have, sets new info into NS mode and returns T.") (LET ((OLDDATA (\LAFITE.GET.USER.DATA (QUOTE NS))) OLDSERVERS NEWSERVERS FULLNAME) (if (AND OLDDATA (SETQ OLDSERVERS (fetch (LAFITEMODEDATA MAILSERVERS) of OLDDATA))) then (* ; "Actually, if we got here at all, OLDSERVERS surely is non-NIL.  The check is for sanity.") (SETQ NEWSERVERS (NS.FINDMAILBOXES (SETQ FULLNAME (fetch (LAFITEMODEDATA UNPACKEDUSERNAME) of OLDDATA)))) (LET ((STATE (fetch (MAILSERVER MAILSTATE) of (CAR OLDSERVERS)))) (* ; "Reset the timer that tells us when next to check on location.") (replace STATETIMER of STATE with (SETUPTIMER (if NEWSERVERS then *NSMAIL-CACHE-TIMEOUT* else (* ; "Couldn't find servers?  Try again soon") 60000) (fetch STATETIMER of STATE)))) (if (AND NEWSERVERS (OR (NOT (EQ (LENGTH NEWSERVERS) (LENGTH OLDSERVERS))) (for SERVER in OLDSERVERS as PAIR in NEWSERVERS thereis (OR (NOT (EQUAL.CH.NAMES (CAR PAIR) (fetch MAILSERVERNAME of SERVER))) (NOT (for I from 0 to 4 bind (SERVERADDR _ (fetch MAILPORT of SERVER)) (PAIRADDR _ (CADR PAIR)) always (EQ (\GETBASE SERVERADDR I) (\GETBASE PAIRADDR I)))))))) then (* ;; "Yes, mailbox info is different.  Fix it up.  Note that we do nothing if no mail servers were found.  This is to avoid screwing up when we failed to talk to a clearinghouse (since otherwise we would find ourselves with no servers, hence nobody to wake up periodically and find out where the servers have moved to).  If only CH.RETRIEVE.ITEM could give us an error return in that case...") (replace (LAFITEMODEDATA MAILSERVERS) of OLDDATA with (\NSMAIL.MAKE.MAILSERVERS NEWSERVERS FULLNAME (fetch (LAFITEMODEDATA CREDENTIALS) of OLDDATA))) T))))
+)
+)
+
+
+
+(* ; "Utilities")
+
+(DEFINEQ
+
+(\NSMAIL.CHECK.SERIALIZED.VERSION
+(LAMBDA (STREAM) (* ; "Edited  5-May-89 14:47 by bvm") (LET ((V (COURIER.READ STREAM NIL (QUOTE LONGCARDINAL)))) (SELECTC V (\SERIALIZED.FILE.VERSIONS T) (HELP (CL:FORMAT NIL "Lafite does not understand serialized file version ~D.
+RETURN to attempt retrieval anyway." V))))))
+
+(\NSMAIL.READ.SERIALIZED.CONTENT
+(LAMBDA (INSTREAM OUTSTREAM) (* ; "Edited 17-Jan-89 17:14 by bvm") (* ;;; "Interprets INSTREAM as SerializedTree.Content, i.e., as a Bulkdata.StreamOfUnspecified followed by the lastByteIsSignificant flag.  Copies the raw data therein to OUTSTREAM") (bind LASTSEGMENT? BYTE BYTECOUNT do (SETQ LASTSEGMENT? (NEQ (\WIN INSTREAM) 0)) (COND ((NEQ (SETQ BYTECOUNT (UNFOLD (\WIN INSTREAM) BYTESPERWORD)) 0) (RPTQ (SUB1 BYTECOUNT) (\BOUT OUTSTREAM (\BIN INSTREAM))) (SETQ BYTE (\BIN INSTREAM)) (* ; "Final byte of this segment.  Don't copy until we know whether it's significant") (COND ((OR (NULL LASTSEGMENT?) (NEQ (\WIN INSTREAM) 0)) (* ; "Not last segment, or the word after says the final byte was significant") (\BOUT OUTSTREAM BYTE)))) (LASTSEGMENT? (* ; "Null body.  Throw out the lastByteIsSignificant flag") (\WIN INSTREAM))) repeatuntil LASTSEGMENT?))
+)
+
+(\NSMAIL.DISCARD.SERIALIZED.CONTENT
+(LAMBDA (INSTREAM) (* ; "Edited 17-Jan-89 17:17 by bvm") (* ;;; "Interprets INSTREAM as SerializedTree.Content, i.e., as a Bulkdata.StreamOfUnspecified followed by the lastByteIsSignificant flag and discards it all") (do (if (NEQ (PROG1 (\WIN INSTREAM) (RPTQ (UNFOLD (\WIN INSTREAM) BYTESPERWORD) (\BIN INSTREAM))) 0) then (* ; "Finished.  Read the lastByteIsSignificant flag") (\WIN INSTREAM) (RETURN))))
+)
+
+(\NSMAIL.READ.STRING.AS.STREAM
+(LAMBDA (INSTREAM OUTSTREAM) (* bvm%: "30-Jul-84 16:13") (* ;; "Considers INSTREAM to be positioned at a sequence of unspecified, and reads it as if its datatype were string, and copies said bytes to OUTSTREAM") (PROG (LENGTH) (\WIN INSTREAM) (* ; "Skip sequence count") (COPYBYTES INSTREAM OUTSTREAM (SETQ LENGTH (\WIN INSTREAM))) (COND ((ODDP LENGTH) (\BIN INSTREAM)))))
+)
+)
+
+
+
+(* ; "Error handling")
+
+(DEFINEQ
+
+(\NSMAIL.COURIER.OPEN
+(LAMBDA (ADDRESS) (* ; "Edited  9-Sep-88 12:06 by bvm") (COURIER.OPEN ADDRESS NIL T (QUOTE NSMAIL) NIL (CONSTANT (LIST (QUOTE ERRORHANDLER) (FUNCTION \NSMAIL.ERRORHANDLER)))))
+)
+
+(\NSMAIL.ERRORHANDLER
+(LAMBDA (STREAM ERRCODE) (* ; "Edited  9-Sep-88 12:35 by bvm") (* ;; "Called when SPP error occurs on NS mail courier connection STREAM.  Fakes an error return from the courier.call.") (LET (POS) (if (AND (EQ ERRCODE (QUOTE STREAM.LOST)) (SETQ POS (STKPOS (FUNCTION COURIER.CALL)))) then (BLOCK 500) (RETFROM POS (QUOTE (ERROR STREAM.LOST)) T) else (\SPP.DEFAULT.ERRORHANDLER STREAM ERRCODE))))
+)
+
+(\NSMAIL.SIGNAL.ERROR
+(LAMBDA (ERROR MAILBOX PROGRAM PROCEDURE) (* ; "Edited  9-Sep-88 12:37 by bvm") (* ;; "Called when we get an error on an NS mail courier call.  If stream lost, then tries to reestablish the connection, returning a new stream on success.") (if (EQ (CADR ERROR) (QUOTE STREAM.LOST)) then (PRINTOUT PROMPTWINDOW T "Lost NS mail connection, trying to reestablish...") (LET ((STREAM (\NSMAIL.COURIER.OPEN (create NSADDRESS using (SPP.DESTADDRESS (fetch NSMAILSTREAM of MAILBOX)) NSSOCKET _ 0)))) (if STREAM then (PRINTOUT PROMPTWINDOW "done.") (replace NSMAILSTREAM of MAILBOX with STREAM) else (PRINTOUT PROMPTWINDOW "failed.") (ERROR "NS mail connection lost, can't reestablish"))) else (COURIER.SIGNAL.ERROR PROGRAM PROCEDURE ERROR)))
+)
+)
+
+(RPAQ? NSMAILDEBUGFLG)
+
+(RPAQ? NSMAIL.HEADER.ORDER (QUOTE (Date Sender From Subject In-Reply-to To cc Message-ID Reply-to)))
+
+
+
+(* ; "Handling attachments as a special kind of image object")
+
+(DEFINEQ
+
+(\MAILOBJ.CREATE
+(LAMBDA (DATA TYPE ATTR.LENGTH NAME MORE.INFO START) (* ; "Edited 14-Feb-90 16:59 by bvm") (* ;; "Create a mail object encapsulating data (a core file in serialized file format).  TYPE is the type of the serialized data.") (OR START (SETQ START 0)) (LET* ((TITLE (SELECTQ TYPE (REFERENCE (* ; "Reference to a file.") (if (NOT MORE.INFO) then (* ; "Try parsing the reference info--returns (REFERENCE info)") (LET* ((INFO (CADR (\MAILOBJ.PARSE.ATTRIBUTES DATA (LIST MAILOBJ.REFERENCE.FIELD) START))) (TYPE (\TYPE.FROM.FILETYPE (CADR (ASSOC (QUOTE TYPE) INFO))))) (SETQ NAME (\MAILOBJ.NS.TO.LISP.NAME (CADR (ASSOC (QUOTE HOST) INFO)) (CADR (ASSOC (QUOTE DIRECTORY) INFO)) (CADR (ASSOC (QUOTE NAME) INFO)) (AND (NEQ (CADR (ASSOC (QUOTE FLAGS) INFO)) \MAILOBJ.REFERENCE.LAST.FILED) (CADR (ASSOC (QUOTE VERSION) INFO))) (EQ TYPE (QUOTE DIRECTORY)))) (SETQ MORE.INFO (BQUOTE (FILE.ID (\, (CADR (ASSOC (QUOTE FILE.ID) INFO))) TYPE (\, TYPE)))))) (CL:FORMAT NIL "Reference to ~A ~A" (\MAILOBJ.TYPE.NAME (LISTGET MORE.INFO (QUOTE TYPE))) NAME)) (if NAME then (CONCAT NAME " (" (\MAILOBJ.TYPE.NAME TYPE T) ")") else (\MAILOBJ.TYPE.NAME TYPE)))) (TITLELEN (NCHARS TITLE)) (FONT (AND (> TITLELEN 20) (LET* ((FONT DEFAULTICONFONT) (SIZE (FONTPROP FONT (QUOTE SIZE)))) (* ; "Use a smaller font if available") (if (> TITLELEN 30) then (* ; "This is really getting out of hand...") (SETQ TITLE (CONCAT (SUBSTRING TITLE 1 25) "..."))) (AND (> SIZE 8) (CAR (NLSETQ (FONTCOPY FONT (QUOTE SIZE) (- SIZE 2)))))))) (IMAGE (WINDOWPROP (TITLEDICONW NIL TITLE FONT (QUOTE (0 . 0)) T NIL (QUOTE FILE)) (QUOTE ICONIMAGE)))) (* ; "Crude way of getting a bitmap with some text printed on it nicely") (IMAGEOBJCREATE (create MAILOBJ MAILOBJ.IMAGE _ IMAGE MAILOBJ.BOX _ (create IMAGEBOX XSIZE _ (BITMAPWIDTH IMAGE) YSIZE _ (BITMAPHEIGHT IMAGE) YDESC _ (LRSH (BITMAPHEIGHT IMAGE) 1) XKERN _ 0) MAILOBJ.TYPE _ TYPE MAILOBJ.DATA _ DATA MAILOBJ.ATTR.LENGTH _ ATTR.LENGTH MAILOBJ.START _ START MAILOBJ.NAME _ NAME MAILOBJ.INFO _ MORE.INFO MAILOBJ.EXPANDABLE _ (PROGN (* ; "True if object has children") (CADR (\MAILOBJ.PARSE.ATTRIBUTES DATA (CONSTANT (LIST (ASSOC (QUOTE IS.DIRECTORY) \NSFILING.ATTRIBUTES))) START)))) \MAILOBJ.IMAGEFNS)))
+)
+
+(\MAILOBJ.TYPE.NAME
+(LAMBDA (TYPE SHORT) (* ; "Edited 29-Sep-87 14:21 by bvm:") (* ;; "Translate filing TYPE into a descriptive string, e.g., %"Interpress Document%".  If SHORT is true, leave out %"Document%".  If TYPE is numeric, it is rendered as %"Type nnn Document%".") (if (EQ TYPE (QUOTE DIRECTORY)) then (* ; "Viewpoint calls these %"folders%"") "Viewpoint Folder" else (CL:FORMAT NIL "~:[~:(~A~)~;Type ~D~]~@[ Document~]" (FIXP TYPE) TYPE (NOT SHORT))))
+)
+
+(\MAILOBJ.NS.TO.LISP.NAME
+(LAMBDA (HOST DIRECTORY NAME VERSION DIRECTORYFLG) (* ; "Edited 29-Sep-87 17:54 by bvm:") (* ;; "Turn these pieces parsed out of a reference icon into a Lisp-style file name.  Mainly this means turning the slashes into angles.  This code is stolen from \NSFILING.FULLNAME, which is what we would use if it didn't require a filing session arg.") (LET ((PATHNAME (if DIRECTORYFLG then (CONCAT DIRECTORY "/" NAME (if (AND VERSION (NEQ VERSION 1)) then (CONCAT "!" VERSION) else "")) else DIRECTORY)) FILENAME DIRLST FULLNAME FUNNYCHAR DOTSEEN QUOTEDDIRS) (for I from 1 bind CH (START _ 1) while (SETQ CH (NTHCHARCODE PATHNAME I)) do (SELCHARQ CH (%' (* ; "quote mark, skip it and next char") (add I 1)) (/ (* ; "Directory marker") (push DIRLST (SUBSTRING PATHNAME START (SUB1 I))) (SETQ START (ADD1 I))) ((; %: < > } %]) (* ; "Funny characters that filing doesn't care about but we do -- need to quote these") (SETQ FUNNYCHAR T)) NIL) finally (push DIRLST (SUBSTRING PATHNAME START))) (* ;; "DIRLST is in reverse order now.") (for DIR in DIRLST do (push QUOTEDDIRS (COND (FUNNYCHAR (\NSFILING.ADDQUOTES DIR T)) (T DIR)) (QUOTE >))) (CONCATLIST (NCONC (LIST (QUOTE {) HOST "}<") QUOTEDDIRS (AND (NOT DIRECTORYFLG) (CONS (\NSFILING.ADDQUOTES NAME) (AND VERSION (LIST (if (STRPOS "." NAME) then ";" else ".;") VERSION))))))))
+)
+
+(\MAILOBJ.DISPLAY
+(LAMBDA (OBJ STREAM) (* ; "Edited 29-Jun-87 17:34 by bvm:") (LET ((IMAGE (fetch MAILOBJ.IMAGE of (fetch OBJECTDATUM of OBJ)))) (* ; "Display the image, centered on the baseline") (BITBLT IMAGE NIL NIL STREAM (DSPXPOSITION NIL STREAM) (- (DSPYPOSITION NIL STREAM) (LRSH (BITMAPHEIGHT IMAGE) 1)))))
+)
+
+(\MAILOBJ.GET
+(LAMBDA (STREAM TEXTSTREAM) (* ; "Edited 14-Feb-90 16:50 by bvm") (DESTRUCTURING-BIND (LEN TYPE ATTR.LEN NAME . INFO) (READ STREAM FILERDTBL) (LET (DATASTREAM START) (if (EQ (fetch DEVICENAME of (fetch (STREAM DEVICE) of STREAM)) (QUOTE NODIRCORE)) then (* ; "No need to copy the data, just copy the cover") (SETQ DATASTREAM (NCREATE (QUOTE STREAM) STREAM)) (SETQ START (GETFILEPTR STREAM)) (LET ((EOF (+ START LEN))) (* ; "Fix the eof so we don't have to carry around the length") (replace (STREAM EPAGE) of DATASTREAM with (FOLDLO EOF BYTESPERPAGE)) (replace (STREAM EOFFSET) of DATASTREAM with (IMOD EOF BYTESPERPAGE))) else (SETQ DATASTREAM (OPENSTREAM (QUOTE {NODIRCORE}) (QUOTE BOTH))) (COPYBYTES STREAM DATASTREAM LEN) (SETQ START 0)) (\MAILOBJ.CREATE DATASTREAM TYPE ATTR.LEN NAME INFO START))))
+)
+
+(\MAILOBJ.IMAGEBOX
+(LAMBDA (OBJ) (* ; "Edited 29-Jun-87 16:57 by bvm:") (fetch MAILOBJ.BOX of (fetch OBJECTDATUM of OBJ)))
+)
+
+(\MAILOBJ.PUT
+(LAMBDA (OBJ STREAM) (* ; "Edited 14-Feb-90 16:16 by bvm") (LET* ((MAILOBJ (fetch OBJECTDATUM of OBJ)) (COREFILE (fetch MAILOBJ.DATA of MAILOBJ)) (END (GETEOFPTR COREFILE)) (START (fetch MAILOBJ.START of MAILOBJ))) (LET ((*PRINT-BASE* 10) (*READTABLE FILERDTBL) (NAME (fetch MAILOBJ.NAME of MAILOBJ)) (INFO (fetch MAILOBJ.INFO of MAILOBJ))) (* ; "Make sure we can read it back.") (PRIN4 (LIST* (- END START) (fetch MAILOBJ.TYPE of MAILOBJ) (fetch MAILOBJ.ATTR.LENGTH of MAILOBJ) (AND (OR NAME INFO) (CONS NAME INFO))) STREAM)) (COPYBYTES COREFILE STREAM START END)))
+)
+
+(\MAILOBJ.INIT
+(LAMBDA NIL (* ; "Edited 29-Jun-87 16:36 by bvm:") (SETQ \MAILOBJ.IMAGEFNS (IMAGEFNSCREATE (FUNCTION \MAILOBJ.DISPLAY) (FUNCTION \MAILOBJ.IMAGEBOX) (FUNCTION \MAILOBJ.PUT) (FUNCTION \MAILOBJ.GET) (FUNCTION CL:IDENTITY) (FUNCTION \MAILOBJ.BUTTONEVENTFN))))
+)
+)
+(DEFINEQ
+
+(\MAILOBJ.BUTTONEVENTFN
+(LAMBDA (OBJ WINDOWSTREAM SELECTION RELX RELY WINDOW TEXTSTREAM BUTTON) (* ; "Edited 15-Aug-89 17:44 by bvm") (if (.COPYKEYDOWNP.) then (* ; "There's more to copy selection than this") (AND NIL (LET ((NAME (fetch MAILOBJ.NAME of (IMAGEOBJPROP OBJ (QUOTE OBJECTDATUM))))) (AND NAME (BKSYSBUF NAME)))) elseif (IMAGEOBJPROP OBJ (QUOTE BUSY)) then (* ; "Busy") (PRINTOUT PROMPTWINDOW T "Attachment is busy") else (LET* ((MAILOBJ (IMAGEOBJPROP OBJ (QUOTE OBJECTDATUM))) (TYPE (fetch MAILOBJ.TYPE of MAILOBJ)) (REAL.TYPE (if (EQ TYPE (QUOTE REFERENCE)) then (LISTGET (fetch MAILOBJ.INFO of MAILOBJ) (QUOTE TYPE)) else TYPE)) (CMD (MENU (create MENU ITEMS _ (BQUOTE (("View as text" (QUOTE \MAILOBJ.VIEW) "View the attachment as raw text, using TEdit") ((\, (if (EQ TYPE (QUOTE REFERENCE)) then (* ; "Note that we are storing the reference itself, not the referenced file") "Store reference" else "Put to file")) (QUOTE \MAILOBJ.PUT.FILE) "Store the attachment in a file.  This operation loses information unless the file is on an NS File Server.") (\,@ (AND (EQ REAL.TYPE (QUOTE INTERPRESS)) (QUOTE (("Send to Printer" (QUOTE \MAILOBJ.HARDCOPY) "Send the document to the printer of your choice."))))) (\,@ (AND (fetch MAILOBJ.EXPANDABLE of MAILOBJ) (QUOTE (("Expand folder" (QUOTE \MAILOBJ.EXPAND) "Extract the first-level subparts of the folder"))))) (\,@ (SELECTQ TYPE (REFERENCE (AND (GETD (QUOTE FILEBROWSER)) (EQ (NTHCHARCODE (fetch MAILOBJ.NAME of MAILOBJ) -1) (CHARCODE >)) (BQUOTE (("FileBrowse" (QUOTE \MAILOBJ.FB) "Invoke the File Browser on the referenced object"))))) NIL)))) CENTERFLG _ T)))) (if (NULL CMD) then (* ; "Nothing selected; allow TEdit to select") T else (* ; "Do the command in its own process so that the window can return to its more natural state (instead of severely clipped)") (ADD.PROCESS (LIST (FUNCTION \MAILOBJ.DO.COMMAND) (KWOTE CMD) (KWOTE OBJ) (KWOTE WINDOW) (KWOTE TEXTSTREAM)) (QUOTE NAME) (QUOTE MAILOBJ) (QUOTE RESTARTABLE) (QUOTE HARDRESET) (QUOTE BEFOREEXIT) (QUOTE DON'T)) (* ; "Return DON'T so that the window doesn't pop on top to select") (QUOTE DON'T)))))
+)
+
+(\MAILOBJ.DO.COMMAND
+(LAMBDA (CMD OBJ WINDOW TEXTSTREAM) (* ; "Edited  3-Jul-87 17:51 by bvm:") (RESETLST (RESETSAVE (IMAGEOBJPROP OBJ (QUOTE BUSY) T) (LIST (QUOTE IMAGEOBJPROP) OBJ (QUOTE BUSY) NIL)) (CL:FUNCALL CMD OBJ WINDOW TEXTSTREAM)))
+)
+
+(\MAILOBJ.HARDCOPY
+(LAMBDA (OBJ WINDOW) (* ; "Edited 14-Feb-90 17:08 by bvm") (* ;; "Hardcopy the attachment in MAILOBJ.  WINDOW is the window in which we are viewing it (not currently used).") (LET* ((*UPPER-CASE-FILE-NAMES* NIL) (PRINTER (GetPrinterName)) (MAILOBJ (IMAGEOBJPROP OBJ (QUOTE OBJECTDATUM))) (REFP (EQ (fetch MAILOBJ.TYPE of MAILOBJ) (QUOTE REFERENCE))) ATTRIBUTES PRINTRESULTS NAME DATA START) (if (NULL PRINTER) then (* ; "abort") NIL elseif (NOT (STRPOS ":" PRINTER)) then (* ; "not ns") (PRINTOUT PROMPTWINDOW T PRINTER " is not an Interpress printer") else (SETQ PRINTER (GETNSPRINTER PRINTER)) (if REFP then (NSPRINT PRINTER (SETQ NAME (fetch MAILOBJ.NAME of MAILOBJ))) else (* ; "Have to do this by hand, since we don't have a nice standalone stream") (SETQ ATTRIBUTES (\MAILOBJ.PARSE.ATTRIBUTES (SETQ DATA (fetch MAILOBJ.DATA of MAILOBJ)) (CONSTANT (BQUOTE ((DOCUMENT.NAME (\,@ (CDR (ASSOC (QUOTE NAME) \NSFILING.ATTRIBUTES)))) (DOCUMENT.CREATION.DATE (\,@ (CDR (ASSOC (QUOTE CREATED.ON) \NSFILING.ATTRIBUTES))))))) (SETQ START (fetch MAILOBJ.START of MAILOBJ)))) (* ; "Parse out the name and creation date, and use them for the document name/date") (if (SETQ NAME (LISTGET ATTRIBUTES (QUOTE DOCUMENT.NAME))) then (* ; "Fix up any wayward subject") (LISTPUT ATTRIBUTES (QUOTE DOCUMENT.NAME) (SETQ NAME (\MAILOBJ.MUNGE.NAME NAME)))) (SETQ PRINTRESULTS (\NSPRINT.INTERNAL PRINTER ATTRIBUTES (FUNCTION (LAMBDA (DATASTREAM) (\MAILOBJ.COPY.BODY DATA DATASTREAM (+ START (fetch MAILOBJ.ATTR.LENGTH of MAILOBJ))) NIL)))) (if (AND PRINTRESULTS NSPRINT.WATCHERFLG) then (* ; "Set up a 'watchdog' process to keep the guy informed of the print job's status.") (\NSPRINT.WATCH.JOB PRINTRESULTS PRINTER NAME))) (PRINTOUT PROMPTWINDOW T NAME " sent to " (fetch NSOBJECT of (CAR PRINTER))))))
+)
+
+(\MAILOBJ.FB
+(LAMBDA (OBJ WINDOW) (* ; "Edited 29-Sep-87 17:33 by bvm:") (* ;; "Invoke the File Browser on the referenced object") (FILEBROWSER (fetch MAILOBJ.NAME of (IMAGEOBJPROP OBJ (QUOTE OBJECTDATUM)))))
+)
+
+(\MAILOBJ.PUT.FILE
+(LAMBDA (OBJ WINDOW) (* ; "Edited 14-Feb-90 16:20 by bvm") (* ;; "Store the attachment of MAILOBJ as file of user's choosing.  Prompt for file name.  If it's on an NS directory, we can deserialize and thus preserve the whole thing.") (LET* ((MAILOBJ (IMAGEOBJPROP OBJ (QUOTE OBJECTDATUM))) (DATA (fetch MAILOBJ.DATA of MAILOBJ)) (START (fetch MAILOBJ.START of MAILOBJ)) (PW (CREATEW (create REGION LEFT _ LASTMOUSEX BOTTOM _ LASTMOUSEY WIDTH _ (WINDOWPROP WINDOW (QUOTE WIDTH)) HEIGHT _ (HEIGHTIFWINDOW (TIMES 4 (FONTPROP DEFAULTFONT (QUOTE HEIGHT))) NIL 8)) NIL 8)) FILE DEVICE CONDITION) (if (NULL (SETQ FILE (TTYINPROMPTFORWORD "Put attachment to file: " NIL NIL PW NIL (QUOTE TTY) (CHARCODE (CR))))) then (PRINTOUT PW "...aborted") elseif (NULL (SETQ DEVICE (\GETDEVICEFROMNAME (SETQ FILE (\ADD.CONNECTED.DIR FILE)) T))) then (PRINTOUT PW T "No such server/device") else (ALLOW.BUTTON.EVENTS) (PRINTOUT PW " ... ") (if (CL:MULTIPLE-VALUE-SETQ (FILE CONDITION) (IGNORE-ERRORS (if (EQ (fetch OPENFILE of DEVICE) (FUNCTION \NSFILING.OPENFILE)) then (* ; "NS device.  Really need better test than this.") (SETFILEPTR DATA START) (LET ((*UPPER-CASE-FILE-NAMES* NIL)) (DECLARE (CL:SPECIAL *UPPER-CASE-FILE-NAMES*)) (* ; "Get name pretty") (\NSFILING.DESERIALIZE FILE DATA DEVICE)) else (SETQ FILE (OPENSTREAM FILE (QUOTE OUTPUT) (QUOTE NEW) (BQUOTE ((TYPE (\, (fetch MAILOBJ.TYPE of MAILOBJ))) (SEQUENTIAL T))))) (PRINTOUT PW "(some attributes will be lost) ") (\MAILOBJ.COPY.BODY DATA FILE (+ START (fetch MAILOBJ.ATTR.LENGTH of MAILOBJ)) PW) (CLOSEF FILE)))) then (PRINTOUT PW T FILE " written.") else (PRINTOUT PW "failed: " CONDITION)))))
+)
+
+(\MAILOBJ.VIEW
+(LAMBDA (OBJ WINDOW) (* ; "Edited 14-Feb-90 16:24 by bvm") (* ;; "View the text of the attachment.   This is often enough to tell you whether you want to bother doing something more exciting with it.") (RESETLST (LET* ((MAILOBJ (IMAGEOBJPROP OBJ (QUOTE OBJECTDATUM))) (TYPE (fetch MAILOBJ.TYPE of MAILOBJ)) (REFP (EQ TYPE (QUOTE REFERENCE))) (WREG (WINDOWREGION (OR (CAR (WINDOWPROP WINDOW (QUOTE EXTRAWINDOWS))) WINDOW))) PROPS W SUBJECT START DATA DATASTART) (if REFP then (SETQ SUBJECT (fetch MAILOBJ.NAME of MAILOBJ)) (SETQ TYPE (LISTGET (fetch MAILOBJ.INFO of MAILOBJ) (QUOTE TYPE))) (SETQ START NIL) else (SETQ DATA (fetch MAILOBJ.DATA of MAILOBJ)) (SETQ SUBJECT (CADR (\MAILOBJ.PARSE.ATTRIBUTES DATA (CONSTANT (LIST (ASSOC (QUOTE NAME) \NSFILING.ATTRIBUTES))) (SETQ DATASTART (fetch MAILOBJ.START of MAILOBJ))))) (SETQ START (+ DATASTART (fetch MAILOBJ.ATTR.LENGTH of MAILOBJ)))) (SETQ W (CREATEW (create REGION using WREG LEFT _ (+ (fetch (REGION LEFT) of WREG) (if (> (+ (fetch (REGION LEFT) of WREG) (fetch (REGION WIDTH) of WREG) MAILOBJ.WINDOWOFFSET) SCREENWIDTH) then (- MAILOBJ.WINDOWOFFSET) else MAILOBJ.WINDOWOFFSET)) BOTTOM _ (- (fetch (REGION BOTTOM) of WREG) (if (< (- (fetch (REGION BOTTOM) of WREG) MAILOBJ.WINDOWOFFSET) 0) then (- MAILOBJ.WINDOWOFFSET) else MAILOBJ.WINDOWOFFSET))) (CONCAT "Attachment: " (\MAILOBJ.MUNGE.NAME SUBJECT)))) (* ; "Make window slightly overlapping display window") (WINDOWADDPROP WINDOW (QUOTE EXTRAWINDOWS) W T) (if (NEQ TYPE (QUOTE TEDIT)) then (* ; "TEdit's not so good on binary files, so just pull out the text.") (LET ((COMPACTDATA (OPENSTREAM (QUOTE {NODIRCORE}) (QUOTE BOTH)))) (if REFP then (RESETSAVE NIL (LIST (QUOTE CLOSEF) (SETQ DATA (OPENSTREAM SUBJECT (QUOTE INPUT) NIL (QUOTE ((SEQUENTIAL T))))))) else (SETFILEPTR DATA (+ DATASTART 4)) (* ; "Skip the version number (LONGCARDINAL).  Next comes SEQUENCE Filing.Attribute") (if NIL then (* ;; "First extract possible text from unknown attributes.  This is not really worth much, other than it skips the mail note, and it is completely the wrong thing on sub-mailobjs, for which none of the fields (except the subject) has been exposed.") (to (\WIN DATA) bind X TYPE do (SETQ TYPE (COURIER.READ DATA NIL (QUOTE LONGCARDINAL))) (if (find X in \NSMAIL.ATTRIBUTES suchthat (EQ (CADR X) TYPE)) then (* ; "Something of known type--it's probably in the message header.  Just skip it") (COURIER.SKIP.SEQUENCE DATA NIL (QUOTE UNSPECIFIED)) else (* ; "Unknown attribute--extract text from it in case it's interesting.  Next word is a count of words") (\MAILOBJ.EXTRACT.TEXT DATA COMPACTDATA (UNFOLD (\WIN DATA) BYTESPERWORD)))))) (\MAILOBJ.EXTRACT.TEXT DATA COMPACTDATA (- (\GETEOFPTR DATA) (GETFILEPTR DATA))) (SETQ DATA COMPACTDATA) (SETQ START NIL) (SETQ PROPS (LIST (QUOTE FONT) LAFITEDISPLAYFONT)))) (OPENTEXTSTREAM DATA W START (AND START (GETEOFPTR DATA)) (APPEND PROPS (QUOTE (PROMPTWINDOW DON'T)))))))
+)
+
+(\MAILOBJ.MUNGE.NAME
+(LAMBDA (STRING) (* ; "Edited 15-Aug-89 17:03 by bvm") (* ;; "Get rid of the CR's in string, substituting something more innocuous.") (if (OR (NULL STRING) (NOT (STRPOS "
+" STRING))) then STRING else (CL:SUBSTITUTE #\\ #\Newline STRING))))
+
+(\MAILOBJ.COPY.BODY
+(LAMBDA (INSTREAM OUTSTREAM START PW) (* ; "Edited  6-Jul-87 12:47 by bvm:") (SETFILEPTR INSTREAM START) (\NSMAIL.READ.SERIALIZED.CONTENT INSTREAM OUTSTREAM) (if (NEQ (\WIN INSTREAM) 0) then (PRINTOUT (OR PW PROMPTWINDOW) T "Warning: Attachment had children, which were not processed.")))
+)
+
+(\MAILOBJ.EXPAND
+(LAMBDA (OBJ WINDOW TEXTSTREAM) (* ; "Edited 14-Feb-90 17:19 by bvm") (LET* ((MAILOBJ (IMAGEOBJPROP OBJ (QUOTE OBJECTDATUM))) (DATA (fetch MAILOBJ.DATA of MAILOBJ)) (IMAGEPOS (TEDIT.FIND.OBJECT TEXTSTREAM OBJ)) NUMCHILDREN CHILDREN SUBDATA SUBSTART TYPE PARSE) (SETFILEPTR DATA (+ (fetch MAILOBJ.START of MAILOBJ) (fetch MAILOBJ.ATTR.LENGTH of MAILOBJ))) (\NSMAIL.DISCARD.SERIALIZED.CONTENT DATA) (* ; "Skip over the body of the folder (should be empty, actually)") (if (EQ (SETQ NUMCHILDREN (\WIN DATA)) 0) then (* ; "Why did it say it was a directory?") (PRINTOUT PROMPTWINDOW T "There is nothing in that 'folder' to expand!") else (to NUMCHILDREN do (* ; "copy each child into its own image obj") (SETQ SUBDATA (OPENSTREAM (QUOTE {NODIRCORE}) (QUOTE BOTH))) (COURIER.WRITE SUBDATA \SERIALIZED.FILE.VERSION NIL (QUOTE LONGCARDINAL)) (SETQ SUBSTART (\MAILOBJ.COPY.CHILD DATA SUBDATA)) (* ; "Copy recursive part") (SETQ PARSE (\MAILOBJ.PARSE.ATTRIBUTES SUBDATA (CONSTANT (LIST (ASSOC (QUOTE FILE.TYPE) \NSFILING.ATTRIBUTES) (ASSOC (QUOTE NAME) \NSFILING.ATTRIBUTES))) 0)) (SETQ TYPE (LISTGET PARSE (QUOTE FILE.TYPE))) (push CHILDREN (\MAILOBJ.CREATE SUBDATA (AND TYPE (\TYPE.FROM.FILETYPE TYPE)) SUBSTART (LISTGET PARSE (QUOTE NAME)))) (* ; "Create object, parsing the type field out of the raw data")) (add IMAGEPOS 1) (TEXTPROP TEXTSTREAM (QUOTE READONLY) (PROG1 (TEXTPROP TEXTSTREAM (QUOTE READONLY)) (TEXTPROP TEXTSTREAM (QUOTE READONLY) NIL) (* ; "This ought to be one call, but the macro does not expand properly") (for C in CHILDREN do (* ; "Insert the objects following obj in reverse order of creation, so they come out right in the end.") (TEDIT.INSERT.OBJECT C TEXTSTREAM IMAGEPOS)))))))
+)
+
+(\MAILOBJ.COPY.CHILD
+(LAMBDA (INSTREAM OUTSTREAM) (* ; "Edited  6-Jul-87 14:41 by bvm:") (* ;; "This is the counterpart to \nsmail.read.serialized.tree, except that it copies the data as it parses it, rather than interpreting it.  Returns file pointer of the start of the main child's data section.") (* ;; "We are parsing here the recursive part of Filing.SerializedFile: SerializedTree, which consists of: Sequence of Attribute;  Content;  children = Sequence of SerializedTree") (LET (ATTRLENGTH SUBSTART NCHILDREN LASTSEGMENT?) (\WOUT OUTSTREAM (SETQ ATTRLENGTH (\WIN INSTREAM))) (* ; "number of attributes") (to ATTRLENGTH do (RPTQ 4 (\BOUT OUTSTREAM (\BIN INSTREAM))) (* ; "Copy attribute type (longcardinal)") (\MAILOBJ.COPY.SEQUENCE INSTREAM OUTSTREAM) (* ; "Copy attribute value (sequence unspecified)")) (SETQ SUBSTART (GETFILEPTR OUTSTREAM)) (* ;; "Now copy the body, which is StreamOfUnspecified followed by lastByteIsSignficant boolean") (do (\WOUT OUTSTREAM (SETQ LASTSEGMENT? (\WIN INSTREAM))) (* ; "1 => this is last segment") (\MAILOBJ.COPY.SEQUENCE INSTREAM OUTSTREAM) (* ; "Copy the sequence") repeatuntil (NEQ LASTSEGMENT? 0) finally (\WOUT OUTSTREAM (\WIN INSTREAM)) (* ; "Copy lastByteIsSignficant boolean")) (\WOUT OUTSTREAM (SETQ NCHILDREN (\WIN INSTREAM))) (to NCHILDREN do (\MAILOBJ.COPY.CHILD INSTREAM OUTSTREAM)) SUBSTART))
+)
+
+(\MAILOBJ.COPY.SEQUENCE
+(LAMBDA (INSTREAM OUTSTREAM) (* ; "Edited  6-Jul-87 14:37 by bvm:") (* ;; "Copy a Sequence of Unspecified from in to out.") (LET ((SEQLENGTH (\WIN INSTREAM))) (\WOUT OUTSTREAM SEQLENGTH) (* ; "Representation is sequence length (word) followed by that many words") (RPTQ (UNFOLD SEQLENGTH BYTESPERWORD) (\BOUT OUTSTREAM (\BIN INSTREAM)))))
+)
+
+(\MAILOBJ.EXTRACT.TEXT
+(LAMBDA (DATA OUTSTREAM LEN) (* ; "Edited 15-Aug-89 16:38 by bvm") (* ;; "Copy LEN bytes from the stream DATA to OUTSTREAM, where all the runs of non-printing characters are replaced by some small number of ugly characters that won't upset tedit.") (to LEN bind CH HELDCH (SKIPPING _ -1) do (if (OR (>= (SETQ CH (\BIN DATA)) 127) (AND (< CH (CHARCODE SPACE)) (SELCHARQ CH ((TAB CR) NIL) ( (* ; "VP eol") (SETQ CH (CHARCODE CR)) NIL) T))) then (* ; "Junk") (SETQ HELDCH NIL) (* ; "I don't care if the previous byte was accidentally ascii") (if (EVENP (add SKIPPING 1) 16) then (BOUT OUTSTREAM MAILOBJ.SKIPCHAR)) elseif (< SKIPPING 0) then (* ; "in a nice ascii section") (BOUT OUTSTREAM CH) elseif HELDCH then (* ; "We were just waiting to see...") (BOUT OUTSTREAM HELDCH) (SETQ HELDCH NIL) (SETQ SKIPPING -1) (BOUT OUTSTREAM CH) else (* ; "We had been skipping.  Don't print this byte until we see the next byte is nice, too, so as to reduce the gibberish of accidental ascii in the middle of binary") (SETQ HELDCH CH))) OUTSTREAM)
+)
+
+(\MAILOBJ.PARSE.ATTRIBUTES
+(LAMBDA (DATA FIELDS START) (* ; "Edited 14-Feb-90 16:26 by bvm") (* ;; "Parse the SUBJECT field out of the serialized stream DATA beginning at START.  FIELDS is in the format of \nsfiling.attributes entries") (SETFILEPTR DATA (+ START 4)) (* ; "Skip the version number (LONGCARDINAL).  Next comes SEQUENCE Filing.Attribute") (to (\WIN DATA) bind (CNT _ (LENGTH FIELDS)) X TYPE do (SETQ TYPE (COURIER.READ DATA NIL (QUOTE LONGCARDINAL))) (if (find old X in FIELDS suchthat (EQ (CADR X) TYPE)) then (* ; "X = (type number interpretation)") (\WIN DATA) (push $$VAL (CAR X) (COURIER.READ DATA NIL (CADDR X))) (if (<= (SETQ CNT (SUB1 CNT)) 0) then (* ;; "Found them all") (RETURN $$VAL)) else (COURIER.SKIP.SEQUENCE DATA NIL (QUOTE UNSPECIFIED)))))
+)
+)
+
+(ADDTOVAR FILING.TYPES (VIEWPOINT 4353) (RES 4428) (XEROX860 5120) (REFERENCE 4427) (MAILFOLDER 4417))
+
+(RPAQQ MAILOBJ.REFERENCE.FIELD (REFERENCE 4421 (NAMEDRECORD (FILE.ID (FILING . FILE.ID)) (SERVICE NSNAME) (ADDRESS NSADDRESS) (HOST STRING) (DIRECTORY STRING) (NAME STRING) (TYPE (FILING . ATTRIBUTE.TYPE)) (NIL UNSPECIFIED) (PAGES CARDINAL) (VERSION CARDINAL) (FLAGS CARDINAL))))
+
+(RPAQ? MAILOBJ.WINDOWOFFSET 16)
+
+(RPAQ? MAILOBJ.SKIPCHAR (CHARCODE "."))
+(DECLARE%: EVAL@COMPILE DONTCOPY 
+(DECLARE%: EVAL@COMPILE
+
+(RECORD MAILOBJ (MAILOBJ.IMAGE MAILOBJ.BOX MAILOBJ.TYPE MAILOBJ.DATA MAILOBJ.ATTR.LENGTH MAILOBJ.START MAILOBJ.NAME MAILOBJ.EXPANDABLE . MAILOBJ.INFO)
+)
+)
+
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ \MAILOBJ.REFERENCE.LAST.FILED 8192)
+
+
+(CONSTANTS \MAILOBJ.REFERENCE.LAST.FILED)
+)
+)
+(DECLARE%: DONTEVAL@LOAD DOCOPY 
+
+(\MAILOBJ.INIT)
+
+(AND (EQ MAKESYSNAME :LYRIC) (FILESLOAD (SYSLOAD) NSRANDOM))
+)
+(DEFINEQ
+
+(\NSMAIL.WRITE.ATTRIBUTE
+(LAMBDA (STREAM TYPE VALUE) (* ; "Edited 17-Jan-89 16:39 by bvm") (LET* (FILINGP (TYPEINFO (if (EQ TYPE (QUOTE REFERENCE)) then (* ; "This is handled specially so that we don't read references on input") MAILOBJ.REFERENCE.FIELD else (OR (ASSOC TYPE \NSMAIL.ATTRIBUTES) (SETQ FILINGP (ASSOC TYPE \NSFILING.ATTRIBUTES)))))) (if TYPEINFO then (COURIER.WRITE STREAM (CADR TYPEINFO) NIL (QUOTE LONGCARDINAL)) (* ; "Type code") (COURIER.WRITE.SEQUENCE.UNSPECIFIED STREAM VALUE (if FILINGP then (QUOTE FILING) else (QUOTE MAILTRANSPORT)) (CADDR TYPEINFO)) else (ERROR "Unknown mail attribute" TYPE))))
+)
+)
+(DECLARE%: EVAL@COMPILE DOCOPY 
+
+(RPAQQ \NSMAIL.ATTRIBUTES ((From 4672 NAME.LIST) (Date 4673 TIME) (Reply-to 4674 NAME.LIST) (To 4676 NAME.LIST) (cc 4677 NAME.LIST) (Subject 9 STRING) (Message-ID 4693 MESSAGEID) (Sender 4705 NAME) (BodySize 16 LONGCARDINAL) (BodyType 17 LONGCARDINAL) (Note 4687 STRING) (OldLispFormatting 4910 STRING) (LispFormatting 4911 STRING) (In-Reply-to 4690 STRING)))
+)
+
+
+
+(* ; "sending mail")
+
+(DEFINEQ
+
+(\NSMAIL.PARSE.REFERENCE
+(LAMBDA (FILENAME EDITWINDOW) (* ; "Edited 17-Jan-89 15:55 by bvm") (LET* ((*UPPER-CASE-FILE-NAMES* NIL) (FULLNAME (FINDFILE FILENAME T))) (COND ((NULL FULLNAME) (\SENDMESSAGEFAIL EDITWINDOW "Can't find reference file " FILENAME)) (T (LET* ((FIELDS (UNPACKFILENAME.STRING FULLNAME)) (HOST (LISTGET FIELDS (QUOTE HOST))) (NSHOST (PARSE.NSNAME HOST)) (ADDRESS (LOOKUP.NS.SERVER NSHOST)) (NAME (LISTGET FIELDS (QUOTE NAME))) (EXT (LISTGET FIELDS (QUOTE EXTENSION))) (VERSION (LISTGET FIELDS (QUOTE VERSION))) (ID (GETFILEINFO FULLNAME (QUOTE FILE.ID))) (TYPE (GETFILEINFO FULLNAME (QUOTE FILE.TYPE))) (SIZE (GETFILEINFO FULLNAME (QUOTE SIZE)))) (COND ((NOT (AND (STRPOS ":" HOST) ADDRESS)) (\SENDMESSAGEFAIL EDITWINDOW "Reference file must be on NS server")) ((NOT (AND ID TYPE SIZE)) (\SENDMESSAGEFAIL EDITWINDOW "Can't lookup info on " FULLNAME)) (T (BQUOTE ((FILE.ID (\, ID)) (SERVICE (\, NSHOST)) (ADDRESS (\, ADDRESS)) (HOST (\, HOST)) (DIRECTORY (\, (CL:SUBSTITUTE #\/ #\> (UNPACKFILENAME.STRING FULLNAME (QUOTE DIRECTORY))))) (NAME (\, (if EXT then (SETQ NAME (CONCAT NAME "." EXT)) else NAME))) (TYPE (\, (if (OR (NEQ TYPE 0) (NULL EXT)) then (* ; "Interesting type, or no clue from extension") TYPE elseif (AND (SETQ TYPE (\NSMAIL.GUESS.FILE.TYPE NAME EXT)) (SELECTQ (\SENDMESSAGE.MENUPROMPT EDITWINDOW (\LAFITE.CREATE.MENU (BQUOTE (((\, (CONCAT "Change file type to " TYPE)) T) ("Leave as type BINARY" NIL) ("Abort" (QUOTE ABORT)))) "Fix type of reference file?") "Referenced document is of type BINARY; some mail clients will not understand.") (NIL NIL) (ABORT (ERROR!)) (if (SETFILEINFO FULLNAME (QUOTE TYPE) (SETQ TYPE (\FILETYPE.FROM.TYPE TYPE))) then TYPE else (\SENDMESSAGEFAIL EDITWINDOW "Could not set the file type")))) else (* ; "Oh, give up, leave it binary") 0))) (NIL 0) (PAGES (\, (ADD1 SIZE))) (VERSION (\, (OR (AND VERSION (MKATOM VERSION)) 0))) (FLAGS 0))))))))))
+)
+
+(\NSMAIL.EXPAND.DL
+(LAMBDA (DL SENDER EDITWINDOW) (* ; "Edited 16-Jan-89 14:04 by bvm") (LET ((FILENAME (PACKFILENAME.STRING (QUOTE BODY) (if (EQL (CL:CHAR DL 0) #\") then (* ; "quoted file name, take off the quotes first") (CL:SUBSEQ DL 1 (- (CL:LENGTH DL) 1)) else DL) (QUOTE EXTENSION) LAFITEDL.EXT)) STREAM) (if (NULL (SETQ FILENAME (if (OR (UNPACKFILENAME.STRING FILENAME (QUOTE HOST)) (UNPACKFILENAME.STRING FILENAME (QUOTE DIRECTORY))) then (INFILEP FILENAME) else (* ; "Search default directories") (FINDFILE FILENAME T (CONS LAFITEDEFAULTHOST&DIR LAFITEDLDIRECTORIES))))) then (\SENDMESSAGEFAIL EDITWINDOW "Can't find file named " DL) elseif (NULL (SETQ STREAM (CAR (NLSETQ (OPENTEXTSTREAM (MKATOM FILENAME)))))) then (\SENDMESSAGEFAIL EDITWINDOW "Can't open " DL) else (RESETLST (RESETSAVE NIL (LIST (QUOTE CLOSEF) STREAM)) (* ; "I hope this closes the file.  We used OPENTEXTSTREAM instead of OPEN so that file can contain tedit formatting.") (bind LINE while (SETQ LINE (CL:READ-LINE STREAM NIL NIL)) join (\NSMAIL.PARSE LINE SENDER EDITWINDOW))))))
+)
+
+(\NSMAIL.PARSE
+(LAMBDA (FIELD DEFAULTDOMAIN EDITWINDOW) (* bvm%: " 3-Jul-84 16:21") (NS.REMOVEDUPLICATES (COND ((LISTP FIELD) (for PIECE in FIELD join (\NSMAIL.PARSE1 PIECE DEFAULTDOMAIN EDITWINDOW))) (T (\NSMAIL.PARSE1 FIELD DEFAULTDOMAIN EDITWINDOW)))))
+)
+
+(\NSMAIL.PARSE1
+(LAMBDA (FIELD DEFAULTDOMAIN EDITWINDOW) (* ; "Edited 26-Feb-93 14:34 by bvm") (COND (FIELD (bind ADDR (START _ 1) COMMA DOT when (PROGN (SETQ ADDR (SUBSTRING FIELD START (AND (SETQ COMMA (STRPOS (QUOTE %,) FIELD START)) (SUB1 COMMA)))) (do (* ; "Strip leading blanks") (SELCHARQ (CHCON1 ADDR) ((SPACE TAB) (GNC ADDR)) (RETURN))) (do (* ; "Strip trailing blanks") (SELCHARQ (NTHCHARCODE ADDR -1) ((SPACE TAB) (GLC ADDR)) (RETURN))) (NEQ (NCHARS ADDR) 0)) collect (if (AND (STRPOS (QUOTE @) ADDR) (NOT (STRPOS (QUOTE %:) ADDR)) (EQ DEFAULTDOMAIN (fetch (LAFITEMODEDATA UNPACKEDUSERNAME) of *LAFITE-MODE-DATA*)) (SETQ DOT (STRPOS (QUOTE %.) ADDR NIL NIL NIL NIL NIL T))) then (* ;; "It's an Internet address--turn the last dot into a colon.  Don't do this if we're not being called from the places that parse with respect to the user's own name.  E.g., when building an answer form, there are often names that are abbreviated relative to the message sender's name.") (create NSNAME NSOBJECT _ (SUBSTRING ADDR 1 (SUB1 DOT)) NSDOMAIN _ (SUBSTRING ADDR (ADD1 DOT)) NSORGANIZATION _ "Xerox") else (PARSE.NSNAME ADDR NIL DEFAULTDOMAIN)) repeatwhile (COND (COMMA (SETQ START (ADD1 COMMA))))))))
+)
+
+(NS.REMOVEDUPLICATES
+(LAMBDA (LST) (* ; "Edited  6-Jun-88 13:38 by bvm") (CL:REMOVE-DUPLICATES LST :TEST (FUNCTION EQUAL.CH.NAMES)))
+)
+
+(\NSMAIL.GUESS.FILE.TYPE
+(LAMBDA (FILENAME EXT) (* ; "Edited 17-Jan-89 15:42 by bvm") (* ;; "Given a file name, try to guess what type it is from the extension, since file's TYPE property was boring.  EXT is computed from FILENAME if omitted.") (OR (CAR (CL:ASSOC (OR EXT (UNPACKFILENAME.STRING FILENAME (QUOTE EXTENSION))) FILING.TYPES :TEST (QUOTE STRING-EQUAL))) (LET ((TYPE (PRINTFILETYPE.FROM.EXTENSION FILENAME))) (AND TYPE (CAR (CL:ASSOC TYPE FILING.TYPES :TEST (QUOTE STRING-EQUAL)))))))
+)
+
+(COURIER.WRITE.STREAM.UNSPECIFIED
+(LAMBDA (OUTSTREAM INSTREAM START END) (* bvm%: "16-May-85 14:24") (* ;;; "Copies INSTREAM from START to END onto OUTSTREAM in the form of Bulkdata.StreamOfUnspecified --- format is one or more concatenations of {lastSegmentP,SequenceUnspecified} --- returns T if even number of bytes written, NIL if odd") (LET (LENGTH) (COND (END (SETFILEPTR INSTREAM START) (SETQ LENGTH (IDIFFERENCE (COND ((EQ END -1) (GETEOFPTR INSTREAM)) (T END)) START))) (START (SETQ LENGTH START)) (T (SETQ LENGTH (IDIFFERENCE (GETEOFPTR INSTREAM) (GETFILEPTR INSTREAM))))) (while (GREATERP LENGTH MAX.BULK.SEGMENT.LENGTH) do (\WOUT OUTSTREAM 0) (* ; "Not last segment") (\WOUT OUTSTREAM (FOLDHI MAX.BULK.SEGMENT.LENGTH BYTESPERWORD)) (* ; "Word length of this segment") (COPYBYTES INSTREAM OUTSTREAM MAX.BULK.SEGMENT.LENGTH) (SETQ LENGTH (IDIFFERENCE LENGTH MAX.BULK.SEGMENT.LENGTH))) (\WOUT OUTSTREAM 1) (* ; "Last segment") (\WOUT OUTSTREAM (FOLDHI LENGTH BYTESPERWORD)) (* ; "Word length of this segment") (COPYBYTES INSTREAM OUTSTREAM LENGTH) (COND ((EVENP LENGTH) T) (T (* ; "Garbage last byte") (\BOUT OUTSTREAM 0) NIL))))
+)
+
+(\NSMAIL.SEND.STREAM.AS.STRING
+(LAMBDA (INSTREAM OUTSTREAM START ATTRIBUTE) (* bvm%: "30-Jul-84 15:31") (* ;; "Writes the contents of INSTREAM, beginning at byte START, to OUTSTREAM in the form of a Filing Attribute whose type is ATTRIBUTE and whose value is a string") (PROG ((EOF (GETEOFPTR INSTREAM)) LENGTH) (COURIER.WRITE OUTSTREAM ATTRIBUTE NIL (QUOTE LONGCARDINAL)) (\WOUT OUTSTREAM (ADD1 (FOLDHI (SETQ LENGTH (IDIFFERENCE EOF START)) BYTESPERWORD))) (* ; "Sequence length") (\WOUT OUTSTREAM LENGTH) (* ; "String length") (COPYBYTES INSTREAM OUTSTREAM START EOF) (COND ((ODDP LENGTH) (\BOUT OUTSTREAM 0)))))
+)
+)
+
+(FILESLOAD LAFITEMAIL)
+
+
+
+(* ; "for LAFITE.MAKE.PARSE.TABLE")
+
+
+(RPAQQ NSMAIL.PARSEFIELDS (("DATE:" LAFITE.READ.LINE.FOR.TOC Date) ("SUBJECT:" LAFITE.READ.LINE.FOR.TOC Subject) ("SENDER:" LAFITE.READ.NAME.FIELD Sender) ("FROM:" LAFITE.READ.NAME.FIELD From) ("REPLY-TO:" LAFITE.READ.NAME.FIELD Reply-to) ("IN-REPLY-TO:" LAFITE.READ.LINE.FOR.TOC In-Reply-to) ("TO:" LAFITE.READ.NAME.FIELD To) ("CC:" LAFITE.READ.NAME.FIELD cc) ("FORMAT:" LAFITE.READ.FORMAT) ("ATTACHED-REFERENCE:" LAFITE.READ.LINE.FOR.TOC REFERENCE) ("ATTACHED-FILE:" LAFITE.READ.LINE.FOR.TOC ATTACHMENT) ("Importance:" LAFITE.READ.LINE.FOR.TOC Importance) ("Sensitivity:" LAFITE.READ.LINE.FOR.TOC Sensitivity) ("Immutable:" LAFITE.READ.LINE.FOR.TOC Immutable)))
+
+(RPAQ \LAPARSE.NSMAIL (LAFITE.MAKE.PARSE.TABLE NSMAIL.PARSEFIELDS))
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS \LAPARSE.NSMAIL)
+)
+
+(RPAQ? NSMAIL.NET.HINT)
+
+(RPAQ? *NSMAIL-MAX-NOTE-LENGTH* 8000)
+
+(RPAQ? *NSMAIL-CACHE-TIMEOUT* 14400000)
+
+(RPAQ? *NSMAIL-GENEROUS-SELF-TEST* T)
+
+(RPAQ? LAFITEDL.EXT "DL")
+
+(CL:PROCLAIM (QUOTE (GLOBAL NSMAIL.NET.HINT *NSMAIL-MAX-NOTE-LENGTH* *NSMAIL-CACHE-TIMEOUT* *NSMAIL-GENEROUS-SELF-TEST*)))
+(DEFINEQ
+
+(\NSMAIL.MESSAGE.P
+(LAMBDA (MSG) (* ; "Edited  6-May-88 13:58 by bvm") (AND (STRPOS ":" (fetch (LAFITEMSG FROM) of MSG)) (QUOTE ?)))
+)
+
+(\NSMAIL.MESSAGE.FROM.SELF.P
+(LAMBDA (MSG) (* ; "Edited  6-Aug-93 17:03 by bvm") (* ;; "True if message is from current user.  Easy in NS case because we always make the From field be exactly our full name.  However, the from field might already be munged to be a %"pretty%" name, so first check that from is a prefix of the full name, and if so, see if it's a valid abbreviation.") (LET* ((FROM (fetch (LAFITEMSG FROM) of MSG)) (FROMLEN (NCHARS FROM)) (FULL (fetch (LAFITEMODEDATA FULLUSERNAME) of *LAFITE-MODE-DATA*)) (FULEN (NCHARS FULL))) (* ;; "All sorts of checking so that STRING-EQUAL doesn't barf...") (AND (>= FULEN FROMLEN) (STRING-EQUAL FROM FULL :END2 FROMLEN) (COND ((= FULEN FROMLEN) (* ; "completely identical") T) ((AND *NSMAIL-GENEROUS-SELF-TEST* (EQL (CL:CHAR FULL FROMLEN) #\:) (NOT (STRPOS ":" FROM))) (* ;; "From is and rfc822 'real name' identical to the name component of my ns name.  We generously assume that this is an smtp alter ego of self, though we could be confused by someone out on the net with a name identical to mine, which is why this is under a flag.") T) (T (LET ((UP (fetch (LAFITEMODEDATA UNPACKEDUSERNAME) of *LAFITE-MODE-DATA*))) (* ;; "From is shorter than my full nsname.  Following is a non-consy way of writing (= FROMLEN (NCHARS (NSNAME.TO.STRING UP))), slightly optimized by noting that if the org is not the default, then the abbreviated name is the same as the full name, which we've already checked for.") (AND (STRING-EQUAL (fetch NSORGANIZATION of UP) CH.DEFAULT.ORGANIZATION) (= FROMLEN (+ (NCHARS (fetch NSOBJECT of UP)) 1 (if (STRING-EQUAL (fetch NSDOMAIN of UP) CH.DEFAULT.DOMAIN) then 0 else (NCHARS (fetch NSDOMAIN of UP))))))))))))
+)
+
+(\NSMAIL.MAKEANSWERFORM
+(LAMBDA (MSGDESCRIPTORS MAILFOLDER) (* ; "Edited  6-Jun-88 14:09 by bvm") (LET ((MSGFIELDS (\LAFITE.PARSE.MESSAGE MAILFOLDER (OR (CAR (LISTP MSGDESCRIPTORS)) MSGDESCRIPTORS))) SUBJECT FROM DATE SENDER REPLYTO TO CC ORIGINALREGISTRY OLDFROM NEWTO) (* ; "get the fields from the file") (for PAIR in MSGFIELDS do (SELECTQ (CAR PAIR) (Subject (SETQ SUBJECT (CADR PAIR))) (Sender (SETQ SENDER (CADR PAIR))) (From (SETQ FROM (CADR PAIR))) (Date (SETQ DATE (CADR PAIR))) (Reply-to (SETQ REPLYTO (CDR PAIR))) (To (SETQ TO (CDR PAIR))) (cc (SETQ CC (CDR PAIR))) NIL)) (* ; "first parse the strings into recipients") (COND (SENDER (* ; "Sender is a mail address, and has the official registry") (SETQ ORIGINALREGISTRY (PARSE.NSNAME SENDER)) (SETQ OLDFROM (AND FROM (\NSMAIL.PARSE FROM ORIGINALREGISTRY)))) (FROM (* ; "Have to parse the From field before we can get its registry") (SETQ ORIGINALREGISTRY (CAR (SETQ OLDFROM (\NSMAIL.PARSE FROM))))) (T (LAB.PROMPTPRINT MAILFOLDER T "Can't reply--no FROM or SENDER field"))) (SETQ NEWTO (OR (AND REPLYTO (SETQ REPLYTO (\NSMAIL.PARSE REPLYTO ORIGINALREGISTRY))) OLDFROM)) (LAFITE.FILL.IN.ANSWER.FORM SUBJECT FROM DATE NEWTO (CL:SET-DIFFERENCE (COND (REPLYTO (* ; "Only this address, so can only cc to self now") (LIST (fetch (LAFITEMODEDATA UNPACKEDUSERNAME) of *LAFITE-MODE-DATA*))) (T (* ; "Take everyone who got the original, removing duplicates, of course.") (NS.REMOVEDUPLICATES (APPEND (AND TO (\NSMAIL.PARSE TO ORIGINALREGISTRY)) (AND CC (\NSMAIL.PARSE CC ORIGINALREGISTRY)))))) NEWTO :TEST (FUNCTION EQUAL.CH.NAMES)) (FUNCTION \NSMAIL.PRINT.NAMES))))
+)
+
+(\NSMAIL.PRINT.NAMES
+(LAMBDA (NSNAMES OUTSTREAM DEFAULTNAME) (* ; "Edited  5-Jan-90 18:30 by bvm") (for NAME in NSNAMES bind (FIRSTTIME _ T) ORGDIFFERS do (COND (FIRSTTIME (SETQ FIRSTTIME NIL)) (T (PRIN3 ", " OUTSTREAM))) (PRIN3 (fetch NSOBJECT of NAME) OUTSTREAM) (LET ((ORG (fetch NSORGANIZATION of NAME)) (DOM (fetch NSDOMAIN of NAME))) (if (OR (SETQ ORGDIFFERS (NOT (AND DEFAULTNAME (OR (STRING-EQUAL ORG (fetch NSORGANIZATION of DEFAULTNAME)) (EQ (NCHARS ORG) 0))))) (NOT (OR (STRING-EQUAL DOM (fetch NSDOMAIN of DEFAULTNAME)) (EQ (NCHARS DOM) 0)))) then (* ;; "Have to print the domain.  The null string tests are because there exists buggy software that doesn't fill in the domain and org--we want them to default correctly eventually.") (PRIN3 ":" OUTSTREAM) (PRIN3 DOM OUTSTREAM) (if ORGDIFFERS then (* ; "Have to print the org, too") (PRIN3 ":" OUTSTREAM) (PRIN3 ORG OUTSTREAM))))))
+)
+)
+(DECLARE%: EVAL@COMPILE DONTCOPY 
+(DECLARE%: EVAL@COMPILE
+
+(RECORD NSMAILBOX (NSMAILSTREAM NSMAILENVTAIL NSMAILENVELOPES NSMAILLASTINDEX . NSMAILSTATE) (ACCESSFNS NSMAILBOX ((NSMAILSESSION (fetch STATESESSION of (fetch NSMAILSTATE of DATUM))) (NSMAILFIRSTINDEX (fetch STATEFIRSTNEW of (fetch NSMAILSTATE of DATUM)))))
+)
+
+(RECORD NSMAILSTATE (STATESESSION STATEFIRSTNEW STATEOLDLAST STATENAME STATECREDENTIALS STATEADDRESS STATELASTERROR STATETIMER)
+)
+
+(RECORD NSMAILPARSE (NSPSUBJECT NSPRECIPIENTS NSPSTART NSPFORMATTED . NSPFIELDS))
+)
+
+(DECLARE%: EVAL@COMPILE 
+
+(RPAQQ \NSMAIL.SOCKET 26)
+
+(RPAQQ \SERIALIZED.FILE.VERSION 2)
+
+(RPAQQ \SERIALIZED.FILE.VERSIONS (2 3))
+
+(RPAQQ \NSMAIL.TEXT.BODYTYPE 2)
+
+(RPAQQ \NSMAIL.EMPTY.BODYTYPE 4)
+
+(RPAQQ \NSMAIL.REFERENCE.BODYTYPE 4427)
+
+(RPAQQ MAX.BULK.SEGMENT.LENGTH 32768)
+
+
+(CONSTANTS \NSMAIL.SOCKET \SERIALIZED.FILE.VERSION \SERIALIZED.FILE.VERSIONS \NSMAIL.TEXT.BODYTYPE \NSMAIL.EMPTY.BODYTYPE \NSMAIL.REFERENCE.BODYTYPE MAX.BULK.SEGMENT.LENGTH)
+)
+
+(DECLARE%: EVAL@COMPILE 
+
+(PUTPROPS \NSMAIL.ATTRIBUTE.TYPE MACRO (ARGS (COND ((CADR (ASSOC (CAR ARGS) \NSMAIL.ATTRIBUTES))) (T (ERROR "Unknown mail attribute" (CAR ARGS)) (QUOTE IGNOREMACRO)))))
+
+(PUTPROPS \NSMAIL.WRITE.ATTRIBUTE MACRO (ARGS (LET ((INFO (CDR (ASSOC (CAR (CONSTANTEXPRESSIONP (CADR ARGS))) \NSMAIL.ATTRIBUTES)))) (COND (INFO (LIST (QUOTE \NSMAIL.WRITE.ATTRIBUTE.MACRO) (CAR ARGS) (CAR INFO) (CADDR ARGS) (KWOTE (CADR INFO)))) (T (QUOTE IGNOREMACRO))))))
+
+(PUTPROPS \NSMAIL.WRITE.ATTRIBUTE.MACRO MACRO (OPENLAMBDA (STREAM TYPENO VALUE VALUETYPE) (COURIER.WRITE STREAM TYPENO NIL (QUOTE LONGCARDINAL)) (COURIER.WRITE.SEQUENCE.UNSPECIFIED STREAM VALUE (QUOTE MAILTRANSPORT) VALUETYPE)))
+)
+
+
+(PUTPROPS \NSMAIL.ATTRIBUTE.TYPE INFO NOEVAL)
+
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS *NSMAIL-OP-VECTOR* DEFAULTICONFONT FILING.TYPES MAILOBJ.REFERENCE.FIELD MAILOBJ.SKIPCHAR MAILOBJ.WINDOWOFFSET NSMAIL.HEADER.ORDER NSMAIL.NET.HINT NSMAILDEBUGFLG NSPRINT.WATCHERFLG NSWIZARDFLG \MAILOBJ.IMAGEFNS \NSFILING.ATTRIBUTES \NSMAIL.ATTRIBUTES)
+)
+
+
+(FILESLOAD (SOURCE) LAFITEDECLS LLNSDECLS)
+
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(LOCALVARS . T)
+)
+)
+(PUTPROPS NSMAIL COPYRIGHT ("Xerox Corporation" 1984 1985 1986 1987 1988 1989 1990 1992 1993))
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL (3699 7008 (\NSMAIL.LOGIN 3709 . 3935) (NS.FINDMAILBOXES 3937 . 4394) (
+\NSMAIL.MAKE.MAILSERVERS 4396 . 5190) (\NSMAIL.FIX.MAILBOX.LOCATIONS 5192 . 7006)) (7035 9116 (
+\NSMAIL.CHECK.SERIALIZED.VERSION 7045 . 7358) (\NSMAIL.READ.SERIALIZED.CONTENT 7360 . 8254) (
+\NSMAIL.DISCARD.SERIALIZED.CONTENT 8256 . 8703) (\NSMAIL.READ.STRING.AS.STREAM 8705 . 9114)) (9148 
+10549 (\NSMAIL.COURIER.OPEN 9158 . 9361) (\NSMAIL.ERRORHANDLER 9363 . 9785) (\NSMAIL.SIGNAL.ERROR 9787
+ . 10547)) (10747 16949 (\MAILOBJ.CREATE 10757 . 12982) (\MAILOBJ.TYPE.NAME 12984 . 13451) (
+\MAILOBJ.NS.TO.LISP.NAME 13453 . 14804) (\MAILOBJ.DISPLAY 14806 . 15126) (\MAILOBJ.GET 15128 . 15951) 
+(\MAILOBJ.IMAGEBOX 15953 . 16081) (\MAILOBJ.PUT 16083 . 16669) (\MAILOBJ.INIT 16671 . 16947)) (16950 
+31846 (\MAILOBJ.BUTTONEVENTFN 16960 . 19089) (\MAILOBJ.DO.COMMAND 19091 . 19338) (\MAILOBJ.HARDCOPY 
+19340 . 21146) (\MAILOBJ.FB 21148 . 21362) (\MAILOBJ.PUT.FILE 21364 . 23029) (\MAILOBJ.VIEW 23031 . 
+25968) (\MAILOBJ.MUNGE.NAME 25970 . 26234) (\MAILOBJ.COPY.BODY 26236 . 26550) (\MAILOBJ.EXPAND 26552
+ . 28273) (\MAILOBJ.COPY.CHILD 28275 . 29632) (\MAILOBJ.COPY.SEQUENCE 29634 . 30002) (
+\MAILOBJ.EXTRACT.TEXT 30004 . 31065) (\MAILOBJ.PARSE.ATTRIBUTES 31067 . 31844)) (32756 33393 (
+\NSMAIL.WRITE.ATTRIBUTE 32766 . 33391)) (33818 40701 (\NSMAIL.PARSE.REFERENCE 33828 . 35746) (
+\NSMAIL.EXPAND.DL 35748 . 36815) (\NSMAIL.PARSE 36817 . 37078) (\NSMAIL.PARSE1 37080 . 38288) (
+NS.REMOVEDUPLICATES 38290 . 38428) (\NSMAIL.GUESS.FILE.TYPE 38430 . 38931) (
+COURIER.WRITE.STREAM.UNSPECIFIED 38933 . 40077) (\NSMAIL.SEND.STREAM.AS.STRING 40079 . 40699)) (41866 
+46243 (\NSMAIL.MESSAGE.P 41876 . 42014) (\NSMAIL.MESSAGE.FROM.SELF.P 42016 . 43715) (
+\NSMAIL.MAKEANSWERFORM 43717 . 45341) (\NSMAIL.PRINT.NAMES 45343 . 46241)))))
+STOP

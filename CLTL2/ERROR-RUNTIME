@@ -1,0 +1,420 @@
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "XCL" BASE 10)
+(FILECREATED "18-Oct-93 15:37:49" "{Pele:mv:envos}<LispCore>Sources>CLTL2>ERROR-RUNTIME.;2" 23732  
+
+      |previous| |date:| "11-Mar-92 14:19:49" 
+"{Pele:mv:envos}<LispCore>Sources>CLTL2>ERROR-RUNTIME.;1")
+
+
+; Copyright (c) 1986, 1987, 1988, 1990, 1991, 1992, 1993 by Venue & Xerox Corporation.  All rights reserved.
+
+(PRETTYCOMPRINT ERROR-RUNTIMECOMS)
+
+(RPAQQ ERROR-RUNTIMECOMS
+       ((COMS 
+
+(* |;;;| "Internal functions.")
+
+              (FUNCTIONS SI::CONDITION-CASE-ERROR CONDITION-HANDLER CONDITION-REPORTER 
+                     %PRINT-CONDITION CONDITIONS::%RESTART-PRINTER 
+                     CONDITIONS::%RESTART-DEFAULT-REPORTER REPORT-CONDITION CONDITION-PARENT)
+              (VARIABLES *CONDITION-HANDLER-BINDINGS* LISP:*DEBUGGER-HOOK* *PROCEED-CASES*)
+              (FUNCTIONS CHECK-TYPE-FAIL ECASE-FAIL ASSERT-FAIL)
+              (FUNCTIONS XCL::SYMBOL-AS-PATHNAME)
+              (FUNCTIONS MAKE-INTO-CONDITION RAISE-SIGNAL DEFAULT-HANDLE-CONDITION 
+                     DEFAULT-PROCEED-REPORTER CONDITIONS::DEFAULT-RESTART-REPORTER 
+                     DEFAULT-PROCEED-TEST TEST-PROCEED-CASE WALK-PROCEED-CASES 
+                     SI::INVOKE-ACTUAL-RESTART))
+        (COMS 
+
+(* |;;;| "Exported symbols. Anything here that's not in CL should be in XCL.")
+
+              (VARIABLES CONDITIONS:*BREAK-ON-SIGNALS* *BREAK-ON-WARNINGS* XCL:*CURRENT-CONDITION*)
+              (FUNCTIONS MAKE-CONDITION SIGNAL LISP:ERROR LISP:CERROR LISP:WARN LISP:BREAK 
+                     CONDITIONS:INVOKE-DEBUGGER)
+              (FUNCTIONS LISP:FIND-RESTART LISP:COMPUTE-RESTARTS LISP:INVOKE-RESTART 
+                     CONDITIONS:INVOKE-RESTART-INTERACTIVELY))
+        (PROP FILETYPE ERROR-RUNTIME)))
+
+
+
+(* |;;;| "Internal functions.")
+
+
+(LISP:DEFUN SI::CONDITION-CASE-ERROR (SI::REAL-SELECTOR SI::POSSIBILITIES)
+   (LISP:ERROR "Unexpected selector in ~S." 'CONDITION-CASE SI::REAL-SELECTOR SI::POSSIBILITIES))
+
+(DEFMACRO CONDITION-HANDLER (XCL::CONDITION-TYPE)
+   `(GETPROP ,XCL::CONDITION-TYPE '%CONDITION-HANDLER))
+
+(DEFMACRO CONDITION-REPORTER (XCL::CONDITION-TYPE)
+   `(GETPROP ,XCL::CONDITION-TYPE '%CONDITION-REPORTER))
+
+(LISP:DEFUN %PRINT-CONDITION (CONDITION STREAM LEVEL)
+   (DECLARE (IGNORE LEVEL))
+   (LISP:IF *PRINT-ESCAPE*
+       (LISP:FORMAT STREAM "#<Condition ~S @ ~O,~O>" (LISP:TYPE-OF CONDITION)
+              (\\HILOC CONDITION)
+              (\\LOLOC CONDITION))
+       (REPORT-CONDITION CONDITION STREAM)))
+
+(LISP:DEFUN CONDITIONS::%RESTART-PRINTER (CONDITIONS:RESTART STREAM CONDITIONS::LEVEL)
+                                                             (* \; "Edited  2-Mar-92 16:00 by jrb:")
+   (LISP:IF *PRINT-ESCAPE*
+       (LISP:FUNCALL LISP::%DEFAULT-PRINT-FUNCTION CONDITIONS:RESTART STREAM CONDITIONS::LEVEL)
+       (LET ((CONDITIONS::REPORTER (OR (CONDITIONS::RESTART-REPORT CONDITIONS:RESTART)
+                                       (CONDITIONS::DEFAULT-RESTART-REPORT (CONDITIONS:RESTART-NAME
+                                                                            CONDITIONS:RESTART))
+                                       (LISP:RETURN-FROM CONDITIONS::%RESTART-PRINTER
+                                              (CONDITIONS::DEFAULT-RESTART-REPORTER 
+                                                     CONDITIONS:RESTART STREAM)))))
+            (LISP:IF (LISP:STRINGP CONDITIONS::REPORTER)
+                (LISP:PRINC CONDITIONS::REPORTER STREAM)
+                (LISP:FUNCALL CONDITIONS::REPORTER STREAM)))))
+
+(LISP:DEFUN CONDITIONS::%RESTART-DEFAULT-REPORTER (CONDITIONS:RESTART STREAM)
+   (LISP:FUNCALL (CONDITIONS::DEFAULT-RESTART-REPORT (CONDITIONS:RESTART-NAME CONDITIONS:RESTART))
+          CONDITIONS:RESTART STREAM))
+
+(LISP:DEFUN REPORT-CONDITION (CONDITION STREAM)
+   (LISP:DO* ((TYPE (LISP:TYPE-OF CONDITION)
+                    (CONDITION-PARENT TYPE))
+              (REPORTER (CONDITION-REPORTER TYPE)
+                     (CONDITION-REPORTER TYPE)))
+             ((NULL TYPE)
+              (LISP:BREAK "No report function found for ~S." CONDITION))
+       (LISP:WHEN REPORTER
+           (RETURN (LISP:IF (LISP:STRINGP REPORTER)
+                       (LISP:PRINC REPORTER STREAM)
+                       (LISP:FUNCALL REPORTER CONDITION STREAM))))))
+
+(LISP:DEFUN CONDITION-PARENT (TYPE)
+   (LET ((PARENT (GETSUPERTYPE TYPE)))
+        (LISP:IF (EQ PARENT 'LISP::STRUCTURE-OBJECT)
+            NIL
+            PARENT)))
+
+(LISP:DEFVAR *CONDITION-HANDLER-BINDINGS* NIL
+   "Condition handler binding stack")
+
+(LISP:DEFVAR LISP:*DEBUGGER-HOOK* NIL)
+
+(LISP:DEFVAR *PROCEED-CASES* NIL
+   "Active proceed case stack")
+
+(LISP:DEFUN CHECK-TYPE-FAIL (PROCEEDABLE PLACE VALUE DESIRED-TYPE MESSAGE)
+   (LISP:RESTART-CASE (LISP:ERROR 'XCL:TYPE-MISMATCH :NAME PLACE :VALUE VALUE :EXPECTED-TYPE 
+                             DESIRED-TYPE :MESSAGE MESSAGE)
+          (STORE-VALUE (NEW)
+                 :REPORT
+                 (LAMBDA (STREAM)
+                   (LISP:FORMAT STREAM "Change the value of ~A" PLACE))
+                 :INTERACTIVE
+                 (LAMBDA NIL
+                   (LISP:FORMAT *QUERY-IO* "Enter a new value to store into ~A: " PLACE)
+                   (LIST (LISP:EVAL (LISP:READ *QUERY-IO*))))
+                 :FILTER
+                 (LAMBDA NIL
+                   (AND PROCEEDABLE (TYPEP XCL:*CURRENT-CONDITION* 'XCL:TYPE-MISMATCH)))
+                 NEW)))
+
+(LISP:DEFUN ECASE-FAIL (PROCEEDABLE PLACE VALUE SELECTORS)
+   (LISP:RESTART-CASE (LISP:IF (EQL PLACE VALUE)
+                          (LISP:ERROR "~S is ~?." VALUE 
+                                 "~#[wrong~;not ~S~;neither ~S nor ~S~:;not~@{~#[~; or~] ~S~^,~}~]" 
+                                 SELECTORS)
+                          (LISP:ERROR "The value of ~S, ~S,~&is ~?." PLACE VALUE 
+                                 "~#[wrong~;not ~S~;neither ~S nor ~S~:;not~@{~#[~; or~] ~S~^,~}~]" 
+                                 SELECTORS))
+          (STORE-VALUE (V)
+                 :FILTER
+                 (LAMBDA NIL PROCEEDABLE)
+                 :REPORT
+                 (LAMBDA (STREAM)
+                   (LISP:FORMAT STREAM "Change the value of ~A" PLACE))
+                 :INTERACTIVE
+                 (LAMBDA NIL
+                   (LISP:FORMAT *QUERY-IO* "Enter a new value to store into ~A: " PLACE)
+                   (LIST (LISP:EVAL (LISP:READ *QUERY-IO*))))
+                 V)))
+
+(LISP:DEFUN ASSERT-FAIL (STRING &REST ARGS)
+   (PROCEED-CASE (LISP:ERROR 'XCL:ASSERTION-FAILED :FORMAT-STRING STRING :FORMAT-ARGUMENTS ARGS)
+          (CONDITIONS:CONTINUE NIL :REPORT "Re-test assertion")))
+
+(LISP:DEFUN XCL::SYMBOL-AS-PATHNAME (LISP:SYMBOL XCL::WHERE &OPTIONAL XCL::MESSAGE)
+   (LISP:RESTART-CASE (LISP:ERROR 'XCL::SYMBOL-AS-PATHNAME :SYMBOL LISP:SYMBOL :WHERE XCL::WHERE
+                             :MESSAGE XCL::MESSAGE)
+          (XCL::USE-PNAME NIL :REPORT (LISP:LAMBDA (STREAM)
+                                               (LISP:PRINC "Use the symbol's pname" STREAM))
+                 :FILTER
+                 (LISP:LAMBDA NIL (TYPEP XCL:*CURRENT-CONDITION* 'XCL::SYMBOL-AS-PATHNAME)))))
+
+(LISP:DEFUN MAKE-INTO-CONDITION (DATUM DESIRED-TYPE ARGS)
+   (LISP:ETYPECASE DATUM
+       (CONDITION DATUM)
+       (LISP:SYMBOL (LISP:IF (LISP:SUBTYPEP DATUM 'CONDITION)
+                        (LISP:APPLY 'MAKE-CONDITION DATUM ARGS)
+                        (LISP:ERROR "~S is not a condition type." DATUM)))
+       (STRING (MAKE-CONDITION DESIRED-TYPE :FORMAT-STRING DATUM :FORMAT-ARGUMENTS ARGS))))
+
+(LISP:DEFUN RAISE-SIGNAL (CONDITION)
+   (LISP:WHEN (TYPEP CONDITION CONDITIONS:*BREAK-ON-SIGNALS*)
+          (LISP:BREAK "Condition ~S is about to be signalled." CONDITION))
+   (LET ((*CONDITION-HANDLER-BINDINGS* *CONDITION-HANDLER-BINDINGS*))
+        (LISP:FLET ((TRY-TO-HANDLE (CONDITION TYPE-SPEC HANDLER)
+                           (LISP:MACROLET ((WITHOUT-HANDLERS (&BODY BODY)
+                                                  `(LET (*CONDITION-HANDLER-BINDINGS*)
+                                                        ,@BODY)))
+                                  (LISP:WHEN (PROCEED-CASE (WITHOUT-HANDLERS (TYPEP CONDITION 
+                                                                                    TYPE-SPEC))
+                                                    (PROCEED NIL :REPORT 
+                                                           "Skip the bad handler binding" NIL))
+                                         (LISP:FUNCALL HANDLER CONDITION)))))
+               (WHILE *CONDITION-HANDLER-BINDINGS*
+                  DO (LET ((BINDING (LISP:POP *CONDITION-HANDLER-BINDINGS*)))
+                              (IF (EQ (LISP:FIRST BINDING)
+                                          :MULTIPLE-HANDLER-BINDINGS)
+                                  THEN (LISP:POP BINDING)
+                                        (WHILE BINDING DO (TRY-TO-HANDLE CONDITION
+                                                                         (LISP:POP BINDING)
+                                                                         (LISP:POP BINDING)))
+                                ELSE (TRY-TO-HANDLE CONDITION (CAR BINDING)
+                                                (CDR BINDING)))) FINALLY (
+                                                                           DEFAULT-HANDLE-CONDITION
+                                                                              CONDITION)))
+        CONDITION))
+
+(LISP:DEFUN DEFAULT-HANDLE-CONDITION (CONDITION)
+   (LISP:DO ((TYPE (LISP:TYPE-OF CONDITION)
+                   (CONDITION-PARENT TYPE)))
+            ((NULL TYPE))
+       (LET ((HANDLER (CONDITION-HANDLER TYPE)))
+            (LISP:WHEN HANDLER (LISP:FUNCALL HANDLER CONDITION)))))
+
+(LISP:DEFUN DEFAULT-PROCEED-REPORTER (PC STREAM)
+   (LISP:FORMAT STREAM "Proceed-type: ~A" (PROCEED-CASE-NAME PC)))
+
+(LISP:DEFUN CONDITIONS::DEFAULT-RESTART-REPORTER (CONDITIONS:RESTART STREAM)
+   (LISP:FORMAT STREAM "Restart type: ~A" (CONDITIONS:RESTART-NAME CONDITIONS:RESTART)))
+
+(DEFMACRO DEFAULT-PROCEED-TEST (XCL::PROCEED-TYPE)
+   `(GETPROP ,XCL::PROCEED-TYPE '%DEFAULT-PROCEED-TEST))
+
+(LISP:DEFUN TEST-PROCEED-CASE (PC &AUX FILTER)
+   (COND
+      ((LISP:SETF FILTER (CONDITIONS::RESTART-TEST PC))
+       (LISP:FUNCALL FILTER))
+      ((CONDITIONS:RESTART-NAME PC)
+       (LISP:IF (LISP:SETF FILTER (DEFAULT-PROCEED-TEST (CONDITIONS:RESTART-NAME PC)))
+           (LISP:FUNCALL FILTER)
+           T))
+      (T                                                     (* \; 
+                                                       "unnamed proceed case with no explicit test")
+         T)))
+
+(LISP:DEFUN WALK-PROCEED-CASES (PROCEED-CASES PRED)
+   (LISP:FLET ((CONVERT-PROCEED-CASE (PC BLIP)
+                      (LISP:IF (NULL (CONDITIONS::RESTART-TAG PC))
+                          (LET ((NEW (CONDITIONS::COPY-RESTART PC)))
+                               (LISP:SETF (CONDITIONS::RESTART-TAG NEW)
+                                      BLIP)
+                               NEW)
+                          PC)))
+          (LISP:DO ((TAIL PROCEED-CASES (CDR TAIL)))
+                   ((NULL TAIL)
+                    NIL)
+              (LISP:MACROLET ((PROCESS-THING (THING BLIP)
+                                     `(LET ((PC (CONVERT-PROCEED-CASE ,THING ,BLIP)))
+                                           (LISP:WHEN (LISP:FUNCALL PRED PC)
+                                                  (LISP:RETURN-FROM WALK-PROCEED-CASES PC)))))
+                     (LET ((OBJECT (CAR TAIL)))
+                          (LISP:IF (LISP:CONSP OBJECT)
+                              (LISP:DO ((THINGS OBJECT (CDR THINGS)))
+                                       ((NULL THINGS))
+                                  (PROCESS-THING (CAR THINGS)
+                                         TAIL))
+                              (PROCESS-THING OBJECT TAIL)))))))
+
+(LISP:DEFUN SI::INVOKE-ACTUAL-RESTART (SI::RESTART SI::ARGUMENTS)
+   (COND
+      ((NULL (CONDITIONS::RESTART-FUNCTION SI::RESTART))
+       (LISP:THROW (CONDITIONS::RESTART-TAG SI::RESTART)
+              (CONS (CONDITIONS::RESTART-SELECTOR SI::RESTART)
+                    SI::ARGUMENTS)))
+      ((EQ (CONDITIONS::RESTART-SELECTOR SI::RESTART)
+           'SI::COMPLEX-RESTART-MARKER)
+       (LISP:APPLY (CONDITIONS::RESTART-FUNCTION SI::RESTART)
+              SI::ARGUMENTS))
+      (T (LISP:ERROR "Malformed restart object ~S." SI::RESTART))))
+
+
+
+(* |;;;| "Exported symbols. Anything here that's not in CL should be in XCL.")
+
+
+(LISP:DEFVAR CONDITIONS:*BREAK-ON-SIGNALS* NIL)
+
+(LISP:DEFVAR *BREAK-ON-WARNINGS* NIL
+   "If true, calls to WARN will cause a break as well as logging the warning.")
+
+(LISP:DEFVAR XCL:*CURRENT-CONDITION* NIL
+   "The condition currently being signalled")
+
+(LISP:DEFUN MAKE-CONDITION (TYPE &REST XCL::SLOT-INITIALIZATIONS)
+   "Create a condition object of the specified type."
+   (LISP:APPLY (LISP::STRUCTURE-CONSTRUCTOR TYPE)
+          XCL::SLOT-INITIALIZATIONS))
+
+(LISP:DEFUN SIGNAL (XCL::DATUM &REST XCL::ARGS)
+   (LET ((XCL:*CURRENT-CONDITION* (MAKE-INTO-CONDITION XCL::DATUM 'SIMPLE-CONDITION XCL::ARGS)))
+        (RAISE-SIGNAL (LISP:SETQ *LAST-CONDITION* XCL:*CURRENT-CONDITION*))
+        (LISP:RETURN-FROM SIGNAL XCL:*CURRENT-CONDITION*)))
+
+(LISP:DEFUN LISP:ERROR (LISP::DATUM &REST LISP::ARGS)
+
+   (* |;;| "In Xerox Common Lisp, as with Interlisp, errors may not enter the debugger if they are simple, defined by ENTER-DEBUGGER-P")
+
+   (LET ((XCL:*CURRENT-CONDITION* (MAKE-INTO-CONDITION LISP::DATUM 'SIMPLE-ERROR LISP::ARGS)))
+        (RAISE-SIGNAL (LISP:SETQ *LAST-CONDITION* XCL:*CURRENT-CONDITION*))
+                                                             (* \; "may just unwind.")
+        (RESETLST
+            (LET ((PRINTMSG T)
+                  (ERRORPOS (FIND-DEBUGGER-ENTRY-FRAME 'LISP:ERROR)))
+                 (DECLARE (LISP:SPECIAL PRINTMSG ERRORPOS))
+                 (RESETSAVE NIL (LIST 'RELSTK ERRORPOS))
+                 (COND
+                    ((NULL (ENTER-DEBUGGER-P HELPDEPTH ERRORPOS XCL:*CURRENT-CONDITION*))
+
+                     (* |;;| " says not to enter debugger")
+
+                     (COND
+                        (PRINTMSG                            (* \; 
+                                                           "print message if no break is to occur.")
+                               (LISP:PRINC XCL:*CURRENT-CONDITION* *ERROR-OUTPUT*)))
+                     (ERROR!)))
+                 (DEBUGGER :CONDITION XCL:*CURRENT-CONDITION* :AT (STKNAME ERRORPOS))))))
+
+(LISP:DEFUN LISP:CERROR (LISP::PROCEED-FORMAT-STRING LISP::DATUM &REST LISP::ARGUMENTS)
+   (LET ((XCL:*CURRENT-CONDITION* (MAKE-INTO-CONDITION LISP::DATUM 'SIMPLE-ERROR LISP::ARGUMENTS)
+                ))
+        (PROCEED-CASE (LISP:ERROR XCL:*CURRENT-CONDITION*)
+               (CONDITIONS:CONTINUE NIL :REPORT (LISP:APPLY (FUNCTION LISP:FORMAT)
+                                                         T LISP::PROCEED-FORMAT-STRING 
+                                                         LISP::ARGUMENTS)
+                      (LISP:RETURN-FROM LISP:CERROR XCL:*CURRENT-CONDITION*)))))
+
+(LISP:DEFUN LISP:WARN (LISP::DATUM &REST LISP::ARGUMENTS)
+   (LET ((XCL:*CURRENT-CONDITION* (MAKE-INTO-CONDITION LISP::DATUM 'SIMPLE-WARNING 
+                                         LISP::ARGUMENTS)))
+        (LISP:UNLESS (TYPEP XCL:*CURRENT-CONDITION* 'WARNING)
+            (LISP:CERROR "Signal and report the condition anyway" 'XCL:TYPE-MISMATCH :NAME
+                   'LISP::CONDITION :VALUE XCL:*CURRENT-CONDITION* :EXPECTED-TYPE 'WARNING))
+        (LISP:WHEN *BREAK-ON-WARNINGS* (LISP:BREAK "Warning: ~A" XCL:*CURRENT-CONDITION*))
+        (PROCEED-CASE (PROGN (RAISE-SIGNAL XCL:*CURRENT-CONDITION*)
+                             (LISP:FORMAT *ERROR-OUTPUT* "~&Warning: ~A~%" XCL:*CURRENT-CONDITION*)
+                             NIL)
+               (CONDITIONS:MUFFLE-WARNING NIL :REPORT "Don't print the warning" NIL))))
+
+(LISP:DEFUN LISP:BREAK (&OPTIONAL (LISP::FORMAT-STRING "Break.")
+                                  &REST LISP::FORMAT-ARGUMENTS)
+
+   (* |;;| "Want to try and get some indication of which break you're returning from.")
+
+   (PROCEED-CASE (CONDITIONS:INVOKE-DEBUGGER (MAKE-CONDITION 'SIMPLE-CONDITION :FORMAT-STRING
+                                                        LISP::FORMAT-STRING :FORMAT-ARGUMENTS 
+                                                        LISP::FORMAT-ARGUMENTS))
+          (CONDITIONS:CONTINUE NIL :REPORT "Return from BREAK" (LISP:RETURN-FROM LISP:BREAK NIL))
+          ))
+
+(LISP:DEFUN CONDITIONS:INVOKE-DEBUGGER (CONDITION)       (* \; "Edited 19-Feb-92 20:27 by jrb:")
+
+   (* |;;| 
+ "Look at the *DEBUGGER-HOOK* and call it; if you get back, enter debugger, never to return ")
+
+   (LISP:WHEN LISP:*DEBUGGER-HOOK* (LISP:FUNCALL LISP:*DEBUGGER-HOOK* CONDITION LISP:*DEBUGGER-HOOK*)
+          )
+   (DEBUGGER :CONDITION CONDITION))
+
+(LISP:DEFUN LISP:FIND-RESTART (CONDITIONS::IDENTIFIER &OPTIONAL (XCL:*CURRENT-CONDITION* 
+                                                                           XCL:*CURRENT-CONDITION*))
+                                                             (* \; "Edited 24-Feb-92 12:02 by jrb:")
+   (LISP:FLET ((CONDITIONS::SAME-RESTART (CONDITIONS::IDENTIFIER CONDITIONS::PROTOTYPE)))
+          (LISP:ETYPECASE CONDITIONS::IDENTIFIER
+              (NULL (LISP:ERROR "~S is an invalid argument to ~S;~%    use ~S instead" NIL
+                           'LISP:FIND-RESTART
+                           'LISP:COMPUTE-RESTARTS))
+              (CONDITIONS:RESTART (WALK-PROCEED-CASES
+                                   *PROCEED-CASES*
+                                   #'(LISP:LAMBDA (CONDITIONS:RESTART)
+                                            (AND (OR (EQ CONDITIONS::IDENTIFIER CONDITIONS:RESTART)
+                                                     (AND (CONDITIONS::RESTART-TAG 
+                                                                 CONDITIONS::IDENTIFIER)
+                                                          (EQ (CONDITIONS:RESTART-NAME 
+                                                                     CONDITIONS::IDENTIFIER)
+                                                              (CONDITIONS:RESTART-NAME 
+                                                                     CONDITIONS:RESTART))
+                                                          (EQ (CONDITIONS::RESTART-TAG 
+                                                                     CONDITIONS::IDENTIFIER)
+                                                              (CONDITIONS::RESTART-TAG 
+                                                                     CONDITIONS:RESTART))
+                                                          (EQ (CONDITIONS::RESTART-SELECTOR 
+                                                                     CONDITIONS::IDENTIFIER)
+                                                              (CONDITIONS::RESTART-SELECTOR 
+                                                                     CONDITIONS:RESTART))
+                                                          (EQ (CONDITIONS::RESTART-TEST 
+                                                                     CONDITIONS::IDENTIFIER)
+                                                              (CONDITIONS::RESTART-TEST 
+                                                                     CONDITIONS:RESTART))
+                                                          (EQ (CONDITIONS::RESTART-REPORT 
+                                                                     CONDITIONS::IDENTIFIER)
+                                                              (CONDITIONS::RESTART-REPORT 
+                                                                     CONDITIONS:RESTART))
+                                                          (EQ (CONDITIONS::RESTART-INTERACTIVE-FN
+                                                               CONDITIONS::IDENTIFIER)
+                                                              (CONDITIONS::RESTART-INTERACTIVE-FN
+                                                               CONDITIONS:RESTART))
+                                                          (EQ (CONDITIONS::RESTART-FUNCTION 
+                                                                     CONDITIONS::IDENTIFIER)
+                                                              (CONDITIONS::RESTART-FUNCTION 
+                                                                     CONDITIONS:RESTART))))
+                                                 (TEST-PROCEED-CASE CONDITIONS:RESTART)))))
+              (LISP:SYMBOL (WALK-PROCEED-CASES *PROCEED-CASES*
+                                  #'(LISP:LAMBDA (CONDITIONS:RESTART)
+                                           (AND (EQ (CONDITIONS:RESTART-NAME CONDITIONS:RESTART)
+                                                    CONDITIONS::IDENTIFIER)
+                                                (TEST-PROCEED-CASE CONDITIONS:RESTART))))))))
+
+(LISP:DEFUN LISP:COMPUTE-RESTARTS (&OPTIONAL (XCL:*CURRENT-CONDITION* XCL:*CURRENT-CONDITION*))
+                                                             (* \; "Edited 24-Feb-92 12:01 by jrb:")
+   (LET ((CONDITIONS::FOUND NIL))
+        (WALK-PROCEED-CASES *PROCEED-CASES* #'(LISP:LAMBDA (CONDITIONS:RESTART)
+                                                         (LISP:WHEN (LISP:CATCH 
+                                                                           'SI::SKIP-PROCEED-CASE
+                                                                           (TEST-PROCEED-CASE
+                                                                            CONDITIONS:RESTART))
+                                                                (LISP:PUSH CONDITIONS:RESTART 
+                                                                       CONDITIONS::FOUND))
+                                                         NIL))
+        (LISP:NREVERSE CONDITIONS::FOUND)))
+
+(LISP:DEFUN LISP:INVOKE-RESTART (CONDITIONS:RESTART &REST CONDITIONS::ARGUMENTS)
+   (LET ((CONDITIONS::R (LISP:FIND-RESTART CONDITIONS:RESTART)))
+        (LISP:IF (NULL CONDITIONS::R)
+            (LISP:ERROR 'XCL:BAD-PROCEED-CASE :NAME CONDITIONS:RESTART)
+            (SI::INVOKE-ACTUAL-RESTART CONDITIONS::R CONDITIONS::ARGUMENTS))))
+
+(LISP:DEFUN CONDITIONS:INVOKE-RESTART-INTERACTIVELY (CONDITIONS:RESTART)
+   (LET ((CONDITIONS::R (LISP:FIND-RESTART CONDITIONS:RESTART)))
+        (LISP:IF (NULL CONDITIONS::R)
+            (LISP:ERROR 'XCL:BAD-PROCEED-CASE :NAME CONDITIONS:RESTART)
+            (LET ((CONDITIONS::I-FN (CONDITIONS::RESTART-INTERACTIVE-FN CONDITIONS:RESTART)))
+                 (SI::INVOKE-ACTUAL-RESTART CONDITIONS::R (LISP:IF CONDITIONS::I-FN (LISP:FUNCALL
+                                                                                         
+                                                                                     CONDITIONS::I-FN
+                                                                                         )))))))
+
+(PUTPROPS ERROR-RUNTIME FILETYPE LISP:COMPILE-FILE)
+(PUTPROPS ERROR-RUNTIME COPYRIGHT ("Venue & Xerox Corporation" 1986 1987 1988 1990 1991 1992 1993))
+(DECLARE\: DONTCOPY
+  (FILEMAP (NIL)))
+STOP

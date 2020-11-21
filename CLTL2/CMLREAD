@@ -1,0 +1,334 @@
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
+(FILECREATED " 8-Jun-90 14:17:52" |{PELE:MV:ENVOS}<LISPCORE>SOURCES>CMLREAD.;3| 15466  
+
+      changes to%:  (FNS CL:READ-FROM-STRING)
+
+      previous date%: "16-May-90 14:23:07" |{PELE:MV:ENVOS}<LISPCORE>SOURCES>CMLREAD.;2|)
+
+
+(* ; "
+Copyright (c) 1985, 1986, 1987, 1988, 1990 by Venue & Xerox Corporation.  All rights reserved.
+")
+
+(PRETTYCOMPRINT CMLREADCOMS)
+
+(RPAQQ CMLREADCOMS [(COMS 
+                              (* ;; "Misc Common Lisp reader functions")
+
+                              (FNS CL:COPY-READTABLE)
+                              (FNS CL:READ-LINE CL:READ-CHAR CL:UNREAD-CHAR CL:PEEK-CHAR CL:LISTEN 
+                                   CL:READ-CHAR-NO-HANG CL:CLEAR-INPUT CL:READ-FROM-STRING 
+                                   CL:READ-BYTE CL:WRITE-BYTE)
+                                                             (* ; 
+                                                      "must turn off packed version of CLISP infix")
+                              (VARS [CLISPCHARS (LDIFFERENCE CLISPCHARS '(- *]
+                                    (CLISPCHARRAY (MAKEBITTABLE CLISPCHARS))
+                                    (DWIMINMACROSFLG))
+                              (VARIABLES *READ-DEFAULT-FLOAT-FORMAT*)
+                              (GLOBALVARS CMLRDTBL READ-LINE-RDTBL))
+                        [COMS 
+                              (* ;; "Crude means to aid reading and printing things in same reader environment.  There are some fns and an INITRECORDS for this on ATBL to get it early in the loadup")
+
+                              (RECORDS READER-ENVIRONMENT)
+                              (FUNCTIONS WITH-READER-ENVIRONMENT)
+                              (ADDVARS (SYSSPECVARS *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))
+                              (PROP INFO WITH-READER-ENVIRONMENT)
+                              (GLOBALVARS *COMMON-LISP-READ-ENVIRONMENT*)
+                              (INITVARS (*COMMON-LISP-READ-ENVIRONMENT* (create READER-ENVIRONMENT 
+                                                                               REPACKAGE _
+                                                                               (CL:FIND-PACKAGE
+                                                                                "USER")
+                                                                               REREADTABLE _ CMLRDTBL
+                                                                               REBASE _ 10]
+                        (PROP FILETYPE CMLREAD)
+                        (DECLARE%: DONTEVAL@LOAD DOEVAL@COMPILE DONTCOPY COMPILERVARS
+                               (ADDVARS (NLAMA)
+                                      (NLAML)
+                                      (LAMA CL:READ-BYTE CL:READ-FROM-STRING CL:CLEAR-INPUT 
+                                            CL:READ-CHAR-NO-HANG CL:PEEK-CHAR CL:UNREAD-CHAR 
+                                            CL:READ-CHAR CL:READ-LINE CL:COPY-READTABLE])
+
+
+
+(* ;; "Misc Common Lisp reader functions")
+
+(DEFINEQ
+
+(CL:COPY-READTABLE
+  [CL:LAMBDA (&OPTIONAL (FROM-READTABLE *READTABLE*)
+                    TO-READTABLE)                            (* bvm%: "13-Oct-86 15:21")
+                                                             (* ; 
+                 "If FROM-READTABLE is NIL, then a copy of a standard Common Lisp readtable is made.")
+         (if (AND (NULL FROM-READTABLE)
+                  (NULL TO-READTABLE))
+             then                                            (* ; "just make a brand new one")
+                  (CMLRDTBL)
+           else (SETQ FROM-READTABLE (\DTEST (OR FROM-READTABLE (CMLRDTBL))
+                                            'READTABLEP))
+                (if TO-READTABLE
+                    then (RESETREADTABLE (\DTEST TO-READTABLE 'READTABLEP)
+                                FROM-READTABLE)
+                         TO-READTABLE
+                  else (COPYREADTABLE FROM-READTABLE])
+)
+(DEFINEQ
+
+(CL:READ-LINE
+  [CL:LAMBDA (&OPTIONAL STREAM (EOF-ERRORP T)
+                    EOF-VALUE RECURSIVE-P)                   (* ; "Edited 31-Mar-87 18:36 by bvm:")
+          
+          (* ;; 
+         "Returns a line of text read from the STREAM as a string, discarding the newline character.")
+
+         (CL:SETQ STREAM (\GETSTREAM STREAM 'INPUT))
+         (if (AND (NULL EOF-ERRORP)
+                  (NULL RECURSIVE-P)
+                  (\EOFP STREAM))
+             then EOF-VALUE
+           else (LET ((RESULT (RSTRING STREAM READ-LINE-RDTBL)))
+                     (if (\EOFP STREAM)
+                         then (CL:VALUES RESULT T)
+                       else                                  (* ; "consume the eol")
+                            (READCCODE STREAM)
+                            (CL:VALUES RESULT NIL])
+
+(CL:READ-CHAR
+  [CL:LAMBDA (&OPTIONAL (STREAM *STANDARD-INPUT*)
+                    (EOF-ERRORP T)
+                    EOF-VALUE RECURSIVE-P)                   (* ; "Edited 14-Dec-86 20:41 by bvm:")
+          
+          (* ;; "Inputs a character from STREAM and returns it.")
+
+         (LET [(STREAM (\GETSTREAM STREAM 'INPUT]
+              (COND
+                 ((AND (NOT EOF-ERRORP)
+                       (NOT RECURSIVE-P)
+                       (\EOFP STREAM))
+                  EOF-VALUE)
+                 (T (CL:CODE-CHAR (READCCODE STREAM])
+
+(CL:UNREAD-CHAR
+  (CL:LAMBDA (CHARACTER &OPTIONAL (INPUT-STREAM *STANDARD-INPUT*))
+                                                             (* bvm%: "13-Oct-86 15:44")
+          
+          (* ;; "Puts the CHARACTER back on the front of the input STREAM.  According to the manual, `One may apply UNREAD-CHAR only to the character most recently read from INPUT-STREAM.'")
+
+         (\BACKCHAR (\GETSTREAM INPUT-STREAM 'INPUT))
+         NIL))
+
+(CL:PEEK-CHAR
+  [CL:LAMBDA (&OPTIONAL (PEEK-TYPE NIL)
+                    (STREAM *STANDARD-INPUT*)
+                    (EOF-ERRORP T)
+                    EOF-VALUE RECURSIVE-P)                   (* ; "Edited 14-Apr-87 14:39 by bvm:")
+          
+          (* ;; "Peeks at the next character in the input Stream.  See manual for details.")
+
+         (DECLARE (IGNORE RECURSIVE-P))
+         (LET ((STREAM (\GETSTREAM STREAM 'INPUT))
+               (\RefillBufferFn '\PEEKREFILL)
+               CL:CHAR)
+              (DECLARE (CL:SPECIAL \RefillBufferFn))
+              (SELECTQ PEEK-TYPE
+                  (NIL                                       (* ; "standard case--return next char.  \peekccode to terminal requires the binding of \RefillBufferFn above")
+                       (if (SETQ CL:CHAR (\PEEKCCODE STREAM (NULL EOF-ERRORP)))
+                           then (CL:CODE-CHAR CL:CHAR)
+                         else EOF-VALUE))
+                  (T                                         (* ; "skip whitespace before peeking")
+                     (if (SETQ CL:CHAR (SKIPSEPRCODES STREAM))
+                         then (CL:CODE-CHAR CL:CHAR)
+                       elseif EOF-ERRORP
+                         then (\EOF.ACTION STREAM)
+                       else EOF-VALUE))
+                  (if (CL:CHARACTERP PEEK-TYPE)
+                      then (LET ((DESIREDCHAR (CL:CHAR-CODE PEEK-TYPE))
+                                 (NOERROR (NULL EOF-ERRORP)))
+                                (until (EQ (SETQ CL:CHAR (\PEEKCCODE STREAM NOERROR))
+                                           DESIREDCHAR) do (if (NULL CL:CHAR)
+                                                               then (RETURN EOF-VALUE))
+                                                           (READCCODE STREAM)
+                                   finally (RETURN PEEK-TYPE)))
+                    else (\ILLEGAL.ARG PEEK-TYPE])
+
+(CL:LISTEN
+  (CL:LAMBDA (&OPTIONAL STREAM)                              (* ; "Edited 14-Apr-87 16:49 by bvm:")
+          
+          (* ;; "Returns T if a character is available on the given STREAM ")
+
+         (READP (\GETSTREAM STREAM 'INPUT)
+                T)))
+
+(CL:READ-CHAR-NO-HANG
+  (CL:LAMBDA (&OPTIONAL STREAM (EOF-ERRORP T)
+                    EOF-VALUE RECURSIVE-P)                   (* ; "Edited 14-Apr-87 16:40 by bvm:")
+          
+          (* ;; "Returns the next character from the STREAM if one is available, or NIL.  However, if STREAM is at eof, do eof handling.")
+
+         (COND
+            ((READP STREAM T)                                (* ; "there is input, get it")
+             (CL:READ-CHAR STREAM EOF-ERRORP EOF-VALUE RECURSIVE-P))
+            ((NOT (EOFP STREAM))                             (* ; 
+                                               "there could be more input, so don't wait, return NIL")
+             NIL)
+            (EOF-ERRORP (\EOF.ACTION STREAM))
+            (T EOF-VALUE))))
+
+(CL:CLEAR-INPUT
+  [CL:LAMBDA (&OPTIONAL (STREAM *STANDARD-INPUT*))           (* bvm%: "13-Oct-86 15:46")
+          
+          (* ;; "Clears any buffered input associated with the Stream.")
+
+         (CLEARBUF (\GETSTREAM STREAM 'INPUT])
+
+(CL:READ-FROM-STRING
+  [CL:LAMBDA (STRING &OPTIONAL EOF-ERROR-P EOF-VALUE &KEY START END PRESERVE-WHITESPACE)
+                                                           (* ; "Edited  8-Jun-90 14:15 by ymasuda")
+         (LET [(STREAM (OPENSTRINGSTREAM (COND
+                                            [END (SUBSTRING STRING 1 (IMIN END (NCHARS STRING]
+                                            (T (MKSTRING STRING]
+              (COND
+                 (START (SETFILEPTR STREAM START)))
+              (CL:VALUES (CL:IF PRESERVE-WHITESPACE
+                             (CL:READ-PRESERVING-WHITESPACE STREAM EOF-ERROR-P EOF-VALUE)
+                             (CL:READ STREAM EOF-ERROR-P EOF-VALUE))
+                     (\GETFILEPTR STREAM])
+
+(CL:READ-BYTE
+  [CL:LAMBDA (BINARY-INPUT-STREAM &OPTIONAL (EOF-ERRORP T)
+                    EOF-VALUE)                               (* bvm%: "13-Oct-86 15:49")
+          
+          (* ;; "Returns the next byte of the BINARY-INPUT-STREAM")
+
+         (LET [(STREAM (\GETSTREAM BINARY-INPUT-STREAM 'INPUT]
+              (CL:IF (AND (NOT EOF-ERRORP)
+                          (\EOFP STREAM))
+                     EOF-VALUE
+                     (\BIN STREAM])
+
+(CL:WRITE-BYTE
+  (CL:LAMBDA (INTEGER BINARY-OUTPUT-STREAM)                  (* bvm%: "13-Oct-86 15:49")
+          
+          (* ;; "Outputs the INTEGER to the binary BINARY-OUTPUT-STREAM")
+
+         (BOUT BINARY-OUTPUT-STREAM INTEGER)
+         INTEGER))
+)
+
+
+
+(* ; "must turn off packed version of CLISP infix")
+
+
+(RPAQ CLISPCHARS (LDIFFERENCE CLISPCHARS '(- *)))
+
+(RPAQ CLISPCHARRAY (MAKEBITTABLE CLISPCHARS))
+
+(RPAQQ DWIMINMACROSFLG NIL)
+
+(CL:DEFVAR *READ-DEFAULT-FLOAT-FORMAT* 'CL:SINGLE-FLOAT)
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS CMLRDTBL READ-LINE-RDTBL)
+)
+
+
+
+(* ;; 
+"Crude means to aid reading and printing things in same reader environment.  There are some fns and an INITRECORDS for this on ATBL to get it early in the loadup"
+)
+
+(DECLARE%: EVAL@COMPILE
+
+(DATATYPE READER-ENVIRONMENT (REPACKAGE REREADTABLE REBASE RESPEC))
+)
+
+(/DECLAREDATATYPE 'READER-ENVIRONMENT '(POINTER POINTER POINTER POINTER)
+       '((READER-ENVIRONMENT 0 POINTER)
+         (READER-ENVIRONMENT 2 POINTER)
+         (READER-ENVIRONMENT 4 POINTER)
+         (READER-ENVIRONMENT 6 POINTER))
+       '8)
+
+(DEFMACRO WITH-READER-ENVIRONMENT (ENV . BODY)
+   `((CL:LAMBDA (E)
+            (LET ((*PACKAGE* (ffetch (READER-ENVIRONMENT REPACKAGE) of E))
+                  (*READTABLE* (ffetch (READER-ENVIRONMENT REREADTABLE) of E))
+                  (*READ-BASE* (ffetch (READER-ENVIRONMENT REBASE) of E))
+                  (*PRINT-BASE* (ffetch (READER-ENVIRONMENT REBASE) of E)))
+                 ,@BODY))
+     (\DTEST ,ENV 'READER-ENVIRONMENT)))
+
+(ADDTOVAR SYSSPECVARS *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*)
+
+(PUTPROPS WITH-READER-ENVIRONMENT INFO EVAL)
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS *COMMON-LISP-READ-ENVIRONMENT*)
+)
+
+(RPAQ? *COMMON-LISP-READ-ENVIRONMENT* (create READER-ENVIRONMENT REPACKAGE _ (CL:FIND-PACKAGE
+                                                                                  "USER")
+                                                 REREADTABLE _ CMLRDTBL REBASE _ 10))
+
+(PUTPROPS CMLREAD FILETYPE CL:COMPILE-FILE)
+(DECLARE%: DONTEVAL@LOAD DOEVAL@COMPILE DONTCOPY COMPILERVARS 
+
+(ADDTOVAR NLAMA )
+
+(ADDTOVAR NLAML )
+
+(ADDTOVAR LAMA CL:READ-BYTE CL:READ-FROM-STRING CL:CLEAR-INPUT CL:READ-CHAR-NO-HANG CL:PEEK-CHAR
+                         CL:UNREAD-CHAR CL:READ-CHAR CL:READ-LINE CL:COPY-READTABLE)
+)
+(PRETTYCOMPRINT CMLREADCOMS)
+
+(RPAQQ CMLREADCOMS 
+       [(COMS 
+              (* ;; "Misc Common Lisp reader functions")
+
+              (FNS CL:COPY-READTABLE)
+              (FNS CL:READ-LINE CL:READ-CHAR CL:UNREAD-CHAR CL:PEEK-CHAR CL:LISTEN 
+                   CL:READ-CHAR-NO-HANG CL:CLEAR-INPUT CL:READ-FROM-STRING CL:READ-BYTE CL:WRITE-BYTE
+                   )
+                                                             (* ; 
+                                                      "must turn off packed version of CLISP infix")
+              (VARS [CLISPCHARS (LDIFFERENCE CLISPCHARS '(- *]
+                    (CLISPCHARRAY (MAKEBITTABLE CLISPCHARS))
+                    (DWIMINMACROSFLG))
+              (VARIABLES *READ-DEFAULT-FLOAT-FORMAT*)
+              (GLOBALVARS CMLRDTBL READ-LINE-RDTBL))
+        [COMS 
+              (* ;; "Crude means to aid reading and printing things in same reader environment.  There are some fns and an INITRECORDS for this on ATBL to get it early in the loadup")
+
+              (RECORDS READER-ENVIRONMENT)
+              (FUNCTIONS WITH-READER-ENVIRONMENT)
+              (ADDVARS (SYSSPECVARS *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))
+              (PROP INFO WITH-READER-ENVIRONMENT)
+              (GLOBALVARS *COMMON-LISP-READ-ENVIRONMENT*)
+              (INITVARS (*COMMON-LISP-READ-ENVIRONMENT* (create READER-ENVIRONMENT REPACKAGE _
+                                                               (CL:FIND-PACKAGE "USER")
+                                                               REREADTABLE _ CMLRDTBL REBASE _ 10]
+        (PROP FILETYPE CMLREAD)
+        (DECLARE%: DONTEVAL@LOAD DOEVAL@COMPILE DONTCOPY COMPILERVARS
+               (ADDVARS (NLAMA)
+                      (NLAML)
+                      (LAMA CL:WRITE-BYTE CL:READ-BYTE CL:READ-FROM-STRING CL:CLEAR-INPUT 
+                            CL:READ-CHAR-NO-HANG CL:LISTEN CL:PEEK-CHAR CL:UNREAD-CHAR CL:READ-CHAR 
+                            CL:READ-LINE CL:COPY-READTABLE])
+(DECLARE%: DONTEVAL@LOAD DOEVAL@COMPILE DONTCOPY COMPILERVARS 
+
+(ADDTOVAR NLAMA )
+
+(ADDTOVAR NLAML )
+
+(ADDTOVAR LAMA CL:WRITE-BYTE CL:READ-BYTE CL:READ-FROM-STRING CL:CLEAR-INPUT CL:READ-CHAR-NO-HANG
+                         CL:LISTEN CL:PEEK-CHAR CL:UNREAD-CHAR CL:READ-CHAR CL:READ-LINE 
+                         CL:COPY-READTABLE)
+)
+(PUTPROPS CMLREAD COPYRIGHT ("Venue & Xerox Corporation" 1985 1986 1987 1988 1990))
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL (3113 4089 (CL:COPY-READTABLE 3123 . 4087)) (4090 10834 (CL:READ-LINE 4100 . 4967) (
+CL:READ-CHAR 4969 . 5534) (CL:UNREAD-CHAR 5536 . 5995) (CL:PEEK-CHAR 5997 . 8003) (CL:LISTEN 8005 . 
+8285) (CL:READ-CHAR-NO-HANG 8287 . 9076) (CL:CLEAR-INPUT 9078 . 9330) (CL:READ-FROM-STRING 9332 . 
+10087) (CL:READ-BYTE 10089 . 10561) (CL:WRITE-BYTE 10563 . 10832)))))
+STOP

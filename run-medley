@@ -1,0 +1,225 @@
+#!/bin/sh
+#
+# Run Medley
+#
+# Syntax: run-medley [-nogreet][-xns][-noxns] [-geometry pixelgeometry]
+#                [-display xdisplay-device] [-screensize pixelgeometry]
+#                [-raw] [-t xtimeout][-prog executable-program]
+#                [-vmem savevmemfilename] |
+#                [-m memorylimit] [-kbd keyboardtype]  [-key key]
+#                [sysoutfilename | -lfg | -lisp | -full |
+#                -{name of any in the sysouts} ]
+#
+# -xns means leave unix xns running
+# -noxns means suppress Lisp xns.
+
+# LDESRCESYSOUT
+# LDESOURCESYSOUT       SYSOUT full-file name you want to run
+
+# LDEDESTSYSOUT     SYSOUT name for destination of SAVEVM/LOGOUT
+
+# LDEKBDTYPE
+#           type2
+#           type3
+#           type4
+#           jle
+#           as3000j
+# LDEFILETIMEOUT
+
+export HOSTNAME=`hostname`
+export OSVERSION=`uname -r`
+
+# Directory variables are accessible from Lisp via UNIX-GETENV
+
+if [ -z "$MEDLEYDIR" ] ; then export MEDLEYDIR=`pwd`; fi
+if [ ! -d $MEDLEYDIR/loadups ] ; then
+   echo MEDLEYDIR not found: "$MEDLEYDIR"
+   exit 1
+fi
+
+if [ -z "$MAIKODIR" ] ; then
+   export MAIKODIR="$MEDLEYDIR/../maiko"
+   if [ ! -d "$MAIKODIR"/bin ] ; then
+    echo "MAIKODIR not found: $MAIKODIR"
+    exit 1
+   fi
+fi
+
+export LDEINIT="$MEDLEYDIR/greetfiles/LOCAL-INIT"
+
+mem="-m 256"   # Default, has to be set
+#geometry="-g 1060x790"
+# MBA screensize
+geometry="-g 1440x900"
+screensize="-sc 1440x900"
+export LDEKBDTYPE=x
+ICONSPEC=" "
+
+export LDEFILETIMEOUT=60
+export TAKEXNSDOWN=0
+export LDELISPXNS=0
+#default is no lispxns
+
+
+while [ "$#" -ne 0 ]; do
+    case "$1" in
+        "-m")
+            mem="-m $2"
+            shift
+            ;;
+        "-xlisp")
+            export LDESRCESYSOUT="$MEDLEYDIR/loadups/xlisp.sysout"
+            ;;
+        "-lisp")
+            export LDESRCESYSOUT="$MEDLEYDIR/loadups/lisp.sysout"
+            ;;
+        "-xfull35")
+            export LDESRCESYSOUT="$MEDLEYDIR/loadups/xfull35.sysout"
+            ;;
+        "-full")
+            export LDESRCESYSOUT="$MEDLEYDIR/loadups/full.sysout"
+            ;;
+        "-lfg" | "-lfg35" | "-xlfg35")
+            export LDESRCESYSOUT="$LFGPARSERDIR/release/lfg35.sysout"
+            ICONSPEC="-iconbitmap $LFGPARSERDIR/release/lfg.xbm -icontitle Xerox"
+            ;;
+        "-nogreet")
+            export LDEINIT=""
+            ;;
+        "-greet")
+            export LDEINIT="$2"
+            shift
+            ;;
+        "-xns")
+            export TAKEXNSDOWN=1
+            export LDELISPXNS=1
+            ;;
+        "-noxns")
+            export TAKEXNSDOWN=0
+            export LDELISPXNS=0
+            ;;
+        "-raw")
+            unset DISPLAY
+            ;;
+        "-geometry")
+            geometry="-g $2"
+            shift
+            ;;
+        "-screensize")
+            screensize="-sc $2"
+            shift
+            ;;
+        "-display")
+            export DISPLAY=$2
+            shift
+            ;;
+        "-t")
+            xtimeout=$2
+            shift
+            ;;
+        "-prog")
+            progparam=$2
+            shift
+            ;;
+        "-vmem")
+            export LDEDESTSYSOUT=$2
+            shift
+            ;;
+        "-kbd")
+            export LDEKBDTYPE=$2
+            shift
+            ;;
+        *)
+            # anything else is a public sysout name
+            case "$1" in
+                "-"*)
+                    name=`expr substr $1 2 999`
+                    export LDESRCESYSOUT="$MEDLEYDIR/loadups/${name}.sysout"
+                    ;;
+                *) # not an option so must be a sysout name
+                    export LDESRCESYSOUT=$1 ;;
+            esac
+            ;;
+    esac
+    shift
+done
+
+if [ -z "$LDEDESTSYSOUT" ] ; then
+    if [ -f /$HOSTNAME/$LOGNAME/lisp.virtualmem ]; then
+        export LDEDESTSYSOUT=/$HOSTNAME/$LOGNAME/lisp.virtualmem
+    elif [ -f ~/lisp.virtualmem ]; then
+        export LDEDESTSYSOUT=~/lisp.virtualmem
+    elif [ -d /$HOSTNAME/$LOGNAME ]; then
+        export LDEDESTSYSOUT=/$HOSTNAME/$LOGNAME/lisp.virtualmem
+    fi
+fi
+
+if [ -z "$LDESRCESYSOUT" ] ; then
+   export LDESRCESYSOUT="$LDEDESTSYSOUT"
+fi
+
+
+# if [ ! -z "$LDEKBDTYPE" ] ; then
+# #   switch (`/usr/bin/hostinfo keyboardtype`)
+# #   endsw
+# fi
+echo "keyboard type is " $LDEKBDTYPE
+
+export INMEDLEY=1
+echo "sysout is " $LDESRCESYSOUT
+#version = `medley-lisp-version $LDESRCESYSOUT`
+version="35010"
+
+if [ "$LDELISPXNS" -ne "0" ] ; then
+    prog="ldeether"
+else
+    prog="lde"
+    echo "running without xns protocols"
+fi
+case "$version" in
+  "35000")
+    version="3.5"
+    ;;
+  "35010")
+    version="3.501"
+    ;;
+  *)
+    version="3.5"
+    ;;
+esac
+echo "using emulator version $version"
+
+case "$version" in
+    "3.5"|"3.501")
+
+    export PATH=.:"$PATH"
+    old_wd=`pwd`
+    cd "$MAIKODIR"/bin
+    export PATH=$MAIKODIR/`osversion`.`machinetype`:"$PATH"
+    cd $old_wd
+
+    #   if ${?DISPLAY} then  # we are running under X
+    $prog $mem $geometry $screensize $ICONSPEC
+    #   else $prog $mem
+    #   endif
+    ;;
+
+    *) echo HMM
+
+esac
+
+#
+# Now we are done, so clean up after ourselves
+#
+cleanup:
+
+# if ${?DISPLAY} then
+#     # do X cleanup
+# else
+# #   reset
+# endif
+
+
+
+
+

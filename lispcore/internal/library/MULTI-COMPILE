@@ -1,374 +1,0 @@
-(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "XCL" BASE 10)
-(FILECREATED "16-Nov-94 16:28:04" |{DSK}<lispcore>internal>library>MULTI-COMPILE.;4| 37236  
-
-      |changes| |to:|  (VARS MULTI-COMPILECOMS)
-                       (FNS FIND-UNCOMPILED-FILES)
-
-      |previous| |date:| " 9-Sep-94 13:03:19" |{DSK}<lispcore>internal>library>MULTI-COMPILE.;3|)
-
-
-; Copyright (c) 1988, 1990, 1991, 1992, 1993, 1994 by Venue & Xerox Corporation.  All rights reserved.
-
-(PRETTYCOMPRINT MULTI-COMPILECOMS)
-
-(RPAQQ MULTI-COMPILECOMS
-       (
-        (* |;;| "Support for compiling multiple files in one pass, for a bulk recompilation of the system (or some part of it).")
-
-        (COMS                                                (* \; "Function to compile multiple files without having one step on the next (so you could compile all the system with it).")
-              (FUNCTIONS BIGCOMP))
-        (COMS                                                (* \; "Function to identify all the source files on a given directory (useful for creating lists of things to compile)")
-              (FUNCTIONS FIND-ALL-SOURCE-FILES)
-              (FNS FIND-UNCOMPILED-FILES))
-        (COMS                                                (* \; 
-                                            "Misc utility functions from the big Lyric recompiles.")
-              (FNS NEWERDCOMS? NEWERSOURCES? SETUP-FOR-RECOMPILE SMASH-OPCODES GET-DIRECTORY-LISTING
-                   GET-OPEN-FILES)
-              
-              (* |;;| "Control variables")
-
-              (VARS FILES-IN-FULL.SYSOUT FILES-IN-LIBRARY FILES-IN-LISP.SYSOUT FILES-IN-SOURCES 
-                    FORKED-FILES GARBAGE-OPCODES))
-        (COMS                                                (* \; 
-                                    "Utilities for making mass-scale fixups to a library of files.")
-              (FNS FIX-FILES FIX-FILE FIX-COPYRIGHT FIX-FILE-COPYRIGHT QUALIFY-FIELDS FIX-TEDIT 
-                   FIX-DOCS))
-        
-        (* |;;| "Removes bogus (CLISP  <clisp xlation> <real-code>) translations that result from CLISPARRAY being NIL.")
-
-        (FNS CLFIX)
-        (PROP FILETYPE MULTI-COMPILE)
-        (DECLARE\: DONTEVAL@LOAD DOEVAL@COMPILE DONTCOPY COMPILERVARS (ADDVARS (NLAMA)
-                                                                             (NLAML)
-                                                                             (LAMA FIX-FILES)))))
-
-
-
-(* |;;| 
-"Support for compiling multiple files in one pass, for a bulk recompilation of the system (or some part of it)."
-)
-
-
-
-
-(* \; 
-"Function to compile multiple files without having one step on the next (so you could compile all the system with it)."
-)
-
-
-(CL:DEFUN BIGCOMP (FILENAMES SOURCEDIRS DESTDIR &OPTIONAL (DRIBBLE-FILE '"{DSK}BIGCOMP.DRIBBLE")
-                             DELETE-DCOMS? DELETE-DRIBBLE?)
-
-   (* |;;| "Compile all the files in the system.")
-
-   (LET ((COMPLETION 'ERROR)
-         (NUM-FILES (LENGTH FILENAMES)))
-        (IDLE.SET.OPTION 'TIMEOUT T)                         (* \; "never idle")
-        (SETQ NOSPELLFLG T)                                  (* \; "death to DWIM!")
-        (SETQ DWIMIFYCOMPFLG NIL)                            (* \; "I mean it")
-
-        (* |;;| "do it")
-
-        (CL:UNWIND-PROTECT
-            (PROGN (DRIBBLE DRIBBLE-FILE)
-                   (WINDOWPROP (WFROMDS (TTYDISPLAYSTREAM))
-                          'PAGEFULLFN
-                          'NILL)
-                   (PRINTOUT NIL "= = = = = Setting up for full-system compilation run on " (DATE)
-                          " = = = = =" T T)
-                   (|for| FILE |in| FILENAMES |as| FILE-NUM |from| 1
-                      |do| (DSPNEWPAGE (GETSTREAM NIL 'OUTPUT)) 
-
-                            (* |;;| "changed the destfile so it has the proper extension.  It was compiling everything correctly, but naming all the files .lcom.")
-
-                            (LET* ((CF (COMPILE-FILE? FILE))
-                                   (SOURCEFILE (FINDFILE FILE NIL SOURCEDIRS))
-                                   (DESTFILE (PACKFILENAME 'BODY FILE 'DIRECTORY DESTDIR 'EXTENSION
-                                                    (SELECTQ CF
-                                                        (CL:COMPILE-FILE 
-                                                             'DFASL)
-                                                        'LCOM))))
-                                  (RESETLST
-                                      (RESETSAVE (RESETUNDO))
-                                      (PRINTOUT NIL T "- - - " (OR CF 'BCOMPL)
-                                             "'ing file " SOURCEFILE " to " DESTFILE " at " (DATE)
-                                             " - - -" T)
-                                      (PRINTOUT NIL T "(File number " FILE-NUM " of " NUM-FILES ": "
-                                             (- NUM-FILES FILE-NUM)
-                                             " left)" T T)
-                                      (PRINT (SELECTQ CF
-                                                 ((BCOMPL TCOMPL NIL) 
-                                                      (LISPXUNREAD '(F))
-                                                      (CL:FUNCALL (OR CF 'BCOMPL)
-                                                             SOURCEFILE DESTFILE))
-                                                 (CL:FUNCALL CF SOURCEFILE :OUTPUT-FILE DESTFILE))
-                                             T)
-                                      (PRINTOUT NIL T T "- - - End of " FILE " compilation - - -" T))
-                                  (AND DELETE-DCOMS? (DELFILE DESTFILE))))
-                   (PRINTOUT NIL T T T "= = = = = END OF FULL-SYSTEM COMPILATION RUN = = = = =")
-                   (SETQ COMPLETION 'SUCCESS))
-
-            (* |;;| "cleanup forms")
-
-            (PRINTOUT NIL T "Compilation status: " COMPLETION T T)
-            (DRIBBLE)
-            (WINDOWPROP (WFROMDS (TTYDISPLAYSTREAM))
-                   'PAGEFULLFN NIL))
-        (SEND.FILE.TO.PRINTER DRIBBLE-FILE)
-        (AND DELETE-DRIBBLE? (DELFILE DRIBBLE-FILE))))
-
-
-
-(* \; 
-"Function to identify all the source files on a given directory (useful for creating lists of things to compile)"
-)
-
-
-(CL:DEFUN FIND-ALL-SOURCE-FILES (DIRECTORY)
-
-   (* |;;| "Return a list of every file that has a compiled equivalent on DIRECTORY.  This is a way of finding out what needs to be recompiled for a bulk compile.")
-
-   (LET ((DFASLS (FOR FILENAME IN (DIRECTORY (PACKFILENAME 'DIRECTORY DIRECTORY 'BODY 
-                                                            "*.DFASL;"))
-                    COLLECT (UNPACKFILENAME FILENAME 'NAME)))
-         (LCOMS (FOR FILENAME IN (DIRECTORY (PACKFILENAME 'DIRECTORY DIRECTORY 'BODY 
-                                                           "*.LCOM;"))
-                   COLLECT (UNPACKFILENAME FILENAME 'NAME))))
-        (UNION (INTERSECTION DFASLS DFASLS)
-               (INTERSECTION LCOMS LCOMS))))
-(DEFINEQ
-
-(FIND-UNCOMPILED-FILES
-  (LAMBDA (SRCDIR DESTDIR)                               (* \; "Edited 16-Nov-94 16:23 by jds")
-    (LET ((SRCFILES (DIRECTORY (PACKFILENAME 'DIRECTORY SRCDIR 'BODY '*.\;)))
-          SFILE DFILE)
-         (|for| FILE |in| SRCFILES |do| (SETQ SFILE (UNPACKFILENAME FILE 'NAME))
-                                                 (COND
-                                                    ((AND (SETQ DFILE (FINDFILE-WITH-EXTENSIONS
-                                                                       SFILE
-                                                                       (LIST DESTDIR)
-                                                                       '(DFASL LCOM)))
-                                                          (ILESSP (GETFILEINFO DFILE 'ICREATIONDATE)
-                                                                 (GETFILEINFO FILE 'ICREATIONDATE)))
-                                                     (PRINTOUT T FILE " needs compiling." T))
-                                                    ((NOT DFILE)
-                                                     (PRINTOUT T FILE " has no compiled version." T))
-                                                    )))))
-)
-
-
-
-(* \; "Misc utility functions from the big Lyric recompiles.")
-
-(DEFINEQ
-
-(NEWERDCOMS?  (LAMBDA (DIRPAIRS EXTENSIONS FILTER)                   (* \; "Edited  9-Dec-86 21:39 by bvm")    (OR DIRPAIRS (SETQ DIRPAIRS '(({ERIS}<LISPCORE>NEWSTRING>SOURCES> {ERIS}<LISPCORE>SOURCES>)                                  ({ERIS}<LISPCORE>NEWSTRING>LIBRARY> {ERIS}<LISPCORE>LIBRARY>)                                  ({ERIS}<LISPCORE>NEWSTRING>INTERNAL>LIBRARY>                                          {ERIS}<LISPCORE>INTERNAL>LIBRARY>))))    (OR EXTENSIONS (SETQ EXTENSIONS '(LCOM DCOM)))    (|for| PAIR |in| DIRPAIRS       |join| (RESETLST                      (LET ((THISDIR (CAR PAIR))                            (OTHERDIR (CADR PAIR))                            (THISEXT (CAR EXTENSIONS))                            (OTHEREXT (CADR EXTENSIONS))                            NEXT DT OTHERFILE OTHERDT OTHERWDT THISAUTHOR DIRPRINTED GEN)                           (SETQ GEN (\\GENERATEFILES (PACKFILENAME.STRING 'DIRECTORY THISDIR                                                             'NAME "*" 'EXTENSION THISEXT                                                             'VERSION "")                                            '(ICREATIONDATE)                                            '(RESETLST)))                           (|while| (SETQ NEXT (\\GENERATENEXTFILE GEN)) |eachtime|                                                                             (SETQ OTHERWDT NIL)                              |when| (AND (SETQ OTHERFILE (INFILEP (PACKFILENAME.STRING                                                                        'DIRECTORY OTHERDIR                                                                        'EXTENSION OTHEREXT                                                                        'VERSION NIL 'BODY NEXT)))                                              (SETQ DT (\\GENERATEFILEINFO GEN 'ICREATIONDATE))                                              (OR (AND (SETQ OTHERDT (GETFILEINFO OTHERFILE                                                                            'ICREATIONDATE))                                                       (< DT OTHERDT))                                                  (AND (SETQ OTHERWDT (GETFILEINFO OTHERFILE                                                                             'IWRITEDATE))                                                       (< DT OTHERWDT)))                                              (OR (NULL FILTER)                                                  (CL:FUNCALL FILTER NEXT OTHERFILE DT OTHERDT                                                          OTHERWDT GEN)))                              |collect| (|if| (NOT DIRPRINTED)                                                |then| (|printout| T T "   " THISDIR 18                                                                   "This Date" 38 "Other Date" 58                                                                   "Author" T)                                                      (SETQ DIRPRINTED T))                                    (|printout| T (SUBSTRING NEXT                                                         (STRPOS THISDIR NEXT 1 NIL T T                                                                 UPPERCASEARRAY))                                           18                                           (GDATE DT)                                           38                                           (GDATE OTHERDT)                                           58)                                    (|if| OTHERWDT                                        |then| (|printout| T (GDATE OTHERWDT)                                                          " "))                                    (|printout| T (GETFILEINFO OTHERFILE 'AUTHOR)                                           T)                                    (FILENAMEFIELD NEXT 'NAME)))))))
-
-(NEWERSOURCES?  (LAMBDA (DIRPAIRS FILTER)                              (* \; "Edited  9-Dec-86 23:07 by bvm")    (OR DIRPAIRS (SETQ DIRPAIRS '(({ERIS}<LISPCORE>NEWSTRING>SOURCES> {ERIS}<LISPCORE>SOURCES>)                                  ({ERIS}<LISPCORE>NEWSTRING>LIBRARY> {ERIS}<LISPCORE>LIBRARY>)                                  ({ERIS}<LISPCORE>NEWSTRING>INTERNAL>LIBRARY>                                          {ERIS}<LISPCORE>INTERNAL>LIBRARY>))))    (|for| PAIR |in| DIRPAIRS       |do| (RESETLST                    (LET ((THISDIR (CAR PAIR))                          (OTHERDIR (CADR PAIR))                          NEXT DT THISFILE THISDT WDT DIRPRINTED GEN)                         (SETQ GEN (\\GENERATEFILES (PACKFILENAME.STRING 'DIRECTORY OTHERDIR                                                           'NAME "*" 'VERSION "")                                          '(ICREATIONDATE IWRITEDATE AUTHOR)                                          '(RESETLST)))                         (|while| (SETQ NEXT (\\GENERATENEXTFILE GEN))                            |eachtime| (SETQ THISDT (SETQ WDT (SETQ DT NIL)))                            |when| (AND (SETQ DT (\\GENERATEFILEINFO GEN 'ICREATIONDATE))                                            (OR (NULL (SETQ THISFILE (INFILEP (PACKFILENAME.STRING                                                                               'DIRECTORY THISDIR                                                                               'EXTENSION COMPILE.EXT                                                                               'VERSION NIL                                                                               'BODY NEXT))))                                                (AND (SETQ THISDT (GETFILEINFO THISFILE                                                                          'ICREATIONDATE))                                                     (OR (> DT THISDT)                                                         (AND (SETQ WDT (\\GENERATEFILEINFO                                                                         GEN                                                                         'IWRITEDATE))                                                              (> WDT THISDT)))))                                            (OR (NULL FILTER)                                                (CL:FUNCALL FILTER NEXT THISFILE DT WDT THISDT GEN)))                            |do| (|if| (NOT DIRPRINTED)                                         |then| (|printout| T T "   " OTHERDIR 18 " Its Date" 38                                                           " Other Date" 58 "Author" T)                                               (SETQ DIRPRINTED T))                                  (OR (GET (NAMEFIELD NEXT)                                           'FILEDATES)                                      (PRIN1 "+" T))                                  (|printout| T (SUBSTRING NEXT                                                       (STRPOS OTHERDIR NEXT 1 NIL T T UPPERCASEARRAY                                                              ))                                         18                                         (GDATE DT)                                         38                                         (|if| THISDT                                             |then| (GDATE THISDT)                                           |else| " - - -")                                         58)                                  (|if| WDT                                      |then| (|printout| T (GDATE WDT)                                                        " "))                                  (|printout| T (\\GENERATEFILEINFO GEN 'AUTHOR)                                         T)))))))
-
-(SETUP-FOR-RECOMPILE  (LAMBDA NIL                                            (* \; "Edited  8-Dec-86 21:23 by jop:")                                                             (* \;                                                            "So we don't get alot of warnings")    (SETQ *REMOVE-INTERLISP-COMMENTS* NIL)                   (* \;                                                            "So we don't get asked stupid questions")    (SETQ CROSSCOMPILING T)                                  (* \;                                                            "setup up new compiled file version")    (PUTPROP ':D4 'CODEREADER (COPYALL (GETPROP 'D1 'CODEREADER)))    (RPAQQ CODEINDICATOR :D4)    (RPAQQ COMPILE.EXT LCOM)                             (* \;                                                            "Smash garbage collectable opcodes")    (SMASH-OPCODES GARBAGE-OPCODES)                      (* \; "Setup for unwind recompile")    (LOAD '{ERIS}<LISPCORE>NEWSTRING>SOURCES>UNWINDMACROS 'SYSLOAD)                                                             (* \; "may not be necessary")    (LOAD '{ERIS}<LISPCORE>NEWSTRING>SOURCES>PROC 'PROP)     (* \; "Setup for new string recompile")    (LOAD '{ERIS}<LISPCORE>NEWSTRING>SOURCES>LLCHAR 'PROP)    (REMPROP 'STRINGP 'DOPVAL)                               (* \; "to get correct record def's")    (LOAD '{ERIS}<LISPCORE>SOURCES>CMLARRAY 'PROP)           (* \; "Setup for new stream record")    (LOAD '{ERIS}<LISPCORE>NEWSTRING>SOURCES>FILEIO 'PROP)   (* \;                                                      "To setup packagified global type number vars")    (LOAD '{ERIS}<LISPCORE>NEWSTRING>SOURCES>DTDECLARE.DCOM 'SYSLOAD)                                                             (* \;                                               "hack for typep - not needed if makesysdate > Nov 23")    (CL:DEFTYPE :DATATYPE (OBJECT)       `(DATATYPE ,OBJECT))                                  (* \; "dribble hack")    (WBREAK NIL)                                             (* \; "So the debuuger will compile")    (LOAD '{ERIS}<LISPCORE>SOURCES>XCL-PACKAGE.DCOM)         (* \; "To fix the broken FP printer")    (LOADFNS '\\CONVERT.FLOATING.NUMBER '{ERIS}<LISPCORE>SOURCES>LLFLOAT.DCOM)))
-
-(SMASH-OPCODES  (LAMBDA (OPCODE-ALIST)                                 (* \; "Edited 24-Nov-86 17:56 by jop:")    (LET (OPNUMBER)         (CL:DOLIST (OPCODE OPCODE-ALIST)             (SETQ OPNUMBER (CADR OPCODE))             (CL:NSUBSTITUTE-IF (LIST OPNUMBER ':UNUSED)                    (FUNCTION (CL:LAMBDA (OP)                                     (EQL (CAR OP)                                          OPNUMBER)))                    \\OPCODES :COUNT 1)             (SETQ \\OPCODEARRAY NIL)))))
-
-(GET-DIRECTORY-LISTING  (LAMBDA (DIRECTORY EXTENSION)                          (* \; "Edited 24-Nov-86 18:14 by jop:")    (|for| X |infiles| (DIRECTORY.FILL.PATTERN DIRECTORY (OR EXTENSION "")                                      "") |collect| (FILENAMEFIELD X 'NAME))))
-
-(GET-OPEN-FILES  (LAMBDA (DEVICE-NAME)                                  (* \; "Edited 25-Nov-86 18:16 by jop:")    (FETCH (FDEV OPENFILELST) OF (CDR (ASSOC DEVICE-NAME \\DEVICENAMETODEVICE)))))
-)
-
-
-
-(* |;;| "Control variables")
-
-
-(RPAQQ FILES-IN-FULL.SYSOUT
-       (PACKAGE-STARTUP LLPACKAGE LLSYMBOL CMLARRAY CMLLIST CMLMACROS DMISC COMPATIBILITY APUTDQ 
-              LLDISPLAY FONT PASSWORDS LEAF PUP LLETHER PROC ERROR-RUNTIME DEFSTRUCT-RUN-TIME 
-              BOOTSTRAP MISC AINTERRUPT AERROR ABASIC APRINT ATERM MOD44IO VANILLADISK PMAP ADIR AOFD
-              COREIO IOCHAR LLCODE ATBL DTDECLARE ASTACK LLTIMER LLKEY LLDATATYPE LLSTK LLCHAR LLREAD
-              LLBIGNUM LLFLOAT LLARITH LLARRAYELT LLMVS LLINTERP LLGC LLBASIC IMAGEIO FILEIO LLNEW 
-              LLBFS LLSUBRS LLFAULT PACKAGE-CONVERSION-TABLE ACODE MACHINEINDEPENDENT POSTLOADUP 
-              DEFPACKAGE-IMPORT XCL-PACKAGE LISP-PACKAGE FASL-PACKAGE COMPILER-PACKAGE BSP DPUPFTP 
-              CMLCHARACTER CMLREADTABLE STACKFNS CMLMVS MACROS MACROAUX CMLSYMBOL CMLHASH CMLDEFFER 
-              CMLPROGV CMLEVAL COMMON CMLSPECIALFORMS CONDITION-HIERARCHY XCLC-RUNTIME CMLTYPES 
-              CL-ERROR AFONT EDIT WEDIT PRETTY DSPRINTDEF NEWPRINTDEF FONTPROFILE SPELLFILE PRINTFN 
-              ADVISE LOADFNS DIRECTORY FILEPKG RESOURCE DLAP BYTECOMPILER COMPILE HIST UNDO SPELL 
-              DWIM WTFIX CLISP DWIMIFY CLISPIFY RECORD ASSIST ASKUSER CMLUNDO CMLEXEC DEBUGGER TRACE
-              CMLDOC CMLPARSE CMLSETF CMLPRED CMLARRAY-OPTIMIZERS CMLREAD CMLWALK CMLSEQCOMMON 
-              CMLSEQBASICS CMLSEQMAPPERS CMLSEQMODIFY CMLSEQFINDER CMLSORT CMLSEQ CMLARITH DEFSTRUCT
-              CMLMISCIO CMLCOMPILE CMLSTRING CLSTREAMS CMLDESTRUCT CMLFORMAT CMLENVIRONMENT CMLPRINT
-              CMLLOAD CMLFILESYS CMLFLOAT CMLTIME CMLRAND CMLMODULES ADDARITH READ-PRINT-PROFILE 
-              CMLPATHNAME HPRINT MSANALYZE MSPARSE MASTERSCOPE AARITH ADISPLAY HLDISPLAY MENU 
-              WINDOWOBJ WINDOWSCROLL WINDOW WINDOWICON ATTACHEDWINDOW XXGEOM XXFILL DEXEC INSPECT 
-              TWODINSPECTOR FREEMENU CMLARRAYINSPECTOR EDITINTERFACE TTYIN DISKDLION DOVEINPUTOUTPUT
-              DOVEDISK DOVEDISPLAY DOVEMISC DOVEETHER DOVEFLOPPY LOCALFILE DSKDISPLAY 10MBDRIVER LLNS
-              TRSERVER SPP COURIER NSPRINT CLEARINGHOUSE NSFILING HARDCOPY INTERPRESS FLOPPY IDLER 
-              ICONW SEDIT-ATOMIC SEDIT-COMMANDS SEDIT-COMMENTS SEDIT-LINEAR SEDIT-LISTS 
-              SEDIT-TERMINAL SEDIT-TOPLEVEL SEDIT-WINDOW SEDIT D-ASSEM-PACKAGE D-ASSEM FASL 
-              XCLC-READER XCLC-ENV-CTXT XCLC-TREES XCLC-TOP-LEVEL XCLC-ALPHA XCLC-ANALYZE 
-              XCLC-META-EVAL XCLC-ANNOTATE XCLC-GENCODE XCLC-PEEPHOLE XCLC-DATABASE XCL-COMPILER 
-              CMLPACKAGE GIVE-AND-TAKE CHATTERMINAL DMCHAT CHAT PUPCHAT NSCHAT PRESS PUPPRINT 
-              TEDITDECLS TEXTOFD TEDITCOMMAND TEDITSCREEN TEDITABBREV TEDITLOOKS TEDITFIND 
-              TEDITHISTORY TEDITFILE TEDITWINDOW TEDITSELECTION READNUMBER EDITBITMAP IMAGEOBJ 
-              TFBRAVO TEDITHCPY TEDITPAGE TEDITMENU TEDITFNKEYS TEDIT HRULE TEDITCHAT GRAPEVINE 
-              MAILCLIENT NSMAIL LAFITEBROWSE LAFITESEND LAFITEMAIL LAFITE TABLEBROWSER FILEBROWSER 
-              REMOTEVMEM VMEM READSYS RDSYS TELERAID GRAPHER SPY AREDIT HASH WHEREIS COPYFILES))
-
-(RPAQQ FILES-IN-LIBRARY
-       (4045XLPDEFAULTPRINTER 4045XLPSTREAM ARCLEANUP AREDIT BROWSER BSEARCH CENTRONICS 
-              CHARCODETABLES CHAT CHATDECLS CHATTERMINAL CLMAIL CML CMLARRAYINSPECTOR CMLDEBUGGER 
-              CMLFLOATARRAY CMLHELP COLOR COLORDEMO CONDITIONGRAPH COPYFILES DANDELIONKEYBOARDS 
-              DATABASEFNS DAYBREAKKEYBOARDS DEDIT DES DICOLOR DINFO DLRS232C DLTTY DMCHAT DO-TEST 
-              DORADOCOLOR DORADOKEYBOARDS DOVEKEYBOARDS DOVERS232C DSKTEST EDITBITMAP ETHERRECORDS 
-              FASTFX80STREAM FILEBROWSER FILECACHE FILECACHE-BROWSER FILECACHE-DECLS FILECACHE-HOSTUP
-              FILECACHE-SCAVENGE FILENAMES FONTSAMPLE FTPSERVER FX80STREAM FXPRINTER GCHAX 
-              GIVE-AND-TAKE GRAPEVINE GRAPHER GRAPHZOOM HASH HELPSYS HRULE IMAGEOBJ KERMIT KERMITMENU
-              KEYBOARDEDITOR LAFITE LAFITEBROWSE LAFITEDECLS LAFITEFIND LAFITEMAIL LAFITESEND 
-              LAMBDATRAN LISPDIAGNOSTICS LLCOLOR MACROTEST MACROTESTAUX MAILCLIENT MAILSCAVENGE 
-              MAINTAIN MATMULT MERGE-FILEGEN MESATYPES MINISERVE MSHASH NEWDEBUG NSCHAT NSCHATSERVER
-              NSMAIL NSMAINTAIN NSTOASCIIDISPLAYFONT PCALLSTATS PCE PCEDISPLAY PCEERD PCEFLOPPY 
-              PCEKEYBOARD PCEWINDOW PCMEMTEST PIXELBLT PUPCHAT PUPIDSERVER RDSYS READAIS READNUMBER 
-              READSYS REMOTEVMEM RS232CHAT RS232CHATSERVER RS232CMENU SAMEDIR SCALEBITMAP SFFONT 
-              SIMPLIFY SKETCHCOLOR SKETCHSTREAM SPY SYSEDIT TABLEBROWSER TABLEBROWSERDECLS TCP 
-              TCPCHAT TCPCONFIG TCPDEBUG TCPFTP TCPHTE TCPLLAR TCPLLICMP TCPLLIP TCPNAMES TCPTFTP 
-              TCPUDP TEDIT TEDITABBREV TEDITCHAT TEDITCOLOR TEDITCOMMAND TEDITDECLS TEDITFILE 
-              TEDITFIND TEDITFNKEYS TEDITHCPY TEDITHISTORY TEDITKEY TEDITLOOKS TEDITMENU TEDITPAGE 
-              TEDITPAGINATE |TEditPartOne| |TEditPartTwo| TEDITSCREEN TEDITSELECTION TEDITWINDOW 
-              TEK4010 TEK4010CHAT TELERAID TEXEC TEXTOFD TFBRAVO TTYCHAT TWODINSPECTOR 
-              VIRTUALKEYBOARDS VMEM VPCDISK VT100KP VTCHAT WHEREIS 4045STREAM BUSCOLOR BUSEXTENDER 
-              BUSMASTER BUSMASTERARRAYBASE BUSTEST C150STREAM COLORNNCC COLOROBJ COLORPOLYGONS 
-              DANDELIONUFO DANDELIONUFO4096 IRISCONSTANTS IRISIO IRISLIB IRISNET IRISSTREAM LOADIRIS))
-
-(RPAQQ FILES-IN-LISP.SYSOUT
-       (PACKAGE-STARTUP LLPACKAGE LLSYMBOL CMLARRAY CMLLIST CMLMACROS DMISC COMPATIBILITY APUTDQ 
-              LLDISPLAY FONT PASSWORDS LEAF PUP LLETHER PROC ERROR-RUNTIME DEFSTRUCT-RUN-TIME 
-              BOOTSTRAP MISC AINTERRUPT AERROR ABASIC APRINT ATERM MOD44IO VANILLADISK PMAP ADIR AOFD
-              COREIO IOCHAR LLCODE ATBL DTDECLARE ASTACK LLTIMER LLKEY LLDATATYPE LLSTK LLCHAR LLREAD
-              LLBIGNUM LLFLOAT LLARITH LLARRAYELT LLMVS LLINTERP LLGC LLBASIC IMAGEIO FILEIO LLNEW 
-              LLBFS LLSUBRS LLFAULT PACKAGE-CONVERSION-TABLE ACODE MACHINEINDEPENDENT POSTLOADUP 
-              DEFPACKAGE-IMPORT XCL-PACKAGE LISP-PACKAGE FASL-PACKAGE COMPILER-PACKAGE BSP DPUPFTP 
-              CMLCHARACTER CMLREADTABLE STACKFNS CMLMVS MACROS MACROAUX CMLSYMBOL CMLHASH CMLDEFFER 
-              CMLPROGV CMLEVAL COMMON CMLSPECIALFORMS CONDITION-HIERARCHY CONDITION-HIERARCHY-SI 
-              CONDITION-HIERARCHY-POST-SI CONDITION-HIERARCHY-IL XCLC-RUNTIME CMLTYPES CL-ERROR AFONT
-              EDIT WEDIT PRETTY DSPRINTDEF NEWPRINTDEF FONTPROFILE SPELLFILE PRINTFN ADVISE LOADFNS 
-              DIRECTORY FILEPKG RESOURCE DLAP BYTECOMPILER COMPILE HIST UNDO SPELL DWIM WTFIX CLISP 
-              DWIMIFY CLISPIFY RECORD ASSIST ASKUSER CMLUNDO CMLEXEC DEBUGGER TRACE CMLDOC CMLPARSE 
-              CMLSETF CMLPRED CMLARRAY-OPTIMIZERS CMLREAD CMLWALK CMLSEQCOMMON CMLSEQBASICS 
-              CMLSEQMAPPERS CMLSEQMODIFY CMLSEQFINDER CMLSORT CMLSEQ CMLARITH DEFSTRUCT CMLMISCIO 
-              CMLCOMPILE CMLSTRING CLSTREAMS CMLDESTRUCT CMLFORMAT CMLENVIRONMENT CMLPRINT CMLLOAD 
-              CMLFILESYS CMLFLOAT CMLTIME CMLRAND CMLMODULES ADDARITH READ-PRINT-PROFILE CMLPATHNAME
-              HPRINT MSANALYZE MSPARSE MASTERSCOPE AARITH ADISPLAY HLDISPLAY MENU WINDOWOBJ 
-              WINDOWSCROLL WINDOW WINDOWICON ATTACHEDWINDOW XXGEOM XXFILL DEXEC INSPECT TWODINSPECTOR
-              FREEMENU CMLARRAYINSPECTOR EDITINTERFACE TTYIN DISKDLION DOVEINPUTOUTPUT DOVEDISK 
-              DOVEDISPLAY DOVEMISC DOVEETHER DOVEFLOPPY LOCALFILE DSKDISPLAY 10MBDRIVER LLNS TRSERVER
-              SPP COURIER NSPRINT CLEARINGHOUSE NSFILING HARDCOPY INTERPRESS FLOPPY IDLER ICONW 
-              SEDIT-ATOMIC SEDIT-COMMANDS SEDIT-COMMENTS SEDIT-LINEAR SEDIT-LISTS SEDIT-TERMINAL 
-              SEDIT-TOPLEVEL SEDIT-WINDOW SEDIT D-ASSEM-PACKAGE D-ASSEM FASL XCLC-READER 
-              XCLC-ENV-CTXT XCLC-TREES XCLC-TOP-LEVEL XCLC-ALPHA XCLC-ANALYZE XCLC-META-EVAL 
-              XCLC-ANNOTATE XCLC-GENCODE XCLC-PEEPHOLE XCLC-DATABASE XCL-COMPILER CMLPACKAGE))
-
-(RPAQQ FILES-IN-SOURCES
-       (ADVISE AFONT BREAK-AND-TRACE CL-ERROR CLOSURE-CACHE CMLDEFFER CMLENVIRONMENT CMLPACKAGE 
-              CMLSETF CMLSMARTARGS CMLUNDO DEBUGGER DEFSTRUCT DESCRIBE ERROR-RUNTIME-AFTER-FASL 
-              FASDUMP HPRINT IMPLICIT-KEY-HASH SEDIT-ACCESS SEDIT-ATOMIC SEDIT-BASE SEDIT-COMMANDS 
-              SEDIT-COMMENTS SEDIT-EXPORTS SEDIT-INDENT SEDIT-LINEAR SEDIT-LIST-FORMATS SEDIT-LISTS 
-              SEDIT-TERMINAL SEDIT-TOPLEVEL SEDIT-WINDOW SEDIT WALKER XCL-EXTRAS XCLC-DATABASE 
-              XCLC-OPTIMIZERS XCLC-TOP-LEVEL XCLC-TREES 10MBDRIVER AARITH ABASIC ACODE ADDARITH ADIR
-              ADISPLAY AERROR AINTERRUPT AOFD APRINT APUTDQ ARGLIST ASKUSER ASTACK ATBL ATERM 
-              ATTACHEDWINDOW AUTHENTICATION NSFILING BOOTSTRAP BSP BYTECOMPILER CLEARINGHOUSE CLISP 
-              CLISPIFY CLSTREAMS CMLARITH CMLARRAY-SUPPORT CMLARRAY CMLARRAYINSPECTOR CMLCHARACTER 
-              CMLCOMPILE CMLDESTRUCT CMLDOC CMLEVAL CMLEXEC CMLFILESYS CMLFLOAT CMLFORMAT CMLHASH 
-              CMLLIST CMLLOAD CMLMACROS CMLMISCIO CMLMODULES CMLMVS CMLPARSE CMLPATHNAME CMLPRED 
-              CMLPRINT CMLPROGV CMLRAND CMLREAD CMLREADTABLE CMLSEQ CMLSEQBASICS CMLSEQCOMMON 
-              CMLSEQFINDER CMLSEQMAPPERS CMLSEQMODIFY CMLSORT CMLSPECIALFORMS CMLSTEP CMLSTRING 
-              CMLSYMBOL CMLTIME CMLTYPES COMMON COMPARE COMPATIBILITY COMPILE COMPILER-PACKAGE 
-              CONDITION-HIERARCHY-IL CONDITION-HIERARCHY-POST-SI CONDITION-HIERARCHY-SI 
-              CONDITION-HIERARCHY CONDITION-PACKAGE COREIO COROUTINE COURIER D-ASSEM-PACKAGE D-ASSEM
-              DEBUGEDIT DEFFER-RUNTIME DEFPACKAGE-IMPORT DEFSTRUCT-RUN-TIME DEXEC DIRECTORY DISKDLION
-              DLAP DLFIXINIT DMISC DOVEDISK DOVEDISPLAY DOVEETHER DOVEFLOPPY DOVEINPUTOUTPUT DOVEMISC
-              DPUPFTP DSKDISPLAY DSPRINTDEF DTDECLARE DWIM DWIMIFY EDIT EDITINTERFACE ERROR-RUNTIME 
-              EXEC-COMMANDS FASL-PACKAGE FASLOAD FILEIO FILEPKG FLOPPY FONT FONTPROFILE FREEMENU 
-              GAINSPACE HARDCOPY HIST HLDISPLAY ICONW IDLER IL-ERROR-STUFF IMAGEIO INSPECT-CLOSURE 
-              INSPECT INTERPRESS IOCHAR LEAF LISP-PACKAGE CMLWALK DEBUGGER-EVAL DOVEVMEMSIZEPATCH 
-              SEDIT-CONVERT SEDIT-DEBUG SEDIT-LOAD LLARITH LLARRAYELT LLBASIC LLBFS LLBIGNUM LLCHAR 
-              LLCODE LLDATATYPE LLDISPLAY LLERROR LLETHER LLFAULT LLFLOAT LLGC LLINTERP LLKEY LLMVS 
-              LLNEW LLNS LLPACKAGE LLREAD LLRESTART LLSTK LLSUBRS LLSYMBOL LLTIMER LOADFNS LOCALFILE
-              LOGOW LYRIC-PATCH-1 MACHINEINDEPENDENT MACROAUX MACROS MAKEINIT MEM MENU MISC MOD44IO 
-              NEWPRINTDEF NSPRINT PACKAGE-CONVERSION-TABLE PACKAGE-STARTUP PAINTW PASSWORDS PMAP 
-              POSTLOADUP PRETTY PRINTFN PROC PROFILE PUP READ-PRINT-PROFILE RECORD RENAMEFNS RESOURCE
-              SETF-RUNTIME SPELL SPELLFILE SPP STACKFNS SYSPRETTY TIME TRSERVER TTYIN TWODINSPECTOR 
-              UNDO UNWINDMACROS VANILLADISK WEDIT WINDOW WINDOWICON WINDOWOBJ WINDOWSCROLL WRAPPERS 
-              WTFIX XCL-COMPILER XCL-PACKAGE XCLC-ALPHA XCLC-ANALYZE XCLC-ANNOTATE XCLC-ENV-CTXT 
-              XCLC-GENCODE XCLC-META-EVAL XCLC-PEEPHOLE XCLC-RUNTIME XCLC-TRANSFORMS XXFILL XXGEOM))
-
-(RPAQQ FORKED-FILES (ABC APUTDQ ASTACK CMLEVAL CMLMVS DEFPACKAGE-IMPORT DLAP DTDECLARE DWIMIFY 
-                             FILEIO FILESETS LLBASIC LLCHAR LLCODE LLDATATYPE LLINTERP LLNEW LLSTK 
-                             MACHINEINDEPENDENT MACROS MISC PACKAGE-STARTUP PROC UNWINDMACROS 
-                             XCL-PACKAGE))
-
-(RPAQQ GARBAGE-OPCODES
-       ((BOUT 33)
-        (DOCOLLECT 36)
-        (ENDCOLLECT 37)
-        (GETP 27)
-        (GETHASH 29)
-        (ELT 40)
-        (NTHCHC 41)
-        (SETA 42)
-        (RPLCHARCODE 43)
-        (EVALV 45)
-        (ATOMNUMBER 112)
-        (GETBASEFIXP.N 203)
-        (PUTBASEFIXP.N 204)))
-
-
-
-(* \; "Utilities for making mass-scale fixups to a library of files.")
-
-(DEFINEQ
-
-(FIX-FILES  (CL:LAMBDA (FILENAMES SOURCEDIR DESTDIR &OPTIONAL (DRIBBLE-FILE '{DSK6}BIGCOMP.DRIBBLE)                    DELETE-DRIBBLE? RECORDS-TO-FIX)      (* \; "Edited 15-Aug-90 12:02 by jds")         (* |;;| "Make large-scale fix-ups to a bunch of files.")         (CL:BLOCK FIX-FILES             (LET ((COMPLETION 'ERROR)                   (NUM-FILES (LENGTH FILENAMES)))                  (IDLE.SET.OPTION 'TIMEOUT T)                  (SETQ NOSPELLFLG T)                  (SETQ DWIMIFYCOMPFLG NIL)                  (CL:UNWIND-PROTECT                      (PROGN (DRIBBLE DRIBBLE-FILE)                             (WINDOWPROP (WFROMDS (TTYDISPLAYSTREAM))                                    'PAGEFULLFN                                    'NILL)                             (CNDIR DESTDIR)                             (PRINTOUT NIL "= = = = = Setting up for large-scale fix-up run on "                                    (DATE)                                    " = = = = =" T T)                             (|for| FILE |in| FILENAMES |as| FILE-NUM |from| 1                                |do| (DSPNEWPAGE (GETSTREAM NIL 'OUTPUT))                                      (LET* ((SOURCEFILE (PACKFILENAME 'BODY FILE 'DIRECTORY                                                                 SOURCEDIR))                                             (DESTFILE (PACKFILENAME 'BODY FILE 'DIRECTORY DESTDIR)))                                            (RESETLST                                                (PRINTOUT NIL T "Fixing file " SOURCEFILE " at "                                                       (DATE)                                                       " - - -" T)                                                (PRINTOUT NIL T "(File number " FILE-NUM " of "                                                        NUM-FILES ": " (- NUM-FILES FILE-NUM)                                                       " left)" T T)                                                (PRINT (FIX-FILE FILE RECORDS-TO-FIX)                                                       T)                                                (PRINTOUT NIL T T "- - - End of " FILE                                                        " fix-up - - -" T))))                             (PRINTOUT NIL T T T "= = = = = END OF CLEANUP RUN = = = = =")                             (SETQ COMPLETION 'SUCCESS))                      (PRINTOUT NIL T "Fix-up status: " COMPLETION T T)                      (DRIBBLE)                      (WINDOWPROP (WFROMDS (TTYDISPLAYSTREAM))                             'PAGEFULLFN NIL))                  (SEND.FILE.TO.PRINTER DRIBBLE-FILE)                  (AND DELETE-DRIBBLE? (DELFILE DRIBBLE-FILE))))))
-
-(FIX-FILE  (LAMBDA (FILE RECORD-NAMES MAKEFILE-ONLY?)             (* \; "Edited 21-Jan-93 16:30 by jds")    (* |;;| "Perform cleanup tasks on FILE.")    (LOAD FILE 'PROP)    (LOADCOMP FILE 'PROP)    (* |;;| "(FIX-COPYRIGHT FILE)")    (AND (FILEFNSLST FILE)         (|for| RECNAME |in| (APPEND (FILECOMSLST FILE 'RECORDS)                                            RECORD-NAMES) |do| (QUALIFY-FIELDS RECNAME FILE))         )    (MARKASCHANGED FILE 'FILES)    (COND       (MAKEFILE-ONLY? (MAKEFILE FILE))       (T (APPLY* 'CLEANUP FILE)))))
-
-(FIX-COPYRIGHT  (LAMBDA (FILENAME)    (LET ((CR (GETPROP FILENAME 'COPYRIGHT)))         (COND            (CR (RPLACA CR "Venue & Xerox Corporation"))            (T (PUTPROP FILENAME 'COPYRIGHT (LIST "Venue" 1990)))))))
-
-(FIX-FILE-COPYRIGHT  (LAMBDA (FILE)    (LOADFROM FILE NIL 'PROP)    (FIX-COPYRIGHT FILE)    (MARKASCHANGED FILE 'FILES)    (APPLY* 'CLEANUP FILE)))
-
-(QUALIFY-FIELDS  (LAMBDA (RECNAME FILE)                                 (* \; "Edited 28-Sep-87 14:41 by bvm:")    (APPLY* 'EDITFNS FILE `(LPQ F ((*ANY* FETCH |fetch| REPLACE |replace| FFETCH |ffetch| FREPLACE                                           |freplace| /REPLACE |/replace|)                                   (*ANY* ,@(APPEND (RECORDFIELDNAMES RECNAME)))                                   --)                                2                                (MBD ,RECNAME)                                0 P))))
-
-(FIX-TEDIT  (LAMBDA (FILE)                                         (* \; "Edited 17-Aug-90 16:07 by jds")    (LET ((STRM (OPENTEXTSTREAM (MKATOM FILE))))         (TEDIT.SUBLOOKS STRM '(FAMILY OPTIMA)                '(FAMILY CLASSIC))         (TEDIT.PUT STRM FILE)         (CLOSEF STRM))))
-
-(FIX-DOCS  (LAMBDA (DIRECTORY)    (LET ((FILES (|for| FILE |in| (DIRECTORY (CONCAT DIRECTORY "*.TEDIT;"))                    |collect| (PACKFILENAME.STRING 'VERSION NIL 'BODY FILE))))         (|for| FILE |in| FILES |do| (FIX-TEDIT FILE)))))
-)
-
-
-
-(* |;;| 
-"Removes bogus (CLISP  <clisp xlation> <real-code>) translations that result from CLISPARRAY being NIL."
-)
-
-(DEFINEQ
-
-(CLFIX
-  (LAMBDA (FILE)                                         (* \; "Edited  9-Sep-94 11:57 by jds")
-    (APPLY* 'EDITFNS FILE '(LPQ F CLISP\  1 D D 0 P))))
-)
-
-(PUTPROPS MULTI-COMPILE FILETYPE CL:COMPILE-FILE)
-(DECLARE\: DONTEVAL@LOAD DOEVAL@COMPILE DONTCOPY COMPILERVARS 
-
-(ADDTOVAR NLAMA )
-
-(ADDTOVAR NLAML )
-
-(ADDTOVAR LAMA FIX-FILES)
-)
-(PUTPROPS MULTI-COMPILE COPYRIGHT ("Venue & Xerox Corporation" 1988 1990 1991 1992 1993 1994))
-(DECLARE\: DONTCOPY
-  (FILEMAP (NIL (7131 8389 (FIND-UNCOMPILED-FILES 7141 . 8387)) (8461 19787 (NEWERDCOMS? 8471 . 12445) (
-NEWERSOURCES? 12447 . 16359) (SETUP-FOR-RECOMPILE 16361 . 18749) (SMASH-OPCODES 18751 . 19269) (
-GET-DIRECTORY-LISTING 19271 . 19568) (GET-OPEN-FILES 19570 . 19785)) (31690 36610 (FIX-FILES 31700 . 
-34497) (FIX-FILE 34499 . 35090) (FIX-COPYRIGHT 35092 . 35319) (FIX-FILE-COPYRIGHT 35321 . 35481) (
-QUALIFY-FIELDS 35483 . 36022) (FIX-TEDIT 36024 . 36330) (FIX-DOCS 36332 . 36608)) (36735 36917 (CLFIX 
-36745 . 36915)))))
-STOP

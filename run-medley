@@ -1,75 +1,66 @@
 #!/bin/sh
-
-# Run Medley
+#               Run Medley
 #
-# Syntax: run-medley [options] [sysout name]
-# Options:
-#  -nogreet
-#  -greet <greetfile>
+# Syntax: run-medley [--geometry WIDTHxHEIGHT]  \
+#                    [--display X_DISPLAY]      \
+#                    [--vmfile FILE]            \
+#                    [--nogreet | --greet FILE] \
+#                    [--load URL_OR_FILE]
 
-# current limit 65536*32 bits
-#  -g[eometry]   <width>x<height>
-#  -sc[reensize] <width>x<height>
-
-#  -d[isplay] <xdisplay-device>
-#  -vmem <savevmemfilename>
-
-# Environment variables set
 # Directory variables are accessible from Lisp via UNIX-GETENV
-
 # LDESRCESYSOUT         SYSOUT full-file name you want to run
-# LDEDESTSYSOUT         name for destination of SAVEVM/LOGOUT
+# LDEDESTSYSOUT         name for destination of SaveVM/LOGOUT
 # MEDLEYDIR             used by init file to set other path variables
 
+inferred_medleydir=false
 
-if [ -z "$MEDLEYDIR" ] ; then export MEDLEYDIR="`pwd`"; fi
-if [ ! -d $MEDLEYDIR/loadups ] ; then
-   echo MEDLEYDIR not found: "$MEDLEYDIR"
-   exit 1
+if [ -z "$MEDLEYDIR" ] ; then
+    # the user is usually running this script from medley, so let's try that
+    export MEDLEYDIR="`pwd`"
+    inferred_medleydir=true
 fi
 
-## should allow for local install?
-
-if [ -z "$MAIKODIR" ] ; then
-   export MAIKODIR="$MEDLEYDIR/../maiko"
-   if [ ! -d "$MAIKODIR"/bin ] ; then # should have more precise test
-    echo "MAIKODIR not found: $MAIKODIR"
+if [ ! -d "$MEDLEYDIR/loadups" ] ; then
+    echo "MEDLEYDIR has no loadups: $MEDLEYDIR"
+    if [ inferred_medleydir = true ] ; then
+        echo "I tried to infer it based on your working directory, but that didn't work."
+        echo "Try cd there or setting the MEDLEYDIR environment variable to its location."
+    fi
     exit 1
-   fi
 fi
 
+# set defaults
 prog="lde"
 geometry="-g 1440x900"
 screensize="-sc 1440x900"
-
+passthrough_args=""
 
 export LDEDESTSYSOUT="~/lisp.virtualmem"
 export LDEINIT="$MEDLEYDIR/greetfiles/SIMPLE-INIT"
 export LDEKBDTYPE=x
 
-
 while [ "$#" -ne 0 ]; do
     case "$1" in
-        "-nogreet")
+        "-nogreet" | "--nogreet")
             export LDEINIT=""
             ;;
-        "-greet")
+        "-greet" | "--greet")
             export LDEINIT="$2"
             shift
             ;;
-	"-geometry" | "-g")
-	    geometry="-g $2"
+        "--geometry" | "-geometry" | "-g")
+            geometry="-g $2"
+            shift
+            ;;
+	"--screensize" | "-screensize" | "-sc")
+	    screensize = "-sc $2"
 	    shift
 	    ;;
-    	"-screensize" | "-sc")
-	    screensize="-sc $2"
-	    shift
-	    ;;
-	"-display" | "-d")
+        "--display" | "-d")
             export DISPLAY="$2"
             shift
             ;;
-	"-vmem")
+    	"-vmem" | "--vmem" | "-vmfile" )
 	    LDEDESTSYSOUT="$2"
 	    shift
 	    ;;
@@ -80,15 +71,18 @@ while [ "$#" -ne 0 ]; do
 	    export LDESRCESYSOUT="$MEDLEYDIR/loadups/xlisp.sysout"
 	    ;;
 	"-*")
-	    echo unrecognized option "$1"
-	    exit 1
+            passthrough_args="$passthrough_args $1 $2"
+	    echo unrecognized option, passthru "$1" "$2"
+            shift
 	    ;;
         *)
-            export LDESRCESYSOUT="$1"
-	    ;;
+	    export LDESRCESYSOUT="$1"
+            ;;
     esac
     shift
 done
+
+# not set on command line
 
 if [ -z "$LDESRCESYSOUT" ] ; then
     if [ -f "$LDEDESTSYSOUT" ] ; then
@@ -98,20 +92,48 @@ if [ -z "$LDESRCESYSOUT" ] ; then
     fi
 fi
 
+case "$LDESRCSYSOUT" in
+    "http:*" | "https:*")
+	echo URL not supported yet
+	exit 1
+esac
 
-export INMEDLEY=1
+inferred_maikodir=false
+
+if [ -z "$MAIKODIR" ] ; then
+    # here we try two options relative to MEDLEYDIR: ./maiko and ../maiko
+    # this is highly imperfect, but the user can always set the env variables
+    export MAIKODIR="$MEDLEYDIR/../maiko"
+    if [ ! -d "$MAIKODIR" ] ; then
+        export MAIKODIR="$MEDLEYDIR/maiko"
+    fi
+    inferred_maikodir=true
+fi
+
+if [ ! -d "$MAIKODIR/bin" ] ; then
+    echo "MAIKODIR has no bin: $MAIKODIR"
+    if [ inferred_maikodir = true ] ; then
+        echo "I tried to infer it based on your working directory, but that didn't work."
+        echo "Try setting the MAIKODIR environment variable to the right location."
+    fi
+    exit 1
+fi
 
 
 oldpath="$PATH"
 
 export PATH=.:"$PATH"
 cd "$MAIKODIR"/bin
-
 export PATH=$MAIKODIR/`osversion`.`machinetype`:"$oldpath"
-cd $old_wd
+
+cd "$OLDPWD"
 
 echo "sysout is $LDESRCESYSOUT"
 echo "running `which $prog` $geometry $screensize"
 echo "start $LDEINIT"
 
+export INMEDLEY=1
+
 $prog $geometry $screensize -t "Medley Interlisp" "$LDESRCESYSOUT"
+
+

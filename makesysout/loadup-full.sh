@@ -1,4 +1,4 @@
-/bin/sh
+#/bin/sh
 
 export MEDLEYDIR=`pwd`
 
@@ -9,6 +9,6 @@ fi
 
 export LOADUPDIR=$MEDLEYDIR
 
-./run-medley -greet $MEDLEYDIR/makesysout/makefullsysout.lcom $MEDLEYDIR/loadups/xlisp.sysout
+./run-medley -greet $MEDLEYDIR/makesysout/makefullsysout.LCOM $MEDLEYDIR/loadups/xlisp.sysout
 
 

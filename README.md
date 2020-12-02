@@ -5,35 +5,8 @@ A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko) which is 
 
 We're still in the process of sorting out what we have and ensuring we start with a solid base.
 
-File Names and Extensions: Most Interlisp source file names are
-UPPERCASE and Interlisp didn't use file extensions for its source
-files.  (note that any .TEDIT or .TXT file is probably documentation
-for the package of same name, at least in the library,
-internal/library, lispusers)
 
-The current repo has both Lisp sources and compiled .LCOM and .DFASL
-files, because some files don't compile in a vanilla lisp.sysout .
-
-Each directory should have a README.md, but briefly
-- basics -- old sysouts needed (for now) for rebuilding new sysouts
-- docs -- Documentation files (either PDFs or online help)
-- fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
-- greetfiles -- should have any necessary setup of directories Lisp should look in for load
-- internal -- These _were_ internal to Venue
-- library  -- packages that were supported (30 years ago)
-- lispusers -- packages that were only half supported (ditto)
-- loadups   -- has sysouts and other builds
-- makesysout -- files for making new sysouts for various configurations, based on basics
-- patches -- ""
-- sunloadup --  support information for making a new lisp.sysout from scratch
-- sources   -- sources for Interlisp and Common Lisp implementations
-- unicode  -- data files for support of XCCS to and from Unicode mappings
-
-plus
-   Dockerfile, and scripts for building and running medley
-
-
-## Running Medley with Docker (all platforms)
+## Running Medley on all platforms with Docker
 
 If this is your first time working with Docker, you'll want to [install it](https://docs.docker.com/get-docker/) before continuing. You'll also need a modern VNC client; [TightVNC](https://www.tightvnc.com/) works well.
 
@@ -53,7 +26,21 @@ Next, you can either pull a prebuilt image or build from scratch:
 5. And then as above.
 
 
-## Running Medley with WSL (Windows)
+## Running Medley on macOS
+
+1. Download and install [XQuartz](https://www.xquartz.org/releases/). MacPorts has the most recent builds.
+2. Clone this repo and [Interlisp/maiko](https://github.com/Interlisp/maiko) into the same parent directory.
+3. In a terminal:
+```sh
+cd maiko/bin
+./makeright x
+
+cd ../../medley
+./run-medley --dimensions 1440x800 -full &
+```
+
+
+## Running Medley on Windows with WSL
 
 Get the Windows X server called [Xming](https://sourceforge.net/projects/xming/) (the default options will do).
 
@@ -90,3 +77,32 @@ defaults write org.macosforge.xquartz.X11 enable_fake_buttons -boolean false
 defaults delete org.macosforge.xquartz.X11 fake_button2
 defaults delete org.macosforge.xquartz.X11 fake_button3
 ```
+
+## Naming conventions and directory structure
+
+File Names and Extensions: Most Interlisp source file names are
+UPPERCASE and Interlisp didn't use file extensions for its source
+files.  (note that any .TEDIT or .TXT file is probably documentation
+for the package of same name, at least in the library,
+internal/library, lispusers)
+
+The current repo has both Lisp sources and compiled .LCOM and .DFASL
+files, because some files don't compile in a vanilla lisp.sysout .
+
+Each directory should have a README.md, but briefly
+- basics -- old sysouts needed (for now) for rebuilding new sysouts
+- docs -- Documentation files (either PDFs or online help)
+- fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
+- greetfiles -- should have any necessary setup of directories Lisp should look in for load
+- internal -- These _were_ internal to Venue
+- library  -- packages that were supported (30 years ago)
+- lispusers -- packages that were only half supported (ditto)
+- loadups   -- has sysouts and other builds
+- makesysout -- files for making new sysouts for various configurations, based on basics
+- patches -- ""
+- sunloadup --  support information for making a new lisp.sysout from scratch
+- sources   -- sources for Interlisp and Common Lisp implementations
+- unicode  -- data files for support of XCCS to and from Unicode mappings
+
+plus
+   Dockerfile, and scripts for building and running medley

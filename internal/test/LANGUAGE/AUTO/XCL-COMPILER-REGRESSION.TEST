@@ -1,1 +1,229 @@
-;; Regression tests for the XCL Compiler(do-test "AR 8246: Compiling yields TYPE-MISMATCH error"   (and (setf (symbol-function '#1=#:foo)           '(lambda ()                (let ((l nil))                   (do ((i 0 (1+ i)))                      ((= i 4)                       (nreverse l))                     (push (let ((j i))                             #'(lambda () j))                          l)))))        (compile '#1#)        (equal '(0 1 2 3) (mapcar #'funcall (#1#)))))(do-test "AR 8346: Compiler doesn't make use of DEFMACRO's on the file"   (progn (with-open-file (s "{Core}AR8346.lisp;1"                             :direction :output                             :if-exists :supersede)             (princ ";;                     (progn (defmacro #1=#:foo (x) `(1+ ,x))                            (defun #2=#:bar (y) (#1# y))                            (#2# 1))" s))          (compile-file "{Core}AR8346.lisp;1")          (load "{Core}AR8346.dfasl")          t))(do-test "AR 7043: (MULTIPLE-VALUE-BIND (A B) (LET ...) ...) loses the extra values when compiled"   (let* ((fn '(lambda (x y)                 (multiple-value-bind (a b)	                                 (let ((*foo* t))	                                    (declare (special *foo*))	                                    (floor x y))	               (list a b))))	     (compiled-fn (compile nil fn)))	(and (compiled-function-p compiled-fn)	     (equal '(2 1)	            (funcall compiled-fn 5 2)))))(do-test "AR 8352: Peephole optimizer sometimes doesn't eliminate degenerate jumps"   (let ((fn '(lambda (x)                 (tagbody x                    (let ((a (foo)))                       (when x                          (foo #'(lambda () a))))))))	(compiled-function-p (compile nil fn))))(do-test "AR 7458: COMPILE-FILE should return the DFASL name, not T"   (progn (with-open-file (s "{Core}AR7458.lisp;1"                               :direction :output                               :if-exists :supersede)              (princ ";;                      (defun foo (x) x)" s))          (let ((result (compile-file "{Core}AR7458.lisp;1")))             (and (pathnamep result)                  (equalp "{CORE}AR7458.dfasl;"                          (namestring result))))))(do-test "AR 8353: Compiler bombs on (CDR (CONS ...))"   (let* ((fn '(lambda (x y)                  (cdr (cons x y))))          (compiled-fn (compile nil fn)))	(and (compiled-function-p compiled-fn)	     (eq 'a (funcall compiled-fn 'b 'a)))))(do-test "AR 7831: Compiler doesn't observe NOTINLINE declarations"   (let* ((fn '(lambda (x)                 (declare (notinline car))                 (car x)))          (compiled-fn (compile nil fn)))     (and (compiled-function-p compiled-fn)          (member 'car (first (il:calls compiled-fn))))))(do-test "AR 8429: Side-effects data for IL:MACHINETYPE are wrong"   (equal '(:none . :any)          (get 'il:machinetype 'compiler::side-effects-data)))(do-test "AR 8390: Optimizer for EQL does not transform to EQ for EQL tests of Fixnum's"   (let* ((fn '(lambda (x)                 (declare (notinline eq))                 (eql 7 x)))          (compiled-fn (compile nil fn)))     (and (compiled-function-p compiled-fn)          (member 'eq (first (il:calls compiled-fn))))))(do-test "AR 7981: New compiler loses binding specials to NIL in non-return context"   (let* ((fn '(lambda ()                  (tagbody	              loop	                (let (*foo*)	                   (declare (special *foo*))	                   (go loop)))))          (compiled-fn (compile nil fn)))     (compiled-function-p compiled-fn)))(do-test "AR 7798: SPECIAL declarations are scoped incorrectly by the interpreter and compiler"   (let* ((fn '(lambda (x)                  (declare (special x))                  (let ((x 2))                     (let ((x x))                        (declare (special x))                        x))))          (compiled-fn (compile nil fn)))     (and (compiled-function-p compiled-fn)          (= 1 (funcall fn 1))          (= 1 (funcall compiled-fn 1)))))(do-test "AR 7803: SPECIAL scopes improperly - Lucid L226, L227"   (let* ((fn1 '(lambda (foo)                   (declare (special foo))                   (let ((foo 3))                      (list foo                            (let ((foo foo))                               (declare (special foo))                               foo)))))          (compiled-fn1 (compile nil fn1))          (fn2 '(lambda ()                   (let ((y 1))                      (declare (special y))                      (let ((y 7))                         ((lambda (y)                             (let ((y y))                                (declare (special y))                                (list y)))                          y)))))          (compiled-fn2 (compile nil fn2)))     (and (compiled-function-p compiled-fn1)          (equal '(3 5) (funcall fn1 5))          (equal '(3 5) (funcall compiled-fn1 5))          (compiled-function-p compiled-fn2)          (equal '(1) (funcall fn2))          (equal '(1) (funcall compiled-fn2)))))(do-test "AR 8043: Compiler should keep multiple values from constant-folding in return context"   (let* ((fn '(lambda (x)                  (when x (floor 5 2))))          (compiled-fn (compile nil fn)))     (and (compiled-function-p compiled-fn)          (equal '(2 1) (multiple-value-list                           (funcall compiled-fn 1))))))(do-test "AR 7463: Compiler can't find global defconstants with values that are lists"   (progn      (defconstant #1=#:foo '(1 2 3))      (zerop (length (with-output-to-string (*error-output*)                        (let* ((fn '(lambda (x)                                        (+ x (second #1#))))                               (compiled-fn (compile nil fn)))                           (unless (and (compiled-function-p                                                      compiled-fn)                                        (= 3 (funcall compiled-fn 1)))                               (error "ack"))))))))(do-test "AR 7625: Hairy uses of non-local return-froms compile incorrectly"   (let* ((fn '(lambda (f)                 (block one                    (funcall f nil                         #'(lambda nil (return-from one 1)))                    (block two                       (block three                          (funcall f t                               #'(lambda () (return-from three 3))))                       (block four                          (funcall f nil                              #'(lambda () (return-from four 4))))))))          (compiled-fn (compile nil fn)))      (and (compiled-function-p compiled-fn)           (progn (funcall compiled-fn #'(lambda (flag fn)                                      (when flag                                          (funcall fn))))                  t))))(do-test "AR 8584: Compiler breaks on non-local returns to effect-context blocks"   (let* ((fn '(lambda (f)                  (block foo                     (funcall f                        #'(lambda ()                             (return-from foo 7))))                  t))          (compiled-fn (compile nil fn)))      (and (compiled-function-p compiled-fn)           (funcall compiled-fn 'funcall))))(do-test "AR 7974: Compiler doesn't remove FOO.LISP from NOTCOMPILEDFILES"   (push 'il:AR7974.lisp il:notcompiledfiles)   (with-open-file (s "{core}AR7974.lisp" :direction :output)       (princ ";;               (defun foo (x) x)" s))   (compile-file "{core}AR7974.lisp")   (not (member 'il:AR7974.lisp il:notcompiledfiles)))(do-test "AR 7507: SETF macroexpands too early sometimes"   (with-open-file (s "{Core}AR7507.lisp" :direction :output :if-exists :supersede)      (princ ";;              (defvar *foo* nil)              (defmacro foo7507 (x)                  `(frob ,x 'foo))              (defsetf foo7507 set-foo7507)              (defun set-foo7507 (x y)                 (push (cons x y) *foo*)                 y)              (defun bar (x)                 (setf (foo7507 x) 7)                 (macrolet ((bar (x) `(foo7507 ,x))                            (baz (x) `(bar ,x))                            (foo7507 (x) `(car ,x)))                    (setf (baz x) 8)                    (setf (foo7507 x) 9)))" s))   (compile-file "{Core}AR7507.lisp")   t)(do-test "AR 8602: Compiler reorders PROCLAIMs with respect to package-creating forms"   (with-open-file (s "{Core}AR8602" :direction :output)      (format s "(DEFINE-FILE-INFO ~AREADTABLE \"XCL\" ~APACKAGE (DEFPACKAGE \"PKG FOR TESTING AR 8602\"))                 (proclaim '(special foo))                 il:stop~%"  (int-char #o36) (int-char #o36)))   (compile-file "{Core}AR8602")   (delete-package "PKG FOR TESTING AR 8602")   (load "{Core}AR8602.dfasl")   (let* ((pkg (find-package "PKG FOR TESTING AR 8602"))          (symbol (find-symbol "FOO" pkg)))      (and pkg           symbol           (il:variable-globally-special-p symbol))))           
+;; Regression tests for the XCL Compiler
+
+(do-test "AR 8246: Compiling yields TYPE-MISMATCH error"
+   (and (setf (symbol-function '#1=#:foo)
+           '(lambda () 
+               (let ((l nil)) 
+                  (do ((i 0 (1+ i)))
+                      ((= i 4)
+                       (nreverse l)) 
+                    (push (let ((j i))
+                             #'(lambda () j))
+                          l)))))
+        (compile '#1#)
+        (equal '(0 1 2 3) (mapcar #'funcall (#1#)))))
+
+(do-test "AR 8346: Compiler doesn't make use of DEFMACRO's on the file"
+   (progn (with-open-file (s "{Core}AR8346.lisp;1"
+                             :direction :output
+                             :if-exists :supersede)
+             (princ ";;
+                     (progn (defmacro #1=#:foo (x) `(1+ ,x))
+                            (defun #2=#:bar (y) (#1# y))
+                            (#2# 1))" s))
+          (compile-file "{Core}AR8346.lisp;1")
+          (load "{Core}AR8346.dfasl")
+          t))
+
+(do-test "AR 7043: (MULTIPLE-VALUE-BIND (A B) (LET ...) ...) loses the extra values when compiled"
+   (let* ((fn '(lambda (x y)
+                 (multiple-value-bind (a b)
+	                                 (let ((*foo* t))
+	                                    (declare (special *foo*))
+	                                    (floor x y))
+	               (list a b))))
+	     (compiled-fn (compile nil fn)))
+	(and (compiled-function-p compiled-fn)
+	     (equal '(2 1)
+	            (funcall compiled-fn 5 2)))))
+
+(do-test "AR 8352: Peephole optimizer sometimes doesn't eliminate degenerate jumps"
+   (let ((fn '(lambda (x)
+                 (tagbody x
+                    (let ((a (foo)))
+                       (when x
+                          (foo #'(lambda () a))))))))
+	(compiled-function-p (compile nil fn))))
+
+(do-test "AR 7458: COMPILE-FILE should return the DFASL name, not T"
+   (progn (with-open-file (s "{Core}AR7458.lisp;1"
+                               :direction :output
+                               :if-exists :supersede)
+              (princ ";;
+                      (defun foo (x) x)" s))
+          (let ((result (compile-file "{Core}AR7458.lisp;1")))
+             (and (pathnamep result)
+                  (equalp "{CORE}AR7458.dfasl;"
+                          (namestring result))))))
+
+(do-test "AR 8353: Compiler bombs on (CDR (CONS ...))"
+   (let* ((fn '(lambda (x y)
+                  (cdr (cons x y))))
+          (compiled-fn (compile nil fn)))
+	(and (compiled-function-p compiled-fn)
+	     (eq 'a (funcall compiled-fn 'b 'a)))))
+
+(do-test "AR 7831: Compiler doesn't observe NOTINLINE declarations"
+   (let* ((fn '(lambda (x)
+                 (declare (notinline car))
+                 (car x)))
+          (compiled-fn (compile nil fn)))
+     (and (compiled-function-p compiled-fn)
+          (member 'car (first (il:calls compiled-fn))))))
+
+(do-test "AR 8429: Side-effects data for IL:MACHINETYPE are wrong"
+   (equal '(:none . :any)
+          (get 'il:machinetype 'compiler::side-effects-data)))
+
+(do-test "AR 8390: Optimizer for EQL does not transform to EQ for EQL tests of Fixnum's"
+   (let* ((fn '(lambda (x)
+                 (declare (notinline eq))
+                 (eql 7 x)))
+          (compiled-fn (compile nil fn)))
+     (and (compiled-function-p compiled-fn)
+          (member 'eq (first (il:calls compiled-fn))))))
+
+(do-test "AR 7981: New compiler loses binding specials to NIL in non-return context"
+   (let* ((fn '(lambda ()
+                  (tagbody
+	              loop
+	                (let (*foo*)
+	                   (declare (special *foo*))
+	                   (go loop)))))
+          (compiled-fn (compile nil fn)))
+     (compiled-function-p compiled-fn)))
+
+(do-test "AR 7798: SPECIAL declarations are scoped incorrectly by the interpreter and compiler"
+   (let* ((fn '(lambda (x)
+                  (declare (special x))
+                  (let ((x 2))
+                     (let ((x x))
+                        (declare (special x))
+                        x))))
+          (compiled-fn (compile nil fn)))
+     (and (compiled-function-p compiled-fn)
+          (= 1 (funcall fn 1))
+          (= 1 (funcall compiled-fn 1)))))
+
+(do-test "AR 7803: SPECIAL scopes improperly - Lucid L226, L227"
+   (let* ((fn1 '(lambda (foo)
+                   (declare (special foo))
+                   (let ((foo 3))
+                      (list foo
+                            (let ((foo foo))
+                               (declare (special foo))
+                               foo)))))
+          (compiled-fn1 (compile nil fn1))
+          (fn2 '(lambda ()
+                   (let ((y 1))
+                      (declare (special y))
+                      (let ((y 7))
+                         ((lambda (y)
+                             (let ((y y))
+                                (declare (special y))
+                                (list y)))
+                          y)))))
+          (compiled-fn2 (compile nil fn2)))
+     (and (compiled-function-p compiled-fn1)
+          (equal '(3 5) (funcall fn1 5))
+          (equal '(3 5) (funcall compiled-fn1 5))
+          (compiled-function-p compiled-fn2)
+          (equal '(1) (funcall fn2))
+          (equal '(1) (funcall compiled-fn2)))))
+
+(do-test "AR 8043: Compiler should keep multiple values from constant-folding in return context"
+   (let* ((fn '(lambda (x)
+                  (when x (floor 5 2))))
+          (compiled-fn (compile nil fn)))
+     (and (compiled-function-p compiled-fn)
+          (equal '(2 1) (multiple-value-list
+                           (funcall compiled-fn 1))))))
+
+(do-test "AR 7463: Compiler can't find global defconstants with values that are lists"
+   (progn
+      (defconstant #1=#:foo '(1 2 3))
+      (zerop (length (with-output-to-string (*error-output*)
+                        (let* ((fn '(lambda (x)
+                                        (+ x (second #1#))))
+                               (compiled-fn (compile nil fn)))
+                           (unless (and (compiled-function-p
+                                                      compiled-fn)
+                                        (= 3 (funcall compiled-fn 1)))
+                               (error "ack"))))))))
+
+(do-test "AR 7625: Hairy uses of non-local return-froms compile incorrectly"
+   (let* ((fn '(lambda (f)
+                 (block one
+                    (funcall f nil
+                         #'(lambda nil (return-from one 1)))
+                    (block two
+                       (block three
+                          (funcall f t
+                               #'(lambda () (return-from three 3))))
+                       (block four
+                          (funcall f nil
+                              #'(lambda () (return-from four 4))))))))
+          (compiled-fn (compile nil fn)))
+      (and (compiled-function-p compiled-fn)
+           (progn (funcall compiled-fn #'(lambda (flag fn)
+                                      (when flag
+                                          (funcall fn))))
+                  t))))
+
+(do-test "AR 8584: Compiler breaks on non-local returns to effect-context blocks"
+   (let* ((fn '(lambda (f)
+                  (block foo
+                     (funcall f
+                        #'(lambda ()
+                             (return-from foo 7))))
+                  t))
+          (compiled-fn (compile nil fn)))
+      (and (compiled-function-p compiled-fn)
+           (funcall compiled-fn 'funcall))))
+
+(do-test "AR 7974: Compiler doesn't remove FOO.LISP from NOTCOMPILEDFILES"
+   (push 'il:AR7974.lisp il:notcompiledfiles)
+   (with-open-file (s "{core}AR7974.lisp" :direction :output)
+       (princ ";;
+               (defun foo (x) x)" s))
+   (compile-file "{core}AR7974.lisp")
+   (not (member 'il:AR7974.lisp il:notcompiledfiles)))
+
+(do-test "AR 7507: SETF macroexpands too early sometimes"
+   (with-open-file (s "{Core}AR7507.lisp" :direction :output :if-exists :supersede)
+      (princ ";;
+              (defvar *foo* nil)
+
+              (defmacro foo7507 (x)
+                  `(frob ,x 'foo))
+
+              (defsetf foo7507 set-foo7507)
+
+              (defun set-foo7507 (x y)
+                 (push (cons x y) *foo*)
+                 y)
+
+              (defun bar (x)
+                 (setf (foo7507 x) 7)
+                 (macrolet ((bar (x) `(foo7507 ,x))
+                            (baz (x) `(bar ,x))
+                            (foo7507 (x) `(car ,x)))
+                    (setf (baz x) 8)
+                    (setf (foo7507 x) 9)))" s))
+   (compile-file "{Core}AR7507.lisp")
+   t)
+
+(do-test "AR 8602: Compiler reorders PROCLAIMs with respect to package-creating forms"
+   (with-open-file (s "{Core}AR8602" :direction :output)
+      (format s "(DEFINE-FILE-INFO ~AREADTABLE \"XCL\" ~APACKAGE (DEFPACKAGE \"PKG FOR TESTING AR 8602\"))
+                 (proclaim '(special foo))
+                 il:stop~%"  (int-char #o36) (int-char #o36)))
+   (compile-file "{Core}AR8602")
+   (delete-package "PKG FOR TESTING AR 8602")
+   (load "{Core}AR8602.dfasl")
+   (let* ((pkg (find-package "PKG FOR TESTING AR 8602"))
+          (symbol (find-symbol "FOO" pkg)))
+      (and pkg
+           symbol
+           (il:variable-globally-special-p symbol))))
+           

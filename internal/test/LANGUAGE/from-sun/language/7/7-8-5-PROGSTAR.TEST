@@ -1,1 +1,164 @@
-;; Function To Be Tested: prog*;;;; Source:        CLtL    Section 7.8.5: The "Program Feature"       Page: 131- 133;;;; Created By:    Karin M. Sye;;;; Creation Date: Oct. 15 ,1986;;;; Last Update:   Oct. 15 ,1986;;;; Filed As:      {eris}<lispcore>cml>test>7-8-5-progstar.test;;;;;; Syntax:                prog* ({VAR | (VAR [INIT])}*) {DECLARATION}* {TAG | STATEMENT}*;;;; Function Description:  The prog* construct is a synthesis of LET, BLOCK, and TAGBODY, allowing bound variables (processed ;;					in serial ) and the use of RETURN and GO within a single construct.;;;; Argument(s):           VAR - a variable;;					INIT - a form;;					DECLARATION - ;;					TAG         - a symbol or an integer;;					STATEMENT   - a list;;;; Returns:               anything    ;;(do-test "test prog* -  slightly modified test cases copied from page 132 of CLtL"  (flet (( king-of-confusion (w)		"Take a cons of two lists and make a list of conses. Think of this function as being like a zipper."		(prog* (x y z)		 	 (setq y (car w) z (cdr w))		 loop			 (cond ((null y) (return x))			       ((null z) (go err)))		 rejoin			 (setq x (cons (cons (car y) (car z)) x))			 (setq y (cdr y) z (cdr z))			 (go loop)		 err			 ;; instead of entering the debugger,  z was assinged a list			 (setq z '(a b c d e f))			 (go rejoin)		 )	    )	    ( prince-of-clarity (w)		 "Take a cons of two lists and make a list of conses. Think of this function as being like a zipper."				 (do ((y (car w) (cdr y))			 (z (cdr w) (cdr z))			 (x '() (cons (cons (car y) (car z)) x)))			((null y) x)			(when (null z)				 ;; instead of entering the debugger,  z was assinged a list				 (setq z '(a b c d e f))  ))	    )	   )	    (and 	(equal (king-of-confusion '((1 2 3 4) 11 22 33 44)) '((4 . 44) (3 . 33) (2 . 22) (1 . 11) ))			(equal (king-of-confusion '((1 2 3 4) 11))          '((4 .  c) (3 .  b) (2 .  a) (1 . 11) ))				(equal (king-of-confusion '( () dummy))             '())			(equal (king-of-confusion '((1 2 3 4 5 6 7 8 9 10)))				  '((10 . d) (9 . c) (8 . b) (7 . a) (6 . f) (5 . e) (4 . d) (3 . c) (2 . b) (1 . a)))			(equal (prince-of-clarity '((1 2 3 4) 11 22 33 44)) '((4 . 44) (3 . 33) (2 . 22) (1 . 11) ))			(equal (prince-of-clarity '((1 2 3 4) 11))          '((4 .  c) (3 .  b) (2 .  a) (1 . 11) ))				(equal (prince-of-clarity '( () dummy))             '())			(equal (prince-of-clarity '((1 2 3 4 5 6 7 8 9 10)))				  '((10 . d) (9 . c) (8 . b) (7 . a) (6 . f) (5 . e) (4 . d) (3 . c) (2 . b) (1 . a)))		)  ))(do-test-group ( "test prog* - prog* allows bound variables and returns nil when the end of the body is reached"				:before (progn (test-setq a 2 b 4 c 6 d 8 e 10  buf () )))	(do-test "test Prog 0"		(and			(null (prog* (  (a 10) b (c (+ a 2)) d (e (+ a c))  )					(push (list a b c d e) buf)) )			(equal buf '((10 nil 12 nil 22)))			(null (prog* (  (a (cons b c)) (b (cons a c)) (c (cons c c)) (d (cons c a)) e)					(rplaca buf (list e d c a b) )  ))					(equal buf '(( nil ((6 . 6) 4 . 6) (6 . 6) (4 . 6) ((4 . 6) . 6) )  ))			(null (prog*  ( (a (evenp b)) (b (eq t a)) (c (and a b)) (d (list a b c)) )					   (rplaca buf (list a b c d))  ))					(equal buf '((t t t (t t t) )) )		)	))(do-test "test prog* - go and return statements are allowed"	(macrolet (( mac (m n) 					`(prog* (buf (switch t) ) 						0 (and switch (go ,m)) (go ,n)						1 (push 1 buf) (go 99)						2 (push 2 buf) (go 6)						3 (push 3 buf) (go 99)						4 (push 4 buf) (go 10)						5 (push 5 buf) (go 99)						6 (push 6 buf) (go 4)						7 (push 7 buf) (go 99)						8 (push 8 buf) (go 1)						9 (push 9 buf) (go 99)						10 (push 10 buf) (go 9) 						99 (if switch (or (setq switch nil) (go 0)) (return buf)) 					 )			))			(and				(equal (reverse (mac 3 8)) '(3 8 1))				(equal (reverse (mac 2 4)) '(2 6 4 10 9 4 10 9))				(equal (reverse (mac 99 1)) '(1))				(equal (reverse (mac 7 6))  '( 7 6 4 10 9))				(equal (reverse (mac 9 2))  '(9 2 6 4 10 9))				(equal (reverse (mac 99 99)) ())			)	))(do-test "test prog* - with declarations"	(equal (multiple-value-list			(prog* ((a 66) (b 88) (c 22) (d 44) (e 10) (f 20) buf) (declare (special a b c d))				 (flet (( fun1 (x) (declare (special a b)) (list x (cons a b)))					   ( fun2 (x) (declare (special c d)) (list (cons c d) x))					  )					  (push (fun1 e) buf) 		;; buf = '( (10 (66 . 88)))					  (push (fun2 f) buf) 		;; buf = '( ((22 . 44) 20) (10 (66 . 88)) )					  					  (let ((a -1) (c -2) (b -3) (d -4))						  (push (fun1 a) buf)	;; buf = '( (-1 (66 . 88)) ((22 . 44) 20) (10 (66 . 88)) )						  (set 'c 1000)			;; set only updates dynamic binding						  (push (fun2 c) buf)     ;; buf = '( ((1000 . 44) -2) (-1 (66 . 88)) ((22 . 44) 20) (10 (66 . 88)) )						  (return (values-list buf))					  )				 )			 )		  )		  '( ((1000 . 44) -2) (-1 (66 . 88)) ((22 . 44) 20) (10 (66 . 88))  )	))STOP						    										  					  	 				
+;; Function To Be Tested: prog*
+;;
+;; Source:        CLtL    Section 7.8.5: The "Program Feature"       Page: 131- 133
+;;
+;; Created By:    Karin M. Sye
+;;
+;; Creation Date: Oct. 15 ,1986
+;;
+;; Last Update:   Oct. 15 ,1986
+;;
+;; Filed As:      {eris}<lispcore>cml>test>7-8-5-progstar.test
+;;
+;;
+;; Syntax:                prog* ({VAR | (VAR [INIT])}*) {DECLARATION}* {TAG | STATEMENT}*
+;;
+;; Function Description:  The prog* construct is a synthesis of LET, BLOCK, and TAGBODY, allowing bound variables (processed 
+;;					in serial ) and the use of RETURN and GO within a single construct.
+;;
+;; Argument(s):           VAR - a variable
+;;					INIT - a form
+;;					DECLARATION - 
+;;					TAG         - a symbol or an integer
+;;					STATEMENT   - a list
+;;
+;; Returns:               anything    
+;;
+
+(do-test "test prog* -  slightly modified test cases copied from page 132 of CLtL"
+
+  (flet (( king-of-confusion (w)
+		"Take a cons of two lists and make a list of conses. Think of this function as being like a zipper."
+
+		(prog* (x y z)
+		 	 (setq y (car w) z (cdr w))
+		 loop
+			 (cond ((null y) (return x))
+			       ((null z) (go err)))
+		 rejoin
+			 (setq x (cons (cons (car y) (car z)) x))
+			 (setq y (cdr y) z (cdr z))
+			 (go loop)
+		 err
+			 ;; instead of entering the debugger,  z was assinged a list
+			 (setq z '(a b c d e f))
+			 (go rejoin)
+		 )
+	    )
+	    ( prince-of-clarity (w)
+		 "Take a cons of two lists and make a list of conses. Think of this function as being like a zipper."
+		
+		 (do ((y (car w) (cdr y))
+			 (z (cdr w) (cdr z))
+			 (x '() (cons (cons (car y) (car z)) x)))
+			((null y) x)
+
+			(when (null z)
+				 ;; instead of entering the debugger,  z was assinged a list
+				 (setq z '(a b c d e f))  ))
+	    )
+	   )
+
+	    (and 	(equal (king-of-confusion '((1 2 3 4) 11 22 33 44)) '((4 . 44) (3 . 33) (2 . 22) (1 . 11) ))
+			(equal (king-of-confusion '((1 2 3 4) 11))          '((4 .  c) (3 .  b) (2 .  a) (1 . 11) ))	
+			(equal (king-of-confusion '( () dummy))             '())
+			(equal (king-of-confusion '((1 2 3 4 5 6 7 8 9 10)))
+				  '((10 . d) (9 . c) (8 . b) (7 . a) (6 . f) (5 . e) (4 . d) (3 . c) (2 . b) (1 . a)))
+
+			(equal (prince-of-clarity '((1 2 3 4) 11 22 33 44)) '((4 . 44) (3 . 33) (2 . 22) (1 . 11) ))
+			(equal (prince-of-clarity '((1 2 3 4) 11))          '((4 .  c) (3 .  b) (2 .  a) (1 . 11) ))	
+			(equal (prince-of-clarity '( () dummy))             '())
+			(equal (prince-of-clarity '((1 2 3 4 5 6 7 8 9 10)))
+				  '((10 . d) (9 . c) (8 . b) (7 . a) (6 . f) (5 . e) (4 . d) (3 . c) (2 . b) (1 . a)))
+		)
+  )
+)
+
+(do-test-group ( "test prog* - prog* allows bound variables and returns nil when the end of the body is reached"
+				:before (progn (test-setq a 2 b 4 c 6 d 8 e 10  buf () )))
+
+	(do-test "test Prog 0"
+		(and
+			(null (prog* (  (a 10) b (c (+ a 2)) d (e (+ a c))  )
+					(push (list a b c d e) buf)) )
+
+			(equal buf '((10 nil 12 nil 22)))
+
+			(null (prog* (  (a (cons b c)) (b (cons a c)) (c (cons c c)) (d (cons c a)) e)
+					(rplaca buf (list e d c a b) )  ))
+		
+			(equal buf '(( nil ((6 . 6) 4 . 6) (6 . 6) (4 . 6) ((4 . 6) . 6) )  ))
+
+			(null (prog*  ( (a (evenp b)) (b (eq t a)) (c (and a b)) (d (list a b c)) )
+					   (rplaca buf (list a b c d))  ))
+		
+			(equal buf '((t t t (t t t) )) )
+		)
+	)
+)
+
+(do-test "test prog* - go and return statements are allowed"
+	(macrolet (( mac (m n) 
+					`(prog* (buf (switch t) ) 
+
+						0 (and switch (go ,m)) (go ,n)
+						1 (push 1 buf) (go 99)
+						2 (push 2 buf) (go 6)
+						3 (push 3 buf) (go 99)
+						4 (push 4 buf) (go 10)
+						5 (push 5 buf) (go 99)
+						6 (push 6 buf) (go 4)
+						7 (push 7 buf) (go 99)
+						8 (push 8 buf) (go 1)
+						9 (push 9 buf) (go 99)
+						10 (push 10 buf) (go 9) 
+
+						99 (if switch (or (setq switch nil) (go 0)) (return buf)) 
+					 )
+			))
+			(and
+				(equal (reverse (mac 3 8)) '(3 8 1))
+				(equal (reverse (mac 2 4)) '(2 6 4 10 9 4 10 9))
+				(equal (reverse (mac 99 1)) '(1))
+				(equal (reverse (mac 7 6))  '( 7 6 4 10 9))
+				(equal (reverse (mac 9 2))  '(9 2 6 4 10 9))
+				(equal (reverse (mac 99 99)) ())
+			)
+	)
+)
+(do-test "test prog* - with declarations"
+
+	(equal (multiple-value-list
+
+			(prog* ((a 66) (b 88) (c 22) (d 44) (e 10) (f 20) buf) (declare (special a b c d))
+
+				 (flet (( fun1 (x) (declare (special a b)) (list x (cons a b)))
+					   ( fun2 (x) (declare (special c d)) (list (cons c d) x))
+					  )
+
+					  (push (fun1 e) buf) 		;; buf = '( (10 (66 . 88)))
+					  (push (fun2 f) buf) 		;; buf = '( ((22 . 44) 20) (10 (66 . 88)) )
+					  
+					  (let ((a -1) (c -2) (b -3) (d -4))
+						  (push (fun1 a) buf)	;; buf = '( (-1 (66 . 88)) ((22 . 44) 20) (10 (66 . 88)) )
+						  (set 'c 1000)			;; set only updates dynamic binding
+						  (push (fun2 c) buf)     ;; buf = '( ((1000 . 44) -2) (-1 (66 . 88)) ((22 . 44) 20) (10 (66 . 88)) )
+						  (return (values-list buf))
+					  )
+				 )
+			 )
+		  )
+		  '( ((1000 . 44) -2) (-1 (66 . 88)) ((22 . 44) 20) (10 (66 . 88))  )
+	)
+)
+STOP
+						    
+					
+					  
+					  
+	 
+				
+
+
+
+

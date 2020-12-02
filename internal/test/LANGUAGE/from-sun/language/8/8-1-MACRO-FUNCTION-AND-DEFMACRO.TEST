@@ -1,1 +1,484 @@
-;; Functions To Be Tested: macro-function and defmacro;;;; Source:        Steele's book    Section 8.1: Macro definition        Page: 144,145;;;; Created By:    Karin M. Sye;;;; Creation Date: May 12 '86;;;; Last Update:   May 19, 1986/ Masinter, fix (optional0) test,;;                        comment out some tests that now (correctly) ;;                        signal errors;;                May 21, 1986/ Sye, add test cases test-redefine0, test-redefine1,;;                        test-redefine2, and test-macros4;; 			  June 2, 1986/ Masinter, put &allow-other-keys in tests that have;;                        extraneous keywords, add more;;                        descriptive name to (currently failing) test;;                Dec. 4, 1986/ Sye;;					 add test cases for MACRO-FUNCTION ;;					 comment out nlsetq statements;;;; Filed As:      {eris}<lispcore>cml>test>8-1-macro-function-and-defmacro.test;;;;;; Syntax:                MACRO-FUNCTION symbol;;;; Function Description:  MACRO-FUNCTION determines if the argument has a macro ;;                        definition;;;; Argument(s):           symbol - a lisp symbol object;;					env - optional lexical environment in which to look for;;						definitions;;;; Returns:               the expansion function - ;;                        nil - ;;                        ;;;;;;;; Syntax:                DEFMACRO name lambda-list {declaratioh | doc-string}* {form}*;;;; Function Description:  DEFMACRO globally defines "name" as a macro with the;;                        arguments "lambda-list" and the definition form "form".;;;; Argument(s):           name - the symbol whose macro definition is being created;;;;                        lambda-list  -  a list that defines how the argument list;;                                        passed to the macro "name" is interpreted.;;                                        It may contain the;;                                        lambda-list "&-keywords", support the imbedded;;                                        lambda-list, and allow the dotted-list format;;                        ;;                        declaration | doc-string - ;;;;                        form - an entity which constitutes the body;;                               of the expander function ;;;; Returns:               name - same as the argument "name" ;;                     ;;                        ;;(do-test "test macro-function - if a macro has a macro global definition, then MACRO-FUNCTION returns the expansion function."	(progn		(defmacro mac () '(* 7 9))		(and			(functionp (macro-function 'mac))			(equal (funcall (macro-function 'mac) '(mac) nil) '(* 7 9))			(equal (first (multiple-value-list (macroexpand '(mac)) )) '(* 7 9))		)	))(do-test "test macro-function - if a macro does not have a macro global definition, then MACRO-FUNCTION returns nil"	(and			;;  special forms			;;			(notany #'macro-function '(let progv throw catch go))			;;			;;  ordinaly functions			;;			(prog2 (defun fun () 99)				  (flet ((locfun () 'locfun)) (notany #'macro-function '(fun locfun))))			;;			;;  local macros			;;			(macrolet ((locmac1 () '(list 23))					 (locmac2 (x y) `(cons ,x ,y)))					(notany #'macro-function '(locmac1 locmac2)))	))(do-test "test macro-function - use setf and MACRO-FUNCTION to erase previous macro's definition"	(let (buf)				(defmacro mac (x y z) `(list  'glob ,y ,z ,x))				(macrolet ( (mac (m n o) `(list 'loc ,o ,n ,m) ))						(push (mac 11 22 33) buf)						(setf (macro-function 'mac) #'(lambda (x y) (list 'cons (fourth x) (second x))))						(push (mac 1 2 3) buf))				(push (mac 111 222 333) buf)				(and					(equal buf '( (333 . 111) (loc 3 2 1) (loc 33 22 11) ))					(equal (funcall (macro-function 'mac) '(mac 8 9 10) nil) '(cons 10 8))				)	))(do-test "test macro-function - use setf and MACRO-FUNCTION to erase previous function's definition"		(let (buf)				(fmakunbound 'fun)				(defun fun (x y) (+ x y))				(push (fun 2 5) buf)				(setf (macro-function 'fun) #'(lambda (x y) (apply (second x) (nthcdr 2 x))))				(push (fun - 10 2 6) buf)				(push (fun * 6 3 -1) buf)				(fmakunbound 'fun)				(equal buf '(-18 2 7))		))(do-test test-macros1         ;;         ;;  ** test defmacro, be sure it returns the name of the symbol         ;;    (and (string-equal (string (defmacro my-first (list) `(car ,list))) "my-first")         ;;         ;;  **  check if the defined expansion function has two arguments         ;;         ;  (= 0 (argtype (macro-function 'my-first)))         ;  (= 2 (nargs   (macro-function 'my-first)))         ;;         ;;  **  try some macro calls         ;;         (equal (my-first '(1 2 3)) 1)         (equal (my-first '((a b c) d e f)) '(a b c))))(do-test test-macros2    (and (string-equal (string (defmacro my-rest (list) `(cdr ,list))) "my-rest")         ;(= 0 (argtype (macro-function 'my-rest)))         ;(= 2 (nargs   (macro-function 'my-rest)))         (equal (my-rest '(1 2 3)) '(2 3))         (equal (my-rest '((a b c) d e f)) '(d e f))))(do-test test-macros3    (and (string-equal (string (defmacro my-cons (object list) `(cons ,object ,list))) "my-cons")         ;(= 0 (argtype (macro-function 'my-cons)))         ;(= 2 (nargs   (macro-function 'my-cons)))         (equal (my-cons 99 '(1 2 3)) '(99 1 2 3))         (equal (my-cons "string" '((a b c) d e f)) '("string" (a b c) d e f))))(do-test test-macros4         ;;         ;;  test for a zero-form macro         ;;    (and (string-equal (string (defmacro empty-macro ())) "empty-macro")         ;(= 0 (argtype (macro-function 'empty-macro)))         ;(= 2 (nargs   (macro-function 'empty-macro)))         (eq nil (empty-macro))));;;;  test &rest keyword in the lambda-list;;(do-test test-rest-keyword0    (and (string-equal (string (defmacro my-when (test &rest form) `(cond (,test ,@form)))) "my-when")         ;(= 0 (argtype (macro-function 'my-when)))         ;(= 2 (nargs   (macro-function 'my-when)))         (equal (my-when (zerop 0) (list 'test 'is 'successful)) '(test is successful))         (equal (my-when (oddp 8) (list "error!")) nil)))(do-test test-rest-keyword1    (and (string-equal (string (defmacro rest1 (&rest form) `',form)) "rest1")         ;(= 0 (argtype (macro-function 'rest1)))         ;(= 2 (nargs   (macro-function 'rest1)))         (equal (rest1 2 4 6 8 10) '(2 4 6 8 10))         (equal (rest1) nil)         (equal (rest1 a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0)                      '(a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0))         (equal (rest1 "arg1" arg2 (arg3 (arg4 arg5))) '("arg1" arg2 (arg3 (arg4 arg5))))));;;;  test &body keyword in the lambda-list (it should work like &rest keyword);;(do-test test-body-keyword0    (and (string-equal (string (defmacro my-when (test &body form) `(cond (,test ,@form)))) "my-when")         ;(= 0 (argtype (macro-function 'my-when)))         ;(= 2 (nargs   (macro-function 'my-when)))         (equal (my-when (zerop 0) (list 'test 'is 'successful)) '(test is successful))         (equal (my-when (oddp 8) (list "error!")) nil)))(do-test test-body-keyword1    (and (string-equal (string (defmacro rest1 (&body form) `',form)) "rest1")         ;(= 0 (argtype (macro-function 'rest1)))         ;(= 2 (nargs   (macro-function 'rest1)))         (equal (rest1 2 4 6 8 10) '(2 4 6 8 10))         (equal (rest1) nil)         (equal (rest1 a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0)                      '(a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0))         (equal (rest1 "arg1" arg2 (arg3 (arg4 arg5))) '("arg1" arg2 (arg3 (arg4 arg5))))));;;;  test &optional keyword in the lambda-list;;(do-test test-optional-keyword0    (and (string-equal (string (defmacro optional0 (&optional n0 n1) `(list ,n0 ,n1))) "optional0")         ;(= 0 (argtype (macro-function 'optional0)))         ;(= 2 (nargs   (macro-function 'optional0)))         (equal (optional0 100 200) '(100 200))         (equal (optional0 9) '(9 nil))         (equal (optional0 9 8) '(9 8))	 		; used to be (optional0 9 8 7)         (equal (optional0) '(nil nil))))(do-test "missing optional signals error"    (and (string-equal (string (defmacro optional1 (n1 n2 n3 &optional (n4 9) n5 (n6 99 n6-flag))                                 `(list ,n1 ,n2 ,n3 ,n4 ,n5 ,n6 ,n6-flag))) "optional1")         ;(= 0 (argtype (macro-function 'optional1)))         ;(= 2 (nargs   (macro-function 'optional1)))          ;;          ;; if all three required  args are not supplied, be sure an error signal occurs          ;;          ;;(eq nil (nlsetq (optional1)))          ;;(eq nil (nlsetq (optional1 2)))          ;;(eq nil (nlsetq (optional1 2 4)))          ;;          ;; more testing follows          ;;         (equal (optional1 100 200 300) '(100 200 300 9 nil 99 nil))         (equal (optional1 2 4 6 8 10 12) '(2 4 6 8 10 12 t))         (equal (optional1 'a 'b 'c 'd  'e) '(a b c d e 99 nil))));;;; test &key keyword in the lambda-list;;(do-test test-key-keyword0    (and (string-equal (string (defmacro key0 (&key n0 n1) `(list ,n0 ,n1))) "key0")         ;(= 0 (argtype (macro-function 'key0)))         ;(= 2 (nargs   (macro-function 'key0)))         (equal (key0) '(nil nil));;;          (equal (key0 1 2) '(nil nil))   This now signals an error         (equal (key0 :n1 80) '(nil 80));;;         (equal (key0 :n0 900 0 1 2) '(900 nil)) This now signals an error         (equal (key0 :n0 20 :n1 1000) '(20 1000))));;(do-test test-key-keyword1    (and (string-equal (string (defmacro key1 (n0 n1 &key n2 (n3 (+ 9 90 900)) (n4 (quote (cons 2 4)) n4-flag) n5 &allow-other-keys)                                `(list ,n0 ,n1 ,n2 ,n3 ,n4 ,n4-flag ,n5))) "key1")         ;(= 0 (argtype (macro-function 'key1)))         ;(= 2 (nargs   (macro-function 'key1)))         (equal (key1 () ()) '(nil nil nil 999 (2 . 4) nil nil))         (equal (key1 1 2 :n3 3 :n5 8) '(1 2 nil 3 (2 . 4) nil 8))         (equal (key1 10 20 :n2 :n3 :n4 :n5) '(10 20 :n3 999 :n5 t nil))         (equal (key1 'a 'b :n5 500 :n4 400 :n2 200 :n3 300) '(a b 200 300 400 t 500))          ;;         ;; -- it is an error for the first member of any keyword-argument pair to be anything but a keyword--         ;;     (page 62 of CLtL)         ;;         ;; "is an error" isn't the same as "signals an error"		;; (eq nil (nlsetq (key1 10 20 30 :n2 22 :n3 33 :n4 44 :n5 55 nil)))));;;;;; test &allow-other-keys keyword in the lambda-list;;(do-test test-allow-otherkey0         ;;         ;;  by specifying &allow-other-keys in the lambda-list, unmatched keywords are allowed         ;;    (and (string-equal (string (defmacro otherkey0 (&key n0 n1 &allow-other-keys) `'(,n0 ,n1))) "otherkey0")         ;(= 0 (argtype (macro-function 'otherkey0)))         ;(= 2 (nargs   (macro-function 'otherkey0)))         (equal (otherkey0 :n0 20 :n1 1000) '(20 1000))         (equal (otherkey0 :n0 20 :n3 6 :n8 900) '(20 nil))         (equal (otherkey0 :n10 20 :n3 6 :n8 900) '(nil nil))))(do-test test-allow-otherkey1         ;;         ;;  &allow-other-keys is not specified in the lambda-list ; unmatched keywords are not allowed         ;;    (and (string-equal (string (defmacro otherkey1 (&key n0 n1) `'(,n0 ,n1))) "otherkey1") ))         ;(= 0 (argtype (macro-function 'otherkey1)))         ;(= 2 (nargs   (macro-function 'otherkey1)))         ;(eq (nlsetq (otherkey1 :n0 20 :n3 6 :n8 900)) nil)         ;(eq (nlsetq (otherkey1 :n10 20 :n3 6 :n8 900))  nil)))(do-test test-allow-otherkey2    (and (string-equal (string (defmacro otherkey2 (&key n0 n1) `'(,n0 ,n1))) "otherkey2")         ;(= 0 (argtype (macro-function 'otherkey2)))         ;(= 2 (nargs   (macro-function 'otherkey2)))         ;;         ;;  ** by setting :allow-other-keys to non-nil, unmatched keywords are allowed **         ;;         (equal (otherkey2 :n0 20 :n1 1000 :n2 44 :allow-other-keys t) '(20 1000))         (equal (otherkey2 :n50 20 :n100 1000 :n28 44 :allow-other-keys 'non-nil) '(nil nil))  ))         ;;         ;;  ** by setting :allow-other-keys to nil, unmatched keywords are not allowed **         ;;         ;; (eq (nlsetq (otherkey2 :n0 20 :n1 1000 :n2 44 :allow-other-keys nil)) nil)         ;; (eq (nlsetq (otherkey2 :n50 20 :n100 1000 :n28 44 :allow-other-keys nil)) nil)         ;;;; test &whole keyword in the lambda-list;;(do-test test-whole-keyword0    (and (string-equal (string (defmacro whole0 (&whole n0  a1 a2 a3 a4 a5) `'(,n0 ,a1 ,a3 ,a5))) "whole0")         ;(= 0 (argtype (macro-function 'whole0)))         ;(= 2 (nargs   (macro-function 'whole0)))         (equal (whole0 1 2 3 4 5) '((whole0 1 2 3 4 5) 1 3 5))         (equal (whole0 a b c d e) '((whole0 a b c d e) a c e))));;;; test &aux keyword in the lambda-list;;(do-test test-aux-keyword0    (and (string-equal (string (defmacro aux0 (&aux a (b 20) (c (* 10 9)) (d (- 100 10)) e)                                              `(list ,a ,b ,c ,d ,e))) "aux0")         ;(= 0 (argtype (macro-function 'aux0)))         ;(= 2 (nargs   (macro-function 'aux0)))         (equal (aux0) '(nil 20 90 90 nil))));;;; test {declaration | doc-string}* in defmacro;;(do-test test-dec-doc0    (and (string-equal (string (defmacro dec-doc0 (n0 n1 n2) (declare (number n0 n1 n2)) "This is a                                  simple macro which returns the sum of three arguments"                                 `(+ ,n0 ,n1 ,n2))) "dec-doc0")         ;(= 0 (argtype (macro-function 'dec-doc0)))         ;(= 2 (nargs   (macro-function 'dec-doc0)))         (= (dec-doc0 11 22 33) 66)         (/= (dec-doc0 -1 1 -1) 1)))(do-test test-dec-doc1    (and (string-equal (string (defmacro dec-doc1 (n0 n1 n2)                                          "This macro returns a list of 3 character codes for the                                          3 input characters"                                         (declare (character n0)) "n0 is 1st arg"                                          (declare (character n1)) "n1 is 2nd arg"                                         (declare (character n2)) "n2 is 3rd arg"                                `(list (char-code ,n0) (char-code ,n1) (char-code ,n2)))) "dec-doc1")         ;(= 0 (argtype (macro-function 'dec-doc1)))         ;(= 2 (nargs   (macro-function 'dec-doc1)))         (equal (dec-doc1 #\a #\b #\c) '(97 98 99))         (equal (dec-doc1 #\1 #\2 #\3) '(49 50 51))));;;;  test imbedded lambda-list in defmacro;;;;(do-test test-imbedded0    (and (defmacro imbedded0 ((mouth eye1 eye2) ((fin1 length1) (fin2 length2)) tail)                   "This test case was copied from Steele's book p149"                   `'(,mouth ,eye1 ,eye2 ,fin1 ,length1 ,fin2 ,length2 ,tail))          ;;          ;; the following "equal" should return t          ;;         (equal (imbedded0 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))                            my-favorite-tail)                 '(m (car eyes) (cdr eyes) f1 (count-scales f1) f2 (count-scales f2) my-favorite-tail))  ))          ;;           ;;  now try make some mistakes in the following macro call forms, I'll expect error signals to occur          ;;         ;; (eq  (nlsetq (imbedded0 (m  (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))         ;;                   my-favorite-tail)) nil)         ;;(eq  (nlsetq (imbedded0 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))         ;;                   )) nil)         ;;(eq  (nlsetq (imbedded0 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) ( (count-scales f2)))         ;;                  my-favorite-tail)) nil))) (do-test test-imbedded1    (and (defmacro imbedded1 ((&whole head mouth eye1 eye2) ((fin1 length1) (fin2 length2)) tail)                   " ** This test case was copied from Steele's book p150 **"                   " ** &whole keyword was included in the imbedded lambda list **"                   `',head)          ;;          ;; check contents of "head". It should be a list whose components are called "mouth" "eye1" and "eye2"          ;;          (equal (imbedded1 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))                            my-favorite-tail) '(m (car eyes) (cdr eyes)))));;;; test lambda-list dotted form;;(do-test test-dotform0    (and (defmacro dotform0 (n0 . n1) " ** test for top-level lambda-list ** " `'(,n0 ,n1))         (equal (dotform0 1 2 3 4) '(1 (2 3 4)))         (equal (dotform0 100) '(100 ()))         (equal (dotform0 (a b c) 8) '((a b c) (8)))))(do-test test-dotform1    (and (defmacro dotform1 ((n0 n1 . n2) n3) " ** test for imbedded -level lambda-list ** " `'(,n0 ,n1 ,n2 ,n3))         (equal (dotform1 (1 2 3 4 5) 6) '(1 2 (3 4 5) 6))         (equal (dotform1 (a b "string1" "string2" 3 4) (x y z)) '(a b ("string1" "string2" 3 4) (x y z)))))(do-test test-dotform2    (and (defmacro dotform2 ((n0 n1 . n2) n3 . n4)  `'(,n0 ,n1 ,n2 ,n3 ,n4))         (equal (dotform2 (1 2 3 4 5) 6 7 8 9 10) '(1 2 (3 4 5) 6 (7 8 9 10)))         (equal (dotform2 (a b "string1" "string2" 3 4) w (x y z)) '(a b ("string1" "string2" 3 4) w ((x y z))))));;;;;; more testing on defmacro;; (with lambda-lists contain & keywords, imbedded lambda lists, and/or dotted forms);;(do-test test-arithmetic-if    (and (defmacro arithmetic-if (test neg-form zero-form pos-form)                         "** This test case was copied from p147 of CLtl **"                   (let  ((var (gensym)))                        `(let ((,var ,test))                           (cond ((< ,var 0) ,neg-form)                                 ((= ,var 0) ,zero-form)                                 (t ,pos-form)))))          (equal (arithmetic-if (+ 10 100) 'neg 'zero 'pos) 'pos)          (equal (let ((x 3)) (arithmetic-if (- x 4.0) (- x) 'zero x)) -3)          (equal (let ((x 4)) (arithmetic-if (- x 4.0) (- x) 'zero x)) 'zero)          (equal (let ((x 5)) (arithmetic-if (- x 4.0) (- x) 'zero x)) 5)));; (do-test test-lamb0;;    (and (defmacro lamb0 (x &optional (a b &rest c) &rest z) ;;                         "**  This test case was copied from p150 of CLtl **";;          `(,x ,a ,c ,z));;         (eq nil (nlsetq (lamb0 4)));;        (eq nil (nlsetq (lamb0 4 ( 1 3 5) 7)))))(do-test test-lamb1    (and (defmacro lamb1 (x &optional ((a b &rest c)) &rest z)                          "**  This test case was copied from p150 of CLtl **"          `'(,x ,a ,b ,c ,z))         (equal (lamb1 1 (2 3 4 5) 6 7 8) '(1 2 3 (4 5) (6 7 8)))  ));;         (eq nil (nlsetq (lamb1 (car pool))));;        (eq nil (nlsetq (lamb1 (car pool) (10))))))(do-test test-lamb2    (and (defmacro lamb2 (x &optional ((a b &rest c) '(nil nil)) &rest z)                           "**  This test case was copied from p151 of CLtl **"          `'(,x ,a ,b ,c ,z))         (equal (lamb2 1 (2 3 4 5) 6 7 8) '(1 2 3 (4 5) (6 7 8)))         (equal (lamb2 (car pool)) '((car pool) nil nil nil nil))         (equal (lamb2 (car pool) (88 99) 100 200) '((car pool) 88 99 nil (100 200)))  ))         ;;         ;;  if the macro call specifies a explicitly then it must also specify b explicitly         ;;         ;; (eq nil (nlsetq (lamb2 (car pool) (10))))))(do-test test-lamb3    (and (defmacro lamb3 (x &optional ((&optional a b &rest c)) &rest z)                           "**  This test case was copied from p151 of CLtl **"          `'(,x ,a ,b ,c ,z))         (equal (lamb3 1 (2 3 4 5) 6 7 8) '(1 2 3 (4 5) (6 7 8)))         (equal (lamb3 (car pool)) '((car pool) nil nil nil nil))         (equal (lamb3 (car pool) (88 99) 100 200) '((car pool) 88 99 nil (100 200)))         ;;         ;;  if the macro call specifies a explicitly, it doesn't have to specify b explicitly         ;;         (equal (lamb3 (car pool) (10) 100 200) '((car pool) 10 nil nil (100 200)))         (equal (lamb3 (car pool) ((+ x 1))) '((car pool) (+ x 1) nil nil nil))));;;; ;; - It is permissible to use defmacro to redefine a macro, or to redefine a function as a macro -;; - It is an error to attempt to redefine the name of a special form -;;   [from 8.1. Macro Definition (p 146) of CLtL];;(do-test test-redefine0    (and (defmacro redefine0 () ''fine)         (equal (redefine0) 'fine)         (defmacro redefine0 () ''fine-fine)         (equal (redefine0) 'fine-fine)))(do-test test-redefine1    (and (defun redefine1 () 'fine)         (equal (redefine1) 'fine)         (defmacro redefine1 () ''fine-fine)         (equal (redefine1) 'fine-fine)));;(do-test test-redefine2;;    (and (eq nil (nlsetq (defmacro progn () ''new-macro)));;         (eq nil (nlsetq (defmacro function () ''new-macro)));;         (eq nil (nlsetq (defmacro labels () ''new-macro)))));;;;(do-test "defmacro and defun" (equal '(fun macro macro fun) (list (PROGN (defun xx () 'fun) (XX))      (PROGN (defmacro xx () ''macro) (xx) )      (PROGN (defmacro xxx () ''macro) (xxx))      (PROGN (defun xxx () 'fun) (xxx)))));;;;STOP            
+;; Functions To Be Tested: macro-function and defmacro
+;;
+;; Source:        Steele's book    Section 8.1: Macro definition        Page: 144,145
+;;
+;; Created By:    Karin M. Sye
+;;
+;; Creation Date: May 12 '86
+;;
+;; Last Update:   May 19, 1986/ Masinter, fix (optional0) test,
+;;                        comment out some tests that now (correctly) 
+;;                        signal errors
+;;                May 21, 1986/ Sye, add test cases test-redefine0, test-redefine1,
+;;                        test-redefine2, and test-macros4
+;; 			  June 2, 1986/ Masinter, put &allow-other-keys in tests that have
+;;                        extraneous keywords, add more
+;;                        descriptive name to (currently failing) test
+;;                Dec. 4, 1986/ Sye
+;;					 add test cases for MACRO-FUNCTION 
+;;					 comment out nlsetq statements
+;;
+;; Filed As:      {eris}<lispcore>cml>test>8-1-macro-function-and-defmacro.test
+;;
+;;
+;; Syntax:                MACRO-FUNCTION symbol
+;;
+;; Function Description:  MACRO-FUNCTION determines if the argument has a macro 
+;;                        definition
+;;
+;; Argument(s):           symbol - a lisp symbol object
+;;					env - optional lexical environment in which to look for
+;;						definitions
+;;
+;; Returns:               the expansion function - 
+;;                        nil - 
+;;                        
+;;
+;;
+;;
+;; Syntax:                DEFMACRO name lambda-list {declaratioh | doc-string}* {form}*
+;;
+;; Function Description:  DEFMACRO globally defines "name" as a macro with the
+;;                        arguments "lambda-list" and the definition form "form".
+;;
+;; Argument(s):           name - the symbol whose macro definition is being created
+;;
+;;                        lambda-list  -  a list that defines how the argument list
+;;                                        passed to the macro "name" is interpreted.
+;;                                        It may contain the
+;;                                        lambda-list "&-keywords", support the imbedded
+;;                                        lambda-list, and allow the dotted-list format
+;;                        
+;;                        declaration | doc-string - 
+;;
+;;                        form - an entity which constitutes the body
+;;                               of the expander function 
+;;
+;; Returns:               name - same as the argument "name" 
+;;                     
+;;                        
+;;
+
+(do-test "test macro-function - if a macro has a macro global definition, then MACRO-FUNCTION returns the expansion function."
+	(progn
+		(defmacro mac () '(* 7 9))
+		(and
+			(functionp (macro-function 'mac))
+			(equal (funcall (macro-function 'mac) '(mac) nil) '(* 7 9))
+			(equal (first (multiple-value-list (macroexpand '(mac)) )) '(* 7 9))
+		)
+	)
+)
+
+(do-test "test macro-function - if a macro does not have a macro global definition, then MACRO-FUNCTION returns nil"
+	(and
+			;;  special forms
+			;;
+			(notany #'macro-function '(let progv throw catch go))
+			;;
+			;;  ordinaly functions
+			;;
+			(prog2 (defun fun () 99)
+				  (flet ((locfun () 'locfun)) (notany #'macro-function '(fun locfun))))
+			;;
+			;;  local macros
+			;;
+			(macrolet ((locmac1 () '(list 23))
+					 (locmac2 (x y) `(cons ,x ,y)))
+					(notany #'macro-function '(locmac1 locmac2)))
+	)
+)
+
+(do-test "test macro-function - use setf and MACRO-FUNCTION to erase previous macro's definition"
+	(let (buf)
+				(defmacro mac (x y z) `(list  'glob ,y ,z ,x))
+				(macrolet ( (mac (m n o) `(list 'loc ,o ,n ,m) ))
+						(push (mac 11 22 33) buf)
+						(setf (macro-function 'mac) #'(lambda (x y) (list 'cons (fourth x) (second x))))
+						(push (mac 1 2 3) buf))
+				(push (mac 111 222 333) buf)
+				(and
+					(equal buf '( (333 . 111) (loc 3 2 1) (loc 33 22 11) ))
+					(equal (funcall (macro-function 'mac) '(mac 8 9 10) nil) '(cons 10 8))
+				)
+	)
+)
+
+(do-test "test macro-function - use setf and MACRO-FUNCTION to erase previous function's definition"
+		(let (buf)
+				(fmakunbound 'fun)
+				(defun fun (x y) (+ x y))
+				(push (fun 2 5) buf)
+				(setf (macro-function 'fun) #'(lambda (x y) (apply (second x) (nthcdr 2 x))))
+				(push (fun - 10 2 6) buf)
+				(push (fun * 6 3 -1) buf)
+				(fmakunbound 'fun)
+				(equal buf '(-18 2 7))
+		)
+)
+
+
+(do-test test-macros1
+         ;;
+         ;;  ** test defmacro, be sure it returns the name of the symbol
+         ;;
+    (and (string-equal (string (defmacro my-first (list) `(car ,list))) "my-first")
+         ;;
+         ;;  **  check if the defined expansion function has two arguments
+         ;;
+         ;  (= 0 (argtype (macro-function 'my-first)))
+         ;  (= 2 (nargs   (macro-function 'my-first)))
+         ;;
+         ;;  **  try some macro calls
+         ;;
+         (equal (my-first '(1 2 3)) 1)
+         (equal (my-first '((a b c) d e f)) '(a b c))))
+
+(do-test test-macros2
+    (and (string-equal (string (defmacro my-rest (list) `(cdr ,list))) "my-rest")
+         ;(= 0 (argtype (macro-function 'my-rest)))
+         ;(= 2 (nargs   (macro-function 'my-rest)))
+         (equal (my-rest '(1 2 3)) '(2 3))
+         (equal (my-rest '((a b c) d e f)) '(d e f))))
+
+(do-test test-macros3
+    (and (string-equal (string (defmacro my-cons (object list) `(cons ,object ,list))) "my-cons")
+         ;(= 0 (argtype (macro-function 'my-cons)))
+         ;(= 2 (nargs   (macro-function 'my-cons)))
+         (equal (my-cons 99 '(1 2 3)) '(99 1 2 3))
+         (equal (my-cons "string" '((a b c) d e f)) '("string" (a b c) d e f))))
+
+(do-test test-macros4
+         ;;
+         ;;  test for a zero-form macro
+         ;;
+    (and (string-equal (string (defmacro empty-macro ())) "empty-macro")
+         ;(= 0 (argtype (macro-function 'empty-macro)))
+         ;(= 2 (nargs   (macro-function 'empty-macro)))
+         (eq nil (empty-macro))))
+;;
+;;  test &rest keyword in the lambda-list
+;;
+(do-test test-rest-keyword0
+    (and (string-equal (string (defmacro my-when (test &rest form) `(cond (,test ,@form)))) "my-when")
+         ;(= 0 (argtype (macro-function 'my-when)))
+         ;(= 2 (nargs   (macro-function 'my-when)))
+         (equal (my-when (zerop 0) (list 'test 'is 'successful)) '(test is successful))
+         (equal (my-when (oddp 8) (list "error!")) nil)))
+
+(do-test test-rest-keyword1
+    (and (string-equal (string (defmacro rest1 (&rest form) `',form)) "rest1")
+         ;(= 0 (argtype (macro-function 'rest1)))
+         ;(= 2 (nargs   (macro-function 'rest1)))
+         (equal (rest1 2 4 6 8 10) '(2 4 6 8 10))
+         (equal (rest1) nil)
+         (equal (rest1 a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0) 
+                     '(a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0))
+         (equal (rest1 "arg1" arg2 (arg3 (arg4 arg5))) '("arg1" arg2 (arg3 (arg4 arg5))))))
+;;
+;;  test &body keyword in the lambda-list (it should work like &rest keyword)
+;;
+(do-test test-body-keyword0
+    (and (string-equal (string (defmacro my-when (test &body form) `(cond (,test ,@form)))) "my-when")
+         ;(= 0 (argtype (macro-function 'my-when)))
+         ;(= 2 (nargs   (macro-function 'my-when)))
+         (equal (my-when (zerop 0) (list 'test 'is 'successful)) '(test is successful))
+         (equal (my-when (oddp 8) (list "error!")) nil)))
+
+(do-test test-body-keyword1
+    (and (string-equal (string (defmacro rest1 (&body form) `',form)) "rest1")
+         ;(= 0 (argtype (macro-function 'rest1)))
+         ;(= 2 (nargs   (macro-function 'rest1)))
+         (equal (rest1 2 4 6 8 10) '(2 4 6 8 10))
+         (equal (rest1) nil)
+         (equal (rest1 a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0) 
+                     '(a b c d e f g h i j k l m n o p q r 10 9 8 7 6 5 4 3 2 1 0))
+         (equal (rest1 "arg1" arg2 (arg3 (arg4 arg5))) '("arg1" arg2 (arg3 (arg4 arg5))))))
+;;
+;;  test &optional keyword in the lambda-list
+;;
+(do-test test-optional-keyword0
+    (and (string-equal (string (defmacro optional0 (&optional n0 n1) `(list ,n0 ,n1))) "optional0")
+         ;(= 0 (argtype (macro-function 'optional0)))
+         ;(= 2 (nargs   (macro-function 'optional0)))
+         (equal (optional0 100 200) '(100 200))
+         (equal (optional0 9) '(9 nil))
+         (equal (optional0 9 8) '(9 8))	 		; used to be (optional0 9 8 7)
+         (equal (optional0) '(nil nil))))
+
+
+(do-test "missing optional signals error"
+    (and (string-equal (string (defmacro optional1 (n1 n2 n3 &optional (n4 9) n5 (n6 99 n6-flag)) 
+                                `(list ,n1 ,n2 ,n3 ,n4 ,n5 ,n6 ,n6-flag))) "optional1")
+         ;(= 0 (argtype (macro-function 'optional1)))
+         ;(= 2 (nargs   (macro-function 'optional1)))
+          ;;
+          ;; if all three required  args are not supplied, be sure an error signal occurs
+          ;;
+          ;;(eq nil (nlsetq (optional1)))
+          ;;(eq nil (nlsetq (optional1 2)))
+          ;;(eq nil (nlsetq (optional1 2 4)))
+          ;;
+          ;; more testing follows
+          ;;
+         (equal (optional1 100 200 300) '(100 200 300 9 nil 99 nil))
+         (equal (optional1 2 4 6 8 10 12) '(2 4 6 8 10 12 t))
+         (equal (optional1 'a 'b 'c 'd  'e) '(a b c d e 99 nil))))
+;;
+;; test &key keyword in the lambda-list
+;;
+(do-test test-key-keyword0
+    (and (string-equal (string (defmacro key0 (&key n0 n1) `(list ,n0 ,n1))) "key0")
+         ;(= 0 (argtype (macro-function 'key0)))
+         ;(= 2 (nargs   (macro-function 'key0)))
+         (equal (key0) '(nil nil))
+;;;          (equal (key0 1 2) '(nil nil))   This now signals an error
+         (equal (key0 :n1 80) '(nil 80))
+;;;         (equal (key0 :n0 900 0 1 2) '(900 nil)) This now signals an error
+         (equal (key0 :n0 20 :n1 1000) '(20 1000))))
+;;
+(do-test test-key-keyword1
+    (and (string-equal (string (defmacro key1 (n0 n1 &key n2 (n3 (+ 9 90 900)) (n4 (quote (cons 2 4)) n4-flag) n5 &allow-other-keys) 
+                               `(list ,n0 ,n1 ,n2 ,n3 ,n4 ,n4-flag ,n5))) "key1")
+         ;(= 0 (argtype (macro-function 'key1)))
+         ;(= 2 (nargs   (macro-function 'key1)))
+         (equal (key1 () ()) '(nil nil nil 999 (2 . 4) nil nil))
+         (equal (key1 1 2 :n3 3 :n5 8) '(1 2 nil 3 (2 . 4) nil 8))
+         (equal (key1 10 20 :n2 :n3 :n4 :n5) '(10 20 :n3 999 :n5 t nil))
+         (equal (key1 'a 'b :n5 500 :n4 400 :n2 200 :n3 300) '(a b 200 300 400 t 500)) 
+         ;;
+         ;; -- it is an error for the first member of any keyword-argument pair to be anything but a keyword--
+         ;;     (page 62 of CLtL)
+         ;;
+         ;; "is an error" isn't the same as "signals an error"
+		;; (eq nil (nlsetq (key1 10 20 30 :n2 22 :n3 33 :n4 44 :n5 55 nil)))
+
+))
+
+;;
+;;
+;; test &allow-other-keys keyword in the lambda-list
+;;
+(do-test test-allow-otherkey0
+         ;;
+         ;;  by specifying &allow-other-keys in the lambda-list, unmatched keywords are allowed
+         ;;
+    (and (string-equal (string (defmacro otherkey0 (&key n0 n1 &allow-other-keys) `'(,n0 ,n1))) "otherkey0")
+         ;(= 0 (argtype (macro-function 'otherkey0)))
+         ;(= 2 (nargs   (macro-function 'otherkey0)))
+         (equal (otherkey0 :n0 20 :n1 1000) '(20 1000))
+         (equal (otherkey0 :n0 20 :n3 6 :n8 900) '(20 nil))
+         (equal (otherkey0 :n10 20 :n3 6 :n8 900) '(nil nil))))
+
+(do-test test-allow-otherkey1
+         ;;
+         ;;  &allow-other-keys is not specified in the lambda-list ; unmatched keywords are not allowed
+         ;;
+    (and (string-equal (string (defmacro otherkey1 (&key n0 n1) `'(,n0 ,n1))) "otherkey1") ))
+         ;(= 0 (argtype (macro-function 'otherkey1)))
+         ;(= 2 (nargs   (macro-function 'otherkey1)))
+         ;(eq (nlsetq (otherkey1 :n0 20 :n3 6 :n8 900)) nil)
+         ;(eq (nlsetq (otherkey1 :n10 20 :n3 6 :n8 900))  nil)))
+
+
+(do-test test-allow-otherkey2
+    (and (string-equal (string (defmacro otherkey2 (&key n0 n1) `'(,n0 ,n1))) "otherkey2")
+         ;(= 0 (argtype (macro-function 'otherkey2)))
+         ;(= 2 (nargs   (macro-function 'otherkey2)))
+         ;;
+         ;;  ** by setting :allow-other-keys to non-nil, unmatched keywords are allowed **
+         ;;
+         (equal (otherkey2 :n0 20 :n1 1000 :n2 44 :allow-other-keys t) '(20 1000))
+         (equal (otherkey2 :n50 20 :n100 1000 :n28 44 :allow-other-keys 'non-nil) '(nil nil))  ))
+         ;;
+         ;;  ** by setting :allow-other-keys to nil, unmatched keywords are not allowed **
+         ;;
+         ;; (eq (nlsetq (otherkey2 :n0 20 :n1 1000 :n2 44 :allow-other-keys nil)) nil)
+         ;; (eq (nlsetq (otherkey2 :n50 20 :n100 1000 :n28 44 :allow-other-keys nil)) nil)         
+;;
+;; test &whole keyword in the lambda-list
+;;
+(do-test test-whole-keyword0
+    (and (string-equal (string (defmacro whole0 (&whole n0  a1 a2 a3 a4 a5) `'(,n0 ,a1 ,a3 ,a5))) "whole0")
+         ;(= 0 (argtype (macro-function 'whole0)))
+         ;(= 2 (nargs   (macro-function 'whole0)))
+         (equal (whole0 1 2 3 4 5) '((whole0 1 2 3 4 5) 1 3 5))
+         (equal (whole0 a b c d e) '((whole0 a b c d e) a c e))))
+;;
+;; test &aux keyword in the lambda-list
+;;
+(do-test test-aux-keyword0
+    (and (string-equal (string (defmacro aux0 (&aux a (b 20) (c (* 10 9)) (d (- 100 10)) e)
+                                              `(list ,a ,b ,c ,d ,e))) "aux0")
+         ;(= 0 (argtype (macro-function 'aux0)))
+         ;(= 2 (nargs   (macro-function 'aux0)))
+         (equal (aux0) '(nil 20 90 90 nil))))
+;;
+;; test {declaration | doc-string}* in defmacro
+;;
+(do-test test-dec-doc0
+    (and (string-equal (string (defmacro dec-doc0 (n0 n1 n2) (declare (number n0 n1 n2)) "This is a 
+                                 simple macro which returns the sum of three arguments"
+                                 `(+ ,n0 ,n1 ,n2))) "dec-doc0")
+         ;(= 0 (argtype (macro-function 'dec-doc0)))
+         ;(= 2 (nargs   (macro-function 'dec-doc0)))
+         (= (dec-doc0 11 22 33) 66)
+         (/= (dec-doc0 -1 1 -1) 1)))
+
+(do-test test-dec-doc1
+    (and (string-equal (string (defmacro dec-doc1 (n0 n1 n2) 
+                                         "This macro returns a list of 3 character codes for the
+                                          3 input characters"
+                                         (declare (character n0)) "n0 is 1st arg" 
+                                         (declare (character n1)) "n1 is 2nd arg"
+                                         (declare (character n2)) "n2 is 3rd arg"
+                                `(list (char-code ,n0) (char-code ,n1) (char-code ,n2)))) "dec-doc1")
+         ;(= 0 (argtype (macro-function 'dec-doc1)))
+         ;(= 2 (nargs   (macro-function 'dec-doc1)))
+         (equal (dec-doc1 #\a #\b #\c) '(97 98 99))
+         (equal (dec-doc1 #\1 #\2 #\3) '(49 50 51))))
+;;
+;;  test imbedded lambda-list in defmacro
+;;
+;;
+(do-test test-imbedded0
+    (and (defmacro imbedded0 ((mouth eye1 eye2) ((fin1 length1) (fin2 length2)) tail)
+                   "This test case was copied from Steele's book p149"
+                   `'(,mouth ,eye1 ,eye2 ,fin1 ,length1 ,fin2 ,length2 ,tail))
+          ;;
+          ;; the following "equal" should return t
+          ;;
+         (equal (imbedded0 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))
+                            my-favorite-tail)
+                 '(m (car eyes) (cdr eyes) f1 (count-scales f1) f2 (count-scales f2) my-favorite-tail))  ))
+          ;; 
+          ;;  now try make some mistakes in the following macro call forms, I'll expect error signals to occur
+          ;;
+         ;; (eq  (nlsetq (imbedded0 (m  (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))
+         ;;                   my-favorite-tail)) nil)
+         ;;(eq  (nlsetq (imbedded0 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))
+         ;;                   )) nil)
+         ;;(eq  (nlsetq (imbedded0 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) ( (count-scales f2)))
+         ;;                  my-favorite-tail)) nil)))
+ 
+(do-test test-imbedded1
+    (and (defmacro imbedded1 ((&whole head mouth eye1 eye2) ((fin1 length1) (fin2 length2)) tail)
+                   " ** This test case was copied from Steele's book p150 **"
+                   " ** &whole keyword was included in the imbedded lambda list **"
+                   `',head)
+          ;;
+          ;; check contents of "head". It should be a list whose components are called "mouth" "eye1" and "eye2"
+          ;;
+          (equal (imbedded1 (m (car eyes) (cdr eyes)) ((f1 (count-scales f1)) (f2 (count-scales f2)))
+                            my-favorite-tail) '(m (car eyes) (cdr eyes)))))
+;;
+;; test lambda-list dotted form
+;;
+(do-test test-dotform0
+    (and (defmacro dotform0 (n0 . n1) " ** test for top-level lambda-list ** " `'(,n0 ,n1))
+         (equal (dotform0 1 2 3 4) '(1 (2 3 4)))
+         (equal (dotform0 100) '(100 ()))
+         (equal (dotform0 (a b c) 8) '((a b c) (8)))))
+
+(do-test test-dotform1
+    (and (defmacro dotform1 ((n0 n1 . n2) n3) " ** test for imbedded -level lambda-list ** " `'(,n0 ,n1 ,n2 ,n3))
+         (equal (dotform1 (1 2 3 4 5) 6) '(1 2 (3 4 5) 6))
+         (equal (dotform1 (a b "string1" "string2" 3 4) (x y z)) '(a b ("string1" "string2" 3 4) (x y z)))))
+
+(do-test test-dotform2
+    (and (defmacro dotform2 ((n0 n1 . n2) n3 . n4)  `'(,n0 ,n1 ,n2 ,n3 ,n4))
+         (equal (dotform2 (1 2 3 4 5) 6 7 8 9 10) '(1 2 (3 4 5) 6 (7 8 9 10)))
+         (equal (dotform2 (a b "string1" "string2" 3 4) w (x y z)) '(a b ("string1" "string2" 3 4) w ((x y z))))))
+;;
+;;
+;; more testing on defmacro
+;; (with lambda-lists contain & keywords, imbedded lambda lists, and/or dotted forms)
+;;
+(do-test test-arithmetic-if
+    (and (defmacro arithmetic-if (test neg-form zero-form pos-form)
+                         "** This test case was copied from p147 of CLtl **"
+                   (let  ((var (gensym)))
+                        `(let ((,var ,test))
+                           (cond ((< ,var 0) ,neg-form)
+                                 ((= ,var 0) ,zero-form)
+                                 (t ,pos-form)))))
+          (equal (arithmetic-if (+ 10 100) 'neg 'zero 'pos) 'pos)
+          (equal (let ((x 3)) (arithmetic-if (- x 4.0) (- x) 'zero x)) -3)
+          (equal (let ((x 4)) (arithmetic-if (- x 4.0) (- x) 'zero x)) 'zero)
+          (equal (let ((x 5)) (arithmetic-if (- x 4.0) (- x) 'zero x)) 5)))
+
+;; (do-test test-lamb0
+;;    (and (defmacro lamb0 (x &optional (a b &rest c) &rest z) 
+;;                         "**  This test case was copied from p150 of CLtl **"
+;;          `(,x ,a ,c ,z))
+;;         (eq nil (nlsetq (lamb0 4)))
+;;        (eq nil (nlsetq (lamb0 4 ( 1 3 5) 7)))))
+
+(do-test test-lamb1
+    (and (defmacro lamb1 (x &optional ((a b &rest c)) &rest z) 
+                         "**  This test case was copied from p150 of CLtl **"
+          `'(,x ,a ,b ,c ,z))
+         (equal (lamb1 1 (2 3 4 5) 6 7 8) '(1 2 3 (4 5) (6 7 8)))  ))
+;;         (eq nil (nlsetq (lamb1 (car pool))))
+;;        (eq nil (nlsetq (lamb1 (car pool) (10))))))
+
+(do-test test-lamb2
+    (and (defmacro lamb2 (x &optional ((a b &rest c) '(nil nil)) &rest z)  
+                         "**  This test case was copied from p151 of CLtl **"
+          `'(,x ,a ,b ,c ,z))
+         (equal (lamb2 1 (2 3 4 5) 6 7 8) '(1 2 3 (4 5) (6 7 8)))
+         (equal (lamb2 (car pool)) '((car pool) nil nil nil nil))
+         (equal (lamb2 (car pool) (88 99) 100 200) '((car pool) 88 99 nil (100 200)))  ))
+         ;;
+         ;;  if the macro call specifies a explicitly then it must also specify b explicitly
+         ;;
+         ;; (eq nil (nlsetq (lamb2 (car pool) (10))))))
+
+(do-test test-lamb3
+    (and (defmacro lamb3 (x &optional ((&optional a b &rest c)) &rest z)  
+                         "**  This test case was copied from p151 of CLtl **"
+          `'(,x ,a ,b ,c ,z))
+         (equal (lamb3 1 (2 3 4 5) 6 7 8) '(1 2 3 (4 5) (6 7 8)))
+         (equal (lamb3 (car pool)) '((car pool) nil nil nil nil))
+         (equal (lamb3 (car pool) (88 99) 100 200) '((car pool) 88 99 nil (100 200)))
+         ;;
+         ;;  if the macro call specifies a explicitly, it doesn't have to specify b explicitly
+         ;;
+         (equal (lamb3 (car pool) (10) 100 200) '((car pool) 10 nil nil (100 200)))
+         (equal (lamb3 (car pool) ((+ x 1))) '((car pool) (+ x 1) nil nil nil))))
+;;
+;; 
+;; - It is permissible to use defmacro to redefine a macro, or to redefine a function as a macro -
+;; - It is an error to attempt to redefine the name of a special form -
+;;   [from 8.1. Macro Definition (p 146) of CLtL]
+;;
+(do-test test-redefine0
+    (and (defmacro redefine0 () ''fine)
+         (equal (redefine0) 'fine)
+         (defmacro redefine0 () ''fine-fine)
+         (equal (redefine0) 'fine-fine)))
+
+(do-test test-redefine1
+    (and (defun redefine1 () 'fine)
+         (equal (redefine1) 'fine)
+         (defmacro redefine1 () ''fine-fine)
+         (equal (redefine1) 'fine-fine)))
+
+;;(do-test test-redefine2
+;;    (and (eq nil (nlsetq (defmacro progn () ''new-macro)))
+;;         (eq nil (nlsetq (defmacro function () ''new-macro)))
+;;         (eq nil (nlsetq (defmacro labels () ''new-macro)))))
+
+;;
+;;
+(do-test "defmacro and defun" (equal '(fun macro macro fun) 
+(list (PROGN (defun xx () 'fun) (XX))
+      (PROGN (defmacro xx () ''macro) (xx) )
+      (PROGN (defmacro xxx () ''macro) (xxx))
+      (PROGN (defun xxx () 'fun) (xxx)))))
+;;
+;;
+STOP
+         
+
+   

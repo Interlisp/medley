@@ -1,1 +1,141 @@
-;; Function To Be Tested: macroexpand and macroexpand-1;;;; Source:        Steele's book    Section 8.2: Macro Expansion        Page: 151;;;; Created By:    Karin M. Sye;;;; Creation Date: May 15 '86;;;; Last Update:   June 2, 1986/masinter, change test-env1: don't use FOO, move MACROLET to the right place;;;;;; Filed As:      {eris}<lispcore>cml>test>8-2-macroexpand-and-macroexpand-1.test;;;;;; Syntax:                MACROEXPAND-1  form &optional env;;                        MACROEXPAND    form &optional env;;;; Function Description:  MACROEXPAND-1  will expand the form (macro call) once and return two values;;                        MACROEXPAND will repeatedly expand the form until it is no longer a macro call.;;                        It also returns two values.;;;; Argument(s):           form - a lisp form;;                        env  - an environment;;;; Returns:               the expansion function and t - if the argument "form" is a macro call;;                        form and nil                 - if the argument "form" is not a macro call    ;;;;;;  tests for *macroexpand-hook* variable;;;;This test commented out by Pavel because we do macro-caching by default in the system and thus don't use 'funcall as the default hook.;;(do-test test-hook;;    ;;;;    ;; make sure its initial value is 'funcall';;    ;;;;    (and (boundp '*macroexpand-hook*);;         (eq *macroexpand-hook* 'funcall)));;;;  tests for "macroexpand-1" with null environment;;(do-test test-macroexpand-10    (and (defmacro expand-10 () `(a b c))         (equal (multiple-value-list (macroexpand-1 '(expand-10))) '((a b c) t))))(do-test test-macroexpand-11    (and (defmacro expand-11 (n0 n1 n2 n3 n4 n5) `(/= ,n0 ,n1 ,n2 ,n3 ,n4 ,n5))         (equal (multiple-value-list (macroexpand-1 '(expand-11 10 10.1 20.2 30 33 50)))                                                     '((/= 10 10.1 20.2 30 33 50) t))         (equal (multiple-value-list (macroexpand-1 '(expand-11 0 0.0 -1 1 (- 0 2) (+ 3 9))))                                                     '((/= 0 0.0 -1 1 (- 0 2) (+ 3 9)) t))))(do-test test-macroexpand-12    (and (defmacro expand-12 (n0 n1 n2) `(progn (defun () (list ,n0 ,n1 ,n2))))         (equal (multiple-value-list (macroexpand-1 '(expand-12 'good 'better 'best)))                                     '((progn (defun () (list 'good 'better 'best))) t))         (equal (multiple-value-list (macroexpand-1 '(expand-12 (cons 1 2) (= 1 1.0) (evenp 4))))                                    '((progn (defun () (list (cons 1 2) (= 1 1.0) (evenp 4)))) t))))(do-test test-macroexpand-13    ;;    ;; tests for non-macro forms    ;;    (and (equal (multiple-value-list (macroexpand-1 '(no-such-macro 1 2 3))) '((no-such-macro 1 2 3) nil))         (equal (multiple-value-list (macroexpand-1 '(again-no-such-macro))) '((again-no-such-macro) nil))));;;;;;;;  tests for "macroexpand" with null environment;;;;;;(do-test test-macroexpand0    (and (defmacro expand0a () ''macro-no-fun)         (defmacro expand0b () `(expand0a))         (defmacro expand0c () `(expand0b))         (equal (multiple-value-list (macroexpand '(expand0c))) '('macro-no-fun t))))(do-test test-macroexpand1    (and (defmacro expand1a (a0 a1 a2) `(list ,a0 ,a1 ,a2))         (defmacro expand1b (b0 b1) `(expand1a (progn (defun fun1 () (+ ,b0 ,b1)) (fun1))                                               (progn (defun fun2 () (- ,b0 ,b1)) (fun2))                                               (progn (defun fun3 () (/ ,b1 ,b0)) (fun3))))         (defmacro expand1c () `(expand1b 10 20))         (equal (multiple-value-list (macroexpand '(expand1c)))                '((list (progn (defun fun1 () (+ 10 20)) (fun1))                         (progn (defun fun2 () (- 10 20)) (fun2))                        (progn (defun fun3 () (/ 20 10)) (fun3))) t))))(do-test test-macroexpand2    (and (defmacro expand2a (n0) `',n0)         (defmacro expand2b (n0 n1) (let ((var (cons n1 n0))) `(expand2a ,var)))         (defmacro expand2c (n0 n1) (let ((var (cons n1 n0))) `(expand2b ,var "d")))         (defmacro expand2d (n0 n1) (let ((var (cons n1 n0))) `(expand2c ,var "c")))         (defmacro expand2e (n0 n1) (let ((var (cons n1 n0))) `(expand2d ,var "b")))         (defmacro expand2f ()      (let ((var (list "-"  ))) `(expand2e ,var "a")))         (equal (multiple-value-list (macroexpand  `(expand2f))) '('("d" "c" "b" "a" "-") t))         (equal (multiple-value-list (macroexpand-1 `(expand2f))) '((expand2e ("-") "a") t))))(do-test test-macroexpand3    ;;    ;; tests for non-macro forms    ;;    (and (equal (multiple-value-list (macroexpand '(no-such-macro 1 2 3))) '((no-such-macro 1 2 3) nil))         (equal (multiple-value-list (macroexpand '(again-no-such-macro))) '((again-no-such-macro) nil))));;;;;;  tests for  macroexpand/macroexpand-1 with &environment argument;;;;(do-test test-env0    (and (defmacro foo () ''global-foo)         (defmacro env0 (&environment env)                              (macrolet ((foo () ''local-foo)))                              (macroexpand-1 '(foo)))         (eq (env0) 'global-foo)))(do-test test-env1    (progn (defmacro test-env1-foo () ''global-foo)           (defmacro env1 (&environment env) (macroexpand-1 '(test-env1-foo) env))           (macrolet ((test-env1-foo () ''local-foo))		    (eq (env1) 'local-foo))));;;;;;  tests for AR # 5532 regarding "&body and &rest args don't get destructured";;;;    (do-test test-5532ar0    (and (defmacro 5532ar0 (&rest (foo bar)) `'(,foo %% ,bar))         ;;         (equal (multiple-value-list (macroexpand '(5532ar0  1 2))) '('(1 %% 2) t))         (equal (5532ar0 1 2) '(1 %% 2))  ))(do-test test-5532ar1    (and (defmacro 5532ar1 (&body ((foo (bar (bar1 &optional (bar2 88)))))) `'(,foo %% ,bar %% ,bar1 %% ,bar2))         ;;         (equal (multiple-value-list (macroexpand '(5532ar1  1 (2 (3 4))))) '('(1 %% 2 %% 3 %% 4) t))         (equal (5532ar1 1 (2 (3 4))) '(1 %% 2 %% 3 %% 4))         (equal (multiple-value-list (macroexpand '(5532ar1  1 (2 (3))))) '('(1 %% 2 %% 3 %% 88) t))         (equal (5532ar1 1 (2 (3))) '(1 %% 2 %% 3 %% 88))  ))STOP 
+;; Function To Be Tested: macroexpand and macroexpand-1
+;;
+;; Source:        Steele's book    Section 8.2: Macro Expansion        Page: 151
+;;
+;; Created By:    Karin M. Sye
+;;
+;; Creation Date: May 15 '86
+;;
+;; Last Update:   June 2, 1986/masinter, change test-env1: don't use FOO, move MACROLET to the right place
+;;
+;;
+;; Filed As:      {eris}<lispcore>cml>test>8-2-macroexpand-and-macroexpand-1.test
+;;
+;;
+;; Syntax:                MACROEXPAND-1  form &optional env
+;;                        MACROEXPAND    form &optional env
+;;
+;; Function Description:  MACROEXPAND-1  will expand the form (macro call) once and return two values
+;;                        MACROEXPAND will repeatedly expand the form until it is no longer a macro call.
+;;                        It also returns two values.
+;;
+;; Argument(s):           form - a lisp form
+;;                        env  - an environment
+;;
+;; Returns:               the expansion function and t - if the argument "form" is a macro call
+;;                        form and nil                 - if the argument "form" is not a macro call    
+;;
+;;
+;;  tests for *macroexpand-hook* variable
+;;
+;;This test commented out by Pavel because we do macro-caching by default in the system and thus don't use 'funcall as the default hook.
+;;(do-test test-hook
+;;    ;;
+;;    ;; make sure its initial value is 'funcall'
+;;    ;;
+;;    (and (boundp '*macroexpand-hook*)
+;;         (eq *macroexpand-hook* 'funcall)))
+;;
+;;  tests for "macroexpand-1" with null environment
+;;
+(do-test test-macroexpand-10
+    (and (defmacro expand-10 () `(a b c))
+         (equal (multiple-value-list (macroexpand-1 '(expand-10))) '((a b c) t))))
+
+(do-test test-macroexpand-11
+    (and (defmacro expand-11 (n0 n1 n2 n3 n4 n5) `(/= ,n0 ,n1 ,n2 ,n3 ,n4 ,n5))
+         (equal (multiple-value-list (macroexpand-1 '(expand-11 10 10.1 20.2 30 33 50))) 
+                                                    '((/= 10 10.1 20.2 30 33 50) t))
+         (equal (multiple-value-list (macroexpand-1 '(expand-11 0 0.0 -1 1 (- 0 2) (+ 3 9)))) 
+                                                    '((/= 0 0.0 -1 1 (- 0 2) (+ 3 9)) t))))
+(do-test test-macroexpand-12
+    (and (defmacro expand-12 (n0 n1 n2) `(progn (defun () (list ,n0 ,n1 ,n2))))
+         (equal (multiple-value-list (macroexpand-1 '(expand-12 'good 'better 'best))) 
+                                    '((progn (defun () (list 'good 'better 'best))) t))
+         (equal (multiple-value-list (macroexpand-1 '(expand-12 (cons 1 2) (= 1 1.0) (evenp 4))))
+                                    '((progn (defun () (list (cons 1 2) (= 1 1.0) (evenp 4)))) t))))
+(do-test test-macroexpand-13
+    ;;
+    ;; tests for non-macro forms
+    ;;
+    (and (equal (multiple-value-list (macroexpand-1 '(no-such-macro 1 2 3))) '((no-such-macro 1 2 3) nil))
+         (equal (multiple-value-list (macroexpand-1 '(again-no-such-macro))) '((again-no-such-macro) nil))))
+;;
+;;
+;;
+;;  tests for "macroexpand" with null environment
+;;
+;;
+;;
+(do-test test-macroexpand0
+    (and (defmacro expand0a () ''macro-no-fun)
+         (defmacro expand0b () `(expand0a))
+         (defmacro expand0c () `(expand0b))
+         (equal (multiple-value-list (macroexpand '(expand0c))) '('macro-no-fun t))))
+
+(do-test test-macroexpand1
+    (and (defmacro expand1a (a0 a1 a2) `(list ,a0 ,a1 ,a2))
+         (defmacro expand1b (b0 b1) `(expand1a (progn (defun fun1 () (+ ,b0 ,b1)) (fun1))
+                                               (progn (defun fun2 () (- ,b0 ,b1)) (fun2))
+                                               (progn (defun fun3 () (/ ,b1 ,b0)) (fun3))))
+         (defmacro expand1c () `(expand1b 10 20))
+         (equal (multiple-value-list (macroexpand '(expand1c)))
+                '((list (progn (defun fun1 () (+ 10 20)) (fun1)) 
+                        (progn (defun fun2 () (- 10 20)) (fun2))
+                        (progn (defun fun3 () (/ 20 10)) (fun3))) t))))
+
+(do-test test-macroexpand2
+    (and (defmacro expand2a (n0) `',n0)
+         (defmacro expand2b (n0 n1) (let ((var (cons n1 n0))) `(expand2a ,var)))
+         (defmacro expand2c (n0 n1) (let ((var (cons n1 n0))) `(expand2b ,var "d")))
+         (defmacro expand2d (n0 n1) (let ((var (cons n1 n0))) `(expand2c ,var "c")))
+         (defmacro expand2e (n0 n1) (let ((var (cons n1 n0))) `(expand2d ,var "b")))
+         (defmacro expand2f ()      (let ((var (list "-"  ))) `(expand2e ,var "a")))
+         (equal (multiple-value-list (macroexpand  `(expand2f))) '('("d" "c" "b" "a" "-") t))
+         (equal (multiple-value-list (macroexpand-1 `(expand2f))) '((expand2e ("-") "a") t))))
+
+(do-test test-macroexpand3
+    ;;
+    ;; tests for non-macro forms
+    ;;
+    (and (equal (multiple-value-list (macroexpand '(no-such-macro 1 2 3))) '((no-such-macro 1 2 3) nil))
+         (equal (multiple-value-list (macroexpand '(again-no-such-macro))) '((again-no-such-macro) nil))))
+;;
+;;
+;;  tests for  macroexpand/macroexpand-1 with &environment argument
+;;
+;;
+(do-test test-env0
+    (and (defmacro foo () ''global-foo)
+         (defmacro env0 (&environment env)
+                              (macrolet ((foo () ''local-foo)))
+                              (macroexpand-1 '(foo)))
+         (eq (env0) 'global-foo)))
+
+(do-test test-env1
+    (progn (defmacro test-env1-foo () ''global-foo)
+           (defmacro env1 (&environment env) (macroexpand-1 '(test-env1-foo) env))
+           (macrolet ((test-env1-foo () ''local-foo))
+		    (eq (env1) 'local-foo))))
+
+
+;;
+;;
+;;  tests for AR # 5532 regarding "&body and &rest args don't get destructured"
+;;
+;;    
+(do-test test-5532ar0
+    (and (defmacro 5532ar0 (&rest (foo bar)) `'(,foo %% ,bar))
+         ;;
+         (equal (multiple-value-list (macroexpand '(5532ar0  1 2))) '('(1 %% 2) t))
+         (equal (5532ar0 1 2) '(1 %% 2))  ))
+
+(do-test test-5532ar1
+    (and (defmacro 5532ar1 (&body ((foo (bar (bar1 &optional (bar2 88)))))) `'(,foo %% ,bar %% ,bar1 %% ,bar2))
+         ;;
+         (equal (multiple-value-list (macroexpand '(5532ar1  1 (2 (3 4))))) '('(1 %% 2 %% 3 %% 4) t))
+         (equal (5532ar1 1 (2 (3 4))) '(1 %% 2 %% 3 %% 4))
+         (equal (multiple-value-list (macroexpand '(5532ar1  1 (2 (3))))) '('(1 %% 2 %% 3 %% 88) t))
+         (equal (5532ar1 1 (2 (3))) '(1 %% 2 %% 3 %% 88))  ))
+
+STOP 

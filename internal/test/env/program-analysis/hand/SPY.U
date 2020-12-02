@@ -1,1 +1,195 @@
-;; Function To Be Tested: SPY (Part I) (Program Analysis);;;; Source: Lisp Library Modules Manual (Lyric Beta Release 2);;		 Browser, Page 187;; Section: Program Analysis (Library);;;; Created By:   John Park;;;; Creation Date: March 12, 1987;;;; Last Update:   March 18, 1987;;;; Massively munged: Rene P. S. Bane on June 22, 1988;;;; Filed As:      {ERIS}<lispcore>test>program-analysis>spy.u;;;;;; Syntax:      (See Spy documentation);;;; Function Description: Spy is a tool to help programs run faster.  Spy has two parts:;; a "sampler" that one runs while running his program, which monitors what the program;; is doing, anda "displayer" that displays the data gathered by the sampler. ;; The "displayer" uses the grapher package to display the data gathered by the sampler.;; In the graph, the height of each node is adjusted to be proportional to the amount;; of time.  Just as Masterscope and Browser give an interactive picture of the static;; structure of the program, Spy give an interactive picture of the dynamic structure.;;;; Required packages: Grapher, readnumber, imageobj, and tedit;;;; Functions: (SPY.BUTTON) - Turns spy on and off.;;		(SPY.START) - Reinitializes the internal Spy data structure and turns on;;					Sampling.;;		(SPY.END) - Turns off sampling, and cleans up the data structure;;		(SPY.TOGGLE) - If Spying is off, turn it on with (SPY.START).  If it's on,;;		turn it off with (SPY.END) and then show the results with (SPY.TREE 10).;;		(WITH.SPY form) - Macro which calls (SPY.START), evaluates the form, calls;;			(SPY.END), and another one will turn it off.;;		(SPY.TREE threshold individualp mergetype depthlimit) - display the results;;			of the last "spy" in a grapher window. For argument description,;;			see SPY documentation.;;		(SPY.LEGEND) - This brings up a window that shows what they mean;;		(SPY.BORDER) - This brings up a window that shows the interpretation of;;			SPY.BORDERS;; Variables: SPY.FREQUENCY - How many times per second to sample? Initially 10.;;			Max: 60;;			SPY.NOMERGEFNS - Functions on this list are not merged under;;				MergeDefault;;			SPY.TREE - This holds the data from the last sampling.  One can save;;				and restore it using UGLYVARS.;;			SPY.BORDERS - This controls the border display on a tree.;;			SPY.FONT - Font used to display node labels.  Initially (GACHA 10);;			SPY.MAXLINES - Maximum height of a node in the graph, measured;;				in multiples of the font height of SPY.FONT.  		 ;; Argument(s):  (SEE Spy documentation);;			  ;; Returns:  (SEE Spy documentation)   ;;;; Constraints/Limitations: Testing of SPY requires much user interface; however, may of the;; functional tests are written in such a way that many of the top-level functions will be;; automatically executed and test results will be recorded in the following file;; {eris}<lispcore>test>program-analysis>browser.report. User interface is necessary for;; some of the spy functions.  Appropriate messages will be printed when user interface is;; required during testing.  Instructions for manually testing SPY (pages 189 - 193), should;; be read carefully before testing the SPY display results (Using SPY,Merging, and Individual;; vs Cumulative mode).(DO-TEST "SPY-TEST-SETUP"		(SETQ SPY-TEST-RESULTS T)   ; assume test succeeds, set to nil if something fails		(DEFUN PASS-FAIL (COMMAND-LANGUAGE TEST-ITEM)	(IL:IF (NOT TEST-ITEM) IL:THEN (FORMAT *ERROR-OUTPUT* "Test ~s failed~%" COMMAND-LANGUAGE) (SETQ SPY-TEST-RESULTS NIL)		))(DEFUN PAUSE NIL (PROGN 				(IL:PLAYTUNE '((262 . 15000) (440 . 15000) (349 . 15000)))				(SLEEP 2)))(SETQ SPYW (IL:CREATEW '(100 100 325 90) NIL NIL T))(IL:PAGEHEIGHT 0);Loading spy and other required package; they are not already loaded...  (PAUSE); This part of the test will load spy and other required packages...(IL:FILESLOAD (IL:SYSLOAD) SPY GRAPHER READNUMBER IMAGEOBJ); This part determines if all spy functions are defined and variables bound ....(PAUSE)(PASS-FAIL 'IL:FUNCTION-VARIABLE-DEFINITION	 (AND (NOTANY #'NULL 			(MAPCAR #'FBOUNDP '(IL:SPY.BUTTON IL:SPY.START IL:SPY.END						IL:WITH.SPY IL:SPY.TREE IL:SPY.LEGEND)))		(NOTANY #'NULL 			(MAPCAR #'BOUNDP '(IL:SPY.FREQUENCY IL:SPY.NOMERGEFNS					IL:SPY.TREE IL:SPY.BORDERS IL:SPY.FONT IL:SPY.MAXLINES)))	))	; Test to see if the SPY variables are bound to correct initial values(PASS-FAIL 'IL:SPY-INITIAL-VALUES	 (AND (EQ IL:SPY.FREQUENCY 10)		(AND (EQ (IL:FONTPROP IL:SPY.FONT 'IL:FAMILY) 'IL:GACHA)			(= (IL:FONTPROP IL:SPY.FONT 'IL:SIZE) 8))		(ZEROP (MOD IL:SPY.MAXLINES (IL:FONTPROP IL:SPY.FONT 'IL:HEIGHT)))	)); Test for SPY.BUTTON; (SPY.BUTTON) will  turn spy on/off;(IL:SPY.BUTTON '(90 . 5))(IL:CURSORPOSITION '(134 . -145))(PASS-FAIL "SPY.BUTTON gets you a Spy Eye"	(Y-OR-N-P "Did a Spy Eye just appear? ")); Clicking the left mouse button will turn it on...(XCL-TEST::PAUSE)(APPLY (IL:WINDOWPROP IL:SPY.BUTTON 'IL:BUTTONEVENTFN) NIL)(PASS-FAIL 'IL:SPY-BUTTON-ON	 (Y-OR-N-P "Did the Spy Eye open? ")); Clicking it again will turn off the spy and display the results....(XCL-TEST::PAUSE)(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")(APPLY (IL:WINDOWPROP IL:SPY.BUTTON 'IL:BUTTONEVENTFN) NIL)(PASS-FAIL 'IL:SPY-BUTTON-OFF (Y-OR-N-P "Did the Spy Eye close? "))(IL:SPY.END)(IL:CLOSEW IL:SPY.WINDOW)(IL:CLRPROMPT); This part of the test is for (SPY.START) and (SPY.END); (SPY.START) will turns on the sampling(XCL-TEST::PAUSE)(IL:SPY.START); Now SPY should be turned back on.(PASS-FAIL 'IL:SPY-START	 (Y-OR-N-P "Did the Spy Eye open? ")); (SPY.END) will turn off sampling.(XCL-TEST::PAUSE)(IL:SPY.END); Now SPY should be turned off.(PASS-FAIL 'IL:SPY-END (Y-OR-N-P "Did the Spy Eye close? ")); The following will test (SPY.TOGGLE); If SPY is off, it will turn it on; otherwise, it will turn it off ; with (SPY.END) and show the results.(XCL-TEST::PAUSE)(IL:SPY.TOGGLE)(PASS-FAIL 'IL:SPY-TOGGLE-ON (Y-OR-N-P "Did the Spy Eye open? ")); Invoking (SPY.TOGGLE) again will turn spy off and display the results...(XCL-TEST::PAUSE)(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")(IL:SPY.TOGGLE)(PASS-FAIL 'IL:SPY-TOGGLE-OFF (Y-OR-N-P "Did the Spy Eye close? "))(IL:CLOSEW IL:SPY.WINDOW)(IL:CLRPROMPT); The following will test (WITH.SPY form); This will evaluate the form with spy on(XCL-TEST::PAUSE)(PASS-FAIL 'IL:WITH-SPY (EQUAL (IL:WITH.SPY (IL:FOR X IL:FROM 1 IL:TO 10 IL:COLLECT (IL:ADD1 X))) 	   (PROGN (IL:SPY.START) (PROG1 (IL:FOR X IL:FROM 1 IL:TO 10 IL:COLLECT (IL:ADD1 X)) (IL:SPY.END))))); This following will test SPY.TREE, which display the results in a grapher window.; (SPY.TREE 10) will display the last spy with threshold set to 10(XCL-TEST::PAUSE)(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")(IL:SPY.TREE 10)(SETQ IL:SPY-TREE1 (MEMBER IL:SPY.WINDOW (IL:OPENWINDOWS)))(IL:CLOSEW IL:SPY.WINDOW); (SPY.TREE 10 T) Should display the spy graph in different format(XCL-TEST::PAUSE)(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")(IL:SPY.TREE 10 T)(SETQ IL:SPY-TREE2 (MEMBER IL:SPY.WINDOW (IL:OPENWINDOWS)))(IL:CLOSEW IL:SPY.WINDOW); (SPY.TREE 10 T 'ALL 2) Should display the spy graph in with depthlimit set to 2(XCL-TEST::PAUSE)(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")(IL:SPY.TREE 10 T 'IL:ALL 2)(SETQ IL:SPY-TREE3 (MEMBER IL:SPY.WINDOW (IL:OPENWINDOWS)))(IL:CLRPROMPT)(IL:CLOSEW IL:SPY.WINDOW)(IL:CLOSEW IL:SPY.BUTTON)SPY-TEST-RESULTS)STOP 
+;; Function To Be Tested: SPY (Part I) (Program Analysis)
+;;
+;; Source: Lisp Library Modules Manual (Lyric Beta Release 2)
+;;		 Browser, Page 187
+;; Section: Program Analysis (Library)
+;;
+;; Created By:   John Park
+;;
+;; Creation Date: March 12, 1987
+;;
+;; Last Update:   March 18, 1987
+;;
+;; Massively munged: Rene P. S. Bane on June 22, 1988
+;;
+;; Filed As:      {ERIS}<lispcore>test>program-analysis>spy.u
+;;
+;;
+;; Syntax:      (See Spy documentation)
+;;
+;; Function Description: Spy is a tool to help programs run faster.  Spy has two parts:
+;; a "sampler" that one runs while running his program, which monitors what the program
+;; is doing, anda "displayer" that displays the data gathered by the sampler. 
+;; The "displayer" uses the grapher package to display the data gathered by the sampler.
+;; In the graph, the height of each node is adjusted to be proportional to the amount
+;; of time.  Just as Masterscope and Browser give an interactive picture of the static
+;; structure of the program, Spy give an interactive picture of the dynamic structure.
+;;
+;; Required packages: Grapher, readnumber, imageobj, and tedit
+;;
+;; Functions: (SPY.BUTTON) - Turns spy on and off.
+;;		(SPY.START) - Reinitializes the internal Spy data structure and turns on
+;;					Sampling.
+;;		(SPY.END) - Turns off sampling, and cleans up the data structure
+;;		(SPY.TOGGLE) - If Spying is off, turn it on with (SPY.START).  If it's on,
+;;		turn it off with (SPY.END) and then show the results with (SPY.TREE 10).
+;;		(WITH.SPY form) - Macro which calls (SPY.START), evaluates the form, calls
+;;			(SPY.END), and another one will turn it off.
+;;		(SPY.TREE threshold individualp mergetype depthlimit) - display the results
+;;			of the last "spy" in a grapher window. For argument description,
+;;			see SPY documentation.
+;;		(SPY.LEGEND) - This brings up a window that shows what they mean
+;;		(SPY.BORDER) - This brings up a window that shows the interpretation of
+;;			SPY.BORDERS
+;; Variables: SPY.FREQUENCY - How many times per second to sample? Initially 10.
+;;			Max: 60
+;;			SPY.NOMERGEFNS - Functions on this list are not merged under
+;;				MergeDefault
+;;			SPY.TREE - This holds the data from the last sampling.  One can save
+;;				and restore it using UGLYVARS.
+;;			SPY.BORDERS - This controls the border display on a tree.
+;;			SPY.FONT - Font used to display node labels.  Initially (GACHA 10)
+;;			SPY.MAXLINES - Maximum height of a node in the graph, measured
+;;				in multiples of the font height of SPY.FONT.  		 
+;; Argument(s):  (SEE Spy documentation)
+;;			  
+;; Returns:  (SEE Spy documentation)   
+;;
+;; Constraints/Limitations: Testing of SPY requires much user interface; however, may of the
+;; functional tests are written in such a way that many of the top-level functions will be
+;; automatically executed and test results will be recorded in the following file
+;; {eris}<lispcore>test>program-analysis>browser.report. User interface is necessary for
+;; some of the spy functions.  Appropriate messages will be printed when user interface is
+;; required during testing.  Instructions for manually testing SPY (pages 189 - 193), should
+;; be read carefully before testing the SPY display results (Using SPY,Merging, and Individual
+;; vs Cumulative mode).
+
+(DO-TEST "SPY-TEST-SETUP"
+		(SETQ SPY-TEST-RESULTS T)   ; assume test succeeds, set to nil if something fails
+		(DEFUN PASS-FAIL (COMMAND-LANGUAGE TEST-ITEM)
+	(IL:IF (NOT TEST-ITEM) IL:THEN (FORMAT *ERROR-OUTPUT* "Test ~s failed~%" COMMAND-LANGUAGE) (SETQ SPY-TEST-RESULTS NIL)
+		))
+(DEFUN PAUSE NIL (PROGN 
+				(IL:PLAYTUNE '((262 . 15000) (440 . 15000) (349 . 15000)))
+				(SLEEP 2)))
+(SETQ SPYW (IL:CREATEW '(100 100 325 90) NIL NIL T))
+(IL:PAGEHEIGHT 0)
+;Loading spy and other required package
+; they are not already loaded...  
+(PAUSE)
+; This part of the test will load spy and other required packages...
+(IL:FILESLOAD (IL:SYSLOAD) SPY GRAPHER READNUMBER IMAGEOBJ)
+
+; This part determines if all spy functions are defined and variables bound ....
+(PAUSE)
+
+(PASS-FAIL 'IL:FUNCTION-VARIABLE-DEFINITION
+	 (AND (NOTANY #'NULL 
+			(MAPCAR #'FBOUNDP '(IL:SPY.BUTTON IL:SPY.START IL:SPY.END
+						IL:WITH.SPY IL:SPY.TREE IL:SPY.LEGEND)))
+		(NOTANY #'NULL 
+			(MAPCAR #'BOUNDP '(IL:SPY.FREQUENCY IL:SPY.NOMERGEFNS
+					IL:SPY.TREE IL:SPY.BORDERS IL:SPY.FONT IL:SPY.MAXLINES)))
+	))
+	
+
+; Test to see if the SPY variables are bound to correct initial values
+
+(PASS-FAIL 'IL:SPY-INITIAL-VALUES
+	 (AND (EQ IL:SPY.FREQUENCY 10)
+		(AND (EQ (IL:FONTPROP IL:SPY.FONT 'IL:FAMILY) 'IL:GACHA)
+			(= (IL:FONTPROP IL:SPY.FONT 'IL:SIZE) 8))
+		(ZEROP (MOD IL:SPY.MAXLINES (IL:FONTPROP IL:SPY.FONT 'IL:HEIGHT)))
+	)
+)
+
+; Test for SPY.BUTTON
+; (SPY.BUTTON) will  turn spy on/off
+;
+(IL:SPY.BUTTON '(90 . 5))
+(IL:CURSORPOSITION '(134 . -145))
+(PASS-FAIL "SPY.BUTTON gets you a Spy Eye"
+	(Y-OR-N-P "Did a Spy Eye just appear? "))
+; Clicking the left mouse button will turn it on...
+(XCL-TEST::PAUSE)
+(APPLY (IL:WINDOWPROP IL:SPY.BUTTON 'IL:BUTTONEVENTFN) NIL)
+(PASS-FAIL 'IL:SPY-BUTTON-ON
+	 (Y-OR-N-P "Did the Spy Eye open? "))
+
+; Clicking it again will turn off the spy and display the results....
+(XCL-TEST::PAUSE)
+(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")
+(APPLY (IL:WINDOWPROP IL:SPY.BUTTON 'IL:BUTTONEVENTFN) NIL)
+(PASS-FAIL 'IL:SPY-BUTTON-OFF (Y-OR-N-P "Did the Spy Eye close? "))
+(IL:SPY.END)
+(IL:CLOSEW IL:SPY.WINDOW)
+(IL:CLRPROMPT)
+
+; This part of the test is for (SPY.START) and (SPY.END)
+; (SPY.START) will turns on the sampling
+(XCL-TEST::PAUSE)
+(IL:SPY.START)
+; Now SPY should be turned back on.
+(PASS-FAIL 'IL:SPY-START
+	 (Y-OR-N-P "Did the Spy Eye open? "))
+; (SPY.END) will turn off sampling.
+(XCL-TEST::PAUSE)
+(IL:SPY.END)
+; Now SPY should be turned off.
+(PASS-FAIL 'IL:SPY-END (Y-OR-N-P "Did the Spy Eye close? "))
+
+; The following will test (SPY.TOGGLE)
+; If SPY is off, it will turn it on; otherwise, it will turn it off 
+; with (SPY.END) and show the results.
+(XCL-TEST::PAUSE)
+(IL:SPY.TOGGLE)
+(PASS-FAIL 'IL:SPY-TOGGLE-ON (Y-OR-N-P "Did the Spy Eye open? "))
+; Invoking (SPY.TOGGLE) again will turn spy off and display the results...
+(XCL-TEST::PAUSE)
+(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")
+(IL:SPY.TOGGLE)
+(PASS-FAIL 'IL:SPY-TOGGLE-OFF (Y-OR-N-P "Did the Spy Eye close? "))
+
+(IL:CLOSEW IL:SPY.WINDOW)
+(IL:CLRPROMPT)
+
+
+; The following will test (WITH.SPY form)
+; This will evaluate the form with spy on
+(XCL-TEST::PAUSE)
+
+(PASS-FAIL 'IL:WITH-SPY (EQUAL (IL:WITH.SPY (IL:FOR X IL:FROM 1 IL:TO 10 IL:COLLECT (IL:ADD1 X))) 
+	   (PROGN (IL:SPY.START) (PROG1 (IL:FOR X IL:FROM 1 IL:TO 10 IL:COLLECT (IL:ADD1 X)) (IL:SPY.END)))))
+
+; This following will test SPY.TREE, which display the results in a grapher window.
+; (SPY.TREE 10) will display the last spy with threshold set to 10
+(XCL-TEST::PAUSE)
+(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")
+(IL:SPY.TREE 10)
+(SETQ IL:SPY-TREE1 (MEMBER IL:SPY.WINDOW (IL:OPENWINDOWS)))
+(IL:CLOSEW IL:SPY.WINDOW)
+
+; (SPY.TREE 10 T) Should display the spy graph in different format
+(XCL-TEST::PAUSE)
+(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")
+(IL:SPY.TREE 10 T)
+(SETQ IL:SPY-TREE2 (MEMBER IL:SPY.WINDOW (IL:OPENWINDOWS)))
+(IL:CLOSEW IL:SPY.WINDOW)
+
+; (SPY.TREE 10 T 'ALL 2) Should display the spy graph in with depthlimit set to 2
+(XCL-TEST::PAUSE)
+(IL:PROMPTPRINT "please indicate the spy.window position with left mouse button")
+(IL:SPY.TREE 10 T 'IL:ALL 2)
+(SETQ IL:SPY-TREE3 (MEMBER IL:SPY.WINDOW (IL:OPENWINDOWS)))
+(IL:CLRPROMPT)
+(IL:CLOSEW IL:SPY.WINDOW)
+(IL:CLOSEW IL:SPY.BUTTON)
+SPY-TEST-RESULTS
+
+)
+
+STOP 
+
+
+
+

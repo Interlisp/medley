@@ -1,1 +1,79 @@
-;;; Regression tests for FASLOAD-PATCHES;; Patch 2.(do-test-group ("Patch 2 tests"  :before (progn (fasl:with-open-handle (h "{core}test.dfasl")                   (princ "This is a test." (fasl:begin-text h)))                 (with-open-file                     (s "{core}test.dfasl" :direction :output :if-exists :append)                   (write-byte 64 s)))                :after (ignore-errors (il:delfile "{core}test.dfasl")))  (do-test "Observe end-of-data mark"    (with-open-file (s "{core}test.dfasl" :direction :input)      (null (expect-errors (error) (fasl:process-file s))))  )  (do-test "Don't print anything when loading :verbose nil"    (and (equal (with-output-to-string (*standard-output*)                  (load "{core}test.dfasl" :verbose nil))                "")         (equal (with-output-to-string (*standard-output*)                  (load "{core}test.dfasl" :verbose t))                "This is a test.")    )  ))(do-test-group "Compatible with old FASL versions"  :before (with-open-file (s "{core}test.dfasl" :direction :output)            (map nil #'(lambda (byte) (write-byte byte s))              (list fasl:signature 0 4 fasl::end-mark fasl::end-mark)))  :after (ignore-errors (il:delfile "{core}test.dfasl"))  (do-test "Read old FASL file"    (null (expect-errors (error)      (with-open-file (s "{core}test.dfasl" :direction :input) (fasl:process-file s))))  ))(DO-TEST-GROUP "Reader environment hackery"  :BEFORE (FASL:WITH-OPEN-HANDLE (H "{core}test.dfasl")            (PRINC "This file tests reader environment hacking." (FASL:BEGIN-TEXT H))            (FASL:BEGIN-BLOCK H)            (FASL:DUMP-EVAL H '(LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))            (FASL:DUMP-EVAL H '(PROGN (SETQ *PRINT-BASE* 7)                                      (SETQ *READ-BASE* 12)                                      (SETQ *PACKAGE* (FIND-PACKAGE "FASL"))                                      (SETQ *READTABLE* (IL:FIND-READTABLE "OLD-INTERLISP-T"))                                      (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))))  :AFTER (IGNORE-ERRORS (IL:DELFILE "{core}test.dfasl"))  (DO-TEST "Ensure reader environment not affected"    (IL:WITH-READER-ENVIRONMENT IL:*COMMON-LISP-READ-ENVIRONMENT*      (LET ((OLD-VALUES (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))            (FORM-COUNT 0))        (BLOCK READER-ENVIRONMENT-TEST          (WITH-OPEN-FILE (S "{core}test.dfasl" :DIRECTION :INPUT)            (FASL:PROCESS-FILE S              :TEXT-FN #'(LAMBDA (S) (UNLESS (EQUAL S "This file tests reader environment hacking.")                                       (RETURN-FROM READER-ENVIRONMENT-TEST NIL)))              :ITEM-FN #'(LAMBDA (X)                           (CASE (INCF FORM-COUNT)                             (1 (UNLESS (EVERY #'EQL X OLD-VALUES) (RETURN-FROM READER-ENVIRONMENT-TEST NIL)))                             (2 (UNLESS (AND (EVERY #'EQL OLD-VALUES                                               (IL:WITH-READER-ENVIRONMENT IL:*COMMON-LISP-READ-ENVIRONMENT*                                                 (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*)))                                             (EVERY #'EQL X                                               (LIST (FIND-PACKAGE "FASL")                                                     (IL:FIND-READTABLE "OLD-INTERLISP-T") 12 7)))                                  (RETURN-FROM READER-ENVIRONMENT-TEST NIL))))))          )        )        (EVERY #'EQL OLD-VALUES (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))      )    )  ))
+;;; Regression tests for FASLOAD-PATCHES
+
+;; Patch 2.
+
+(do-test-group ("Patch 2 tests"
+  :before (progn (fasl:with-open-handle (h "{core}test.dfasl")
+                   (princ "This is a test." (fasl:begin-text h)))
+                 (with-open-file
+                     (s "{core}test.dfasl" :direction :output :if-exists :append)
+                   (write-byte 64 s)))
+              
+  :after (ignore-errors (il:delfile "{core}test.dfasl")))
+
+  (do-test "Observe end-of-data mark"
+    (with-open-file (s "{core}test.dfasl" :direction :input)
+      (null (expect-errors (error) (fasl:process-file s))))
+  )
+
+  (do-test "Don't print anything when loading :verbose nil"
+    (and (equal (with-output-to-string (*standard-output*)
+                  (load "{core}test.dfasl" :verbose nil))
+                "")
+         (equal (with-output-to-string (*standard-output*)
+                  (load "{core}test.dfasl" :verbose t))
+                "This is a test.
+")
+    )
+  )
+
+)
+
+(do-test-group "Compatible with old FASL versions"
+  :before (with-open-file (s "{core}test.dfasl" :direction :output)
+            (map nil #'(lambda (byte) (write-byte byte s))
+              (list fasl:signature 0 4 fasl::end-mark fasl::end-mark)))
+  :after (ignore-errors (il:delfile "{core}test.dfasl"))
+  (do-test "Read old FASL file"
+    (null (expect-errors (error)
+      (with-open-file (s "{core}test.dfasl" :direction :input) (fasl:process-file s))))
+  )
+)
+
+(DO-TEST-GROUP "Reader environment hackery"
+  :BEFORE (FASL:WITH-OPEN-HANDLE (H "{core}test.dfasl")
+            (PRINC "This file tests reader environment hacking." (FASL:BEGIN-TEXT H))
+            (FASL:BEGIN-BLOCK H)
+            (FASL:DUMP-EVAL H '(LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))
+            (FASL:DUMP-EVAL H '(PROGN (SETQ *PRINT-BASE* 7)
+                                      (SETQ *READ-BASE* 12)
+                                      (SETQ *PACKAGE* (FIND-PACKAGE "FASL"))
+                                      (SETQ *READTABLE* (IL:FIND-READTABLE "OLD-INTERLISP-T"))
+                                      (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))))
+  :AFTER (IGNORE-ERRORS (IL:DELFILE "{core}test.dfasl"))
+  (DO-TEST "Ensure reader environment not affected"
+    (IL:WITH-READER-ENVIRONMENT IL:*COMMON-LISP-READ-ENVIRONMENT*
+      (LET ((OLD-VALUES (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))
+            (FORM-COUNT 0))
+        (BLOCK READER-ENVIRONMENT-TEST
+          (WITH-OPEN-FILE (S "{core}test.dfasl" :DIRECTION :INPUT)
+            (FASL:PROCESS-FILE S
+              :TEXT-FN #'(LAMBDA (S) (UNLESS (EQUAL S "This file tests reader environment hacking.")
+                                       (RETURN-FROM READER-ENVIRONMENT-TEST NIL)))
+              :ITEM-FN #'(LAMBDA (X)
+                           (CASE (INCF FORM-COUNT)
+                             (1 (UNLESS (EVERY #'EQL X OLD-VALUES) (RETURN-FROM READER-ENVIRONMENT-TEST NIL)))
+                             (2 (UNLESS (AND (EVERY #'EQL OLD-VALUES
+                                               (IL:WITH-READER-ENVIRONMENT IL:*COMMON-LISP-READ-ENVIRONMENT*
+                                                 (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*)))
+                                             (EVERY #'EQL X
+                                               (LIST (FIND-PACKAGE "FASL")
+                                                     (IL:FIND-READTABLE "OLD-INTERLISP-T") 12 7)))
+                                  (RETURN-FROM READER-ENVIRONMENT-TEST NIL))))))
+          )
+        )
+        (EVERY #'EQL OLD-VALUES (LIST *PACKAGE* *READTABLE* *READ-BASE* *PRINT-BASE*))
+      )
+    )
+  )
+)

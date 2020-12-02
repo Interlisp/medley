@@ -39,6 +39,25 @@ cd ../../medley
 ./run-medley --dimensions 1440x800 -full &
 ```
 
+### Middle-mouse tweak
+
+if you don't have a 3-button mouse (wheel = middle mouse)
+you can enable FN-left to be middle. Run in a terminal:
+
+```sh
+defaults write org.macosforge.xquartz.X11 enable_fake_buttons -boolean true
+defaults write org.macosforge.xquartz.X11 fake_button2 fn
+defaults write org.macosforge.xquartz.X11 fake_button3 none
+```
+
+To turn the settings back to the original default values do:
+
+```sh
+defaults write org.macosforge.xquartz.X11 enable_fake_buttons -boolean false
+defaults delete org.macosforge.xquartz.X11 fake_button2
+defaults delete org.macosforge.xquartz.X11 fake_button3
+```
+
 
 ## Running Medley on Windows with WSL
 
@@ -57,25 +76,6 @@ cd "$MEDLEYDIR"
 
 IP=1.2.3.4  # your Windows machine's local IP
 ./run-medley --dimensions 1440x800 --display "$IP":0 -bw 0 -full &
-```
-
-## Middle-mouse tweak (macOS)
-
-if you don't have a 3-button mouse (wheel = middle mouse)
-you can enable FN-left to be middle. Run in a terminal:
-
-```sh
-defaults write org.macosforge.xquartz.X11 enable_fake_buttons -boolean true
-defaults write org.macosforge.xquartz.X11 fake_button2 fn
-defaults write org.macosforge.xquartz.X11 fake_button3 none
-```
-
-To turn the settings back to the original default values do:
-
-```sh
-defaults write org.macosforge.xquartz.X11 enable_fake_buttons -boolean false
-defaults delete org.macosforge.xquartz.X11 fake_button2
-defaults delete org.macosforge.xquartz.X11 fake_button3
 ```
 
 ## Naming conventions and directory structure

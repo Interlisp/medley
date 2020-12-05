@@ -9,4 +9,4 @@ fi
 
 export LOADUPDIR=$MEDLEYDIR
 
-./run-medley -greet $MEDLEYDIR/makesysout/synclispfiles.lcom $MEDLEYDIR/loadups/lisp.venuesysout
+./run-medley -greet $MEDLEYDIR/makesysout/SYNCLISPFILES.LCOM $MEDLEYDIR/loadups/lisp.venuesysout

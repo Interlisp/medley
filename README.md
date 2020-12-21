@@ -3,8 +3,9 @@ This repo is for the overall Lisp environment for Medley Interlisp.
 
 A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko) which is the implementation of the Lisp virtual machine. If you want to run on some other platform that we haven't tried, you just need to port/build Maiko.
 
-We're still in the process of sorting out what we have and ensuring we start with a solid base.
+Newcomers to Medley Interlisp should check out [Blake McBride's Introduction to Medley](https://github.com/Interlisp/medley-intro)
 
+We've made great process in sorting out what we have (some dusty corners notwithstanding) and are gearing up to fix problems as they are found.
 
 ## Running Medley on all platforms with Docker
 

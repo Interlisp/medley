@@ -7,9 +7,11 @@ Newcomers to Medley Interlisp should check out [Blake McBride's Introduction to 
 
 We've made great process in sorting out what we have (some dusty corners notwithstanding) and are gearing up to fix problems as they are found.
 
-### [Building Medley Interlisp](https://github.com/Interlisp/medley/wiki/Building-Medley-Interlisp)
-### [Running Medley Interlisp]((https://github.com/Interlisp/medley/wiki/Running-Medley-Interlisp)
-### [Using Medley Interlisp](https://github.com/Interlisp/medley/wiki/Using-Medley-Interlisp)
+## Instructions
+
+* [Building Medley Interlisp](https://github.com/Interlisp/medley/wiki/Building-Medley-Interlisp)
+* [Running Medley Interlisp](https://github.com/Interlisp/medley/wiki/Running-Medley-Interlisp)
+* [Using Medley Interlisp](https://github.com/Interlisp/medley/wiki/Using-Medley-Interlisp)
 
 ## Naming conventions and directory structure
 

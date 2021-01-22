@@ -1,21 +1,21 @@
 # Medley 
-This repo is for the Lisp environment of [Medley Interlisp](https://Interlisp.org).
+This repo is for the Lisp environment of [Medley Interlisp](https://Interlisp.org). We've made great process in sorting out what we have (some dusty corners notwithstanding), but there's quite a bit more work to do. Please report problems!
 
 See [Medley Interlisp Introduction](https://github.com/Interlisp/medley/wiki/Medley-Interlisp-Introduction) for an overview.
 
+A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko), which is the implementation (in C) of the Medley virtual machine. 
 
-A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko) which is the implementation (in C) of the Medley virtual machine. 
 
-We've made great process in sorting out what we have (some dusty corners notwithstanding), but there's quite a bit more work to do..
-
-## Instructions
-See [Running with Docker](https://github.com/Interlisp/medley/wiki/Running-Medley-Interlisp-with-Docker) for another way.
+## Instructions for Building and Running
 
 ### Setting up X
 
-Medley Interlisp needs an X-Server to manage its display. Much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best, if you have a 4K display. It also presumes you have a 3-button mouse (the scroll-wheel on some mice act as one with some difficulty.) See [README-mac.md](./README-mac.md) 
+Medley Interlisp needs an X-Server to manage its display. Most Linux desktops have one. 
+If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displayes).
+* It also presumes you have a 3-button mouse (the scroll-wheel on some mice act as one with some difficulty.) See [README-mac.md](./README-mac.md) for more info on dealing with that.
 
 ### Running Medley Interlisp
+
 The `run-medley` script in this repo sets up some convenient defaults. Running Medley can be done by typing:
 ```
 $ cd medley
@@ -32,10 +32,10 @@ $ ./run-medley <SYSOUT-file-name>
 Once the system comes up, give it a few seconds to initialize.
 
 The first time the system is run it loads the system image that comes
-with the system.  When you exit the system (or "do a `SaveVM`" menu option)
-the state of your machine is saved
-in a file named `~/lisp.virtualmem`.  Subsequent system startups 
-load the `~/lisp.virtualmem` image by default.
+with the system.  When you exit the system (or "do a `SaveVM`" menu
+option) the state of your machine is saved in a file named
+`~/lisp.virtualmem`.  Subsequent system startups load the
+`~/lisp.virtualmem` image by default.
 
 ### Exiting The System
 

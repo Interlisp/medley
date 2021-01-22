@@ -1,23 +1,68 @@
-# medley 
-This repo is for the overall Lisp environment for Medley Interlisp.
+# Medley 
+This repo is for the Lisp environment of [Medley Interlisp](https://Interlisp.org).
 
-A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko) which is the implementation of the Lisp virtual machine. If you want to run on some other platform that we haven't tried, you just need to port/build Maiko.
+See [Medley Interlisp Introduction](https://github.com/Interlisp/medley/wiki/Medley-Interlisp-Introduction) for an overview.
 
-Newcomers to Medley Interlisp should check out [Blake McBride's Introduction to Medley](https://github.com/Interlisp/medley-intro)
 
-We've made great process in sorting out what we have (some dusty corners notwithstanding) and are gearing up to fix problems as they are found.
+A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko) which is the implementation (in C) of the Medley virtual machine. 
+
+We've made great process in sorting out what we have (some dusty corners notwithstanding), but there's quite a bit more work to do..
 
 ## Instructions
+See [Running with Docker](https://github.com/Interlisp/medley/wiki/Running-Medley-Interlisp-with-Docker) for another way.
 
-* [Building Medley Interlisp](https://github.com/Interlisp/medley/wiki/Building-Medley-Interlisp)
-* [Running Medley Interlisp](https://github.com/Interlisp/medley/wiki/Running-Medley-Interlisp)
+### Setting up X
+
+Medley Interlisp needs an X-Server to manage its display. Much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best, if you have a 4K display. It also presumes you have a 3-button mouse (the scroll-wheel on some mice act as one with some difficulty.) See [README-mac.md](./README-mac.md) 
+
+### Running Medley Interlisp
+The `run-medley` script in this repo sets up some convenient defaults. Running Medley can be done by typing:
+```
+$ cd medley
+$ ./run-medley
+```
+
+Or, if you wish to start Medley up with a different SYSOUT:
+
+```
+$ cd medley
+$ ./run-medley <SYSOUT-file-name>
+```
+
+Once the system comes up, give it a few seconds to initialize.
+
+The first time the system is run it loads the system image that comes
+with the system.  When you exit the system (or "do a `SaveVM`" menu option)
+the state of your machine is saved
+in a file named `~/lisp.virtualmem`.  Subsequent system startups 
+load the `~/lisp.virtualmem` image by default.
+
+### Exiting The System
+
+The system may be exited from the Interlisp prompt by typing:
+
+```
+(LOGOUT)
+```
+
+Or from the Common Lisp prompt with:
+```
+(IL:LOGOUT)
+```
+When you logout of the system, Medley automatically creates a binary
+dump of your system located in your home directory named
+`lisp.virtualmem`. The next time you run the system, if you don't
+specify a specific image to run, Medley restores that image so that
+you can continue right where you left off.
+
 * [Using Medley Interlisp](https://github.com/Interlisp/medley/wiki/Using-Medley-Interlisp)
+
 
 ## Naming conventions and directory structure
 
 File Names and Extensions: Most Interlisp source file names are
 UPPERCASE and Interlisp didn't use file extensions for its source
-files. Note .TEDIT or .TXT file is probably documentation
+files. A .TEDIT or .TXT file is probably documentation
 for the package of same name, at least in the library,
 internal/library, lispusers.
 
@@ -25,16 +70,16 @@ The current repo has both Lisp sources and compiled .LCOM and .DFASL
 files, because some files don't compile in a vanilla lisp.sysout .
 
 Each directory should have a README.md, but briefly
-- basics -- old sysouts needed (for now) for rebuilding new sysouts
+
 - docs -- Documentation files (either PDFs or online help)
 - fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
-- greetfiles -- should have any necessary setup of directories Lisp should look in for load
-- internal -- These _were_ internal to Venue
+- greetfiles -- various configuration setups
+- internal -- These _were_ internal to Venue; now internal/library and internal/test
 - library  -- packages that were supported (30 years ago)
 - lispusers -- packages that were only half supported (ditto)
 - loadups   -- has sysouts and other builds
 - makesysout -- files for making new sysouts for various configurations, based on basics
-- patches -- ""
+- patches -- for cases where reloading doesn't wor
 - sunloadup --  support information for making a new lisp.sysout from scratch
 - sources   -- sources for Interlisp and Common Lisp implementations
 - unicode  -- data files for support of XCCS to and from Unicode mappings

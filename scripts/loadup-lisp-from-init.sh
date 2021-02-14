@@ -9,10 +9,8 @@ fi
 
 export LOADUPDIR="$MEDLEYDIR"
 mkdir -p "$MEDLEYDIR/tmp"
-echo ------ starting with ---
-ls -l tmp loadups/init*
-echo ----------
-rm -f ~/rem.cm ~/lisp.virtualmem
+
+rm -f ~/rem.cm ~/lisp.virtualmem ./tmp/* loadups/init*~
 
 cp sources/XREM.CM ~/rem.cm
 

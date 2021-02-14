@@ -7,8 +7,6 @@ if [ ! -f run-medley ] ; then
     exit 1 ;
 fi
 
-export LOADUPDIR=$MEDLEYDIR
-
-./run-medley -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/loadups/xlisp.sysout
+./run-medley -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/loadups/lisp.sysout
 
 

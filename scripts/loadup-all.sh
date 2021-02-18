@@ -2,7 +2,7 @@
 
 export MEDLEYDIR=`pwd`
 
-if [ ! -f run-medley ] ; then
+if [ ! -x run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi

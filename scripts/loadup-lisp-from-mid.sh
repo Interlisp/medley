@@ -7,8 +7,7 @@ if [ ! -f run-medley ] ; then
     exit 1
 fi
 
-rm -f ~/rem.cm loadups/LISP.SYSOUT* loadups/lisp.sysout*
-touch loadups/lisp.sysout
+scr="-sc 1024x768 -gr 1042x790"
 
 echo '"' > ~/rem.cm
 echo '(PROGN(LOAD(QUOTE {DSK}'$MEDLEYDIR'/sources/LOADUP.LISP))(HARDRESET))' >> ~/rem.cm
@@ -19,7 +18,9 @@ echo '"' >> ~/rem.cm
 echo -----rem.cm -----
 cat ~/rem.cm
 echo ----------------
-./run-medley -greet $MEDLEYDIR/sources/LOADUP-GREET tmp/init-mid.sysout
+
+./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-GREET tmp/init-mid.sysout
+
 rm ~/rem.cm
 
 echo ----- created: -------

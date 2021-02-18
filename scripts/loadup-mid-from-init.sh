@@ -15,9 +15,12 @@ cp sources/XREM.CM ~/rem.cm
 
 prog=../maiko/linux.x86_64/ldeinit
 if [ ! -x $prog ] ; then
-    echo $prog not found
     prog=../maiko/darwin.aarch64/ldeinit
 fi
+if [ ! -x $prog ] ; then
+    prog=../maiko/linux.armv7l/ldeinit
+fi
+
 
 $prog -sc 1000x900 -g 1000x900 loadups/init.dlinit
 

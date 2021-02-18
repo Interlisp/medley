@@ -7,7 +7,7 @@ if [ ! -f run-medley ] ; then
     exit 1
 fi
 
-scr="-sc 1024x768 -gr 1042x790"
+scr="-sc 1024x768 -g 1042x790"
 
 mkdir -p "$MEDLEYDIR/tmp"
 rm -f ~/rem.cm

@@ -8,7 +8,7 @@ if [ ! -x run-medley ] ; then
 fi
 
 mkdir -p "$MEDLEYDIR/tmp"
-scr="-sc 1024x768 -gr 1042x790"
+scr="-sc 1024x768 -g 1042x790"
 
 cp sources/XREM.CM ~/rem.cm
 

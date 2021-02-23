@@ -10,9 +10,7 @@ fi
 mkdir -p "$MEDLEYDIR/tmp"
 scr="-sc 1024x768 -g 1042x790"
 
-cp sources/XREM.CM ~/rem.cm
-
-./run-medley -prog ldeinit $scr -vmem tmp/init-mid.sysout loadups/init.dlinit
+./run-medley -prog ldeinit -greet $MEDLEYDIR/sources/XREM.CM $scr -vmem tmp/init-mid.sysout loadups/init.dlinit
 
 echo ---- made ----
 ls -l tmp/

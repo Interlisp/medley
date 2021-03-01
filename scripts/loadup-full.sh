@@ -2,13 +2,17 @@
 
 export MEDLEYDIR=`pwd`
 
-if [ ! -f run-medley ] ; then
+if [ ! -x run-medley ] ; then
     echo must run from MEDLEYDIR ;
     exit 1 ;
 fi
+scr="-sc 1024x768 -g 1042x790"
 
-export LOADUPDIR=$MEDLEYDIR
+rm -f ~/rem.cm
 
-./run-medley -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/loadups/xlisp.sysout
+./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/loadups/lisp.sysout
 
 
+echo ----- made ----
+ls -l loadups/full.sysout
+echo ---------------

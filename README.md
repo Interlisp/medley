@@ -1,7 +1,13 @@
 # Medley 
-This repo is for the Lisp environment of [Medley Interlisp](https://Interlisp.org). We've made great process in sorting out what we have (some dusty corners notwithstanding), but there's quite a bit more work to do. Please report problems!
 
-See [Medley Interlisp Introduction](https://github.com/Interlisp/medley/wiki/Medley-Interlisp-Introduction) for an overview.
+
+
+
+This repository is for the Lisp environment of [Medley Interlisp](https://Interlisp.org).
+
+We've made great process in sorting out what we have (some dusty corners notwithstanding), but there's quite a bit more work to do. Please report problems!
+
+See [Medley Interlisp Wiki](https://github.com/Interlisp/medley/wiki/) for an overview, and other pointers.
 
 A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko), which is the implementation (in C) of the Medley virtual machine. 
 
@@ -10,9 +16,10 @@ A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko), which is
 
 ### Setting up X
 
-Medley Interlisp needs an X-Server to manage its display. Most Linux desktops have one. 
-If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displayes).
-* It also presumes you have a 3-button mouse (the scroll-wheel on some mice act as one with some difficulty.) See [README-mac.md](./README-mac.md) for more info on dealing with that.
+Medley Interlisp needs an X-Server to manage its display. Most Linux desktops have one. There are a number of free open source X-servers for windows. Mac users should head over to [XQuartz.org](https://xquartz.org/releases) -- be sure to pick a version if you have a newer Mac.
+
+If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.) It also presumes you have a 3-button mouse; the scroll-wheel on some mice act as one with some difficulty.) XQuartz Preferences/Input has "Emulate three button mouse" option.
+
 
 ### Running Medley Interlisp
 
@@ -78,8 +85,8 @@ Each directory should have a README.md, but briefly
 - library  -- packages that were supported (30 years ago)
 - lispusers -- packages that were only half supported (ditto)
 - loadups   -- has sysouts and other builds
-- makesysout -- files for making new sysouts for various configurations, based on basics
 - patches -- for cases where reloading doesn't wor
+- scripts  -- some scripts for fixing up things
 - sunloadup --  support information for making a new lisp.sysout from scratch
 - sources   -- sources for Interlisp and Common Lisp implementations
 - unicode  -- data files for support of XCCS to and from Unicode mappings

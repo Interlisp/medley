@@ -13,6 +13,6 @@ scr="-sc 1024x768 -g 1042x790"
 ./run-medley $scr -greet $MEDLEYDIR/sources/YREM.CM tmp/init-mid.sysout
 
 echo ----- created: -------
-ls -l loadups/lisp.sysout
+ls -l loadups/lisp.sysout tmp/*.dribble
 echo ----------------------
 

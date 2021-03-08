@@ -1,7 +1,7 @@
 FROM ubuntu:focal
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y make gcc libx11-dev
+RUN apt-get update && apt-get install -y make clang libx11-dev
 COPY ../maiko/ /build/
 WORKDIR /build/bin
 RUN rm -rf /build/linux*

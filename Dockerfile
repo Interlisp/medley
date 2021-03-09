@@ -2,7 +2,7 @@ FROM ubuntu:focal
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y make clang libx11-dev
-COPY ../maiko/ /build/
+COPY ./maiko/ /build/
 WORKDIR /build/bin
 RUN rm -rf /build/linux*
 RUN ./makeright x
@@ -18,7 +18,7 @@ RUN mkdir -p /app/maiko
 WORKDIR /app
 COPY ./* ./
 COPY --from=0 /build/bin ./maiko/bin
-COPY --from=0 /build/linux* ./maiko
+COPY --from=0 /build/linux* ./maiko/
 
 RUN adduser --disabled-password --gecos "" medley
 USER medley

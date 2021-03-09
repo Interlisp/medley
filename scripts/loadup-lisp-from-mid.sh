@@ -10,9 +10,9 @@ fi
 scr="-sc 1024x768 -g 1042x790"
 
 
-./run-medley $scr -greet $MEDLEYDIR/sources/YREM.CM tmp/init-mid.sysout
+./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-LISP.CM tmp/init-mid.sysout
 
 echo ----- created: -------
-ls -l loadups/lisp.sysout
+ls -l tmp/lisp.sysout tmp/lisp.dribble
 echo ----------------------
 

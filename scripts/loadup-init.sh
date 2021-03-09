@@ -14,5 +14,5 @@ mkdir -p "$MEDLEYDIR/tmp"
 ./run-medley $scr -greet "$MEDLEYDIR"/sources/LOADUP-INIT.LISP -full
 
 echo ---- made ----
-ls -l tmp loadups/init*
+ls -l tmp
 echo --------------

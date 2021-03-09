@@ -10,9 +10,9 @@ scr="-sc 1024x768 -g 1042x790"
 
 rm -f ~/rem.cm
 
-./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/loadups/lisp.sysout
+./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/tmp/lisp.sysout
 
 
 echo ----- made ----
-ls -l loadups/full.sysout
+ls -l tmp/full.sysout
 echo ---------------

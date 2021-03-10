@@ -8,5 +8,5 @@ if [ ! -x run-medley ] ; then
 fi
 
 cp -p tmp/full.sysout tmp/lisp.sysout tmp/*.dribble tmp/whereis.hash loadups/
-cp -p tmp/exports.all library/
+cp -p tmp/exports.all tmp/RDSYS tmp/RDSYS.LCOM library/
 

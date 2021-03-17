@@ -1,4 +1,4 @@
-o#!/bin/sh
+#!/bin/sh
 
 export MEDLEYDIR=`pwd`
 

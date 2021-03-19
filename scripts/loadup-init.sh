@@ -14,5 +14,5 @@ mkdir -p "$MEDLEYDIR/tmp"
 ./run-medley $scr -greet "$MEDLEYDIR"/sources/LOADUP-INIT.LISP -full
 
 echo ---- made ----
-ls -l tmp
+ls -l tmp/*[WMShlet]
 echo --------------

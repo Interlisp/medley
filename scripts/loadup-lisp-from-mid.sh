@@ -13,6 +13,6 @@ scr="-sc 1024x768 -g 1042x790"
 ./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-LISP.CM tmp/init-mid.sysout
 
 echo ----- created: -------
-ls -l tmp/lisp.sysout tmp/lisp.dribble
+ls -l tmp/lisp.*[te]
 echo ----------------------
 

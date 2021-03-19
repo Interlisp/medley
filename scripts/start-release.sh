@@ -9,6 +9,8 @@ tag=$1
 
 cd ..
 
+echo making medley zip 
+
 tar cfz medley/tmp/medley-$tag.tgz                        \
     --exclude-backups --exclude="*.PDF"                   \
     medley/docs/dinfo                                     \
@@ -22,7 +24,12 @@ tar cfz medley/tmp/medley-$tag.tgz                        \
     medley/sources/
 
 cd medley
+
+echo making release
 gh release create $tag -F release-notes.md -p -t $tag
+
+echo uploaded tmp/medley-$tag.tgz
+
 gh release upload $tag tmp/medley-$tag.tgz --clobber
 
 ./scripts/release-one.sh $tag

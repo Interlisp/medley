@@ -11,11 +11,14 @@ tag=$1
 cd ../maiko/bin
 export PATH=.:"$PATH"
 osarch=`osversion`.`machinetype`
+
 cd ../..
-tar cfz medley/tmp/maiko-$osarch.tgz \
-    --exclude "make*"  maiko/bin     \                   
+
+tar cfz medley/tmp/maiko-$tag-$osarch.tgz   \
+    --exclude "make*" --exclude legacy      \
+    maiko/bin                               \
     maiko/$osarch/lde*
 
 cd medley
 
-gh release upload $tag tmp/maiko-$osarch.tgz
+gh release upload --clobber $tag tmp/maiko-$tag-$osarch.tgz

@@ -16,6 +16,7 @@ tar cfz medley/tmp/medley-$tag.tgz                        \
     medley/docs/dinfo                                     \
     medley/greetfiles/SIMPLE-INIT                         \
     medley/run-medley                                     \
+    medley/scripts                                        \
     medley/loadups                                        \
     medley/fonts/displayfonts  medley/fonts/altofonts     \
     medley/library/                                       \

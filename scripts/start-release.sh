@@ -19,6 +19,7 @@ tar cfz medley/tmp/medley-$tag.tgz                        \
     medley/scripts                                        \
     medley/loadups                                        \
     medley/fonts/displayfonts  medley/fonts/altofonts     \
+    medley/fonts/postscriptfonts medley/fonts/ipfonts     \
     medley/library/                                       \
     medley/internal/library                               \
     medley/lispusers/                                     \
@@ -27,7 +28,8 @@ tar cfz medley/tmp/medley-$tag.tgz                        \
 cd medley
 
 echo making release
-gh release create $tag -F release-notes.md -p -t $tag
+sed s/'$tag'/$tag/g < release-notes.md > tmp/release-notes.md
+gh release create $tag -F tmp/release-notes.md -p -t $tag
 
 echo uploaded tmp/medley-$tag.tgz
 

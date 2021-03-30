@@ -8,7 +8,7 @@ fi
 
 tag=$1
 if [ -z "$tag" ] ; then
-    tag=nitely-`date +%y%m%d`
+    tag=nightly-`date +%y%m%d`
 fi
 
 cd ../maiko/bin

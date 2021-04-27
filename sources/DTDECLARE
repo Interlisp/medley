@@ -1,1 +1,643 @@
-(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "XCL" BASE 10)(FILECREATED " 8-Mar-95 10:22:57" |{DSK}<lispcore>sources>DTDECLARE.;2| 34107        |changes| |to:|  (FNS TRANSLATE.DATATYPE)      |previous| |date:| "15-Dec-92 14:08:39" |{DSK}<lispcore>sources>DTDECLARE.;1|); Copyright (c) 1981, 1982, 1983, 1984, 1985, 1986, 1987, 1990, 1992, 1995 by Venue & Xerox Corporation.  All rights reserved.(PRETTYCOMPRINT DTDECLARECOMS)(RPAQQ DTDECLARECOMS       (        (* |;;| "declaring DATATYPES --- part of ABC too")        (FNS /DECLAREDATATYPE DECLAREDATATYPE TRANSLATE.DATATYPE \\REUSETO \\TYPEGLOBALVARIABLE)        (FUNCTIONS TYPE-VARIABLE-FROM-TYPE-NAME)        (FNS |BitFieldMask| |BitFieldShift| |BitFieldShiftedMask| |MakeBitField| |BitFieldWidth|              |BitFieldFirst|)        (OPTIMIZERS FETCHFIELD FFETCHFIELD REPLACEFIELD FREPLACEFIELD REPLACEFIELDVAL                FREPLACEFIELDVAL NCREATE \\DTEST)        (PROP DMACRO \\TESTBITS)        (FNS COMPILEDFETCHFIELD COMPILEDREPLACEFIELD COMPILEDNCREATE)        (DECLARE\: DONTCOPY (EXPORT (RECORDS |FldDsc|)))        (VARS DATATYPEFIELDTYPES)        (COMS                                                (* \;                         "Macros which convert a record access form into an address-generating form")              (MACROS LOCF INDEXF)              (FNS TRANSLATE.LOCF))        (LOCALVARS . T)        (PROP FILETYPE DTDECLARE)))(* |;;| "declaring DATATYPES --- part of ABC too")(DEFINEQ(/declaredatatype  (lambda (typename fieldspecs dlist len supertype)          (* \; "Edited 18-May-87 17:09 by Snow")    (and lispxhist typename (undosave (list '/declaredatatype typename (getfieldspecs typename)                                            nil nil (getsupertype typename))))    (cl:multiple-value-bind (dlist redeclared)           (declaredatatype typename fieldspecs dlist len supertype)           (cond              (redeclared (lispxprint (list '|datatype| typename '|redeclared|)                                 t t)))           dlist)))(declaredatatype  (lambda (typename fieldspecs dlist length supertype)       (* |Pavel| "16-Oct-86 14:52")                                                  (* |;;| "this is called twice when declaring records;  once where the DLIST and LENGTH hasn't been computed, and another time when it has.")    (let ((superspecs (cond                         (supertype (getfieldspecs supertype)))))                                                  (* \; "maybe an error if supertype doesn't exist?")         (setq fieldspecs (append superspecs fieldspecs))         (cond            ((and fieldspecs (or (not dlist)                                 (not length)))   (* \;                                   "the AND is an optimization -- do we really need to compute DLIST?")             (setq dlist (translate.datatype typename fieldspecs))             (setq length (|pop| dlist)))))    (or (and typename (litatom typename))        (lisperror "ILLEGAL ARG" typename))    (let ((ptrs (|for| p |in| dlist |when| (selectq (|fetch| |fdType| |of| p)                                               ((pointer fullpointer)                                                     t)                                               nil) |collect| (|fetch| |fdOffset| |of| p))))         (cl:multiple-value-bind (typenum redeclared)                (\\assigndatatype1 typename dlist length fieldspecs ptrs supertype)                (settopval (\\typeglobalvariable typename t)                       typenum)                (cl:values dlist redeclared)))))(TRANSLATE.DATATYPE  (LAMBDA (TYPENAME FIELDSPECS)                              (* DECLARATIONS\: (RECORD SPEC                                                           (N LEN . FD)))    (DECLARE (SPECVARS TYPENAME UNUSED BIT OFFSET FD))   (* \;                                                       "Edited  8-Mar-95 10:18 by sybalsky:mv:envos")    (COND       ((NULL TYPENAME))       ((OR (NOT (LITATOM TYPENAME))            (EQ TYPENAME '**DEALLOC**))        (ERROR "Invalid type name" TYPENAME)))    (PROG ((N 0)           UNUSED           (OFFSET 0)           (BIT 0)           DLIST REUSE LEN FD)          (SETQ DLIST (|for| S |in| FIELDSPECS                         |collect| (|create| SPEC                                              N _ (|add| N 1)                                              LEN _ (SELECTQ S                                                        ((POINTER XPOINTER)                                                              (COND                                                                ((FMEMB :4-BYTE-TEMP                                                                       COMPILER::*TARGET-ARCHITECTURE*                                                                        )                                                             (* \;        "For old systems running in compatibility mode, assume 28-bit pointers when reserving space")                                                                 28)                                                                ((FMEMB :4-BYTE                                                                       COMPILER::*TARGET-ARCHITECTURE*                                                                        )                                                             (* \;                                                       "For BIGVM systems, use 28 bits for pointers")                                                                 28)                                                                (T                                                              (* \;                                                 "For release 2.0 and earlier, use 24-bit pointers.")                                                                   24)))                                                        ((FIXP FLOATP SWAPPEDFIXP FULLPOINTER                                                                SWAPPEDXPOINTER FULLXPOINTER)                                                              BITSPERCELL)                                                        (FLAG (SETQQ S FLAGBITS)                                                              1)                                                        (BYTE (SETQQ S BITS)                                                              BITSPERBYTE)                                                        (WORD (SETQQ S BITS)                                                              BITSPERWORD)                                                        (SIGNEDWORD (SETQQ S SIGNEDBITS)                                                                    BITSPERWORD)                                                        (SELECTQ (CAR (LISTP S))                                                            ((BITS FLAGBITS SIGNEDBITS)                                                                  (PROG1 (CADR S)                                                                     (SETQ S (CAR S))))                                                            (ERROR "invalid field spec: " S)))                                              FD _                                              (|create| |FldDsc|                                                     |fdTypeName| _ TYPENAME                                                     |fdType| _ S                                                     |fdOffset| _ NIL))))          (|for| S |in| DLIST             |do|             (|replace| |fdOffset| |of| (SETQ FD (|fetch| FD |of| S))                |with|                (SELECTQ (|fetch| |fdType| |of| FD)                    ((POINTER XPOINTER)                          (COND                            ((AND TYPENAME                                  (|find| X |in| UNUSED                                     |suchthat|                                     (AND (EQ 0 (LOGAND (CAR X)                                                       1))                                          (IGEQ (CADDR X)                                                (- (COND                                                      ((FMEMB :4-BYTE-TEMP                                                               COMPILER::*TARGET-ARCHITECTURE*)                                                             (* \;        "For old systems running in compatibility mode, assume 28-bit pointers when reserving space")                                                       28)                                                      ((FMEMB :4-BYTE COMPILER::*TARGET-ARCHITECTURE*                                                              )                                                             (* \;                                                       "For BIGVM systems, use 28 bits for pointers")                                                       28)                                                      (T     (* \;                                                 "For release 2.0 and earlier, use 24-bit pointers.")                                                         24))                                                   BITSPERWORD))                                          (EQ (IPLUS (CADR X)                                                     (CADDR X))                                              BITSPERWORD)                                          (|find| Y |in| UNUSED                                             |suchthat| (AND (EQ (CAR Y)                                                                     (ADD1 (CAR X)))                                                                 (EQ (CADDR Y)                                                                     BITSPERWORD))))))                                                             (* \; "unused 24 bit quantity")                                                             (* \; "this case not implemented yet")                             ))                         (COND                            ((IGREATERP BIT 4)               (* \;                                                            "Less than 8 bits left in this word")                             (\\REUSETO BITSPERWORD)))                         (COND                            ((ODDP OFFSET WORDSPERCELL)      (* \; "not on double word boundary")                             (\\REUSETO BITSPERWORD)))                         (COND                            ((NEQ BIT 4)                             (\\REUSETO 4 (EQ BIT 0))))                         (SETQ BIT 0)                        (* \; "")                         (PROG1 OFFSET (|add| OFFSET WORDSPERCELL)))                    ((FIXP SWAPPEDFIXP FLOATP SWAPPEDXPOINTER)                                                              (* \; "32 bit quantities")                         (COND                            ((NEQ BIT 0)                             (\\REUSETO BITSPERWORD)))                         (PROG1 OFFSET (|add| OFFSET WORDSPERCELL)))                    ((FULLPOINTER FULLXPOINTER)              (* \;                                                            "32 bit doubleword-aligned quantities")                         (COND                            ((NEQ BIT 0)                             (\\REUSETO BITSPERWORD)))                         (COND                            ((ODDP OFFSET WORDSPERCELL)                             (\\REUSETO BITSPERWORD)))                         (PROG1 OFFSET (|add| OFFSET WORDSPERCELL)))                    ((BITS FLAGBITS SIGNEDBITS)                          (SETQ LEN (|fetch| LEN |of| S))                         (COND                            ((AND TYPENAME (SETQ REUSE (|find| X |in| UNUSED                                                          |suchthat| (ILEQ LEN (CADDR X)))))                             (RPLACA (CDDR REUSE)                                    (IDIFFERENCE (CAR (CDDR REUSE))                                           LEN))                             (|replace| |fdType| |of| FD |with|                                                                 (CONS (|fetch| |fdType|                                                                          |of| FD)                                                                       (|MakeBitField|                                                                        (CADR REUSE)                                                                        LEN)))                             (|add| (CADR REUSE)                                    LEN)                             (CAR REUSE))                            ((IGREATERP LEN BITSPERWORD)     (* \;                                                "more than 1 word --- Must right justify first word")                             (SETQ LEN (IDIFFERENCE LEN BITSPERWORD))                             (COND                                ((IGREATERP LEN (IDIFFERENCE BITSPERWORD BIT))                                 (\\REUSETO BITSPERWORD)))                             (COND                                ((NEQ (IDIFFERENCE BITSPERWORD BIT)                                      LEN)                                 (\\REUSETO (IDIFFERENCE BITSPERWORD LEN))))                             (|replace| |fdType| |of| FD |with| (CONS 'LONGBITS                                                                                  (|MakeBitField|                                                                                   BIT LEN)))                             (SETQ BIT 0)                             (PROG1 OFFSET (|add| OFFSET 2)))                            (T (COND                                  ((IGREATERP LEN (IDIFFERENCE BITSPERWORD BIT))                                   (\\REUSETO BITSPERWORD)))                               (|replace| |fdType| |of| FD                                  |with| (CONS (|fetch| |fdType| |of| FD)                                                   (|MakeBitField| BIT LEN)))                               (|add| BIT LEN)                               (PROG1 OFFSET                                   (COND                                      ((EQ BIT BITSPERWORD)                                       (SETQ BIT 0)                                       (|add| OFFSET 1)))))))                    (SHOULDNT))))          (COND             (TYPENAME (COND                          ((NEQ BIT 0)                           (\\REUSETO BITSPERWORD)))                    (|while| (ODDP OFFSET WORDSPERCELL) |do| (|add| OFFSET 1))                    (COND                       ((IGREATERP OFFSET |\\MDSIncrement|)                        (ERROR TYPENAME "DATATYPE TOO BIG")))))          (RETURN (CONS OFFSET (MAPCAR DLIST (FUNCTION (LAMBDA (X)                                                         (|fetch| FD |of| X)))))))))(\\REUSETO  (LAMBDA (N FLG)                                        (* \; "Edited 15-Dec-92 13:46 by jds")    (* |;;| "Skip over unused bits in a datatype or blockrecord declaration.  Advance the bin-int-word and word-offset pointers accordingly.  Complain if this isn't supposed to be allowed.")    (SETQ N (IDIFFERENCE N BIT))    (COND       ((NEQ N 0)        (COND           ((AND (NULL TYPENAME)                 (NOT FLG))            (ERROR "Block/datatype field not aligned properly" FD)))        (|push| UNUSED (LIST OFFSET BIT N))))    (|add| BIT N)    (COND       ((EQ BIT 16)        (SETQ BIT 0)        (|add| OFFSET 1)))))(\\typeglobalvariable  (lambda (typename varflg)                                  (* \; "Edited 18-May-87 17:14 by Snow")(* |;;;| "Returns a constant or a variable that contains the datatype number of TYPENAME.  It is used when compiling type tests and assigning datatypes.  If TYPENAME is a system type, it returns the number.  Otherwise it creates a variable name and puts it on GLOBALVARS.")(* |;;;| "This is a kludge that will go away when we have type resolution at load time.")(* |;;;| "If VARFLG is true, always returns a var, rather than a system constant.  This is another kludge for backward compatibility.")    (or (and (not varflg)             (|for| entry |in| \\built-in-system-types |as| i |from| 1                |when| (eq typename (car entry)) |do| (return i)))        (let ((var (type-variable-from-type-name typename)))             (cond                ((not (or (fmemb var globalvars)                          (getprop var 'globalvar)))                 (putprop var 'globalvar t)))             var)))))(CL:DEFUN TYPE-VARIABLE-FROM-TYPE-NAME (TYPE-NAME)(* |;;;| "Convert a symbol naming a type into the unique global variable that holds the number for that type.  This can be tricky during that portion of the init before packages have been turned on.")   (IF (NULL *PACKAGE*)       THEN              (* |;;| "Packages are, indeed, not on yet.  We must check the type-name symbol to see if it begins with a known init-time package prefix.  If so, we strip that off and put it back on the front.  The function NAMESTRING-CONVERSION-CLAUSE is from LLPACKAGE.")             (LET* ((BASE (|ffetch| (CL:SYMBOL PNAMEBASE) |of| TYPE-NAME))                    (LEN (|ffetch| (CL:SYMBOL PNAMELENGTH) |of| TYPE-NAME))                    (FATP (|ffetch| (CL:SYMBOL FATPNAMEP) |of| TYPE-NAME))                    (CLAUSE (NAMESTRING-CONVERSION-CLAUSE BASE 1 LEN FATP)))                   (COND                      ((NULL CLAUSE)                         (* \;                              "TYPE-NAME is homed in the  Interlisp Package. Nothing special to do.")                       (PACK* "" TYPE-NAME "TYPE#"))                      (T                                     (* \; "The symbol matched a clause.  We take the prefix off the front of the name and put it at the beginning.")                         (LET* ((PREFIX (CL:FIRST CLAUSE))                                (PREFIX-LENGTH (FFETCH (STRINGP LENGTH) OF PREFIX)))                               (PACK* PREFIX "" (SUBSTRING TYPE-NAME (CL:1+ PREFIX-LENGTH))                                      "TYPE#")))))     ELSE            (* |;;| "Packages are on; this is the normal case.")           (CL:INTERN (CONCAT "" (MKSTRING TYPE-NAME)                             "TYPE#")                  (CL:SYMBOL-PACKAGE TYPE-NAME))))(DEFINEQ(|BitFieldMask|  (lambda (fd)                                               (* \; "Edited 18-May-87 17:14 by Snow")    (sub1 (llsh 1 (|BitFieldWidth| fd)))))(|BitFieldShift|  (lambda (fd)                                               (* \; "Edited 18-May-87 17:14 by Snow")    (idifference 16 (iplus (|BitFieldFirst| fd)                           (|BitFieldWidth| fd)))))(|BitFieldShiftedMask|  (lambda (fd)                                               (* \; "Edited 18-May-87 17:15 by Snow")    (idifference (llsh 1 (idifference 16 (|BitFieldFirst| fd)))           (llsh 1 (idifference 16 (iplus (|BitFieldFirst| fd)                                          (|BitFieldWidth| fd)))))))(|MakeBitField|  (lambda (first width)                                      (* \; "Edited 18-May-87 17:15 by Snow")    (logor (llsh first 4)           (sub1 width))))(|BitFieldWidth|  (lambda (fd)                                               (* \; "Edited 18-May-87 17:16 by Snow")    (add1 (logand fd 15))))(|BitFieldFirst|  (lambda (fd)                                               (* \; "Edited 18-May-87 17:16 by Snow")    (lrsh fd 4))))(DEFOPTIMIZER FETCHFIELD (&REST X)                             (COMPILEDFETCHFIELD X))(DEFOPTIMIZER FFETCHFIELD (&REST X)                              (COMPILEDFETCHFIELD X T))(DEFOPTIMIZER REPLACEFIELD (&REST X)                               (COMPILEDREPLACEFIELD X))(DEFOPTIMIZER FREPLACEFIELD (&REST X)                                (COMPILEDREPLACEFIELD X T))(DEFOPTIMIZER REPLACEFIELDVAL (&REST ARGS)                                  (CONS '(OPENLAMBDA (DESCRIPTOR DATUM NEWVALUE)                                                (PROG1 DATUM (REPLACEFIELD DESCRIPTOR DATUM NEWVALUE)                                                       ))                                        ARGS))(DEFOPTIMIZER FREPLACEFIELDVAL (&REST ARGS)                                   (CONS '(OPENLAMBDA (DESCRIPTOR DATUM NEWVALUE)                                                 (PROG1 DATUM (FREPLACEFIELD DESCRIPTOR DATUM                                                                      NEWVALUE)))                                         ARGS))(DEFOPTIMIZER NCREATE (&REST X)                          (COMPILEDNCREATE X))(DEFOPTIMIZER \\DTEST (VALUE TYPE &ENVIRONMENT ENV)                          (COND                             ((AND (EQ (CAR TYPE)                                       'QUOTE)                                   (LITATOM (CADR TYPE)))                              (COND                                 ((FMEMB :4-BYTE (COMPILER::ENV-TARGET-ARCHITECTURE ENV))                                  `((OPCODES DTEST 0 0 0 (ATOM \\\, (CADR TYPE)))                                    ,VALUE))                                 ((FMEMB :3-BYTE (COMPILER::ENV-TARGET-ARCHITECTURE ENV))                                  `((OPCODES DTEST 0 0 (ATOM \\\, (CADR TYPE)))                                    ,VALUE))                                 (T `((OPCODES DTEST 0 (ATOM \\\, (CADR TYPE)))                                      ,VALUE))))                             (T 'IGNOREMACRO)))(PUTPROPS \\TESTBITS DMACRO ((X N FD)                                     (NEQ 0 (\\GETBITS X N FD))))(DEFINEQ(compiledfetchfield  (lambda (x fastflg)                                        (* \; "Edited 18-May-87 17:32 by Snow")    (cond       ((eq (car (listp (car x)))            'quote)        ((lambda (descriptor datum)           (prog (typename)                 (cond                    ((and (not fastflg)                          (setq typename (|fetch| |fdTypeName| |of| descriptor)))                     (setq datum (list (function \\dtest)                                       datum                                       (kwote typename)))))                 (return                  (selectq (|fetch| |fdType| |of| descriptor)                      ((pointer xpointer fullpointer fullxpointer)                            (list '\\getbaseptr datum (|fetch| |fdOffset| |of| descriptor)))                      (swappedxpointer                            `((openlambda (d)                                    (\\vag2 (\\getbase d ,(add1 (|fetch| |fdOffset| |of| descriptor))                                                   )                                           (\\getbase d ,(|fetch| |fdOffset| |of| descriptor))))                             ,datum))                      (floatp `(\\getbasefloatp ,datum ,(|fetch| |fdOffset| |of| descriptor)))                      (fixp `(\\getbasefixp ,datum ,(|fetch| |fdOffset| |of| descriptor)))                      (swappedfixp `((openlambda (d)                                            (\\makenumber (\\getbase d                                                                 ,(add1 (|fetch| |fdOffset|                                                                           |of| descriptor)))                                                   (\\getbase d ,(|fetch| |fdOffset| |of| descriptor)                                                          )))                                     ,datum))                      (prog ((ft (|fetch| |fdType| |of| descriptor))                             (off (|fetch| |fdOffset| |of| descriptor)))                            (return (selectq (car ft)                                        (bits (list '\\getbits datum off (cdr ft)))                                        (signedbits `(signed (\\getbits ,datum ,off                                                                    ,(cdr ft))                                                            ,(|BitFieldWidth| (cdr ft))))                                        (flagbits (list '\\testbits datum off (cdr ft)))                                        (longbits `((openlambda (d)                                                           (\\makenumber (\\getbits                                                                          d                                                                          ,off                                                                          ,(cdr ft))                                                                  (\\getbase d ,(add1 off))))                                                    ,datum))                                        (shouldnt))))))))         (cadar x)         (cadr x)))       (t 'ignoremacro))))(compiledreplacefield  (lambda (x fastflg rplvalflg)                              (* \; "Edited 18-May-87 17:29 by Snow")                    (* |;;| "compile code for replacing field values.  Goes to great length to ensure that the coerced value is returned")    (cond       ((eq (car (listp (car x)))            'quote)        ((lambda (descriptor datum newvalue)           (prog ((typename (|fetch| |fdTypeName| |of| descriptor))                  (ft (|fetch| |fdType| |of| descriptor))                  (offset (|fetch| |fdOffset| |of| descriptor)))                 (cond                    ((and (not fastflg)                          typename)                     (setq datum (list (function \\dtest)                                       datum                                       (kwote typename)))))                 (return (selectq ft                             ((pointer fullpointer)                                   (list (function \\rplptr)                                        datum offset newvalue))                             (xpointer (list (function putbaseptrx)                                             datum offset newvalue))                             (fullxpointer (list '\\putbaseptr datum offset newvalue))                             (swappedxpointer                                   `((openlambda (d r)                                           (\\putbase d ,offset (\\loloc r))                                           (\\putbase d ,(add1 offset) (\\hiloc r))                                           r)                                    ,datum                                    ,newvalue))                             (fixp `(\\putbasefixp ,datum ,offset ,newvalue))                             (swappedfixp `(\\putswappedfixp (\\addbase ,datum ,offset)                                                  ,newvalue))                             (floatp `(\\putbasefloatp ,datum ,offset ,newvalue))                             (selectq (car ft)                                 (bits (list '\\putbits datum offset (cdr ft)                                             newvalue))                                 (longbits (list (subpair '(offset ft) (list offset (cdr ft))                                                        '(openlambda (d v)                                                                (\\putbits d offset ft (\\hinum                                                                                        v))                                                                (\\putbase d (add1 offset)                                                                       (\\lonum v))                                                                v))                                                 datum newvalue))                                 (signedbits `(signed (\\putbits ,datum ,offset ,(cdr ft)                                                             (unsigned ,newvalue                                                                    ,(|BitFieldWidth| (cdr ft))))                                                     ,(|BitFieldWidth| (cdr ft))))                                 (flagbits `(neq (\\putbits ,datum ,offset ,(cdr ft)                                                        (cond                                                           (,newvalue ,(|BitFieldMask| (cdr ft)))                                                           (t 0)))                                                 0))                                 (return 'ignoremacro))))))         (cadar x)         (cadr x)         (caddr x)))       (t 'ignoremacro))))(compiledncreate  (lambda (x)                                                (* \; "Edited 18-May-87 17:34 by Snow")(* |;;;| "compiles code for NCREATEs.  Exists to eliminate the call to \\TYPENUMBERFROMNAME.")    (cond       ((eq (car (listp (car x)))            'quote)        (cond           ((null (cadr x))            (list 'createcell (\\typeglobalvariable (cadar x))))           (t (list 'ncreate2 (\\typeglobalvariable (cadar x))                    (cadr x)))))       (t 'ignoremacro)))))(DECLARE\: DONTCOPY (* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE\: EVAL@COMPILE(RECORD |FldDsc| (|fdTypeName| |fdOffset| |fdType|)))(* "END EXPORTED DEFINITIONS"))(RPAQQ DATATYPEFIELDTYPES       ((FLOATP 0.0)        (FIXP 0)        (SWAPPEDFIXP 0)        (POINTER NIL)        (XPOINTER NIL)        (FULLPOINTER NIL)        (FULLXPOINTER NIL)        (SWAPPEDXPOINTER NIL)        (FLAG NIL)        (BYTE 0)        (WORD 0)        (SIGNEDWORD 0)))(* \; "Macros which convert a record access form into an address-generating form")(DECLARE\: EVAL@COMPILE (PUTPROPS LOCF DMACRO (X (TRANSLATE.LOCF X)))(PUTPROPS INDEXF DMACRO (X (TRANSLATE.LOCF X T))))(DEFINEQ(translate.locf  (lambda (args indexonly)                                   (* \; "Edited 18-May-87 17:35 by Snow")    (declare (globalvars clisparray))    (prog ((form (mkprogn args))           newform offset spec)      retry          (selectq (car (listp form))              (progn (cond                        ((not (cddr form))                   (* \;                                                 "get rid of extra PROGN's inserted by record package")                         (setq form (cadr form))                         (go retry))))              ((fetchfield ffetchfield)                    (cond                      ((and (setq offset (listp (cadr form)))                            (eq (car offset)                                'quote)                            (setq offset (cadr (setq spec (cadr offset))))                            (fixp offset))                       (return (cond                                  (indexonly offset)                                  ((eq offset 0)                                   (caddr form))                                  (t (setq form (caddr form))                    (* |;;| "loop in order to merge \\ADDBASEs.  Should actually be done by compiler optimization, but apparently that is currently broken")                                     (|repeatwhile| (selectq (car (listp form))                                                        (progn (cond                                                                  ((null (cddr form))                                                                   (setq form (cadr form))                                                                   t)))                                                        ((addbase \\addbase)                                                              (cond                                                                ((fixp (caddr form))                                                                 (|add| offset (caddr form))                                                                 (setq form (cadr form))                                                                 t)))                                                        (cond                                                           ((neq (setq newform (cl:macroexpand-1                                                                                form))                                                                 form)                                                            (setq form newform)                                                            t))))                                     (list '\\addbase form offset)))))))              (cond                 ((neq form (setq form (cl:macroexpand-1 form)))                  (go retry))))          (error "LOCF Can't figure out this argument" args)          (return 'ignoremacro)))))(DECLARE\: DOEVAL@COMPILE DONTCOPY(LOCALVARS . T))(PUTPROPS DTDECLARE FILETYPE CL:COMPILE-FILE)(PUTPROPS DTDECLARE COPYRIGHT ("Venue & Xerox Corporation" 1981 1982 1983 1984 1985 1986 1987 1990 1992 1995))(DECLARE\: DONTCOPY  (FILEMAP (NIL (1518 17273 (/DECLAREDATATYPE 1528 . 2111) (DECLAREDATATYPE 2113 . 3743) (TRANSLATE.DATATYPE 3745 . 15504) (\\REUSETO 15506 . 16182) (\\TYPEGLOBALVARIABLE 16184 . 17271)) (19148 20420 (|BitFieldMask| 19158 . 19334) (|BitFieldShift| 19336 . 19574) (|BitFieldShiftedMask| 19576 . 19920) (|MakeBitField| 19922 . 20108) (|BitFieldWidth| 20110 . 20268) (|BitFieldFirst| 20270 . 20418)) (22610 30173 (COMPILEDFETCHFIELD 22620 . 25902) (COMPILEDREPLACEFIELD 25904 . 29637) (COMPILEDNCREATE 29639 . 30171)) (30889 33863 (TRANSLATE.LOCF 30899 . 33861)))))STOP
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "XCL" BASE 10)
+(FILECREATED " 8-Mar-95 10:22:57" |{DSK}<lispcore>sources>DTDECLARE.;2| 34107  
+
+      |changes| |to:|  (FNS TRANSLATE.DATATYPE)
+
+      |previous| |date:| "15-Dec-92 14:08:39" |{DSK}<lispcore>sources>DTDECLARE.;1|)
+
+
+; Copyright (c) 1981, 1982, 1983, 1984, 1985, 1986, 1987, 1990, 1992, 1995 by Venue & Xerox Corporation.  All rights reserved.
+
+(PRETTYCOMPRINT DTDECLARECOMS)
+
+(RPAQQ DTDECLARECOMS
+       (
+        (* |;;| "declaring DATATYPES --- part of ABC too")
+
+        (FNS /DECLAREDATATYPE DECLAREDATATYPE TRANSLATE.DATATYPE \\REUSETO \\TYPEGLOBALVARIABLE)
+        (FUNCTIONS TYPE-VARIABLE-FROM-TYPE-NAME)
+        (FNS |BitFieldMask| |BitFieldShift| |BitFieldShiftedMask| |MakeBitField| |BitFieldWidth| 
+             |BitFieldFirst|)
+        (OPTIMIZERS FETCHFIELD FFETCHFIELD REPLACEFIELD FREPLACEFIELD REPLACEFIELDVAL 
+               FREPLACEFIELDVAL NCREATE \\DTEST)
+        (PROP DMACRO \\TESTBITS)
+        (FNS COMPILEDFETCHFIELD COMPILEDREPLACEFIELD COMPILEDNCREATE)
+        (DECLARE\: DONTCOPY (EXPORT (RECORDS |FldDsc|)))
+        (VARS DATATYPEFIELDTYPES)
+        (COMS                                                (* \; 
+                        "Macros which convert a record access form into an address-generating form")
+              (MACROS LOCF INDEXF)
+              (FNS TRANSLATE.LOCF))
+        (LOCALVARS . T)
+        (PROP FILETYPE DTDECLARE)))
+
+
+
+(* |;;| "declaring DATATYPES --- part of ABC too")
+
+(DEFINEQ
+
+(/declaredatatype
+  (lambda (typename fieldspecs dlist len supertype)          (* \; "Edited 18-May-87 17:09 by Snow")
+
+    (and lispxhist typename (undosave (list '/declaredatatype typename (getfieldspecs typename)
+                                            nil nil (getsupertype typename))))
+    (cl:multiple-value-bind (dlist redeclared)
+           (declaredatatype typename fieldspecs dlist len supertype)
+           (cond
+              (redeclared (lispxprint (list '|datatype| typename '|redeclared|)
+                                 t t)))
+           dlist)))
+
+(declaredatatype
+  (lambda (typename fieldspecs dlist length supertype)       (* |Pavel| "16-Oct-86 14:52")
+                                                  (* |;;| "this is called twice when declaring records;  once where the DLIST and LENGTH hasn't been computed, and another time when it has.")
+    (let ((superspecs (cond
+                         (supertype (getfieldspecs supertype)))))
+                                                  (* \; "maybe an error if supertype doesn't exist?")
+         (setq fieldspecs (append superspecs fieldspecs))
+         (cond
+            ((and fieldspecs (or (not dlist)
+                                 (not length)))   (* \; 
+                                  "the AND is an optimization -- do we really need to compute DLIST?")
+             (setq dlist (translate.datatype typename fieldspecs))
+             (setq length (|pop| dlist)))))
+    (or (and typename (litatom typename))
+        (lisperror "ILLEGAL ARG" typename))
+    (let ((ptrs (|for| p |in| dlist |when| (selectq (|fetch| |fdType| |of| p)
+                                               ((pointer fullpointer) 
+                                                    t)
+                                               nil) |collect| (|fetch| |fdOffset| |of| p))))
+         (cl:multiple-value-bind (typenum redeclared)
+                (\\assigndatatype1 typename dlist length fieldspecs ptrs supertype)
+                (settopval (\\typeglobalvariable typename t)
+                       typenum)
+                (cl:values dlist redeclared)))))
+
+(TRANSLATE.DATATYPE
+  (LAMBDA (TYPENAME FIELDSPECS)                              (* DECLARATIONS\: (RECORD SPEC
+                                                           (N LEN . FD)))
+    (DECLARE (SPECVARS TYPENAME UNUSED BIT OFFSET FD))   (* \; 
+                                                      "Edited  8-Mar-95 10:18 by sybalsky:mv:envos")
+    (COND
+       ((NULL TYPENAME))
+       ((OR (NOT (LITATOM TYPENAME))
+            (EQ TYPENAME '**DEALLOC**))
+        (ERROR "Invalid type name" TYPENAME)))
+    (PROG ((N 0)
+           UNUSED
+           (OFFSET 0)
+           (BIT 0)
+           DLIST REUSE LEN FD)
+          (SETQ DLIST (|for| S |in| FIELDSPECS
+                         |collect| (|create| SPEC
+                                              N _ (|add| N 1)
+                                              LEN _ (SELECTQ S
+                                                        ((POINTER XPOINTER) 
+                                                             (COND
+                                                                ((FMEMB :4-BYTE-TEMP 
+                                                                      COMPILER::*TARGET-ARCHITECTURE*
+                                                                        )
+                                                             (* \; 
+       "For old systems running in compatibility mode, assume 28-bit pointers when reserving space")
+                                                                 28)
+                                                                ((FMEMB :4-BYTE 
+                                                                      COMPILER::*TARGET-ARCHITECTURE*
+                                                                        )
+                                                             (* \; 
+                                                      "For BIGVM systems, use 28 bits for pointers")
+                                                                 28)
+                                                                (T 
+                                                             (* \; 
+                                                "For release 2.0 and earlier, use 24-bit pointers.")
+                                                                   24)))
+                                                        ((FIXP FLOATP SWAPPEDFIXP FULLPOINTER 
+                                                               SWAPPEDXPOINTER FULLXPOINTER) 
+                                                             BITSPERCELL)
+                                                        (FLAG (SETQQ S FLAGBITS)
+                                                              1)
+                                                        (BYTE (SETQQ S BITS)
+                                                              BITSPERBYTE)
+                                                        (WORD (SETQQ S BITS)
+                                                              BITSPERWORD)
+                                                        (SIGNEDWORD (SETQQ S SIGNEDBITS)
+                                                                    BITSPERWORD)
+                                                        (SELECTQ (CAR (LISTP S))
+                                                            ((BITS FLAGBITS SIGNEDBITS) 
+                                                                 (PROG1 (CADR S)
+                                                                     (SETQ S (CAR S))))
+                                                            (ERROR "invalid field spec: " S)))
+                                              FD _
+                                              (|create| |FldDsc|
+                                                     |fdTypeName| _ TYPENAME
+                                                     |fdType| _ S
+                                                     |fdOffset| _ NIL))))
+          (|for| S |in| DLIST
+             |do|
+             (|replace| |fdOffset| |of| (SETQ FD (|fetch| FD |of| S))
+                |with|
+                (SELECTQ (|fetch| |fdType| |of| FD)
+                    ((POINTER XPOINTER) 
+                         (COND
+                            ((AND TYPENAME
+                                  (|find| X |in| UNUSED
+                                     |suchthat|
+                                     (AND (EQ 0 (LOGAND (CAR X)
+                                                       1))
+                                          (IGEQ (CADDR X)
+                                                (- (COND
+                                                      ((FMEMB :4-BYTE-TEMP 
+                                                              COMPILER::*TARGET-ARCHITECTURE*)
+                                                             (* \; 
+       "For old systems running in compatibility mode, assume 28-bit pointers when reserving space")
+                                                       28)
+                                                      ((FMEMB :4-BYTE COMPILER::*TARGET-ARCHITECTURE*
+                                                              )
+                                                             (* \; 
+                                                      "For BIGVM systems, use 28 bits for pointers")
+                                                       28)
+                                                      (T     (* \; 
+                                                "For release 2.0 and earlier, use 24-bit pointers.")
+                                                         24))
+                                                   BITSPERWORD))
+                                          (EQ (IPLUS (CADR X)
+                                                     (CADDR X))
+                                              BITSPERWORD)
+                                          (|find| Y |in| UNUSED
+                                             |suchthat| (AND (EQ (CAR Y)
+                                                                     (ADD1 (CAR X)))
+                                                                 (EQ (CADDR Y)
+                                                                     BITSPERWORD))))))
+                                                             (* \; "unused 24 bit quantity")
+                                                             (* \; "this case not implemented yet")
+                             ))
+                         (COND
+                            ((IGREATERP BIT 4)               (* \; 
+                                                           "Less than 8 bits left in this word")
+                             (\\REUSETO BITSPERWORD)))
+                         (COND
+                            ((ODDP OFFSET WORDSPERCELL)      (* \; "not on double word boundary")
+                             (\\REUSETO BITSPERWORD)))
+                         (COND
+                            ((NEQ BIT 4)
+                             (\\REUSETO 4 (EQ BIT 0))))
+                         (SETQ BIT 0)                        (* \; "")
+                         (PROG1 OFFSET (|add| OFFSET WORDSPERCELL)))
+                    ((FIXP SWAPPEDFIXP FLOATP SWAPPEDXPOINTER) 
+                                                             (* \; "32 bit quantities")
+                         (COND
+                            ((NEQ BIT 0)
+                             (\\REUSETO BITSPERWORD)))
+                         (PROG1 OFFSET (|add| OFFSET WORDSPERCELL)))
+                    ((FULLPOINTER FULLXPOINTER)              (* \; 
+                                                           "32 bit doubleword-aligned quantities")
+                         (COND
+                            ((NEQ BIT 0)
+                             (\\REUSETO BITSPERWORD)))
+                         (COND
+                            ((ODDP OFFSET WORDSPERCELL)
+                             (\\REUSETO BITSPERWORD)))
+                         (PROG1 OFFSET (|add| OFFSET WORDSPERCELL)))
+                    ((BITS FLAGBITS SIGNEDBITS) 
+                         (SETQ LEN (|fetch| LEN |of| S))
+                         (COND
+                            ((AND TYPENAME (SETQ REUSE (|find| X |in| UNUSED
+                                                          |suchthat| (ILEQ LEN (CADDR X)))))
+                             (RPLACA (CDDR REUSE)
+                                    (IDIFFERENCE (CAR (CDDR REUSE))
+                                           LEN))
+                             (|replace| |fdType| |of| FD |with|
+                                                                 (CONS (|fetch| |fdType|
+                                                                          |of| FD)
+                                                                       (|MakeBitField|
+                                                                        (CADR REUSE)
+                                                                        LEN)))
+                             (|add| (CADR REUSE)
+                                    LEN)
+                             (CAR REUSE))
+                            ((IGREATERP LEN BITSPERWORD)     (* \; 
+                                               "more than 1 word --- Must right justify first word")
+                             (SETQ LEN (IDIFFERENCE LEN BITSPERWORD))
+                             (COND
+                                ((IGREATERP LEN (IDIFFERENCE BITSPERWORD BIT))
+                                 (\\REUSETO BITSPERWORD)))
+                             (COND
+                                ((NEQ (IDIFFERENCE BITSPERWORD BIT)
+                                      LEN)
+                                 (\\REUSETO (IDIFFERENCE BITSPERWORD LEN))))
+                             (|replace| |fdType| |of| FD |with| (CONS 'LONGBITS
+                                                                                  (|MakeBitField|
+                                                                                   BIT LEN)))
+                             (SETQ BIT 0)
+                             (PROG1 OFFSET (|add| OFFSET 2)))
+                            (T (COND
+                                  ((IGREATERP LEN (IDIFFERENCE BITSPERWORD BIT))
+                                   (\\REUSETO BITSPERWORD)))
+                               (|replace| |fdType| |of| FD
+                                  |with| (CONS (|fetch| |fdType| |of| FD)
+                                                   (|MakeBitField| BIT LEN)))
+                               (|add| BIT LEN)
+                               (PROG1 OFFSET
+                                   (COND
+                                      ((EQ BIT BITSPERWORD)
+                                       (SETQ BIT 0)
+                                       (|add| OFFSET 1)))))))
+                    (SHOULDNT))))
+          (COND
+             (TYPENAME (COND
+                          ((NEQ BIT 0)
+                           (\\REUSETO BITSPERWORD)))
+                    (|while| (ODDP OFFSET WORDSPERCELL) |do| (|add| OFFSET 1))
+                    (COND
+                       ((IGREATERP OFFSET |\\MDSIncrement|)
+                        (ERROR TYPENAME "DATATYPE TOO BIG")))))
+          (RETURN (CONS OFFSET (MAPCAR DLIST (FUNCTION (LAMBDA (X)
+                                                         (|fetch| FD |of| X)))))))))
+
+(\\REUSETO
+  (LAMBDA (N FLG)                                        (* \; "Edited 15-Dec-92 13:46 by jds")
+
+    (* |;;| "Skip over unused bits in a datatype or blockrecord declaration.  Advance the bin-int-word and word-offset pointers accordingly.  Complain if this isn't supposed to be allowed.")
+
+    (SETQ N (IDIFFERENCE N BIT))
+    (COND
+       ((NEQ N 0)
+        (COND
+           ((AND (NULL TYPENAME)
+                 (NOT FLG))
+            (ERROR "Block/datatype field not aligned properly" FD)))
+        (|push| UNUSED (LIST OFFSET BIT N))))
+    (|add| BIT N)
+    (COND
+       ((EQ BIT 16)
+        (SETQ BIT 0)
+        (|add| OFFSET 1)))))
+
+(\\typeglobalvariable
+  (lambda (typename varflg)                                  (* \; "Edited 18-May-87 17:14 by Snow")
+
+(* |;;;| "Returns a constant or a variable that contains the datatype number of TYPENAME.  It is used when compiling type tests and assigning datatypes.  If TYPENAME is a system type, it returns the number.  Otherwise it creates a variable name and puts it on GLOBALVARS.")
+
+(* |;;;| "This is a kludge that will go away when we have type resolution at load time.")
+
+(* |;;;| "If VARFLG is true, always returns a var, rather than a system constant.  This is another kludge for backward compatibility.")
+
+    (or (and (not varflg)
+             (|for| entry |in| \\built-in-system-types |as| i |from| 1
+                |when| (eq typename (car entry)) |do| (return i)))
+        (let ((var (type-variable-from-type-name typename)))
+             (cond
+                ((not (or (fmemb var globalvars)
+                          (getprop var 'globalvar)))
+                 (putprop var 'globalvar t)))
+             var))))
+)
+
+(CL:DEFUN TYPE-VARIABLE-FROM-TYPE-NAME (TYPE-NAME)
+
+(* |;;;| "Convert a symbol naming a type into the unique global variable that holds the number for that type.  This can be tricky during that portion of the init before packages have been turned on.")
+
+   (IF (NULL *PACKAGE*)
+       THEN 
+
+             (* |;;| "Packages are, indeed, not on yet.  We must check the type-name symbol to see if it begins with a known init-time package prefix.  If so, we strip that off and put it back on the front.  The function NAMESTRING-CONVERSION-CLAUSE is from LLPACKAGE.")
+
+             (LET* ((BASE (|ffetch| (CL:SYMBOL PNAMEBASE) |of| TYPE-NAME))
+                    (LEN (|ffetch| (CL:SYMBOL PNAMELENGTH) |of| TYPE-NAME))
+                    (FATP (|ffetch| (CL:SYMBOL FATPNAMEP) |of| TYPE-NAME))
+                    (CLAUSE (NAMESTRING-CONVERSION-CLAUSE BASE 1 LEN FATP)))
+                   (COND
+                      ((NULL CLAUSE)                         (* \; 
+                             "TYPE-NAME is homed in the  Interlisp Package. Nothing special to do.")
+                       (PACK* "" TYPE-NAME "TYPE#"))
+                      (T                                     (* \; "The symbol matched a clause.  We take the prefix off the front of the name and put it at the beginning.")
+                         (LET* ((PREFIX (CL:FIRST CLAUSE))
+                                (PREFIX-LENGTH (FFETCH (STRINGP LENGTH) OF PREFIX)))
+                               (PACK* PREFIX "" (SUBSTRING TYPE-NAME (CL:1+ PREFIX-LENGTH))
+                                      "TYPE#")))))
+     ELSE 
+
+           (* |;;| "Packages are on; this is the normal case.")
+
+           (CL:INTERN (CONCAT "" (MKSTRING TYPE-NAME)
+                             "TYPE#")
+                  (CL:SYMBOL-PACKAGE TYPE-NAME))))
+(DEFINEQ
+
+(|BitFieldMask|
+  (lambda (fd)                                               (* \; "Edited 18-May-87 17:14 by Snow")
+
+    (sub1 (llsh 1 (|BitFieldWidth| fd)))))
+
+(|BitFieldShift|
+  (lambda (fd)                                               (* \; "Edited 18-May-87 17:14 by Snow")
+
+    (idifference 16 (iplus (|BitFieldFirst| fd)
+                           (|BitFieldWidth| fd)))))
+
+(|BitFieldShiftedMask|
+  (lambda (fd)                                               (* \; "Edited 18-May-87 17:15 by Snow")
+
+    (idifference (llsh 1 (idifference 16 (|BitFieldFirst| fd)))
+           (llsh 1 (idifference 16 (iplus (|BitFieldFirst| fd)
+                                          (|BitFieldWidth| fd)))))))
+
+(|MakeBitField|
+  (lambda (first width)                                      (* \; "Edited 18-May-87 17:15 by Snow")
+
+    (logor (llsh first 4)
+           (sub1 width))))
+
+(|BitFieldWidth|
+  (lambda (fd)                                               (* \; "Edited 18-May-87 17:16 by Snow")
+
+    (add1 (logand fd 15))))
+
+(|BitFieldFirst|
+  (lambda (fd)                                               (* \; "Edited 18-May-87 17:16 by Snow")
+
+    (lrsh fd 4)))
+)
+
+(DEFOPTIMIZER FETCHFIELD (&REST X)
+                             (COMPILEDFETCHFIELD X))
+
+(DEFOPTIMIZER FFETCHFIELD (&REST X)
+                              (COMPILEDFETCHFIELD X T))
+
+(DEFOPTIMIZER REPLACEFIELD (&REST X)
+                               (COMPILEDREPLACEFIELD X))
+
+(DEFOPTIMIZER FREPLACEFIELD (&REST X)
+                                (COMPILEDREPLACEFIELD X T))
+
+(DEFOPTIMIZER REPLACEFIELDVAL (&REST ARGS)
+                                  (CONS '(OPENLAMBDA (DESCRIPTOR DATUM NEWVALUE)
+                                                (PROG1 DATUM (REPLACEFIELD DESCRIPTOR DATUM NEWVALUE)
+                                                       ))
+                                        ARGS))
+
+(DEFOPTIMIZER FREPLACEFIELDVAL (&REST ARGS)
+                                   (CONS '(OPENLAMBDA (DESCRIPTOR DATUM NEWVALUE)
+                                                 (PROG1 DATUM (FREPLACEFIELD DESCRIPTOR DATUM 
+                                                                     NEWVALUE)))
+                                         ARGS))
+
+(DEFOPTIMIZER NCREATE (&REST X)
+                          (COMPILEDNCREATE X))
+
+(DEFOPTIMIZER \\DTEST (VALUE TYPE &ENVIRONMENT ENV)
+                          (COND
+                             ((AND (EQ (CAR TYPE)
+                                       'QUOTE)
+                                   (LITATOM (CADR TYPE)))
+                              (COND
+                                 ((FMEMB :4-BYTE (COMPILER::ENV-TARGET-ARCHITECTURE ENV))
+                                  `((OPCODES DTEST 0 0 0 (ATOM \\\, (CADR TYPE)))
+                                    ,VALUE))
+                                 ((FMEMB :3-BYTE (COMPILER::ENV-TARGET-ARCHITECTURE ENV))
+                                  `((OPCODES DTEST 0 0 (ATOM \\\, (CADR TYPE)))
+                                    ,VALUE))
+                                 (T `((OPCODES DTEST 0 (ATOM \\\, (CADR TYPE)))
+                                      ,VALUE))))
+                             (T 'IGNOREMACRO)))
+
+(PUTPROPS \\TESTBITS DMACRO ((X N FD)
+                                     (NEQ 0 (\\GETBITS X N FD))))
+(DEFINEQ
+
+(compiledfetchfield
+  (lambda (x fastflg)                                        (* \; "Edited 18-May-87 17:32 by Snow")
+
+    (cond
+       ((eq (car (listp (car x)))
+            'quote)
+        ((lambda (descriptor datum)
+           (prog (typename)
+                 (cond
+                    ((and (not fastflg)
+                          (setq typename (|fetch| |fdTypeName| |of| descriptor)))
+                     (setq datum (list (function \\dtest)
+                                       datum
+                                       (kwote typename)))))
+                 (return
+                  (selectq (|fetch| |fdType| |of| descriptor)
+                      ((pointer xpointer fullpointer fullxpointer) 
+                           (list '\\getbaseptr datum (|fetch| |fdOffset| |of| descriptor)))
+                      (swappedxpointer 
+                           `((openlambda (d)
+                                    (\\vag2 (\\getbase d ,(add1 (|fetch| |fdOffset| |of| descriptor))
+                                                   )
+                                           (\\getbase d ,(|fetch| |fdOffset| |of| descriptor))))
+                             ,datum))
+                      (floatp `(\\getbasefloatp ,datum ,(|fetch| |fdOffset| |of| descriptor)))
+                      (fixp `(\\getbasefixp ,datum ,(|fetch| |fdOffset| |of| descriptor)))
+                      (swappedfixp `((openlambda (d)
+                                            (\\makenumber (\\getbase d
+                                                                 ,(add1 (|fetch| |fdOffset|
+                                                                           |of| descriptor)))
+                                                   (\\getbase d ,(|fetch| |fdOffset| |of| descriptor)
+                                                          )))
+                                     ,datum))
+                      (prog ((ft (|fetch| |fdType| |of| descriptor))
+                             (off (|fetch| |fdOffset| |of| descriptor)))
+                            (return (selectq (car ft)
+                                        (bits (list '\\getbits datum off (cdr ft)))
+                                        (signedbits `(signed (\\getbits ,datum ,off
+                                                                    ,(cdr ft))
+                                                            ,(|BitFieldWidth| (cdr ft))))
+                                        (flagbits (list '\\testbits datum off (cdr ft)))
+                                        (longbits `((openlambda (d)
+                                                           (\\makenumber (\\getbits
+                                                                          d
+                                                                          ,off
+                                                                          ,(cdr ft))
+                                                                  (\\getbase d ,(add1 off))))
+                                                    ,datum))
+                                        (shouldnt))))))))
+         (cadar x)
+         (cadr x)))
+       (t 'ignoremacro))))
+
+(compiledreplacefield
+  (lambda (x fastflg rplvalflg)                              (* \; "Edited 18-May-87 17:29 by Snow")
+          
+          (* |;;| "compile code for replacing field values.  Goes to great length to ensure that the coerced value is returned")
+
+    (cond
+       ((eq (car (listp (car x)))
+            'quote)
+        ((lambda (descriptor datum newvalue)
+           (prog ((typename (|fetch| |fdTypeName| |of| descriptor))
+                  (ft (|fetch| |fdType| |of| descriptor))
+                  (offset (|fetch| |fdOffset| |of| descriptor)))
+                 (cond
+                    ((and (not fastflg)
+                          typename)
+                     (setq datum (list (function \\dtest)
+                                       datum
+                                       (kwote typename)))))
+                 (return (selectq ft
+                             ((pointer fullpointer) 
+                                  (list (function \\rplptr)
+                                        datum offset newvalue))
+                             (xpointer (list (function putbaseptrx)
+                                             datum offset newvalue))
+                             (fullxpointer (list '\\putbaseptr datum offset newvalue))
+                             (swappedxpointer 
+                                  `((openlambda (d r)
+                                           (\\putbase d ,offset (\\loloc r))
+                                           (\\putbase d ,(add1 offset) (\\hiloc r))
+                                           r)
+                                    ,datum
+                                    ,newvalue))
+                             (fixp `(\\putbasefixp ,datum ,offset ,newvalue))
+                             (swappedfixp `(\\putswappedfixp (\\addbase ,datum ,offset)
+                                                  ,newvalue))
+                             (floatp `(\\putbasefloatp ,datum ,offset ,newvalue))
+                             (selectq (car ft)
+                                 (bits (list '\\putbits datum offset (cdr ft)
+                                             newvalue))
+                                 (longbits (list (subpair '(offset ft) (list offset (cdr ft))
+                                                        '(openlambda (d v)
+                                                                (\\putbits d offset ft (\\hinum
+                                                                                        v))
+                                                                (\\putbase d (add1 offset)
+                                                                       (\\lonum v))
+                                                                v))
+                                                 datum newvalue))
+                                 (signedbits `(signed (\\putbits ,datum ,offset ,(cdr ft)
+                                                             (unsigned ,newvalue
+                                                                    ,(|BitFieldWidth| (cdr ft))))
+                                                     ,(|BitFieldWidth| (cdr ft))))
+                                 (flagbits `(neq (\\putbits ,datum ,offset ,(cdr ft)
+                                                        (cond
+                                                           (,newvalue ,(|BitFieldMask| (cdr ft)))
+                                                           (t 0)))
+                                                 0))
+                                 (return 'ignoremacro))))))
+         (cadar x)
+         (cadr x)
+         (caddr x)))
+       (t 'ignoremacro))))
+
+(compiledncreate
+  (lambda (x)                                                (* \; "Edited 18-May-87 17:34 by Snow")
+
+(* |;;;| "compiles code for NCREATEs.  Exists to eliminate the call to \\TYPENUMBERFROMNAME.")
+
+    (cond
+       ((eq (car (listp (car x)))
+            'quote)
+        (cond
+           ((null (cadr x))
+            (list 'createcell (\\typeglobalvariable (cadar x))))
+           (t (list 'ncreate2 (\\typeglobalvariable (cadar x))
+                    (cadr x)))))
+       (t 'ignoremacro))))
+)
+(DECLARE\: DONTCOPY 
+(* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE\: EVAL@COMPILE
+
+(RECORD |FldDsc| (|fdTypeName| |fdOffset| |fdType|))
+)
+
+(* "END EXPORTED DEFINITIONS")
+
+)
+
+(RPAQQ DATATYPEFIELDTYPES
+       ((FLOATP 0.0)
+        (FIXP 0)
+        (SWAPPEDFIXP 0)
+        (POINTER NIL)
+        (XPOINTER NIL)
+        (FULLPOINTER NIL)
+        (FULLXPOINTER NIL)
+        (SWAPPEDXPOINTER NIL)
+        (FLAG NIL)
+        (BYTE 0)
+        (WORD 0)
+        (SIGNEDWORD 0)))
+
+
+
+(* \; "Macros which convert a record access form into an address-generating form")
+
+(DECLARE\: EVAL@COMPILE 
+
+(PUTPROPS LOCF DMACRO (X (TRANSLATE.LOCF X)))
+
+(PUTPROPS INDEXF DMACRO (X (TRANSLATE.LOCF X T)))
+)
+(DEFINEQ
+
+(translate.locf
+  (lambda (args indexonly)                                   (* \; "Edited 18-May-87 17:35 by Snow")
+
+    (declare (globalvars clisparray))
+    (prog ((form (mkprogn args))
+           newform offset spec)
+      retry
+          (selectq (car (listp form))
+              (progn (cond
+                        ((not (cddr form))                   (* \; 
+                                                "get rid of extra PROGN's inserted by record package")
+
+                         (setq form (cadr form))
+                         (go retry))))
+              ((fetchfield ffetchfield) 
+                   (cond
+                      ((and (setq offset (listp (cadr form)))
+                            (eq (car offset)
+                                'quote)
+                            (setq offset (cadr (setq spec (cadr offset))))
+                            (fixp offset))
+                       (return (cond
+                                  (indexonly offset)
+                                  ((eq offset 0)
+                                   (caddr form))
+                                  (t (setq form (caddr form))
+          
+          (* |;;| "loop in order to merge \\ADDBASEs.  Should actually be done by compiler optimization, but apparently that is currently broken")
+
+                                     (|repeatwhile| (selectq (car (listp form))
+                                                        (progn (cond
+                                                                  ((null (cddr form))
+                                                                   (setq form (cadr form))
+                                                                   t)))
+                                                        ((addbase \\addbase) 
+                                                             (cond
+                                                                ((fixp (caddr form))
+                                                                 (|add| offset (caddr form))
+                                                                 (setq form (cadr form))
+                                                                 t)))
+                                                        (cond
+                                                           ((neq (setq newform (cl:macroexpand-1
+                                                                                form))
+                                                                 form)
+                                                            (setq form newform)
+                                                            t))))
+                                     (list '\\addbase form offset)))))))
+              (cond
+                 ((neq form (setq form (cl:macroexpand-1 form)))
+                  (go retry))))
+          (error "LOCF Can't figure out this argument" args)
+          (return 'ignoremacro))))
+)
+(DECLARE\: DOEVAL@COMPILE DONTCOPY
+
+(LOCALVARS . T)
+)
+
+(PUTPROPS DTDECLARE FILETYPE CL:COMPILE-FILE)
+(PUTPROPS DTDECLARE COPYRIGHT ("Venue & Xerox Corporation" 1981 1982 1983 1984 1985 1986 1987 1990 
+1992 1995))
+(DECLARE\: DONTCOPY
+  (FILEMAP (NIL (1518 17273 (/DECLAREDATATYPE 1528 . 2111) (DECLAREDATATYPE 2113 . 3743) (
+TRANSLATE.DATATYPE 3745 . 15504) (\\REUSETO 15506 . 16182) (\\TYPEGLOBALVARIABLE 16184 . 17271)) (
+19148 20420 (|BitFieldMask| 19158 . 19334) (|BitFieldShift| 19336 . 19574) (|BitFieldShiftedMask| 
+19576 . 19920) (|MakeBitField| 19922 . 20108) (|BitFieldWidth| 20110 . 20268) (|BitFieldFirst| 20270
+ . 20418)) (22610 30173 (COMPILEDFETCHFIELD 22620 . 25902) (COMPILEDREPLACEFIELD 25904 . 29637) (
+COMPILEDNCREATE 29639 . 30171)) (30889 33863 (TRANSLATE.LOCF 30899 . 33861)))))
+STOP

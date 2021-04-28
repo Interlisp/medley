@@ -1,1 +1,250 @@
-(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "XCL" BASE 10)(FILECREATED " 3-Feb-91 14:11:40" |{PELE:MV:ENVOS}<LISPCORE>INTERNAL>LIBRARY>GIVE-AND-TAKE.;4| 14607        |changes| |to:|  (COMMANDS "take")                       (FUNCTIONS TAKE-FILE)      |previous| |date:| "15-Jun-90 14:20:18" |{PELE:MV:ENVOS}<LISPCORE>INTERNAL>LIBRARY>GIVE-AND-TAKE.;3|); Copyright (c) 1986, 1990, 1991 by Venue & Xerox Corporation.  All rights reserved.(PRETTYCOMPRINT GIVE-AND-TAKECOMS)(RPAQQ GIVE-AND-TAKECOMS ((COMMANDS "give?" "taken?" "give" "take" "steal")                              (FUNCTIONS GIVE-OR-TAKE-FIND ADD-DEFAULT-REGISTRY SEND-STEAL-MESSAGE                                      GIVE-FILE TAKE-FILE TAKEN?)                              (VARIABLES *GIVE-AND-TAKE-DIRECTORIES*)                              (PROP FILETYPE GIVE-AND-TAKE)))(DEFCOMMAND "give?" NIL (TAKEN? :GIVE? T))(DEFCOMMAND "taken?" (&REST ARGS) (CL:APPLY #'TAKEN? ARGS))(DEFCOMMAND "give" (&REST FILES) (FOR FILE IN FILES ALWAYS (GIVE-FILE FILE)))(DEFCOMMAND "take" (&REST FILES)   (* |;;| "Give the issuer a \"lock\" on the files he asks for.  If you give more than one file name, it'll stop if it hits one you can't have the lock to.")    (FOR FILE IN FILES ALWAYS (TAKE-FILE FILE)))(DEFCOMMAND "steal" (&REST FILES) (FOR FILE IN FILES ALWAYS (TAKE-FILE FILE T)))(CL:DEFUN GIVE-OR-TAKE-FIND (FILENAME)   (LET ((NAME (FINDFILE FILENAME T *GIVE-AND-TAKE-DIRECTORIES*)))        (COND           (NAME NAME)           (T (CL:FORMAT T "~A does not exist and so cannot be taken or given.~%" FILENAME)              NIL))))(CL:DEFUN ADD-DEFAULT-REGISTRY (NAME)(* |;;;| "Adds default registry to NAME if there isn't one there already")   (COND      ((OR (STRPOS "." NAME)           (NULL DEFAULTREGISTRY))       NAME)      (T (CONCAT NAME "." DEFAULTREGISTRY))))(CL:DEFUN SEND-STEAL-MESSAGE (THIEF AUTHOR FILE)   (LAFITE.SENDMESSAGE (MKSTRING (CL:FORMAT NIL                "Subject: File stolenTo: ~A~A just stole the file ~A from you.	The STEAL command" AUTHOR THIEF FILE))))(CL:DEFUN GIVE-FILE (FILENAME)   "Find the file named and look for a STATUS file associated with it.  If found and this user wrote it, then remove it, thus unlocking the file."   (LET ((NAME (GIVE-OR-TAKE-FIND FILENAME))         STATUS-STREAM TAKEN-BY)        (COND           ((NULL NAME)            NIL)           ((NOT (STREAMP (SETQ STATUS-STREAM (CAR (NLSETQ (OPENSTREAM (PACKFILENAME.STRING                                                                        'EXTENSION                                                                        'STATUS                                                                        'VERSION 1 'BODY NAME)                                                                  'INPUT NIL '(DON\'TCACHE)))))))            (CL:FORMAT T "Sorry, but you can't give what you haven't taken.~%~A has not been taken by anyone, including you.~%"                   NAME)            NIL)           ((STRING-EQUAL (SETQ TAKEN-BY (ADD-DEFAULT-REGISTRY (CL:READ STATUS-STREAM)))                   (ADD-DEFAULT-REGISTRY (USERNAME)))    (* \; "We're a winner")            (DELFILE (CLOSEF STATUS-STREAM))            (CL:FORMAT T "~A is now unlocked.~%" NAME)            T)           (T                                                (* \; "We're a loser")              (CL:FORMAT T                      "Sorry, but you can't give what you haven't taken.~%~A was taken by ~A on ~A.~%"                     NAME TAKEN-BY (CL:READ STATUS-STREAM))              (CLOSEF STATUS-STREAM)              NIL))))(CL:DEFUN TAKE-FILE (FILENAME &OPTIONAL STEAL)   (* |;;| "Find the given file and open a status file to be associated with it.  If the file we open turns out to be version 1, then we've got the lock and we write our name and the date into the file.  Otherwise, somebody (possibly us!) has already got it and the lock cannot be obtained.  HOWEVER:  If we're the lock's owner already, indicate success -- the point is to grab the lock, not to find out if it's locked before!")   (RESETLST       (PROG ((GROSS-LIST-HACK (LIST NIL NIL T))              NAME STATUS-NAME STATUS-NAME-PARTS STATUS-VERSION SUCCESS)             (COND                ((NOT (CL:SETF NAME (GIVE-OR-TAKE-FIND FILENAME)))                 (RETURN NIL)))             (CL:SETF STATUS-NAME (PACKFILENAME.STRING 'EXTENSION 'STATUS 'VERSION NIL 'BODY NAME))             (CL:MACROLET ((STATUS-STREAM NIL '(CL:FIRST GROSS-LIST-HACK))                           (STATUS-FULL-NAME NIL '(CL:SECOND GROSS-LIST-HACK))                           (FINISHED-NORMALLY-P NIL '(CL:THIRD GROSS-LIST-HACK)))                    (RESETSAVE NIL (LIST (FUNCTION (CL:LAMBDA (NAME GROSS-LIST-HACK)                                            (* |;;| "We have been interrupted during processing.  Close any open streams and delete the status file we were making.")                                                          (CL:WHEN (NOT (FINISHED-NORMALLY-P))                                                              (CL:FORMAT T                                               "Interrupted during processing of ~A.  Take aborted.~%"                                                                     NAME)                                                              (CL:WHEN (AND (NULL (STATUS-FULL-NAME))                                                                            (STREAMP (STATUS-STREAM))                                                                            )                                                             (* \; "If STATUS-FULL-NAME was never set, then STATUS-STREAM, if open, must refer to the new status file.")                                                                  (CL:SETF (STATUS-FULL-NAME)                                                                         (FULLNAME (STATUS-STREAM))))                                                              (CL:IF (STREAMP (STATUS-STREAM))                                                                  (CLOSEF? (STATUS-STREAM)))                                                              (CL:IF (NOT (NULL (STATUS-FULL-NAME)))                                                                  (DELFILE (STATUS-FULL-NAME))))))                                         NAME GROSS-LIST-HACK))                    (CL:SETF (STATUS-STREAM)                           (OPENSTREAM STATUS-NAME 'OUTPUT NIL '(DON\'TCACHE)))                    (CL:SETF (STATUS-FULL-NAME)                           (FULLNAME (STATUS-STREAM)))                    (COND                       ((= (FILENAMEFIELD (STATUS-FULL-NAME)                                  'VERSION)                           1)                                (* \; "We're a winner")                        (LET ((UNAME (ADD-DEFAULT-REGISTRY (USERNAME)))                              (D (DATE)))                             (CL:FORMAT (STATUS-STREAM)                                    "~S ~S~%" UNAME D)                             (CLOSEF (STATUS-STREAM))                             (CL:FORMAT T "~A is now locked by ~A at ~A.~%" NAME UNAME D))                        (LET ((ROOTNAME (ROOTFILENAME NAME))                              INSTALLEDVERSION)                             (COND                                ((AND (GET ROOTNAME 'FILE)                                      (NOT (STRING-EQUAL NAME (SETQ INSTALLEDVERSION                                                               (CDAR (GET ROOTNAME 'FILEDATES))))))                                 (CL:FORMAT T "Warning: File ~A is different from loaded file ~A~%"                                         NAME INSTALLEDVERSION))))                        (CL:SETF SUCCESS T))                       (T                                    (* \; "We're a loser at first blush ")                                                             (* \;                                                       "(exception: we had the file locked already)")                          (CLOSEF (STATUS-STREAM))                          (DELFILE (STATUS-FULL-NAME))                          (CL:SETF (STATUS-STREAM)                                 (CAR (NLSETQ (OPENSTREAM (PACKFILENAME.STRING 'VERSION 1                                                                 'BODY                                                                 (STATUS-FULL-NAME))                                                     'INPUT NIL '(DON\'TCACHE)))))                          (COND                             ((NOT (STREAMP (STATUS-STREAM)))                              (CL:FORMAT T "Bad situation: Illegal versions of the status file exist.~&Try again in a moment or try to fix the problem.~%"                                     )                              (CL:SETF SUCCESS NIL))                             (STEAL                                     (* |;;|                            "If we're going to steal it, we should send the former locker a notice.")                                    (CL:FORMAT T "Stealing ~A (and sending ~A a message about it).~%"                                           NAME (GETFILEINFO (STATUS-STREAM)                                                       'AUTHOR))                                    (ADD.PROCESS `(SEND-STEAL-MESSAGE                                                   ',(USERNAME NIL NIL T)                                                   ',(GETFILEINFO (STATUS-STREAM)                                                            'AUTHOR)                                                   ',NAME))                                    (CLOSEF (STATUS-STREAM))                                    (DELFILE (FULLNAME (STATUS-STREAM)))                                    (CL:SETF SUCCESS (TAKE-FILE FILENAME NIL)))                             ((PROG1 (NOT (NLSETQ (LET ((TAKEN-BY (CL:READ (STATUS-STREAM)))                                                        (TAKEN-ON (CL:READ (STATUS-STREAM))))                                                       (CL:IF (STRING-EQUAL TAKEN-BY (                                                                               ADD-DEFAULT-REGISTRY                                                                                      (USERNAME)))                                                           (PROGN (CL:FORMAT T                                                            "You've already had ~A taken, since ~A.~%"                                                                         NAME TAKEN-ON)                                                  (* |;;| "This case is really a success: We've got the lock.  Return T so the \"take\" command will keep going.")                                                                  (CL:SETF SUCCESS T))                                                           (CL:FORMAT T                                                      "Sorry, but ~A was already taken by ~A on ~A.~%"                                                                  NAME TAKEN-BY TAKEN-ON)))))                                  (CLOSEF (STATUS-STREAM)))                              (CL:FORMAT T "Bad situation: Only an illegal status file exists.~%Try again in a moment or try to fix the problem.~%"                                     )                              (CL:SETF SUCCESS NIL)))))                    (CL:SETF (FINISHED-NORMALLY-P)                           T))             (RETURN SUCCESS))))(CL:DEFUN TAKEN? (&KEY ((:BY AUTHOR))                           GIVE?)   (COND      ((NULL AUTHOR)       (SETQ AUTHOR (USERNAME))       (COND          ((STRPOS "." AUTHOR)           (SETQ AUTHOR (SUBSTRING AUTHOR 1 (SUB1 (STRPOS "." AUTHOR)))))))      ((OR (STRING-EQUAL AUTHOR "ANY")           (STRING-EQUAL AUTHOR "ALL")           (STRING-EQUAL AUTHOR "*"))       (SETQ AUTHOR NIL)))   (|printout| T "Looking for files taken by " (OR AUTHOR "any")          T)   (|for| DIR |in| *GIVE-AND-TAKE-DIRECTORIES*      |do| (RESETLST                   (LET ((GEN (\\GENERATEFILES (PACKFILENAME.STRING 'DIRECTORY DIR 'NAME "*"                                                      'EXTENSION "STATUS")                                     '(AUTHOR CREATIONDATE)                                     '(RESETLST)))                         NEXT THISAUTHOR DIRPRINTED)                        (|while| (SETQ NEXT (\\GENERATENEXTFILE GEN))                           |when| (PROGN (SETQ THISAUTHOR (\\GENERATEFILEINFO GEN 'AUTHOR))                                             (OR (NULL AUTHOR)                                                 (STRPOS AUTHOR THISAUTHOR 1 NIL T NIL UPPERCASEARRAY                                                        )))                           |do| (COND                                       ((NOT DIRPRINTED)                                        (|printout| T T "   " DIR T)                                        (SETQ DIRPRINTED T)))                                 (|printout| T (FILENAMEFIELD NEXT 'NAME)                                        16                                        (\\GENERATEFILEINFO GEN 'CREATIONDATE)                                        40 THISAUTHOR)                                 (COND                                    ((NOT GIVE?)                                     (TERPRI T))                                    ((EQ (ASKUSER NIL NIL "  Give? " NIL T)                                         'Y)                                     (GIVE-FILE (PACKFILENAME.STRING 'EXTENSION NIL 'VERSION NIL                                                           'BODY NEXT)))))))))(DEFGLOBALVAR *GIVE-AND-TAKE-DIRECTORIES* '("{Pele:mv:envos}<Lispcore>Sources>"                                                       "{Pele:mv:envos}<Lispcore>Library>"                                                       "{Pele:mv:envos}<Lispcore>Internal>Library>"                                                       "{Pele:mv:envos}<LispUsers>Lispcore>"                                                       "{Pele:mv:envos}<CmL>Test>"))(PUTPROPS GIVE-AND-TAKE FILETYPE CL:COMPILE-FILE)(PUTPROPS GIVE-AND-TAKE COPYRIGHT ("Venue & Xerox Corporation" 1986 1990 1991))(DECLARE\: DONTCOPY  (FILEMAP (NIL)))STOP
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "XCL" BASE 10)
+(FILECREATED " 3-Feb-91 14:11:40" |{PELE:MV:ENVOS}<LISPCORE>INTERNAL>LIBRARY>GIVE-AND-TAKE.;4| 14607  
+
+      |changes| |to:|  (COMMANDS "take")
+                       (FUNCTIONS TAKE-FILE)
+
+      |previous| |date:| "15-Jun-90 14:20:18" 
+|{PELE:MV:ENVOS}<LISPCORE>INTERNAL>LIBRARY>GIVE-AND-TAKE.;3|)
+
+
+; Copyright (c) 1986, 1990, 1991 by Venue & Xerox Corporation.  All rights reserved.
+
+(PRETTYCOMPRINT GIVE-AND-TAKECOMS)
+
+(RPAQQ GIVE-AND-TAKECOMS ((COMMANDS "give?" "taken?" "give" "take" "steal")
+                              (FUNCTIONS GIVE-OR-TAKE-FIND ADD-DEFAULT-REGISTRY SEND-STEAL-MESSAGE 
+                                     GIVE-FILE TAKE-FILE TAKEN?)
+                              (VARIABLES *GIVE-AND-TAKE-DIRECTORIES*)
+                              (PROP FILETYPE GIVE-AND-TAKE)))
+
+(DEFCOMMAND "give?" NIL (TAKEN? :GIVE? T))
+
+(DEFCOMMAND "taken?" (&REST ARGS) (CL:APPLY #'TAKEN? ARGS))
+
+(DEFCOMMAND "give" (&REST FILES) (FOR FILE IN FILES ALWAYS (GIVE-FILE FILE)))
+
+(DEFCOMMAND "take" (&REST FILES)
+
+   (* |;;| "Give the issuer a \"lock\" on the files he asks for.  If you give more than one file name, it'll stop if it hits one you can't have the lock to.")
+
+    (FOR FILE IN FILES ALWAYS (TAKE-FILE FILE)))
+
+(DEFCOMMAND "steal" (&REST FILES) (FOR FILE IN FILES ALWAYS (TAKE-FILE FILE T)))
+
+(CL:DEFUN GIVE-OR-TAKE-FIND (FILENAME)
+   (LET ((NAME (FINDFILE FILENAME T *GIVE-AND-TAKE-DIRECTORIES*)))
+        (COND
+           (NAME NAME)
+           (T (CL:FORMAT T "~A does not exist and so cannot be taken or given.~%" FILENAME)
+              NIL))))
+
+(CL:DEFUN ADD-DEFAULT-REGISTRY (NAME)
+
+(* |;;;| "Adds default registry to NAME if there isn't one there already")
+
+   (COND
+      ((OR (STRPOS "." NAME)
+           (NULL DEFAULTREGISTRY))
+       NAME)
+      (T (CONCAT NAME "." DEFAULTREGISTRY))))
+
+(CL:DEFUN SEND-STEAL-MESSAGE (THIEF AUTHOR FILE)
+   (LAFITE.SENDMESSAGE (MKSTRING (CL:FORMAT NIL 
+               "Subject: File stolen
+To: ~A
+
+~A just stole the file ~A from you.
+
+	The STEAL command" AUTHOR THIEF FILE))))
+
+(CL:DEFUN GIVE-FILE (FILENAME)
+   "Find the file named and look for a STATUS file associated with it.  If found and this user wrote it, then remove it, thus unlocking the file."
+   (LET ((NAME (GIVE-OR-TAKE-FIND FILENAME))
+         STATUS-STREAM TAKEN-BY)
+        (COND
+           ((NULL NAME)
+            NIL)
+           ((NOT (STREAMP (SETQ STATUS-STREAM (CAR (NLSETQ (OPENSTREAM (PACKFILENAME.STRING
+                                                                        'EXTENSION
+                                                                        'STATUS
+                                                                        'VERSION 1 'BODY NAME)
+                                                                  'INPUT NIL '(DON\'TCACHE)))))))
+            (CL:FORMAT T "Sorry, but you can't give what you haven't taken.~%~A has not been taken by anyone, including you.~%"
+                   NAME)
+            NIL)
+           ((STRING-EQUAL (SETQ TAKEN-BY (ADD-DEFAULT-REGISTRY (CL:READ STATUS-STREAM)))
+                   (ADD-DEFAULT-REGISTRY (USERNAME)))    (* \; "We're a winner")
+            (DELFILE (CLOSEF STATUS-STREAM))
+            (CL:FORMAT T "~A is now unlocked.~%" NAME)
+            T)
+           (T                                                (* \; "We're a loser")
+              (CL:FORMAT T 
+                     "Sorry, but you can't give what you haven't taken.~%~A was taken by ~A on ~A.~%"
+                     NAME TAKEN-BY (CL:READ STATUS-STREAM))
+              (CLOSEF STATUS-STREAM)
+              NIL))))
+
+(CL:DEFUN TAKE-FILE (FILENAME &OPTIONAL STEAL)
+
+   (* |;;| "Find the given file and open a status file to be associated with it.  If the file we open turns out to be version 1, then we've got the lock and we write our name and the date into the file.  Otherwise, somebody (possibly us!) has already got it and the lock cannot be obtained.  HOWEVER:  If we're the lock's owner already, indicate success -- the point is to grab the lock, not to find out if it's locked before!")
+
+   (RESETLST
+       (PROG ((GROSS-LIST-HACK (LIST NIL NIL T))
+              NAME STATUS-NAME STATUS-NAME-PARTS STATUS-VERSION SUCCESS)
+             (COND
+                ((NOT (CL:SETF NAME (GIVE-OR-TAKE-FIND FILENAME)))
+                 (RETURN NIL)))
+             (CL:SETF STATUS-NAME (PACKFILENAME.STRING 'EXTENSION 'STATUS 'VERSION NIL 'BODY NAME))
+             (CL:MACROLET ((STATUS-STREAM NIL '(CL:FIRST GROSS-LIST-HACK))
+                           (STATUS-FULL-NAME NIL '(CL:SECOND GROSS-LIST-HACK))
+                           (FINISHED-NORMALLY-P NIL '(CL:THIRD GROSS-LIST-HACK)))
+                    (RESETSAVE NIL (LIST (FUNCTION (CL:LAMBDA (NAME GROSS-LIST-HACK)
+
+                                            (* |;;| "We have been interrupted during processing.  Close any open streams and delete the status file we were making.")
+
+                                                          (CL:WHEN (NOT (FINISHED-NORMALLY-P))
+                                                              (CL:FORMAT T 
+                                              "Interrupted during processing of ~A.  Take aborted.~%"
+                                                                     NAME)
+                                                              (CL:WHEN (AND (NULL (STATUS-FULL-NAME))
+                                                                            (STREAMP (STATUS-STREAM))
+                                                                            )
+                                                             (* \; 
+"If STATUS-FULL-NAME was never set, then STATUS-STREAM, if open, must refer to the new status file.")
+                                                                  (CL:SETF (STATUS-FULL-NAME)
+                                                                         (FULLNAME (STATUS-STREAM))))
+                                                              (CL:IF (STREAMP (STATUS-STREAM))
+                                                                  (CLOSEF? (STATUS-STREAM)))
+                                                              (CL:IF (NOT (NULL (STATUS-FULL-NAME)))
+                                                                  (DELFILE (STATUS-FULL-NAME))))))
+                                         NAME GROSS-LIST-HACK))
+                    (CL:SETF (STATUS-STREAM)
+                           (OPENSTREAM STATUS-NAME 'OUTPUT NIL '(DON\'TCACHE)))
+                    (CL:SETF (STATUS-FULL-NAME)
+                           (FULLNAME (STATUS-STREAM)))
+                    (COND
+                       ((= (FILENAMEFIELD (STATUS-FULL-NAME)
+                                  'VERSION)
+                           1)                                (* \; "We're a winner")
+                        (LET ((UNAME (ADD-DEFAULT-REGISTRY (USERNAME)))
+                              (D (DATE)))
+                             (CL:FORMAT (STATUS-STREAM)
+                                    "~S ~S~%" UNAME D)
+                             (CLOSEF (STATUS-STREAM))
+                             (CL:FORMAT T "~A is now locked by ~A at ~A.~%" NAME UNAME D))
+                        (LET ((ROOTNAME (ROOTFILENAME NAME))
+                              INSTALLEDVERSION)
+                             (COND
+                                ((AND (GET ROOTNAME 'FILE)
+                                      (NOT (STRING-EQUAL NAME (SETQ INSTALLEDVERSION
+                                                               (CDAR (GET ROOTNAME 'FILEDATES))))))
+                                 (CL:FORMAT T "Warning: File ~A is different from loaded file ~A~%" 
+                                        NAME INSTALLEDVERSION))))
+                        (CL:SETF SUCCESS T))
+                       (T                                    (* \; "We're a loser at first blush ")
+                                                             (* \; 
+                                                      "(exception: we had the file locked already)")
+                          (CLOSEF (STATUS-STREAM))
+                          (DELFILE (STATUS-FULL-NAME))
+                          (CL:SETF (STATUS-STREAM)
+                                 (CAR (NLSETQ (OPENSTREAM (PACKFILENAME.STRING 'VERSION 1
+                                                                 'BODY
+                                                                 (STATUS-FULL-NAME))
+                                                     'INPUT NIL '(DON\'TCACHE)))))
+                          (COND
+                             ((NOT (STREAMP (STATUS-STREAM)))
+                              (CL:FORMAT T "Bad situation: Illegal versions of the status file exist.~&Try again in a moment or try to fix the problem.~%"
+                                     )
+                              (CL:SETF SUCCESS NIL))
+                             (STEAL 
+                                    (* |;;| 
+                           "If we're going to steal it, we should send the former locker a notice.")
+
+                                    (CL:FORMAT T "Stealing ~A (and sending ~A a message about it).~%"
+                                           NAME (GETFILEINFO (STATUS-STREAM)
+                                                       'AUTHOR))
+                                    (ADD.PROCESS `(SEND-STEAL-MESSAGE
+                                                   ',(USERNAME NIL NIL T)
+                                                   ',(GETFILEINFO (STATUS-STREAM)
+                                                            'AUTHOR)
+                                                   ',NAME))
+                                    (CLOSEF (STATUS-STREAM))
+                                    (DELFILE (FULLNAME (STATUS-STREAM)))
+                                    (CL:SETF SUCCESS (TAKE-FILE FILENAME NIL)))
+                             ((PROG1 (NOT (NLSETQ (LET ((TAKEN-BY (CL:READ (STATUS-STREAM)))
+                                                        (TAKEN-ON (CL:READ (STATUS-STREAM))))
+                                                       (CL:IF (STRING-EQUAL TAKEN-BY (
+                                                                               ADD-DEFAULT-REGISTRY
+                                                                                      (USERNAME)))
+                                                           (PROGN (CL:FORMAT T 
+                                                           "You've already had ~A taken, since ~A.~%"
+                                                                         NAME TAKEN-ON)
+
+                                                  (* |;;| "This case is really a success: We've got the lock.  Return T so the \"take\" command will keep going.")
+
+                                                                  (CL:SETF SUCCESS T))
+                                                           (CL:FORMAT T 
+                                                     "Sorry, but ~A was already taken by ~A on ~A.~%"
+                                                                  NAME TAKEN-BY TAKEN-ON)))))
+                                  (CLOSEF (STATUS-STREAM)))
+                              (CL:FORMAT T "Bad situation: Only an illegal status file exists.~%Try again in a moment or try to fix the problem.~%"
+                                     )
+                              (CL:SETF SUCCESS NIL)))))
+                    (CL:SETF (FINISHED-NORMALLY-P)
+                           T))
+             (RETURN SUCCESS))))
+
+(CL:DEFUN TAKEN? (&KEY ((:BY AUTHOR))
+                           GIVE?)
+   (COND
+      ((NULL AUTHOR)
+       (SETQ AUTHOR (USERNAME))
+       (COND
+          ((STRPOS "." AUTHOR)
+           (SETQ AUTHOR (SUBSTRING AUTHOR 1 (SUB1 (STRPOS "." AUTHOR)))))))
+      ((OR (STRING-EQUAL AUTHOR "ANY")
+           (STRING-EQUAL AUTHOR "ALL")
+           (STRING-EQUAL AUTHOR "*"))
+       (SETQ AUTHOR NIL)))
+   (|printout| T "Looking for files taken by " (OR AUTHOR "any")
+          T)
+   (|for| DIR |in| *GIVE-AND-TAKE-DIRECTORIES*
+      |do| (RESETLST
+                   (LET ((GEN (\\GENERATEFILES (PACKFILENAME.STRING 'DIRECTORY DIR 'NAME "*"
+                                                      'EXTENSION "STATUS")
+                                     '(AUTHOR CREATIONDATE)
+                                     '(RESETLST)))
+                         NEXT THISAUTHOR DIRPRINTED)
+                        (|while| (SETQ NEXT (\\GENERATENEXTFILE GEN))
+                           |when| (PROGN (SETQ THISAUTHOR (\\GENERATEFILEINFO GEN 'AUTHOR))
+                                             (OR (NULL AUTHOR)
+                                                 (STRPOS AUTHOR THISAUTHOR 1 NIL T NIL UPPERCASEARRAY
+                                                        )))
+                           |do| (COND
+                                       ((NOT DIRPRINTED)
+                                        (|printout| T T "   " DIR T)
+                                        (SETQ DIRPRINTED T)))
+                                 (|printout| T (FILENAMEFIELD NEXT 'NAME)
+                                        16
+                                        (\\GENERATEFILEINFO GEN 'CREATIONDATE)
+                                        40 THISAUTHOR)
+                                 (COND
+                                    ((NOT GIVE?)
+                                     (TERPRI T))
+                                    ((EQ (ASKUSER NIL NIL "  Give? " NIL T)
+                                         'Y)
+                                     (GIVE-FILE (PACKFILENAME.STRING 'EXTENSION NIL 'VERSION NIL
+                                                           'BODY NEXT)))))))))
+
+(DEFGLOBALVAR *GIVE-AND-TAKE-DIRECTORIES* '("{Pele:mv:envos}<Lispcore>Sources>" 
+                                                      "{Pele:mv:envos}<Lispcore>Library>" 
+                                                      "{Pele:mv:envos}<Lispcore>Internal>Library>" 
+                                                      "{Pele:mv:envos}<LispUsers>Lispcore>" 
+                                                      "{Pele:mv:envos}<CmL>Test>"))
+
+(PUTPROPS GIVE-AND-TAKE FILETYPE CL:COMPILE-FILE)
+(PUTPROPS GIVE-AND-TAKE COPYRIGHT ("Venue & Xerox Corporation" 1986 1990 1991))
+(DECLARE\: DONTCOPY
+  (FILEMAP (NIL)))
+STOP

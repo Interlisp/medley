@@ -1,1 +1,370 @@
-(DEFINE-FILE-INFO READTABLE "XCL" PACKAGE "INTERLISP")(FILECREATED "26-Jun-90 19:35:02" |{DSK}<usr>local>lde>lispcore>internal>library>WHEREIS.;2| 21991        |changes| |to:|  (VARS WHEREISCOMS)      |previous| |date:| "29-Oct-86 13:17:33" |{DSK}<usr>local>lde>lispcore>internal>library>WHEREIS.;1|); Copyright (c) 1983, 1984, 1986, 1990 by Venue & Xerox Corporation.  All rights reserved.(PRETTYCOMPRINT WHEREISCOMS)(RPAQQ WHEREISCOMS       (                                                     (* \; "WHEREIS from a hashfile")        (FILES HASH)        (FNS HASHFILE-WHEREIS CLOSEWHEREIS WHEREISNOTICE WHEREISNOTICE1)        (ADDVARS (WHEREIS.HASH))        (GLOBALVARS WHEREIS.HASH)        (DECLARE\: DONTEVAL@LOAD DOCOPY (P (MOVD 'HASHFILE-WHEREIS 'WHEREIS))               (ADDVARS (AROUNDEXITFNS CLOSEWHEREIS)))        (COMS                                                (* \;                                "Possibly obsolete now that directory enumerates highest version ok")              (FNS \\REMOVEOLDVERSIONS))        (LOCALVARS . T)))(* \; "WHEREIS from a hashfile")(FILESLOAD HASH)(DEFINEQ(hashfile-whereis  (lambda (name type files fn)                               (* |bvm:| "28-Apr-86 12:24")    (prog (val)                    (* |if| fn |given,| apply* |to| |each| |element| |and| |return| nil)          (cond             ((eq name t)                    (* t |as| \a name |has| \a |special| |meaning| |to| infilecoms? |so| |don't|           |pass| |through.|)              (return nil)))          (setq type (getfilepkgtype type))          (|for| file |in| (or (listp files)                               filelst)                 |do|                 (cond                    ((infilecoms? name type (filecoms file))                     (cond                        (fn (apply* fn name file)))                     (setq val (cons file val)))))          (and           (eq files t)           (eq type 'fns)           (litatom name)           (progn (cond                     ((and whereis.hash (nlistp whereis.hash))                                                             (* |make| |sure| whereis.hash |is| \a                                                              |list.|)                      (setq whereis.hash (list whereis.hash))))                  (|for| whishsfile hname hsfile delp |on| whereis.hash |do|                     (* whereis.hash |is| \a |list| |of| |hash| |file| |names| |off| |of| |which|           |the| |hash| |file| |structure| |is| |linked| |into| |the| |system| |hash|           |array.| |The| |full| |file| |name| |is| |hashed.|)                         (cond                            ((listp (setq hname (car whishsfile)))                                                             (* |file| |already| |has| |an|                                                              |associated| |hashfile| |datatype|)                             (setq hsfile (cdr hname)))                            ((setq hsfile (findfile hname t))                             (cond                                ((|find| x |in| whereis.hash |suchthat|                                        (and (listp x)                                             (eq hsfile (hashfileprop (cdr x)                                                               'name))))                                                             (* |Looks| |like| \a |duplicate|                                                              |entry|)                                 (rplaca whishsfile (setq hsfile nil))                                 (setq delp t))                                (t (setq hsfile (openhashfile hsfile))                    (* |if| |the| |data| |file| |is| |ever| |closed,| |break| |the| |link| |to|           |the| |hash| |file| |structure.|)                                   (whenclose (hashfileprop hsfile 'stream)                                          'before                                          (function (lambda (strm)                                                      (|for| tail |on| whereis.hash |when|                                                             (and (listp (car tail))                                                                  (eq strm (hashfileprop (cdar tail)                                                                                  'stream)))                                                             |do|                    (* |remove| |the| |hashfile| |structure| |for| |this| |file's| |entry| |on|           whereis.hash.)                                                             (rplaca tail (caar tail)))))                                          'closeall                                          'no)                                   (rplaca whishsfile (cons hname hsfile)))))                            (t (or (eq 'y (askuser 120 'y (concat hname                          ", a file on WHEREIS.HASH, not found -- do you want to delete and continue?"                                                                 )                                                 '((y "es")                                                   (n "o"))))                                   (errorx (list 23 hname)))                               (rplaca whishsfile (setq hsfile nil))                               (setq delp t)))                         (cond                            (hsfile (|for| file |inside| (gethashfile name hsfile)                                           |when|                                           (not (fmemb file val))                                           |do|                                           (and fn (apply* fn name file))                                           (|push| val file))))                         |finally|                         (cond                            (delp (setq whereis.hash (dremove nil whereis.hash)))))))          (return (and (null fn)                       (dreverse val))))))(closewhereis  (lambda (flg)                                              (* |bvm:| "28-Apr-86 12:33")                    (* * |Close| |the| |whereis| |file| |over| |logout,| |since| |there's| |no|           |point| |in| |paying| |to| |keep| |it| |open|)    (and whereis.hash (selectq flg                          ((nil beforelogout beforesysout beforemakesys)                                (|for| hf |in| (|for| wh |in| whereis.hash |when| (listp wh)                                                     |collect|                                                             (* |Gather| |the| |hashfile| |handles|)                                                     (cdr wh))                                      |do|                                      (nlsetq (closehashfile hf))))                          nil))))(whereisnotice  (lambda (filegroups newflg databasefile scratchdir compute.highest.versions.manually)                                                             (* |bvm:| " 5-Oct-86 16:36")                                                  (* |;;| "Copies the current whereis hash-file into a scratch file, then notices the files in FILEGROUP The copy is so that this function will execute even though someone else is reading the current database.  The database is copied to a scratch file, then renamed to be a newer version of the previous database, which is deleted.  This allows others to use the old database while the copying is going on.  If an earlier version of the scratch file exists, it means that someone else is currently updating (their version disappears when they complete successfully or logout), so we wait for them to finish.")                                                  (* |;;| "COMPUTE.HIGHEST.VERSIONS.MANUALLY means don't trust DIRECTORY to get the highest version of a file only when enumerating.")    (resetlst (prog ((databasefilename (or databasefile (|if| whereis.hash |then|                                                   (* \;                                                   "if there is a list of files, use the top one.")                                                              (|if| (nlistp whereis.hash)                                                                    |then| whereis.hash |elseif|                                                                    (nlistp (car whereis.hash))                                                                    |then|                                                                    (car whereis.hash)                                                                    |else|                                                                    (caar whereis.hash))                                                              |else|                                                              'whereis.hash)))                     (scratchval (list nil))                     hf scratch oldwh)                    (setq oldwh (infilep databasefilename))  (* \; "creates a scratch file")                    (|if| (and oldwh (not newflg))                          |then|                             (* \; "copy old one")                          (resetsave nil (list (function (lambda (x)                                                           (|if| (car x)                                                                 |then|                                                                 (closef? (car x))                                                                 (and resetstate (delfile                                                                                  (car x))))))                                               scratchval))                          (rplaca scratchval (setq hf (closef (openfile (setq scratch                                                                         (packfilename                                                                          'directory                                                                          (filenamefield                                                                                  databasefilename                                                                                 'directory)                                                                          'name                                                                          'newwhereisdatabase                                                                          'extension                                                                          'scratch                                                                          'temporary                                                                          's))                                                                     'output                                                                     'new))))                                                  (* \;                      "Compensate for the fact that PACKFILENAME produces version -1 for temporary ;S")                          (and (eq (systemtype)                                   'tops20)                               (setq scratch (packfilename 'version nil 'body scratch)))                                                  (* |;;| "If there is a version earlier than the one we got, someone else must have it, and we must wait until he gets rid of it (by deleting it)")                          (|bind| oldv (rpt _ 1)                                 |until|                                 (eq hf (setq oldv (fullname scratch 'oldest)))                                 |do|                                 (dismiss 2000)                                 (or (null rpt)                                     (|if| (eq rpt 5)                                           |then|                                           (|printout| t t (getfileinfo oldv 'author)                                                  " seems to be updating the database right now." t                                                   "I'm waiting for him to finish." t t)                                           (setq rpt nil)                                           |else|                                           (|add| rpt 1))))                          (setq hf (copyhashfile oldwh hf nil nil t))                          (closef? oldwh)                          |elseif|                          (and oldwh (eq newflg 'nocopy))                          |then|                          (setq hf (openhashfile oldwh 'both nil))                          (setq scratchdir nil)                          |else|                          (resetsave nil (list (function (lambda (x)                                                           (|if| (car x)                                                                 |then|                                                                 (setq x (closehashfile (car x)))                                                                 (and resetstate (delfile x)))))                                               scratchval))                          (rplaca scratchval (setq hf (createhashfile                                                       (|if| scratchdir |then| (packfilename.string                                                                                'directory scratchdir                                                                                'body                                                                                 databasefilename)                                                             |else| databasefilename)                                                       'smallexpr nil (or (numberp newflg)                                                                          20000))))                          (setq newflg t))        (* |;;| "Must leave the new file open--otherwise, the user might lose access to it before he starts to do the noticing.")                    (|for| x |in| (|for| filespec |inside| filegroups |bind| tem |join|                                         (|if| (setq tem (infilep filespec))                                               |then|        (* \; "an individual file")                                               (list tem)                                               |else|                                                  (* |;;| "a specification for a group of files, expand it.  Default to *.; -- i.e., highest version only of the extensionless files on this dir.")                                               (setq tem (directory (packfilename.string 'body                                                                            filespec 'name "*"                                                                           'extension "" 'version "")                                                                ))                                               (|if| compute.highest.versions.manually |then|                                                     (\\removeoldversions tem)                                                     |else| tem)))                           |do|                           (ersetq (|printout| t (whereisnotice1 x hf)                                          -2)))                    (setq hf (closehashfile hf))                    (rplaca scratchval nil)       (* |;;| "This closes the file, but other updaters are still locked out cause they go for a new version and then trip over our old one.")                    (cond                       ((not newflg)                        (|if| (setq hf (renamefile hf (packfilename 'version nil 'body                                                              databasefilename)))                              |then|                              (delfile oldwh)))                       (scratchdir (setq hf (renamefile hf databasefilename))))                                                   (* \; "Now others can get in to read or update.")                    (return hf)))))(whereisnotice1  (lambda (file hf tryhard)                                  (* |bvm:| " 5-Oct-86 16:08")    (resetlst (prog (name map date val env stream)                    (resetsave nil (list 'closef (setq stream (openstream file 'input 'old nil                                                                     '(don\'t.change.read.date                                                                              don\'t.change.date)))))                    (setq file (fullname stream))                    (setfileptr stream 0)                    (cl:multiple-value-setq (env map)                           (get-environment-and-filemap stream t))                    (or map (return (list file "--can't find filemap")))                    (|if| (and (not tryhard)                               (equal (setq date (filedate stream))                                      (gethashfile file hf))                               date)                          |then|                             (* \; " already analyzed")                          (return (list file date)))                    (setq name (namefield file t))                    (|for| x |in| (cdr map)                           |do|                           (|for| y |in| (cddr x)                                  |unless|                                  (or (null (setq val (lookuphashfile (car y)                                                             name hf '(insert retrieve))))                                      (eq name val)                                      (and (listp val)                                           (fmemb name val)))                                  |do|            (* |;;| "the first LOOKUPHASHFILE stores NAME as value if there was no previous value, else returns previous value.  If that value was non-null and did not contain NAME, now have to store union of NAME and what was there.")                                  (puthashfile (car y)                                         (nconc1 (or (listp val)                                                     (list val))                                                name)                                         hf)))                    (puthashfile file date hf)                    (return file))))))(ADDTOVAR WHEREIS.HASH )(DECLARE\: DOEVAL@COMPILE DONTCOPY(GLOBALVARS WHEREIS.HASH))(DECLARE\: DONTEVAL@LOAD DOCOPY (MOVD 'HASHFILE-WHEREIS 'WHEREIS)(ADDTOVAR AROUNDEXITFNS CLOSEWHEREIS))(* \; "Possibly obsolete now that directory enumerates highest version ok")(DEFINEQ(\\removeoldversions  (lambda (fullfilelst)                                      (* |rrb| "22-Feb-84 18:12")                    (* |removes| |all| |but| |the| |newest| |version| |of| |any| |file| |on|           fullfilelst. |Slow| |version| |as| |temporary| |until| directory |has| \a |way|           |of| |asking| |for| |only| |the| |most| |recent| |version.|)    (prog ((expandedfilelst (|for| file |in| fullfilelst |collect| (unpackfilename file)))           uniquelst file)          (|for| exptail |on| expandedfilelst |do|           (* |skip| |deleted| |files.|)                 (and (setq file (car exptail))                      (prog ((xdirectory (listget file 'directory))                             (xname (listget file 'name))                             (xextension (listget file 'extension))                             (xversion (listget file 'version)))                    (* |go| |thru| |the| |list| |of| |expanded| |files| |and| |see| |if| |there|           |are| |any| |other| |files| |on| |the| |list| |with| |the| |same| |name.|          i\f |so| |and| |it| |is| |older,| |delete| |it.|          i\f |so| |and| |it| |is| |newer,| |don't| |copy| |this| |guy| |onto| |the|           |result| |list.|)                            (|for| efltail |on| (cdr exptail)                                   |do|                                   (setq file (car efltail))                                   (cond                                      ((and (eq (listget file 'name)                                                xname)                                            (eq (listget file 'extension)                                                xextension)                                            (eq (listget file 'directory)                                                xdirectory))                                       (cond                                          ((igreaterp (listget file 'version)                                                  xversion)  (* xfile |should| |be| |deleted|)                                           (return nil))                                          (t                     (* |mark| |it| |deleted.| |Don't| |want| |to| |play| |around| |with| |the|           |pointers| |because| |the| |enclosing| for |is| |using| |the| |same| |list.|)                                             (rplaca efltail nil)))))                                   |finally|                                   (setq uniquelst (cons (car exptail)                                                         uniquelst))))))          (return (|for| ufile |in| uniquelst |collect| (packfilename ufile)))))))(DECLARE\: DOEVAL@COMPILE DONTCOPY(LOCALVARS . T))(PUTPROPS WHEREIS COPYRIGHT ("Venue & Xerox Corporation" 1983 1984 1986 1990))(DECLARE\: DONTCOPY  (FILEMAP (NIL (1157 18785 (HASHFILE-WHEREIS 1167 . 6182) (CLOSEWHEREIS 6184 . 7040) (WHEREISNOTICE 7042 . 16464) (WHEREISNOTICE1 16466 . 18783)) (19078 21835 (\\REMOVEOLDVERSIONS 19088 . 21833)))))STOP
+(DEFINE-FILE-INFO READTABLE "XCL" PACKAGE "INTERLISP")
+(FILECREATED "26-Jun-90 19:35:02" |{DSK}<usr>local>lde>lispcore>internal>library>WHEREIS.;2| 21991  
+
+      |changes| |to:|  (VARS WHEREISCOMS)
+
+      |previous| |date:| "29-Oct-86 13:17:33" 
+|{DSK}<usr>local>lde>lispcore>internal>library>WHEREIS.;1|)
+
+
+; Copyright (c) 1983, 1984, 1986, 1990 by Venue & Xerox Corporation.  All rights reserved.
+
+(PRETTYCOMPRINT WHEREISCOMS)
+
+(RPAQQ WHEREISCOMS
+       (                                                     (* \; "WHEREIS from a hashfile")
+        (FILES HASH)
+        (FNS HASHFILE-WHEREIS CLOSEWHEREIS WHEREISNOTICE WHEREISNOTICE1)
+        (ADDVARS (WHEREIS.HASH))
+        (GLOBALVARS WHEREIS.HASH)
+        (DECLARE\: DONTEVAL@LOAD DOCOPY (P (MOVD 'HASHFILE-WHEREIS 'WHEREIS))
+               (ADDVARS (AROUNDEXITFNS CLOSEWHEREIS)))
+        (COMS                                                (* \; 
+                               "Possibly obsolete now that directory enumerates highest version ok")
+              (FNS \\REMOVEOLDVERSIONS))
+        (LOCALVARS . T)))
+
+
+
+(* \; "WHEREIS from a hashfile")
+
+
+(FILESLOAD HASH)
+(DEFINEQ
+
+(hashfile-whereis
+  (lambda (name type files fn)                               (* |bvm:| "28-Apr-86 12:24")
+    (prog (val)
+          
+          (* |if| fn |given,| apply* |to| |each| |element| |and| |return| nil)
+
+          (cond
+             ((eq name t)
+          
+          (* t |as| \a name |has| \a |special| |meaning| |to| infilecoms? |so| |don't| 
+          |pass| |through.|)
+
+              (return nil)))
+          (setq type (getfilepkgtype type))
+          (|for| file |in| (or (listp files)
+                               filelst)
+                 |do|
+                 (cond
+                    ((infilecoms? name type (filecoms file))
+                     (cond
+                        (fn (apply* fn name file)))
+                     (setq val (cons file val)))))
+          (and
+           (eq files t)
+           (eq type 'fns)
+           (litatom name)
+           (progn (cond
+                     ((and whereis.hash (nlistp whereis.hash))
+                                                             (* |make| |sure| whereis.hash |is| \a 
+                                                             |list.|)
+                      (setq whereis.hash (list whereis.hash))))
+                  (|for| whishsfile hname hsfile delp |on| whereis.hash |do| 
+          
+          (* whereis.hash |is| \a |list| |of| |hash| |file| |names| |off| |of| |which| 
+          |the| |hash| |file| |structure| |is| |linked| |into| |the| |system| |hash| 
+          |array.| |The| |full| |file| |name| |is| |hashed.|)
+
+                         (cond
+                            ((listp (setq hname (car whishsfile)))
+                                                             (* |file| |already| |has| |an| 
+                                                             |associated| |hashfile| |datatype|)
+                             (setq hsfile (cdr hname)))
+                            ((setq hsfile (findfile hname t))
+                             (cond
+                                ((|find| x |in| whereis.hash |suchthat|
+                                        (and (listp x)
+                                             (eq hsfile (hashfileprop (cdr x)
+                                                               'name))))
+                                                             (* |Looks| |like| \a |duplicate| 
+                                                             |entry|)
+                                 (rplaca whishsfile (setq hsfile nil))
+                                 (setq delp t))
+                                (t (setq hsfile (openhashfile hsfile))
+          
+          (* |if| |the| |data| |file| |is| |ever| |closed,| |break| |the| |link| |to| 
+          |the| |hash| |file| |structure.|)
+
+                                   (whenclose (hashfileprop hsfile 'stream)
+                                          'before
+                                          (function (lambda (strm)
+                                                      (|for| tail |on| whereis.hash |when|
+                                                             (and (listp (car tail))
+                                                                  (eq strm (hashfileprop (cdar tail)
+                                                                                  'stream)))
+                                                             |do|
+          
+          (* |remove| |the| |hashfile| |structure| |for| |this| |file's| |entry| |on| 
+          whereis.hash.)
+
+                                                             (rplaca tail (caar tail)))))
+                                          'closeall
+                                          'no)
+                                   (rplaca whishsfile (cons hname hsfile)))))
+                            (t (or (eq 'y (askuser 120 'y (concat hname 
+                         ", a file on WHEREIS.HASH, not found -- do you want to delete and continue?"
+                                                                 )
+                                                 '((y "es")
+                                                   (n "o"))))
+                                   (errorx (list 23 hname)))
+                               (rplaca whishsfile (setq hsfile nil))
+                               (setq delp t)))
+                         (cond
+                            (hsfile (|for| file |inside| (gethashfile name hsfile)
+                                           |when|
+                                           (not (fmemb file val))
+                                           |do|
+                                           (and fn (apply* fn name file))
+                                           (|push| val file))))
+                         |finally|
+                         (cond
+                            (delp (setq whereis.hash (dremove nil whereis.hash)))))))
+          (return (and (null fn)
+                       (dreverse val))))))
+
+(closewhereis
+  (lambda (flg)                                              (* |bvm:| "28-Apr-86 12:33")
+          
+          (* * |Close| |the| |whereis| |file| |over| |logout,| |since| |there's| |no| 
+          |point| |in| |paying| |to| |keep| |it| |open|)
+
+    (and whereis.hash (selectq flg
+                          ((nil beforelogout beforesysout beforemakesys) 
+                               (|for| hf |in| (|for| wh |in| whereis.hash |when| (listp wh)
+                                                     |collect|
+                                                             (* |Gather| |the| |hashfile| |handles|)
+                                                     (cdr wh))
+                                      |do|
+                                      (nlsetq (closehashfile hf))))
+                          nil))))
+
+(whereisnotice
+  (lambda (filegroups newflg databasefile scratchdir compute.highest.versions.manually)
+                                                             (* |bvm:| " 5-Oct-86 16:36")
+                                                  (* |;;| "Copies the current whereis hash-file into a scratch file, then notices the files in FILEGROUP The copy is so that this function will execute even though someone else is reading the current database.  The database is copied to a scratch file, then renamed to be a newer version of the previous database, which is deleted.  This allows others to use the old database while the copying is going on.  If an earlier version of the scratch file exists, it means that someone else is currently updating (their version disappears when they complete successfully or logout), so we wait for them to finish.")
+                                                  (* |;;| "COMPUTE.HIGHEST.VERSIONS.MANUALLY means don't trust DIRECTORY to get the highest version of a file only when enumerating.")
+    (resetlst (prog ((databasefilename (or databasefile (|if| whereis.hash |then| 
+                                                  (* \; 
+                                                  "if there is a list of files, use the top one.")
+                                                              (|if| (nlistp whereis.hash)
+                                                                    |then| whereis.hash |elseif|
+                                                                    (nlistp (car whereis.hash))
+                                                                    |then|
+                                                                    (car whereis.hash)
+                                                                    |else|
+                                                                    (caar whereis.hash))
+                                                              |else|
+                                                              'whereis.hash)))
+                     (scratchval (list nil))
+                     hf scratch oldwh)
+                    (setq oldwh (infilep databasefilename))  (* \; "creates a scratch file")
+                    (|if| (and oldwh (not newflg))
+                          |then|                             (* \; "copy old one")
+                          (resetsave nil (list (function (lambda (x)
+                                                           (|if| (car x)
+                                                                 |then|
+                                                                 (closef? (car x))
+                                                                 (and resetstate (delfile
+                                                                                  (car x))))))
+                                               scratchval))
+                          (rplaca scratchval (setq hf (closef (openfile (setq scratch
+                                                                         (packfilename
+                                                                          'directory
+                                                                          (filenamefield 
+                                                                                 databasefilename
+                                                                                 'directory)
+                                                                          'name
+                                                                          'newwhereisdatabase
+                                                                          'extension
+                                                                          'scratch
+                                                                          'temporary
+                                                                          's))
+                                                                     'output
+                                                                     'new))))
+                                                  (* \; 
+                     "Compensate for the fact that PACKFILENAME produces version -1 for temporary ;S")
+                          (and (eq (systemtype)
+                                   'tops20)
+                               (setq scratch (packfilename 'version nil 'body scratch)))
+                                                  (* |;;| "If there is a version earlier than the one we got, someone else must have it, and we must wait until he gets rid of it (by deleting it)")
+                          (|bind| oldv (rpt _ 1)
+                                 |until|
+                                 (eq hf (setq oldv (fullname scratch 'oldest)))
+                                 |do|
+                                 (dismiss 2000)
+                                 (or (null rpt)
+                                     (|if| (eq rpt 5)
+                                           |then|
+                                           (|printout| t t (getfileinfo oldv 'author)
+                                                  " seems to be updating the database right now." t 
+                                                  "I'm waiting for him to finish." t t)
+                                           (setq rpt nil)
+                                           |else|
+                                           (|add| rpt 1))))
+                          (setq hf (copyhashfile oldwh hf nil nil t))
+                          (closef? oldwh)
+                          |elseif|
+                          (and oldwh (eq newflg 'nocopy))
+                          |then|
+                          (setq hf (openhashfile oldwh 'both nil))
+                          (setq scratchdir nil)
+                          |else|
+                          (resetsave nil (list (function (lambda (x)
+                                                           (|if| (car x)
+                                                                 |then|
+                                                                 (setq x (closehashfile (car x)))
+                                                                 (and resetstate (delfile x)))))
+                                               scratchval))
+                          (rplaca scratchval (setq hf (createhashfile
+                                                       (|if| scratchdir |then| (packfilename.string
+                                                                                'directory scratchdir
+                                                                                'body 
+                                                                                databasefilename)
+                                                             |else| databasefilename)
+                                                       'smallexpr nil (or (numberp newflg)
+                                                                          20000))))
+                          (setq newflg t))        (* |;;| "Must leave the new file open--otherwise, the user might lose access to it before he starts to do the noticing.")
+                    (|for| x |in| (|for| filespec |inside| filegroups |bind| tem |join|
+                                         (|if| (setq tem (infilep filespec))
+                                               |then|        (* \; "an individual file")
+                                               (list tem)
+                                               |else|
+                                                  (* |;;| "a specification for a group of files, expand it.  Default to *.; -- i.e., highest version only of the extensionless files on this dir.")
+                                               (setq tem (directory (packfilename.string 'body 
+                                                                           filespec 'name "*"
+                                                                           'extension "" 'version "")
+                                                                ))
+                                               (|if| compute.highest.versions.manually |then|
+                                                     (\\removeoldversions tem)
+                                                     |else| tem)))
+                           |do|
+                           (ersetq (|printout| t (whereisnotice1 x hf)
+                                          -2)))
+                    (setq hf (closehashfile hf))
+                    (rplaca scratchval nil)       (* |;;| "This closes the file, but other updaters are still locked out cause they go for a new version and then trip over our old one.")
+                    (cond
+                       ((not newflg)
+                        (|if| (setq hf (renamefile hf (packfilename 'version nil 'body 
+                                                             databasefilename)))
+                              |then|
+                              (delfile oldwh)))
+                       (scratchdir (setq hf (renamefile hf databasefilename))))
+                                                   (* \; "Now others can get in to read or update.")
+                    (return hf)))))
+
+(whereisnotice1
+  (lambda (file hf tryhard)                                  (* |bvm:| " 5-Oct-86 16:08")
+    (resetlst (prog (name map date val env stream)
+                    (resetsave nil (list 'closef (setq stream (openstream file 'input 'old nil
+                                                                     '(don\'t.change.read.date 
+                                                                             don\'t.change.date)))))
+                    (setq file (fullname stream))
+                    (setfileptr stream 0)
+                    (cl:multiple-value-setq (env map)
+                           (get-environment-and-filemap stream t))
+                    (or map (return (list file "--can't find filemap")))
+                    (|if| (and (not tryhard)
+                               (equal (setq date (filedate stream))
+                                      (gethashfile file hf))
+                               date)
+                          |then|                             (* \; " already analyzed")
+                          (return (list file date)))
+                    (setq name (namefield file t))
+                    (|for| x |in| (cdr map)
+                           |do|
+                           (|for| y |in| (cddr x)
+                                  |unless|
+                                  (or (null (setq val (lookuphashfile (car y)
+                                                             name hf '(insert retrieve))))
+                                      (eq name val)
+                                      (and (listp val)
+                                           (fmemb name val)))
+                                  |do|            (* |;;| "the first LOOKUPHASHFILE stores NAME as value if there was no previous value, else returns previous value.  If that value was non-null and did not contain NAME, now have to store union of NAME and what was there.")
+                                  (puthashfile (car y)
+                                         (nconc1 (or (listp val)
+                                                     (list val))
+                                                name)
+                                         hf)))
+                    (puthashfile file date hf)
+                    (return file)))))
+)
+
+(ADDTOVAR WHEREIS.HASH )
+(DECLARE\: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS WHEREIS.HASH)
+)
+(DECLARE\: DONTEVAL@LOAD DOCOPY 
+
+(MOVD 'HASHFILE-WHEREIS 'WHEREIS)
+
+
+(ADDTOVAR AROUNDEXITFNS CLOSEWHEREIS)
+)
+
+
+
+(* \; "Possibly obsolete now that directory enumerates highest version ok")
+
+(DEFINEQ
+
+(\\removeoldversions
+  (lambda (fullfilelst)                                      (* |rrb| "22-Feb-84 18:12")
+          
+          (* |removes| |all| |but| |the| |newest| |version| |of| |any| |file| |on| 
+          fullfilelst. |Slow| |version| |as| |temporary| |until| directory |has| \a |way| 
+          |of| |asking| |for| |only| |the| |most| |recent| |version.|)
+
+    (prog ((expandedfilelst (|for| file |in| fullfilelst |collect| (unpackfilename file)))
+           uniquelst file)
+          (|for| exptail |on| expandedfilelst |do|           (* |skip| |deleted| |files.|)
+                 (and (setq file (car exptail))
+                      (prog ((xdirectory (listget file 'directory))
+                             (xname (listget file 'name))
+                             (xextension (listget file 'extension))
+                             (xversion (listget file 'version)))
+          
+          (* |go| |thru| |the| |list| |of| |expanded| |files| |and| |see| |if| |there| 
+          |are| |any| |other| |files| |on| |the| |list| |with| |the| |same| |name.|
+          i\f |so| |and| |it| |is| |older,| |delete| |it.|
+          i\f |so| |and| |it| |is| |newer,| |don't| |copy| |this| |guy| |onto| |the| 
+          |result| |list.|)
+
+                            (|for| efltail |on| (cdr exptail)
+                                   |do|
+                                   (setq file (car efltail))
+                                   (cond
+                                      ((and (eq (listget file 'name)
+                                                xname)
+                                            (eq (listget file 'extension)
+                                                xextension)
+                                            (eq (listget file 'directory)
+                                                xdirectory))
+                                       (cond
+                                          ((igreaterp (listget file 'version)
+                                                  xversion)  (* xfile |should| |be| |deleted|)
+                                           (return nil))
+                                          (t 
+          
+          (* |mark| |it| |deleted.| |Don't| |want| |to| |play| |around| |with| |the| 
+          |pointers| |because| |the| |enclosing| for |is| |using| |the| |same| |list.|)
+
+                                             (rplaca efltail nil)))))
+                                   |finally|
+                                   (setq uniquelst (cons (car exptail)
+                                                         uniquelst))))))
+          (return (|for| ufile |in| uniquelst |collect| (packfilename ufile))))))
+)
+(DECLARE\: DOEVAL@COMPILE DONTCOPY
+
+(LOCALVARS . T)
+)
+(PUTPROPS WHEREIS COPYRIGHT ("Venue & Xerox Corporation" 1983 1984 1986 1990))
+(DECLARE\: DONTCOPY
+  (FILEMAP (NIL (1157 18785 (HASHFILE-WHEREIS 1167 . 6182) (CLOSEWHEREIS 6184 . 7040) (WHEREISNOTICE 
+7042 . 16464) (WHEREISNOTICE1 16466 . 18783)) (19078 21835 (\\REMOVEOLDVERSIONS 19088 . 21833)))))
+STOP

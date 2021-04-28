@@ -1,1 +1,1604 @@
-(DEFINE-FILE-INFO READTABLE "XCL" PACKAGE (DEFPACKAGE "COMPILER" (USE "LISP" "XCL")))(il:filecreated "20-Jul-90 17:07:06" il:|{PELE:MV:ENVOS}<LISPCORE>SOURCES>XCLC-ALPHA.;3| 84829        il:|changes| il:|to:|  (il:functions alpha-form)      il:|previous| il:|date:| "18-May-90 01:20:54" il:|{PELE:MV:ENVOS}<LISPCORE>SOURCES>XCLC-ALPHA.;2|); Copyright (c) 1986, 1987, 1988, 1990 by Venue & Xerox Corporation.  All rights reserved.(il:prettycomprint il:xclc-alphacoms)(il:rpaqq il:xclc-alphacoms           ((il:* il:|;;;| "Alphatization")           (il:functions binding-contour process-declarations process-il-declarations                   update-environment)           (il:functions bind-parameter check-arg)           (il:functions binding-to-lambda)           (il:variables *block-stack* *tagbody-stack*)           (il:functions alpha-argument-form alpha-atom alpha-block alpha-catch alpha-combination                   alpha-compiler-let alpha-eval-when alpha-flet alpha-form alpha-function                   alpha-functional-form alpha-go alpha-if alpha-il-function alpha-labels alpha-lambda                  alpha-lambda-list alpha-let alpha-let* alpha-literal alpha-macrolet alpha-mv-call                   alpha-mv-prog1 alpha-progn alpha-progv alpha-return-from alpha-setq alpha-tagbody                   alpha-throw alpha-unwind-protect)           (il:functions convert-to-cl-lambda completely-expand expand-openlambda-call)                      (il:* il:|;;| "Alphatization testing")           (il:variables *indent-increment* *node-hash* *node-number*)           (il:functions test-alpha test-alpha-2 parse-defun print-tree print-node)           (il:variables context-test-form)           (il:functions ctxt)                      (il:* il:|;;| "Arrange to use the correct compiler.")           (il:prop il:filetype il:xclc-alpha)                      (il:* il:|;;| "Arrange for the correct makefile environment")           (il:prop il:makefile-environment il:xclc-alpha)))(il:* il:|;;;| "Alphatization")(defmacro binding-contour (declarations &body body)(il:* il:|;;;| "Called around the alphatization of a binding form, this sets up bindings of the various special variables used to communicate information between declarations and code.  The given declarations are then processed inside the bindings before going on to the body.")   `(let ((*new-specials* nil)          (*new-globals* nil)          (*new-inlines* nil)          (*new-notinlines* nil)          (il:specvars il:specvars)          (il:localvars il:localvars)          (il:globalvars il:globalvars))         (declare (special *new-specials* *new-globals* *new-inlines* *new-notinlines*                              il:specvars il:localvars il:globalvars))         (process-declarations ,declarations)         ,@body))(defun process-declarations (decls)(il:* il:|;;;| "Step through the given declarations, storing the information found therein into various special variables.")   (declare (special *new-specials* *new-globals* *new-inlines* *new-notinlines* il:specvars                        il:localvars il:globalvars))   (flet ((check-var-1 (var)                 (cond                    ((symbolp var)                     var)                    (t (cerror "Use the symbol %LOSE% instead."                               "The value ~S, appearing in a declaration, is not a symbol" var)                       '%lose%))))         (macrolet ((check-var (var)                           `(setq ,var (check-var-1 ,var))))                (dolist (decl decls)                    (dolist (spec (cdr decl))                        (if (atom spec)                            (cerror "Ignore it."                           "A non-list, ~S, was found where a declaration specification was expected."                                   spec)                            (case (car spec)                                ((special) (dolist (var (cdr spec))                                               (check-var var)                                               (push var *new-specials*)))                                ((il:specvars) (cond                                                  ((consp (cdr spec))                                                   (unless (eq il:specvars t)                                                       (setq il:specvars (union il:specvars                                                                                (cdr spec)))))                                                  ((eq (cdr spec)                                                       t)                                                   (setq il:specvars t)                                                   (setq il:localvars il:syslocalvars))                                                  (t (cerror "Ignore it"                                                             "Illegal SPECVARS declaration: ~S" spec))                                                  ))                                ((il:localvars) (cond                                                   ((consp (cdr spec))                                                    (unless (eq il:localvars t)                                                        (setq il:localvars (union il:localvars                                                                                  (cdr spec)))))                                                   ((eq (cdr spec)                                                        t)                                                    (setq il:localvars t)                                                    (setq il:specvars il:sysspecvars))                                                   (t (cerror "Ignore it"                                                              "Illegal LOCALVARS declaration: ~S" spec                                                             ))))                                ((global) (dolist (var (cdr spec))                                              (check-var var)                                              (push var *new-globals*)))                                ((il:globalvars) (if (consp (cdr spec))                                                     (setq il:globalvars (union il:globalvars                                                                                (cdr spec)))                                                     (cerror "Ignore it"                                                             "Illegal GLOBALVARS declaration: ~S" spec                                                            )))                                ((type ftype function)       (il:* il:\;                                                            "We don't handle type declarations yet.")                                   nil)                                ((inline) (dolist (var (cdr spec))                                              (check-var var)                                              (push var *new-inlines*)))                                ((notinline) (dolist (var (cdr spec))                                                 (check-var var)                                                 (push var *new-notinlines*)))                                ((ignore optimize)           (il:* il:\;                                              "We don't handle IGNORE or OPTIMIZE declarations yet.")                                   nil)                                ((declaration)               (il:* il:\; "Add new declaration specifiers right away so that they can be used in later declarations in the same cluster.  It's a picky point, but who cares?")                                   (env-add-decls *environment* (cdr spec)))                                ((il:usedfree)               (il:* il:\;                                                            "Ignored Interlisp declarations")                                   nil)                                (otherwise (unless (or (eq (car spec)                                                           t)                                                       (il:type-expander (car spec))                                                       (xcl::decl-specifier-p (car spec))                                                       (env-decl-p *environment* (car spec)))                                               (cerror "Ignore it."                                                       "Unknown declaration specifier in DECLARE: ~S."                                                      (car spec)))))))))))(defun process-il-declarations (specs)(il:* il:|;;;| " Stroring theInterlisp's declare information found in executable position.")   (declare (special il:specvars il:localvars il:globalvars))   (dolist (spec specs t)       (if (atom spec)           (cerror "Ignore it."                   "A non-list, ~S, was found where a declaration specification was expected." spec)           (case (car spec)               ((il:specvars) (cond                                 ((consp (cdr spec))                                  (unless (eq il:specvars t)                                      (setq il:specvars (union il:specvars (cdr spec)))))                                 ((eq (cdr spec)                                      t)                                  (setq il:specvars t)                                  (setq il:localvars il:syslocalvars))                                 (t (cerror "Ignore it" "Illegal SPECVARS declaration: ~S" spec))))               ((il:localvars) (cond                                  ((consp (cdr spec))                                   (unless (eq il:localvars t)                                       (setq il:localvars (union il:localvars (cdr spec)))))                                  ((eq (cdr spec)                                       t)                                   (setq il:localvars t)                                   (setq il:specvars il:sysspecvars))                                  (t (cerror "Ignore it" "Illegal LOCALVARS declaration: ~S" spec))))               ((il:globalvars) (if (consp (cdr spec))                                    (setq il:globalvars (union il:globalvars (cdr spec)))                                    (cerror "Ignore it" "Illegal GLOBALVARS declaration: ~S" spec)))               ((il:usedfree)                                (il:* il:\;                                                            "Ignored Interlisp declarations")                  nil)               (otherwise (return-from process-il-declarations nil))))))(defun update-environment (env)(il:* il:|;;;| "Store the information in a BINDING-CONTOUR's special variables into the given environment.")   (declare (special *new-specials* *new-globals* *new-inlines* *new-notinlines*))   (when *new-specials* (env-declare-specials env *new-specials*))   (when *new-globals* (env-declare-globals env *new-globals*))   (when *new-inlines* (env-allow-inlines env *new-inlines*))   (when *new-notinlines* (env-disallow-inlines env *new-notinlines*)))(defun bind-parameter (var binder env)   (ecase (resolve-variable-binding env var)       (:special           (deletef var *new-specials*)          (env-declare-a-special env var)          (make-variable :scope :special :kind :variable :name var :binder binder))       (:lexical (let ((struct (make-variable :scope :lexical :kind :variable :name (symbol-name                                                                                     var)                                      :binder binder)))                      (env-bind-variable env var struct)                      struct))))(defun check-arg (var)(il:* il:|;;;| "Make sure that VAR is a legal parameter in a lambda-list.")   (cond      ((not (symbolp var))       (cerror "Ignore it." "The parameter ~S is not a symbol." var)       nil)      ((keywordp var)       (cerror "Ignore it." "The parameter ~S is a keyword and may not be bound." var)       nil)      (t t)))(defun binding-to-lambda (binding)(il:* il:|;;;| "Convert a binding from an FLET or LABELS into the appropriate LAMBDA form, wrapping a BLOCK around the bodies of the functions.")   (destructuring-bind (name arg-list &body body)          binding          (multiple-value-bind (forms decls)                 (parse-body body *environment* t)                 `(lambda ,arg-list ,@decls (block ,name ,@forms)))))(defvar *block-stack* nil(il:* il:|;;;| "Association list of block names to block structures; rebound at several points within the alphatizer.")   )(defvar *tagbody-stack* nil   "Association list from TAGBODY tags to the TAGBODY structure containing the tag; rebound at several points in the alphatizer")(defun alpha-argument-form (form)   (let ((*context* *argument-context*))        (alpha-form form)))(defun alpha-atom (form)(il:* il:|;;;| "The form is atomic.  If it's a symbol, do the appropriate look-ups.  Otherwise, it must be a literal.")   (if (or (not (symbolp form))           (eq form t)           (eq form nil))       (alpha-literal form)       (resolve-variable-reference *environment* form)))(defun alpha-block (name body)   (let* ((new-block (make-block :name name :context *context*))          (*block-stack* (cons (cons name new-block)                               *block-stack*)))         (setf (block-stmt new-block)               (alpha-progn body))         new-block))(defun alpha-catch (tag forms)   (make-catch :tag (alpha-argument-form tag)          :stmt          (alpha-progn forms)))(defun alpha-combination (fn args)   (declare (special il:nlama il:nlaml))   (cond      (il:* il:|;;| "Calls to FUNCALL are expanded into CALL nodes where the FN is the first argument to FUNCALL, more or less.")      ((and (eq fn 'funcall)            (not (env-inline-disallowed *environment* fn)))       (multiple-value-bind (real-fn not-inline?)              (alpha-functional-form (first args))              (make-call :fn real-fn :args (mapcar #'alpha-argument-form (rest args))                     :not-inline not-inline?)))      (il:* il:|;;| "Calls on IL:OPENLAMBDA's involve lots of hairy processing.")      ((and (consp fn)            (eq (first fn)                'il:openlambda))       (alpha-form (expand-openlambda-call fn args)))      (il:* il:|;;| "Lexical functions and non-symbol functions can't be NLambda's.")      ((or (not (symbolp fn))           (env-fboundp *environment* fn))       (make-call :fn (alpha-function fn *context*)              :args              (mapcar #'alpha-argument-form args)              :not-inline              (and (symbolp fn)                   (env-inline-disallowed *environment* fn))))      ((or (eq 3 (il:argtype fn))           (member fn il:nlama :test 'eq))                   (il:* il:\;         "It's an NLambda no-spread.  Funcall it on a single literal argument, the CDR of the form.")       (make-call :fn (alpha-function fn)              :args              (alpha-literal args)              :not-inline              (env-inline-disallowed *environment* fn)))      ((or (eq 1 (il:argtype fn))           (member fn il:nlaml :test 'eq))                   (il:* il:\;                      "It's an NLambda spread.  Funcall it on the quoted versions of its arguments.")       (make-call :fn (alpha-function fn)              :args              (mapcar #'alpha-literal args)              :not-inline              (env-inline-disallowed *environment* fn)))      (t (make-call :fn (alpha-function fn *context*)                :args                (mapcar #'alpha-argument-form args)                :not-inline                (env-inline-disallowed *environment* fn)))))(defun alpha-compiler-let (bindings body)   (let ((vars nil)         (vals nil))        (il:for binding il:in bindings il:do (cond                                                            ((consp binding)                                                             (push (car binding)                                                                   vars)                                                             (push (eval (cadr binding))                                                                   vals))                                                            (t (push binding vars)                                                               (push nil vals))))        (progv vars vals            (alpha-progn body))))(defun alpha-eval-when (times forms)(il:* il:|;;;| "If the times contain COMPILE, we evaluate the forms.  If the times include LOAD, we prognify the forms.  If LOAD isn't mentioned, this turns into NIL.")   (when (or (member 'compile times :test #'eq)             (member 'il:compile times :test #'eq))       (mapc #'eval forms))   (if (or (member 'load times :test #'eq)           (member 'il:load times :test #'eq))       (alpha-progn forms)       *literally-nil*))(defun alpha-flet (bindings body)(il:* il:|;;;| "An FLET is alphatized as a LABELS node. The only difference is that the new variables for the function bindings are inserted after alphatizing the defined functions and body, whereas in a LABELS you add them to the environment before alphatizing the children.")   (let    ((*environment* (make-child-env *environment*)))    (multiple-value-bind     (forms decls)     (parse-body body *environment* nil)     (binding-contour      decls      (update-environment *environment*)      (let ((new-labels (make-labels))            names)           (setq names (with-collection (setf (labels-funs new-labels)                                              (mapcar #'(lambda (binding)                                                               (unless (check-arg (car binding))                                                                   (setq binding (cons '%lose%                                                                                       (cdr binding))                                                                         ))                                                               (collect (car binding))                                                               (cons (make-variable                                                                      :name                                                                      (symbol-name (car binding))                                                                      :scope :lexical :kind :function                                                                      :binder new-labels)                                                                     (alpha-lambda                                                                      (binding-to-lambda binding)                                                                      :name                                                                      (il:* il:|;;|                                                                                                                                "Really want name to be \"Foo in Bar\"")                                                                      (symbol-name (car binding)))))                                                     bindings))))           (il:* il:|;;| "Having alphatized the function bindings, put them in the environment for alphatization of the body.")           (il:for name il:in names il:as fn-pair il:in (labels-funs new-labels)              il:do (env-bind-function *environment* name :function (car fn-pair)))           (il:* il:|;;| "Now we can alphatize the body.")           (setf (labels-body new-labels (alpha-progn forms)))           new-labels)))))(defun alpha-form (form)(il:* il:|;;;| "FORM is a random exectuable form.  Dispatch to the appropriate alphatization routine.")(il:* il:|;;;| "NOTE NOTE NOTE:::  If anything is added to this CASE statement, be sure to add it also to the list in COMPLETELY-EXPAND.")   (if (atom form)       (alpha-atom form)       (case (car form)           ((block) (alpha-block (second form)                           (cddr form)))           ((catch) (alpha-catch (second form)                           (cddr form)))           ((compiler-let) (alpha-compiler-let (second form)                                  (cddr form)))           ((declare)               (or (process-il-declarations (cdr form))                  (cerror "Replace the declaration with NIL"                          "DECLARE found in executable position: ~S" form))              *literally-nil*)           ((eval-when) (alpha-eval-when (second form)                               (cddr form)))           ((flet) (alpha-flet (second form)                          (cddr form)))           ((il:function) (alpha-il-function (second form)                                 (third form)))           ((function) (alpha-function (second form)))           ((go) (alpha-go (second form)))           ((if) (alpha-if (second form)                        (third form)                        (fourth form)))           ((labels)                                         (il:* il:\;                                                            "Rely on the macro expansion for now.")              (return-from alpha-form (alpha-labels (second form)                                             (cddr form)))              (return-from alpha-form (alpha-form (optimize-and-macroexpand-1 form))))           ((let) (alpha-let (second form)                         (cddr form)))           ((let*) (alpha-let* (second form)                          (cddr form)))           ((macrolet si::%macrolet) (alpha-macrolet (second form)                                            (cddr form)))           ((multiple-value-call) (alpha-mv-call (second form)                                         (cddr form)))           ((multiple-value-prog1) (alpha-mv-prog1 (cdr form)))           ((progn) (alpha-progn (cdr form)))           ((progv)                                          (il:* il:\;                                                            "Rely on the macro expansion for now.")              (return-from alpha-form (destructuring-bind                                       (vars-expr vals-expr . body)                                       (cdr form)                                       (alpha-form `(il:\\do.progv ,vars-expr ,vals-expr                                                           #'(lambda nil ,@body)))))              (alpha-progv (second form)                     (third form)                     (cdddr form)))           ((quote) (alpha-literal (second form)))           ((return-from) (alpha-return-from (second form)                                 (third form)))           ((setq il:setq) (alpha-setq (car form)                                  (rest form)))           ((tagbody) (alpha-tagbody (cdr form)))           ((the)                                            (il:* il:\;                                                            "Ignore the THE construct for now.")              (alpha-form (third form)))           ((throw) (alpha-throw (second form)                           (third form)))           ((unwind-protect) (alpha-unwind-protect (second form)                                    (cddr form)))           (otherwise (multiple-value-bind (new-form changed-p)                             (optimize-and-macroexpand-1 form)                             (if (null changed-p)                                 (alpha-combination (car form)                                        (cdr form))                                 (alpha-form new-form)))))))(defun alpha-function (form &optional (context (or (context-applied-context *context*)                                                       *null-context*)))(il:* il:|;;;| "If it's a symbol, then turn this into either the FLET/LABELS-bound VARIABLE structure or a structure for the global symbol.  Otherwise, it must be either a LAMBDA-form or OPCODES-form and is treated as such.  Note that the internal representation of programs treats LAMBDA as a value-producing special form.")(il:* il:|;;;| "The CONTEXT argument is the return-context of the function, if known.  It is passed on to alpha-lambda.")(il:* il:|;;;| "We return a second value when the FORM is a symbol, saying whether or not the named function is supposed to be NOTINLINE.")   (cond      ((symbolp form)       (multiple-value-bind (kind struct)              (env-fboundp *environment* form)              (cond                 ((eq kind :function)                  (values (make-var-ref :variable struct)                         (env-inline-disallowed *environment* form)))                 (t (unless (null kind)                        (assert (eq kind :macro))                        (il:* il:|;;| "This case can only arise if we are alphatizing a FUNCTION form, since the macro would have been expanded otherwise.")                        (cerror "Use the global function definition of ~S" "The symbol ~S names a lexically-bound macro and thus cannot be used with the FUNCTION special form."                               form))                    (il:* il:|;;| "Account for block compilation.")                    (when (not (null *current-block*))                        (let ((lookup (assoc form (block-decl-fn-name-map *current-block*))))                             (when (not (null lookup))       (il:* il:\;                                                            "This function is to be renamed.")                                 (setq form (cdr lookup)))))                    (check-for-unknown-function form)                    (values (make-reference-to-variable :name form :scope :global :kind :function)                           (env-inline-disallowed *environment* form))))))      (t (case (car form)             ((lambda il:lambda il:nlambda il:openlambda) (alpha-lambda form :context context))             ((il:opcodes :opcodes) (make-opcodes :bytes (cdr form)))             (otherwise                 (cerror "Use (LAMBDA () NIL) instead"               "The form ~S, appearing in a functional context, is neither a symbol nor a LAMBDA-form"                       form)                (alpha-lambda '(lambda nil nil)                       :context context))))))(defun alpha-functional-form (form)   (if (and (consp form)            (or (eq 'quote (first form))                (eq 'il:function (first form)))            (symbolp (second form)))       (alpha-function (second form))       (let ((*context* (make-context :values-used 1 :applied-context *context*)))            (alpha-form form))))(defun alpha-go (tag)   (let ((dest (assoc tag *tagbody-stack*)))        (when (null dest)            (cond               ((null *tagbody-stack*)                (cerror "Replace the GO with NIL"                        "The GO tag ~S does not appear in any enclosing TAGBODY" tag)                (return-from alpha-go *literally-nil*))               (t (cerror "Use the tag ~*~S instead"                          "The GO tag ~S does not appear in any enclosing TAGBODY" tag (caar                                                                                       *tagbody-stack*                                                                                            ))                  (setq dest (car *tagbody-stack*)))))        (make-go :tagbody (cdr dest)               :tag               (car dest))))(defun alpha-if (pred-form then-form else-form)   (make-if :pred (let ((*context* *predicate-context*))                       (alpha-form pred-form))          :then          (alpha-form then-form)          :else          (alpha-form else-form)))(defun alpha-il-function (fn close-p-form)(il:* il:|;;;| "If there is no close-p-form, then this is just like Common Lisp FUNCTION except that (IL:FUNCTION symbol) == 'symbol.")(il:* il:|;;;| "If there is a close-p-form, then turn this into a function call, remembering to quote the close-p-form and either quote or hash-quote the function.")   (il:* il:|;;| "Account for block compilation.")   (when (and (symbolp fn)              (not (null *current-block*)))       (let ((lookup (assoc fn (block-decl-fn-name-map *current-block*))))            (when (not (null lookup))                        (il:* il:\;                                                            "This function is to be renamed.")                (setq fn (cdr lookup)))))   (if (null close-p-form)       (cond          ((and (symbolp fn)                (not (env-fboundp *environment* fn)))           (check-for-unknown-function fn)           (alpha-literal fn))          (t (alpha-function fn)))       (make-call :fn (make-reference-to-variable :name 'il:function :scope :global :kind :function)              :args              (list (if (symbolp fn)                        (alpha-literal fn)                        (alpha-function fn))                    (alpha-literal close-p-form)))))(defun alpha-labels (bindings body)(il:* il:|;;;| "Make a first pass down the list of bindings in order to set up the environment in which they will all be defined.  Then alphatize each definition and transform the whole thing into a LABELS binding structure.")   (let* ((*environment* (make-child-env *environment*))          (labels (make-labels))          (structs (mapcar #'(lambda (binding)                                    (unless (check-arg (car binding))                                        (setq binding (cons '%lose% (cdr binding))))                                    (let ((struct (make-variable :name (symbol-name (car binding))                                                         :scope :lexical :kind :function :binder                                                          labels)))                                         (env-bind-function *environment* (car binding)                                                :function struct)                                         struct))                          bindings)))         (multiple-value-bind (forms decls)                (parse-body body *environment* nil)                (binding-contour decls (update-environment *environment*)                       (setf (labels-funs labels)                             (mapcar #'(lambda (binding struct)                                              (cons struct (alpha-lambda (binding-to-lambda binding)                                                                  :name                                                                  (il:* il:|;;|                                                             "Really want name to be \"Foo in Bar\"")                                                                  (symbol-name (car binding)))))                                    bindings structs))                       (setf (labels-body labels)                             (alpha-progn forms))))         labels))(defun alpha-lambda (original-form &key ((:context *context*)                                             *null-context*)                               name)   (il:* il:|;;| "Check for something other than a CL:LAMBDA and coerce if necessary.")   (multiple-value-bind    (form arg-type)    (convert-to-cl-lambda original-form)    (il:* il:|;;| "Crack the argument list, applying any declarations that might be present.")    (let ((arg-list (second form))          (body (cddr form))          (*environment* (make-child-env *environment*)))         (multiple-value-bind (code decls)                (parse-body body *environment* t)                (binding-contour decls                       (il:* il:\; "Process the declarations")                       (update-environment *environment*)                       (let* ((node (make-lambda :name name :arg-type arg-type))                              (auxes (alpha-lambda-list arg-list node))                              (body-node (alpha-progn code)))                             (il:* il:|;;| "AUXES is now the list of values representing the &aux variables IN REVERSE ORDER.  We must bind them around the body one-by-one and then wrap that in the lambda node we've already created.")                             (il:for aux il:in auxes                                il:do (let ((binder (make-lambda :required (list (car aux))                                                               :body body-node)))                                               (setf (variable-binder (car aux))                                                     binder)                                               (setq body-node (make-call :fn binder :args                                                                      (list (cdr aux))))))                             (setf (lambda-body node)                                   body-node)                             (il:* il:|;;| "For Interlisp LAMBDA no-spread's, we need to save away the parameter name so that we can generate code for ARG properly.  (Yecch...)")                             (when (eq arg-type 2)                                 (setf (lambda-no-spread-name node)                                       (second original-form)))                             node))))))(defun alpha-lambda-list (arg-list binder)(il:* il:|;;;| "Alpha-converts the argument list of a lambda form.  Stores the results of the analysis into the appropriate slots of the LAMBDA structure in BINDER.  Returns a list of the values representing the &aux argument variables, in reverse order of binding.")   (let    ((state :required)     required optional keyword aux)    (dolist (arg arg-list)        (case arg            ((&optional) (if (eq state :required)                             (setq state :optional)                             (cerror "Ignore it." "Misplaced &optional in lambda-list")))            ((&rest) (if (member state '(:required :optional))                         (setq state :rest)                         (cerror "Ignore it." "Misplaced &rest in lambda-list")))            ((&ignore-rest)                                  (il:* il:\;                               "Internal keyword used in translation of Interlisp spread functions.")               (assert (eq state :optional)                      nil "BUG: Misplaced &IGNORE-REST keyword.")               (setf (lambda-rest binder)                     (make-variable :binder binder))               (return)                                      (il:* il:\;                                                     "Nothing is supposed to follow an &IGNORE-REST")               )            ((&key) (if (and (il:neq state :aux)                             (il:neq state :key))                        (setq state :key)                        (cerror "Ignore it." "Misplaced &key in lambda-list")))            ((&allow-other-keys)                (unless (eq state :key)                      (cerror "Ignore it." "Stray &allow-other-keys in lambda-list."))               (setf (lambda-allow-other-keys binder)                     t))            ((&aux) (if (il:neq state :aux)                        (setq state :aux)                        (cerror "Ignore it." "Misplaced &aux in lambda-list.")))            (otherwise                (ecase state                   ((:required) (when (check-arg arg)                                    (push (bind-parameter arg binder *environment*)                                          required)))                   ((:optional)                       (if (atom arg)                          (when (check-arg arg)                              (push (list (bind-parameter arg binder *environment*)                                          *literally-nil*)                                    optional))                          (destructuring-bind                           (var &optional (init-form nil)                                (svar nil sv-given))                           arg                           (when (check-arg var)                               (let ((init-struct (alpha-argument-form init-form)))                                    (push `(,(bind-parameter var binder *environment*)                                            ,init-struct                                            ,@(and sv-given (check-arg svar)                                                   (list (bind-parameter svar binder *environment*)))                                            )                                          optional))))))                   ((:rest) (when (check-arg arg)                                (setf (lambda-rest binder)                                      (bind-parameter arg binder *environment*))                                (setq state :after-rest)))                   ((:after-rest) (cerror "Ignore it." "Stray argument ~S found after &rest var."))                   ((:key)                       (if (atom arg)                          (when (check-arg arg)                              (push (list (intern (string arg)                                                 "KEYWORD")                                          (bind-parameter arg binder *environment*)                                          *literally-nil*)                                    keyword))                          (destructuring-bind                           (key&var &optional (init-form nil)                                  (svar nil sv-given)                                  &aux key var)                           arg                           (cond                              ((atom key&var)                               (when (check-arg key&var)                                   (il:* il:|;;| "This is not the real legality test; that's below.  This just makes sure that the intern will work.")                                   (setq key (intern (string key&var)                                                    "KEYWORD")))                               (setq var key&var))                              (t (setq key (first key&var))                                 (setq var (second key&var))))                           (when (check-arg var)                               (let ((init-struct (alpha-argument-form init-form)))                                    (push `(,key ,(bind-parameter var binder *environment*)                                                 ,init-struct                                                 ,@(and sv-given (check-arg svar)                                                        (list (bind-parameter svar binder                                                                      *environment*))))                                          keyword))))))                   ((:aux) (let (var val)                                (cond                                   ((atom arg)                                    (setq var arg)                                    (setq val nil))                                   (t (setq var (first arg))                                      (setq val (second arg))))                                (when (check-arg var)                                    (let ((tree (alpha-argument-form val)))                                         (push (cons (bind-parameter var binder *environment*)                                                     tree)                                               aux)))))))))    (setf (lambda-required binder)          (nreverse required))    (setf (lambda-optional binder)          (nreverse optional))    (setf (lambda-keyword binder)          (nreverse keyword))    aux))(defun alpha-let (bindings body)   (il:* il:|;;| "Install the new variables in a new environment and then install that environment before alphatizing the body.")   (multiple-value-bind (body decls)          (parse-body body *environment* nil)          (binding-contour decls (let ((*environment* (make-child-env *environment*)))                                 (il:* il:|;;| "The standard is losing and wants us to install the environment before alphatizing the init-forms so that SPECIAL declarations will have bigger scope.  Ugh.")                                      (update-environment *environment*)                                      (let ((vars nil)                                            (vals nil)                                            (new-lambda (make-lambda)))                                           (il:* il:|;;| "Alphatize the init-forms.")                                           (il:for binding il:in bindings                                              il:do (cond                                                           ((consp binding)                                                            (push (first binding)                                                                  vars)                                                            (push (alpha-argument-form (second                                                                                               binding                                                                                              ))                                                                  vals))                                                           (t (push binding vars)                                                              (push *literally-nil* vals))))                                           (il:* il:|;;| "Bind all of the variables")                                           (setf (lambda-required new-lambda)                                                 (il:for var il:in (nreverse vars)                                                    il:collect (bind-parameter                                                                    (if (check-arg var)                                                                        var                                                                        '%lose%)                                                                    new-lambda *environment*)))                                           (il:* il:|;;| "Alphatize the body")                                           (setf (lambda-body new-lambda)                                                 (alpha-progn body))                                           (make-call :fn new-lambda :args (nreverse vals)))))))(defun alpha-let* (bindings body)(il:* il:|;;;| "Install the new variables in the environment one at a time, processing the next in an environment including those that came before.  The LET* is then represented as several nested lambdas, so we must be careful to get the BINDER links set up properly.")   (multiple-value-bind    (body decls)    (parse-body body *environment* nil)    (binding-contour     decls     (let ((*environment* (make-child-env *environment*))           (binding-list nil))          (update-environment *environment*)          (il:* il:|;;| "First, alphatize each of the init-forms in the correct environment.")          (il:for binding il:in bindings             il:do (if (consp binding)                           (let ((init-struct (alpha-argument-form (second binding))))                                (push (cons (bind-parameter (if (check-arg (first binding))                                                                (first binding)                                                                '%lose%)                                                   nil *environment*)                                            init-struct)                                      binding-list))                           (push (cons (bind-parameter (if (check-arg binding)                                                           binding                                                           '%lose%)                                              nil *environment*)                                       *literally-nil*)                                 binding-list)))          (il:* il:|;;| "BINDING-LIST is now in reverse order, so we can construct the nested lambdas from the inside out.")          (il:bind (body-struct il:_ (alpha-progn body)) il:for pair il:in binding-list             il:do (let ((binder (make-lambda :required (list (car pair))                                            :body body-struct)))                            (setq body-struct (make-call :fn binder :args (list (cdr pair))))                            (setf (variable-binder (car pair))                                  binder)) il:finally (return body-struct))))))(defun alpha-literal (value)(il:* il:|;;;| "Check for certain special values that have preallocated LITERAL structures.  Otherwise, make a new one.  The test for undumpable values used to be done in both COMPILE and COMPILE-FILE, but this lost in loading PCL, which COMPILE's functions containing circular structures as literals.")   (case value       ((nil) *literally-nil*)       ((t) *literally-t*)       (otherwise (make-literal :value (cond                                          ((and (streamp *input-stream*)                                                             (il:* il:\; "This is COMPILE-FILE")                                                (not (fasl:value-dumpable-p value)))                                           (restart-case (error                                          "The literal value ~S would not be dumpable in a FASL file."                                                                value)                                                  (nil nil :report "Use the value NIL instead" nil)                                                  (nil nil :report (lambda (stream)                                                                          (format stream                                                       "Use the value ~S anyway and hope for the best"                                                                                 value))                                                       value)))                                          (t value))))))(defun alpha-macrolet (bindings body)(il:* il:|;;;| "Turn the bindings into expansion functions and add them into the environment for the analysis of the body.")   (let ((new-env (make-child-env *environment*)))        (il:for macro il:in bindings il:do (env-bind-function new-env (car macro)                                                              :macro                                                              (crack-defmacro (cons 'defmacro macro))                                                              ))        (let ((*environment* new-env))             (multiple-value-bind (forms decls)                    (parse-body body *environment* nil)                    (binding-contour decls (update-environment *environment*)                           (alpha-progn forms))))))(defun alpha-mv-call (fn-form arg-forms)   (let (values-used)        (multiple-value-bind (fn not-inline?)               (alpha-functional-form fn-form)               (cond                  ((and (null (cdr arg-forms))                        (lambda-p fn)                        (not (or (lambda-optional fn)                                 (lambda-rest fn)                                 (lambda-keyword fn))))      (il:* il:\;                               "In this very common case, we can tell how many values are expected.")                   (setq values-used (length (lambda-required fn))))                  (t (setq values-used :unknown)))               (if (null arg-forms)                          (il:* il:\;                                               "This is silly, but we'd better handle it correctly.")                   (make-call :fn fn :args nil :not-inline not-inline?)                   (make-mv-call :fn fn :arg-exprs (let ((*context* (make-context :values-used                                                                            values-used)))                                                        (mapcar #'alpha-form arg-forms))                          :not-inline not-inline?)))))(defun alpha-mv-prog1 (forms)   (let ((vals-used (context-values-used *context*)))        (cond           ((null (cdr forms))            (alpha-form (car forms)))           ((and (numberp vals-used)                 (< vals-used 2))                            (il:* il:\;                                     "The multiple values aren't wanted.  Make this a normal PROG1.")            (alpha-form (cons 'prog1 forms)))           (t (make-mv-prog1 :stmts (cons (alpha-form (first forms))                                          (let ((*context* *effect-context*))                                               (mapcar #'alpha-form (rest forms)))))))))(defun alpha-progn (forms)   (if (null (cdr forms))       (alpha-form (car forms))       (make-progn :stmts (let ((old-context *context*)                                (*context* *effect-context*))                               (il:for tail il:on forms                                  il:collect (if (null (cdr tail))                                                     (let ((*context* old-context))                                                          (alpha-form (car tail)))                                                     (alpha-form (car tail))))))))(defun alpha-progv (syms-expr vals-expr body-forms)   (make-progv :syms-expr (alpha-argument-form syms-expr)          :vals-expr          (alpha-argument-form vals-expr)          :stmt          (alpha-progn body-forms)))(defun alpha-return-from (name form)   (let ((dest (assoc name *block-stack*)))        (when (null dest)            (cond               ((null *block-stack*)                (cerror "Treat (RETURN-FROM name value-form) as simply value-form"                        "~S, found in a RETURN-FROM, is not the name of any enclosing BLOCK" name)                (return-from alpha-return-from (alpha-form form)))               (t (cerror "Use the name ~*~S instead"                          "~S, found in a RETURN-FROM, is not the name of any enclosing BLOCK" name                         (caar *block-stack*))                  (setq dest (car *block-stack*)))))        (make-return :block (cdr dest)               :value               (let ((*context* (block-context (cdr dest))))                    (alpha-form form)))))(defun alpha-setq (kind forms)   (let ((setqs (il:for tail il:on forms il:by (cddr tail)                   il:collect (when (and (eq kind 'setq)                                             (null (cdr tail)))                                        (cerror "Add an extra NIL on the end of the form"                                                "Odd number of forms given to SETQ."))                         (make-setq :var (resolve-variable-reference *environment* (car tail)                                                t)                                :value                                (alpha-argument-form (cadr tail))))))        (if (null (cdr setqs))            (car setqs)            (make-progn :stmts setqs))))(defun alpha-tagbody (body)(il:* il:|;;;| "Break up the body into `segments', each of which is an unbroken series of forms along with the zero or more tags that begin that series of forms.")   (when (null body)         (return-from alpha-tagbody *literally-nil*))   (let ((tagbody (make-tagbody))         (*tagbody-stack* *tagbody-stack*))        (il:* il:|;;| "Make a first pass down the body to find all of the tags")        (il:for form il:in body il:do (when (atom form)                                                      (push (cons form tagbody)                                                            *tagbody-stack*)))        (il:* il:|;;|       "On the second pass, put together the segments and alphatize all of the forms")        (do ((*context* *effect-context*)             (segment-list nil))            ((null body)             (setf (tagbody-segments tagbody)                   (nreverse segment-list)))          (let ((segment (make-segment)))               (do nil                   ((or (null body)                        (consp (car body))))                 (push (pop body)                       (segment-tags segment)))               (do ((form-list nil))                   ((or (null body)                        (atom (car body)))                    (setf (segment-stmts segment)                          (nreverse form-list)))                 (push (alpha-form (pop body))                       form-list))               (push segment segment-list)))        tagbody))(defun alpha-throw (tag value)   (make-throw :tag (alpha-argument-form tag)          :value          (let ((*context* *null-context*))               (alpha-form value))))(defun alpha-unwind-protect (body cleanups)   (make-unwind-protect :stmt (alpha-lambda (let ((cleanup-var (gensym)))                                                 `(lambda (,cleanup-var)                                                         (multiple-value-prog1 ,body                                                                (funcall ,cleanup-var))))                                     :context *context* :name 'si::*unwind-protect*)          :cleanup          (alpha-lambda `(lambda nil ,@cleanups)                 :context *effect-context* :name "Clean-up forms")))(defun convert-to-cl-lambda (form)   (il:* il:|;;| "Return two values: a CL:LAMBDA form equivalent to the given one and the Interlisp ARGTYPE for the form.")   (case (car form)       ((lambda)           (il:* il:|;;| "Common Lisp LAMBDA's have indeterminate ARGTYPE.  The assembler will figure out whether it's 0 or 2.  The LOCALVARS declaration is because Interlisp's scoping rules have overwhelmed those of Common Lisp, may they rest in peace.")          (values `(lambda ,(second form)                          (declare (il:localvars . t))                          ,@(cddr form))                 nil))       ((il:lambda il:openlambda) (if (listp (second form))                                 (il:* il:|;;| "LAMBDA spread.  Use the Common Lisp &OPTIONAL keyword and also one made for internal compiler use that will throw away the extra arguments.")                                      (values `(lambda (&optional ,@(second form)                                                              &ignore-rest)                                                      ,@(cddr form))                                             0)                                 (il:* il:|;;| "LAMBDA no-spread.  Bind the parameter to the number of arguments passed.  The handling of ARG must be done in code generation, unfortunately.")                                      (values `(lambda nil (let ((,(second form)                                                                  (il:\\myargcount)))                                                                ,@(cddr form)))                                             2)))       ((il:nlambda) (if (listp (second form))                         (il:* il:|;;|               "NLAMBDA spread.  Just like the LAMBDA-spread case but we have a different ARG-TYPE.")                         (values `(lambda (&optional ,@(second form)                                                 &ignore-rest)                                         ,@(cddr form))                                1)                         (il:* il:|;;|               "NLAMBDA no-spread.  We take exactly one argument and are otherwise entirely normal.")                         (values `(lambda (,(second form))                                         ,@(cddr form))                                3)))       (otherwise           (il:* il:|;;| "This is not my beautiful LAMBDA form!")          (cerror "Use (LAMBDA () NIL) instead" "The form ~S should be a LAMBDA form but is not."                  form)          (values '(lambda nil nil)                 0))))(defun completely-expand (form)   (if (atom form)       form       (let ((new-form form)             changed-p)            (il:until (member (car new-form)                                 '(block catch                                      compiler-let                                      declare                                      eval-when                                      flet                                      il:function                                      function                                      go                                      if                                      labels                                      let                                      let*                                      macrolet                                      si::%macrolet                                      multiple-value-call                                      multiple-value-prog1                                      progn                                      progv                                      quote                                      setq                                      il:setq                                      tagbody                                      the                                      throw                                      unwind-protect)                                 :test                                 'eq) il:do (multiple-value-setq (new-form changed-p)                                                       (optimize-and-macroexpand-1 new-form))                                            (when (null changed-p)                                                (if (and (consp (car new-form))                                                         (eq 'il:openlambda (caar new-form)))                                                    (setq new-form (expand-openlambda-call                                                                    (car new-form)                                                                    (cdr new-form)))                                                    (return new-form))) il:finally (return                                                                                              new-form                                                                                              )))))(defun expand-openlambda-call (fn args)(il:* il:|;;;| "The idea here is to try to do some substitution into the body of the OPENLAMBDA.  We do it here instead of in meta-evaluation because there are parts of the Interlisp system that count on their optimizers being able to find literals in their arguments.  They count on the substitution being done so that that will be the case.")(il:* il:|;;;| "It is well-known that the use of SUBLIS here is a bug: for example, if one of the arguments to the OPENLAMBDA has the same name as one of the functions called therein, the subst will still change both of them, undoubtably leading to chaos.  However, the ByteCompiler has always done it this way and nothing broke, so, since it's also very easy, we do it too.  If anything actually counts on this, though, I may kill the author.")(il:* il:|;;;| "The general details of this transformation are the way they are because it's the way the ByteCompiler did it.  Pavel will never defend this code on philosophical grounds.  (\"If this code is caught or killed, Pavel will disavow any knowledge of its actions...\")")   (let ((unsubbed-params nil)         (unsubbed-args nil)         (subst-alist nil)         extra-args)        (do* ((params (cadr fn)                     (cdr params))              (args (let ((*context* *argument-context*))                         (mapcar 'completely-expand args))                    (cdr args))              (arg (car args)                   (car args)))             ((null params)              (setq extra-args args))           (il:* il:|;;|       "For each pair, if the argument is a constant, add it to the substitution we'll later apply.")           (cond              ((or (constantp arg)                   (and (atom arg)                        (not (symbolp arg)))                   (and (consp arg)                        (eq (car arg)                            'il:function)                        (symbolp (cadr arg))))               (push (cons (car params)                           arg)                     subst-alist))              (t (push (car params)                       unsubbed-params)                 (push arg unsubbed-args))))        (when (null unsubbed-args)                           (il:* il:\;                                                            "We got rid of all of them.")            (return-from expand-openlambda-call `(progn ,@extra-args ,@(sublis subst-alist                                                                              (cddr fn)                                                                              :test                                                                              'eq))))        (il:* il:|;;| "Perhaps there're no extra arguments or they're all constants.  This should really be a full-blown test for side-effect freedom, but that's too much work for alphatization.")        (cond           ((and extra-args (notevery                             #'(lambda (arg)                                      (or (constantp arg)                                          (and (atom arg)                                               (not (symbolp arg)))                                          (and (consp arg)                                               (member (car arg)                                                      '(il:function function)))))))            (il:* il:|;;| "There're extra arguments in the way, so we're done.")            (setf (car unsubbed-args)                  `(prog1 ,(car unsubbed-args)                          ,@extra-args))            `((lambda ,(reverse unsubbed-params)                     ,@(sublis subst-alist (cddr fn)                              :test                              'eq))              ,@(reverse unsubbed-args)))           (t               (il:* il:|;;| "There's nothing interesting between the body and the as yet unsubbed arguments, so maybe we can also substitute some variables.  Note that because the unsubbed lists are in reverse order now, we can easily examine the arguments starting with the last one and working backwards, just as we'd like.")              (il:while (and unsubbed-args (symbolp (first unsubbed-args)))                 il:do (push (cons (pop unsubbed-params)                                       (pop unsubbed-args))                                 subst-alist))              (cond                 ((null unsubbed-args)                       (il:* il:\; "All substituted in.")                  `(progn ,@(sublis subst-alist (cddr fn)                                   :test                                   'eq)))                 ((member (car (first unsubbed-args))                         '(il:setq setq))                  (cond                     ((null (cdr unsubbed-args))                      (push (cons (first unsubbed-params)                                  (cadr (first unsubbed-args)))                            subst-alist)                      `(progn ,(first unsubbed-args)                              ,@(sublis subst-alist (cddr fn)                                       :test                                       'eq)))                     (t (push (cons (pop unsubbed-params)                                    (cadr (first unsubbed-args)))                              subst-alist)                        (setq unsubbed-args (cons `(prog1 ,(second unsubbed-args)                                                       ,(first unsubbed-args))                                                  (cddr unsubbed-args)))                        `((lambda ,(reverse unsubbed-params)                                 ,@(sublis subst-alist (cddr fn)                                          :test                                          'eq))                          ,@(reverse unsubbed-args)))))                 (t `((lambda ,(reverse unsubbed-params)                             ,@(sublis subst-alist (cddr fn)                                      :test                                      'eq))                      ,@(reverse unsubbed-args))))))))(il:* il:|;;| "Alphatization testing")(defparameter *indent-increment* 3(il:* il:|;;;| "Number of spaces by which the indentation should increase in nested nodes.")   )(defvar *node-hash* nil   "Used by the parse-tree pretty-printer")(defvar *node-number* 0   "Used by the parse-tree pretty-printer")(defun test-alpha (fn)   (let ((tree (test-alpha-2 fn)))        (unwind-protect            (print-tree tree)            (release-tree tree))))(defun test-alpha-2 (fn)   (let ((*environment* (make-env))         (*context* *null-context*)         (*constants-hash-table* (make-hash-table))         (il:specvars t)         (il:localvars il:syslocalvars)         (il:globalvars il:globalvars)         (il:localfreevars nil)         (*processed-functions* nil)         (*unknown-functions* nil)         (*current-function* nil)         (*automatic-special-declarations* nil))        (declare (special il:specvars il:localvars il:localfreevars il:globalvars))        (alpha-lambda (cond                         ((consp fn)                          fn)                         ((consp (il:getd fn))                          (il:getd fn))                         (t (parse-defun (il:getdef fn 'il:functions)))))))(defun parse-defun (form)   (destructuring-bind (ignore name arg-list &body body)          form          (multiple-value-bind (forms decls)                 (parse-body body nil t)                 `(lambda ,arg-list ,@decls (block ,name ,@forms)))))(defun print-tree (tree)   (let ((*node-hash* (make-hash-table))         (*node-number* 0)         (*print-case* :upcase))        (print-node tree 0))   (terpri)   (values))(defun print-node (node indent)(il:* il:|;;;| "NODE is the node to print.  INDENT is the number of spaces over we are on entry to PRINT-NODE.  We should not ever print anything on the line to the left of that point.")   (let    ((number (and (not (literal-p node))                  (gethash node *node-hash*))))    (cond       (number (format t "-~S-" number))       (t (incf *node-number*)          (setf (gethash node *node-hash*)                *node-number*)          (format t "~S. ~A: " *node-number* (type-of node))          (let ((nested-indent (+ indent *indent-increment*)))               (macrolet ((new-line (&optional (delta 0))                                 `(format t "~%~vT" (+ nested-indent ,delta)))                          (print-blipper-info nil '(format t                                    "  Closed-over-p: ~:[false~;true~]  New-frame-p: ~:[false~;true~]"                                                          (blipper-closed-over-p node)                                                          (blipper-new-frame-p node))))                      (etypecase node                          (block-node                              (prin1 (block-name node))                             (print-blipper-info)                             (new-line)                             (print-node (block-stmt node)                                    nested-indent))                          (call-node                              (when (caller-not-inline node)                                   (princ "(not inline)"))                             (new-line)                             (princ "Func: ")                             (print-node (call-fn node)                                    (+ nested-indent 6))                             (when (call-args node)                                 (new-line)                                 (princ "Args: ")                                 (il:for arg-tail il:on (call-args node)                                    il:do (print-node (car arg-tail)                                                     (+ nested-indent 6))                                          (when (not (null (cdr arg-tail)))                                                (new-line 6)))))                          (catch-node                              (new-line)                             (princ "Tag:  ")                             (print-node (catch-tag node)                                    (+ nested-indent 6))                             (new-line)                             (princ "Stmt: ")                             (print-node (catch-stmt node)                                    (+ nested-indent 6)))                          (go-node                              (format t "to ~S" (go-tag node))                             (new-line)                             (princ "Tagbody: ")                             (print-node (go-tagbody node)                                    (+ nested-indent 9)))                          (if-node                              (new-line)                             (princ "Pred: ")                             (print-node (if-pred node)                                    (+ nested-indent 6))                             (new-line)                             (princ "Then: ")                             (print-node (if-then node)                                    (+ nested-indent 6))                             (new-line)                             (princ "Else: ")                             (print-node (if-else node)                                    (+ nested-indent 6)))                          (labels-node                              (new-line)                             (princ "Funs: ")                             (il:for tail il:on (labels-funs node)                                il:do (print-node (caar tail)                                                 (+ nested-indent 6))                                      (new-line 10)                                      (print-node (cdar tail)                                             (+ nested-indent 10))                                      (when (not (null (cdr tail)))                                            (new-line 6)))                             (new-line)                             (princ "Body: ")                             (print-node (labels-body node)                                    (+ nested-indent 6)))                          (lambda-node                              (new-line)                             (when (lambda-required node)                                 (princ "&req: ")                                 (il:for vars il:on (lambda-required node)                                    il:do (print-node (car vars)                                                     (+ nested-indent 6))                                          (if (null (cdr vars))                                              (new-line)                                              (new-line 6))))                             (when (lambda-optional node)                                 (princ "&opt: ")                                 (il:for vars il:on (lambda-optional node)                                    il:do (destructuring-bind (var &optional (init nil i-given)                                                                       (svar nil sv-given))                                                     (car vars)                                                     (cond                                                        ((symbolp var)                                                         (print-node (car vars)                                                                (+ nested-indent 6)))                                                        ((not i-given)                                                         (print-node var (+ nested-indent 6)))                                                        (t (princ "(")                                                           (print-node var (+ nested-indent 7))                                                           (new-line 7)                                                           (print-node init (+ nested-indent 7))                                                           (new-line 7)                                                           (when sv-given                                                               (print-node svar (+ nested-indent 7))                                                               (new-line 7))                                                           (princ ")"))))                                          (if (null (cdr vars))                                              (new-line)                                              (new-line 6))))                             (when (lambda-rest node)                                 (princ "&rest: ")                                 (print-node (lambda-rest node)                                        (+ nested-indent 7))                                 (new-line))                             (when (lambda-keyword node)                                 (princ "&key: ")                                 (il:for vars il:on (lambda-keyword node)                                    il:do (destructuring-bind (key var &optional (init nil                                                                                            i-given)                                                                       (svar nil sv-given))                                                     (car vars)                                                     (format t "((~S " key)                                                     (new-line 8)                                                     (print-node var (+ nested-indent 8))                                                     (princ ")")                                                     (new-line 7)                                                     (print-node init (+ nested-indent 7))                                                     (new-line 7)                                                     (when sv-given                                                         (print-node svar (+ nested-indent 7))                                                         (new-line 7))                                                     (princ ")"))                                          (cond                                             ((null (cdr vars))                                              (when (lambda-allow-other-keys node)                                                    (princ "&allow-other-keys"))                                              (new-line))                                             (t (new-line 6)))))                             (when (lambda-closed-over-vars node)                                 (princ "Closed-over:")                                 (new-line 10)                                 (il:for vars il:on (lambda-closed-over-vars node)                                    il:do (print-node (car vars)                                                     (+ nested-indent 10))                                          (if (null (cdr vars))                                              (new-line)                                              (new-line 10))))                             (print-node (lambda-body node)                                    nested-indent))                          (literal-node (prin1 (literal-value node)))                          (mv-call-node                              (when (caller-not-inline node)                                   (princ "(not inline)"))                             (new-line)                             (princ "Func: ")                             (print-node (mv-call-fn node)                                    (+ nested-indent 6))                             (new-line)                             (princ "Args: ")                             (il:for arg-tail il:on (mv-call-arg-exprs node)                                il:do (print-node (car arg-tail)                                                 (+ nested-indent 6))                                      (when (not (null (cdr arg-tail)))                                            (new-line 6))))                          (mv-prog1-node (il:for stmt il:in (mv-prog1-stmts node)                                            il:do (new-line)                                                  (print-node stmt nested-indent)))                          (opcodes-node (prin1 (opcodes-bytes node)))                          (progn-node (il:for stmt il:in (progn-stmts node)                                         il:do (new-line)                                               (print-node stmt nested-indent)))                          (progv-node                              (new-line)                             (princ "Vars: ")                             (print-node (progv-syms-expr node)                                    (+ nested-indent 6))                             (new-line)                             (princ "Vals: ")                             (print-node (progv-vals-expr node)                                    (+ nested-indent 6))                             (new-line)                             (princ "Body: ")                             (print-node (progv-stmt node)                                    (+ nested-indent 6)))                          (return-node                              (new-line)                             (princ "From:  ")                             (print-node (return-block node)                                    (+ nested-indent 7))                             (new-line)                             (princ "Value: ")                             (print-node (return-value node)                                    (+ nested-indent 7)))                          (setq-node                              (new-line)                             (princ "Var:   ")                             (print-node (setq-var node)                                    (+ nested-indent 7))                             (new-line)                             (princ "Value: ")                             (print-node (setq-value node)                                    (+ nested-indent 7)))                          (tagbody-node                              (print-blipper-info)                             (il:for segment il:in (tagbody-segments node)                                il:do (il:for tag il:in (segment-tags segment)                                             il:do (new-line)                                                   (princ tag))                                      (il:for stmt il:in (segment-stmts segment)                                         il:do (new-line 4)                                               (print-node stmt (+ nested-indent 4)))))                          (throw-node                              (new-line)                             (princ "Tag:   ")                             (print-node (throw-tag node)                                    (+ nested-indent 7))                             (new-line)                             (princ "Value: ")                             (print-node (throw-value node)                                    (+ nested-indent 7)))                          (unwind-protect-node                              (new-line)                             (princ "Stmt:    ")                             (print-node (unwind-protect-stmt node)                                    (+ nested-indent 9))                             (new-line)                             (princ "Cleanup: ")                             (print-node (unwind-protect-cleanup node)                                    (+ nested-indent 9)))                          ((or variable-struct var-ref-node)                              (let ((var (if (variable-p node)                                            node                                            (var-ref-variable node))))                                  (format t "~S ~S ~S ~@[~*Closed-over ~]" (variable-scope var)                                         (variable-kind var)                                         (variable-name var)                                         (variable-closed-over var))                                  (when (variable-binder var)                                      (cond                                         ((gethash (variable-binder var)                                                 *node-hash*)                                          (princ "Binder: ")                                          (print-node (variable-binder var)                                                 0))                                         (t (new-line)                                            (princ "Binder: ")                                            (print-node (variable-binder var)                                                   (+ nested-indent 8))))))))))))))(defparameter context-test-form   '(progn (ctxt)           (list (if (ctxt)                     (ctxt))                 (multiple-value-list (ctxt))                 (multiple-value-call #'(lambda (a b)                                               (bar a b))                        (ctxt))                 (multiple-value-call #'(lambda (a &rest b)                                               (bar a b))                        (ctxt))                 (multiple-value-call #'(lambda (a b)                                               (bar a b))                        (ctxt)                        (ctxt))                 (let ((x (ctxt)))                      (setq x (ctxt)))                 ((lambda (a &optional (b (ctxt)))                         (ctxt))                  (ctxt))                 (multiple-value-call #'(lambda (a b)                                               (bar a b))                        ((lambda (c)                                (ctxt))                         17)))           (ctxt))   "Form for testing the alphatizer's manipulation of context information.")(defmacro ctxt ()   (princ-to-string *context*))(il:* il:|;;| "Arrange to use the correct compiler.")(il:putprops il:xclc-alpha il:filetype compile-file)(il:* il:|;;| "Arrange for the correct makefile environment")(il:putprops il:xclc-alpha il:makefile-environment (:readtable "XCL" :package                                                              (defpackage "COMPILER" (:use "LISP"                                                                                            "XCL"))))(il:putprops il:xclc-alpha il:copyright ("Venue & Xerox Corporation" 1986 1987 1988 1990))(il:declare\: il:dontcopy  (il:filemap (nil)))il:stop
+(DEFINE-FILE-INFO READTABLE "XCL" PACKAGE (DEFPACKAGE "COMPILER" (USE "LISP" "XCL")))
+(il:filecreated "20-Jul-90 17:07:06" il:|{PELE:MV:ENVOS}<LISPCORE>SOURCES>XCLC-ALPHA.;3| 84829  
+
+      il:|changes| il:|to:|  (il:functions alpha-form)
+
+      il:|previous| il:|date:| "18-May-90 01:20:54" il:|{PELE:MV:ENVOS}<LISPCORE>SOURCES>XCLC-ALPHA.;2|
+)
+
+
+; Copyright (c) 1986, 1987, 1988, 1990 by Venue & Xerox Corporation.  All rights reserved.
+
+(il:prettycomprint il:xclc-alphacoms)
+
+(il:rpaqq il:xclc-alphacoms 
+          (
+
+(il:* il:|;;;| "Alphatization")
+
+           (il:functions binding-contour process-declarations process-il-declarations 
+                  update-environment)
+           (il:functions bind-parameter check-arg)
+           (il:functions binding-to-lambda)
+           (il:variables *block-stack* *tagbody-stack*)
+           (il:functions alpha-argument-form alpha-atom alpha-block alpha-catch alpha-combination 
+                  alpha-compiler-let alpha-eval-when alpha-flet alpha-form alpha-function 
+                  alpha-functional-form alpha-go alpha-if alpha-il-function alpha-labels alpha-lambda
+                  alpha-lambda-list alpha-let alpha-let* alpha-literal alpha-macrolet alpha-mv-call 
+                  alpha-mv-prog1 alpha-progn alpha-progv alpha-return-from alpha-setq alpha-tagbody 
+                  alpha-throw alpha-unwind-protect)
+           (il:functions convert-to-cl-lambda completely-expand expand-openlambda-call)
+           
+           (il:* il:|;;| "Alphatization testing")
+
+           (il:variables *indent-increment* *node-hash* *node-number*)
+           (il:functions test-alpha test-alpha-2 parse-defun print-tree print-node)
+           (il:variables context-test-form)
+           (il:functions ctxt)
+           
+           (il:* il:|;;| "Arrange to use the correct compiler.")
+
+           (il:prop il:filetype il:xclc-alpha)
+           
+           (il:* il:|;;| "Arrange for the correct makefile environment")
+
+           (il:prop il:makefile-environment il:xclc-alpha)))
+
+
+
+(il:* il:|;;;| "Alphatization")
+
+
+(defmacro binding-contour (declarations &body body)
+
+(il:* il:|;;;| "Called around the alphatization of a binding form, this sets up bindings of the various special variables used to communicate information between declarations and code.  The given declarations are then processed inside the bindings before going on to the body.")
+
+   `(let ((*new-specials* nil)
+          (*new-globals* nil)
+          (*new-inlines* nil)
+          (*new-notinlines* nil)
+          (il:specvars il:specvars)
+          (il:localvars il:localvars)
+          (il:globalvars il:globalvars))
+         (declare (special *new-specials* *new-globals* *new-inlines* *new-notinlines* 
+                             il:specvars il:localvars il:globalvars))
+         (process-declarations ,declarations)
+         ,@body))
+
+(defun process-declarations (decls)
+
+(il:* il:|;;;| "Step through the given declarations, storing the information found therein into various special variables.")
+
+   (declare (special *new-specials* *new-globals* *new-inlines* *new-notinlines* il:specvars 
+                       il:localvars il:globalvars))
+   (flet ((check-var-1 (var)
+                 (cond
+                    ((symbolp var)
+                     var)
+                    (t (cerror "Use the symbol %LOSE% instead." 
+                              "The value ~S, appearing in a declaration, is not a symbol" var)
+                       '%lose%))))
+         (macrolet ((check-var (var)
+                           `(setq ,var (check-var-1 ,var))))
+                (dolist (decl decls)
+                    (dolist (spec (cdr decl))
+                        (if (atom spec)
+                            (cerror "Ignore it." 
+                          "A non-list, ~S, was found where a declaration specification was expected."
+                                   spec)
+                            (case (car spec)
+                                ((special) (dolist (var (cdr spec))
+                                               (check-var var)
+                                               (push var *new-specials*)))
+                                ((il:specvars) (cond
+                                                  ((consp (cdr spec))
+                                                   (unless (eq il:specvars t)
+                                                       (setq il:specvars (union il:specvars
+                                                                                (cdr spec)))))
+                                                  ((eq (cdr spec)
+                                                       t)
+                                                   (setq il:specvars t)
+                                                   (setq il:localvars il:syslocalvars))
+                                                  (t (cerror "Ignore it" 
+                                                            "Illegal SPECVARS declaration: ~S" spec))
+                                                  ))
+                                ((il:localvars) (cond
+                                                   ((consp (cdr spec))
+                                                    (unless (eq il:localvars t)
+                                                        (setq il:localvars (union il:localvars
+                                                                                  (cdr spec)))))
+                                                   ((eq (cdr spec)
+                                                        t)
+                                                    (setq il:localvars t)
+                                                    (setq il:specvars il:sysspecvars))
+                                                   (t (cerror "Ignore it" 
+                                                             "Illegal LOCALVARS declaration: ~S" spec
+                                                             ))))
+                                ((global) (dolist (var (cdr spec))
+                                              (check-var var)
+                                              (push var *new-globals*)))
+                                ((il:globalvars) (if (consp (cdr spec))
+                                                     (setq il:globalvars (union il:globalvars
+                                                                                (cdr spec)))
+                                                     (cerror "Ignore it" 
+                                                            "Illegal GLOBALVARS declaration: ~S" spec
+                                                            )))
+                                ((type ftype function)       (il:* il:\; 
+                                                           "We don't handle type declarations yet.")
+                                   nil)
+                                ((inline) (dolist (var (cdr spec))
+                                              (check-var var)
+                                              (push var *new-inlines*)))
+                                ((notinline) (dolist (var (cdr spec))
+                                                 (check-var var)
+                                                 (push var *new-notinlines*)))
+                                ((ignore optimize)           (il:* il:\; 
+                                             "We don't handle IGNORE or OPTIMIZE declarations yet.")
+                                   nil)
+                                ((declaration)               (il:* il:\; "Add new declaration specifiers right away so that they can be used in later declarations in the same cluster.  It's a picky point, but who cares?")
+                                   (env-add-decls *environment* (cdr spec)))
+                                ((il:usedfree)               (il:* il:\; 
+                                                           "Ignored Interlisp declarations")
+                                   nil)
+                                (otherwise (unless (or (eq (car spec)
+                                                           t)
+                                                       (il:type-expander (car spec))
+                                                       (xcl::decl-specifier-p (car spec))
+                                                       (env-decl-p *environment* (car spec)))
+                                               (cerror "Ignore it." 
+                                                      "Unknown declaration specifier in DECLARE: ~S."
+                                                      (car spec)))))))))))
+
+(defun process-il-declarations (specs)
+
+(il:* il:|;;;| " Stroring theInterlisp's declare information found in executable position.")
+
+   (declare (special il:specvars il:localvars il:globalvars))
+   (dolist (spec specs t)
+       (if (atom spec)
+           (cerror "Ignore it." 
+                  "A non-list, ~S, was found where a declaration specification was expected." spec)
+           (case (car spec)
+               ((il:specvars) (cond
+                                 ((consp (cdr spec))
+                                  (unless (eq il:specvars t)
+                                      (setq il:specvars (union il:specvars (cdr spec)))))
+                                 ((eq (cdr spec)
+                                      t)
+                                  (setq il:specvars t)
+                                  (setq il:localvars il:syslocalvars))
+                                 (t (cerror "Ignore it" "Illegal SPECVARS declaration: ~S" spec))))
+               ((il:localvars) (cond
+                                  ((consp (cdr spec))
+                                   (unless (eq il:localvars t)
+                                       (setq il:localvars (union il:localvars (cdr spec)))))
+                                  ((eq (cdr spec)
+                                       t)
+                                   (setq il:localvars t)
+                                   (setq il:specvars il:sysspecvars))
+                                  (t (cerror "Ignore it" "Illegal LOCALVARS declaration: ~S" spec))))
+               ((il:globalvars) (if (consp (cdr spec))
+                                    (setq il:globalvars (union il:globalvars (cdr spec)))
+                                    (cerror "Ignore it" "Illegal GLOBALVARS declaration: ~S" spec)))
+               ((il:usedfree)                                (il:* il:\; 
+                                                           "Ignored Interlisp declarations")
+                  nil)
+               (otherwise (return-from process-il-declarations nil))))))
+
+(defun update-environment (env)
+
+(il:* il:|;;;| 
+"Store the information in a BINDING-CONTOUR's special variables into the given environment.")
+
+   (declare (special *new-specials* *new-globals* *new-inlines* *new-notinlines*))
+   (when *new-specials* (env-declare-specials env *new-specials*))
+   (when *new-globals* (env-declare-globals env *new-globals*))
+   (when *new-inlines* (env-allow-inlines env *new-inlines*))
+   (when *new-notinlines* (env-disallow-inlines env *new-notinlines*)))
+
+(defun bind-parameter (var binder env)
+   (ecase (resolve-variable-binding env var)
+       (:special 
+          (deletef var *new-specials*)
+          (env-declare-a-special env var)
+          (make-variable :scope :special :kind :variable :name var :binder binder))
+       (:lexical (let ((struct (make-variable :scope :lexical :kind :variable :name (symbol-name
+                                                                                     var)
+                                      :binder binder)))
+                      (env-bind-variable env var struct)
+                      struct))))
+
+(defun check-arg (var)
+
+(il:* il:|;;;| "Make sure that VAR is a legal parameter in a lambda-list.")
+
+   (cond
+      ((not (symbolp var))
+       (cerror "Ignore it." "The parameter ~S is not a symbol." var)
+       nil)
+      ((keywordp var)
+       (cerror "Ignore it." "The parameter ~S is a keyword and may not be bound." var)
+       nil)
+      (t t)))
+
+(defun binding-to-lambda (binding)
+
+(il:* il:|;;;| "Convert a binding from an FLET or LABELS into the appropriate LAMBDA form, wrapping a BLOCK around the bodies of the functions.")
+
+   (destructuring-bind (name arg-list &body body)
+          binding
+          (multiple-value-bind (forms decls)
+                 (parse-body body *environment* t)
+                 `(lambda ,arg-list ,@decls (block ,name ,@forms)))))
+
+(defvar *block-stack* nil
+
+(il:* il:|;;;| "Association list of block names to block structures; rebound at several points within the alphatizer.")
+
+   )
+
+(defvar *tagbody-stack* nil
+   "Association list from TAGBODY tags to the TAGBODY structure containing the tag; rebound at several points in the alphatizer"
+)
+
+(defun alpha-argument-form (form)
+   (let ((*context* *argument-context*))
+        (alpha-form form)))
+
+(defun alpha-atom (form)
+
+(il:* il:|;;;| "The form is atomic.  If it's a symbol, do the appropriate look-ups.  Otherwise, it must be a literal.")
+
+   (if (or (not (symbolp form))
+           (eq form t)
+           (eq form nil))
+       (alpha-literal form)
+       (resolve-variable-reference *environment* form)))
+
+(defun alpha-block (name body)
+   (let* ((new-block (make-block :name name :context *context*))
+          (*block-stack* (cons (cons name new-block)
+                               *block-stack*)))
+         (setf (block-stmt new-block)
+               (alpha-progn body))
+         new-block))
+
+(defun alpha-catch (tag forms)
+   (make-catch :tag (alpha-argument-form tag)
+          :stmt
+          (alpha-progn forms)))
+
+(defun alpha-combination (fn args)
+   (declare (special il:nlama il:nlaml))
+   (cond
+
+      (il:* il:|;;| "Calls to FUNCALL are expanded into CALL nodes where the FN is the first argument to FUNCALL, more or less.")
+
+      ((and (eq fn 'funcall)
+            (not (env-inline-disallowed *environment* fn)))
+       (multiple-value-bind (real-fn not-inline?)
+              (alpha-functional-form (first args))
+              (make-call :fn real-fn :args (mapcar #'alpha-argument-form (rest args))
+                     :not-inline not-inline?)))
+
+      (il:* il:|;;| "Calls on IL:OPENLAMBDA's involve lots of hairy processing.")
+
+      ((and (consp fn)
+            (eq (first fn)
+                'il:openlambda))
+       (alpha-form (expand-openlambda-call fn args)))
+
+      (il:* il:|;;| "Lexical functions and non-symbol functions can't be NLambda's.")
+
+      ((or (not (symbolp fn))
+           (env-fboundp *environment* fn))
+       (make-call :fn (alpha-function fn *context*)
+              :args
+              (mapcar #'alpha-argument-form args)
+              :not-inline
+              (and (symbolp fn)
+                   (env-inline-disallowed *environment* fn))))
+      ((or (eq 3 (il:argtype fn))
+           (member fn il:nlama :test 'eq))                   (il:* il:\; 
+        "It's an NLambda no-spread.  Funcall it on a single literal argument, the CDR of the form.")
+       (make-call :fn (alpha-function fn)
+              :args
+              (alpha-literal args)
+              :not-inline
+              (env-inline-disallowed *environment* fn)))
+      ((or (eq 1 (il:argtype fn))
+           (member fn il:nlaml :test 'eq))                   (il:* il:\; 
+                     "It's an NLambda spread.  Funcall it on the quoted versions of its arguments.")
+       (make-call :fn (alpha-function fn)
+              :args
+              (mapcar #'alpha-literal args)
+              :not-inline
+              (env-inline-disallowed *environment* fn)))
+      (t (make-call :fn (alpha-function fn *context*)
+                :args
+                (mapcar #'alpha-argument-form args)
+                :not-inline
+                (env-inline-disallowed *environment* fn)))))
+
+(defun alpha-compiler-let (bindings body)
+   (let ((vars nil)
+         (vals nil))
+        (il:for binding il:in bindings il:do (cond
+                                                            ((consp binding)
+                                                             (push (car binding)
+                                                                   vars)
+                                                             (push (eval (cadr binding))
+                                                                   vals))
+                                                            (t (push binding vars)
+                                                               (push nil vals))))
+        (progv vars vals
+            (alpha-progn body))))
+
+(defun alpha-eval-when (times forms)
+
+(il:* il:|;;;| "If the times contain COMPILE, we evaluate the forms.  If the times include LOAD, we prognify the forms.  If LOAD isn't mentioned, this turns into NIL.")
+
+   (when (or (member 'compile times :test #'eq)
+             (member 'il:compile times :test #'eq))
+       (mapc #'eval forms))
+   (if (or (member 'load times :test #'eq)
+           (member 'il:load times :test #'eq))
+       (alpha-progn forms)
+       *literally-nil*))
+
+(defun alpha-flet (bindings body)
+
+(il:* il:|;;;| "An FLET is alphatized as a LABELS node. The only difference is that the new variables for the function bindings are inserted after alphatizing the defined functions and body, whereas in a LABELS you add them to the environment before alphatizing the children.")
+
+   (let
+    ((*environment* (make-child-env *environment*)))
+    (multiple-value-bind
+     (forms decls)
+     (parse-body body *environment* nil)
+     (binding-contour
+      decls
+      (update-environment *environment*)
+      (let ((new-labels (make-labels))
+            names)
+           (setq names (with-collection (setf (labels-funs new-labels)
+                                              (mapcar #'(lambda (binding)
+                                                               (unless (check-arg (car binding))
+                                                                   (setq binding (cons '%lose%
+                                                                                       (cdr binding))
+                                                                         ))
+                                                               (collect (car binding))
+                                                               (cons (make-variable
+                                                                      :name
+                                                                      (symbol-name (car binding))
+                                                                      :scope :lexical :kind :function
+                                                                      :binder new-labels)
+                                                                     (alpha-lambda
+                                                                      (binding-to-lambda binding)
+                                                                      :name
+
+                                                                      (il:* il:|;;|
+                                                                    
+                                                            "Really want name to be \"Foo in Bar\"")
+
+                                                                      (symbol-name (car binding)))))
+                                                     bindings))))
+
+           (il:* il:|;;| "Having alphatized the function bindings, put them in the environment for alphatization of the body.")
+
+           (il:for name il:in names il:as fn-pair il:in (labels-funs new-labels)
+              il:do (env-bind-function *environment* name :function (car fn-pair)))
+
+           (il:* il:|;;| "Now we can alphatize the body.")
+
+           (setf (labels-body new-labels (alpha-progn forms)))
+           new-labels)))))
+
+(defun alpha-form (form)
+
+(il:* il:|;;;| 
+"FORM is a random exectuable form.  Dispatch to the appropriate alphatization routine.")
+
+(il:* il:|;;;| "NOTE NOTE NOTE:::  If anything is added to this CASE statement, be sure to add it also to the list in COMPLETELY-EXPAND.")
+
+   (if (atom form)
+       (alpha-atom form)
+       (case (car form)
+           ((block) (alpha-block (second form)
+                           (cddr form)))
+           ((catch) (alpha-catch (second form)
+                           (cddr form)))
+           ((compiler-let) (alpha-compiler-let (second form)
+                                  (cddr form)))
+           ((declare) 
+              (or (process-il-declarations (cdr form))
+                  (cerror "Replace the declaration with NIL" 
+                         "DECLARE found in executable position: ~S" form))
+              *literally-nil*)
+           ((eval-when) (alpha-eval-when (second form)
+                               (cddr form)))
+           ((flet) (alpha-flet (second form)
+                          (cddr form)))
+           ((il:function) (alpha-il-function (second form)
+                                 (third form)))
+           ((function) (alpha-function (second form)))
+           ((go) (alpha-go (second form)))
+           ((if) (alpha-if (second form)
+                        (third form)
+                        (fourth form)))
+           ((labels)                                         (il:* il:\; 
+                                                           "Rely on the macro expansion for now.")
+              (return-from alpha-form (alpha-labels (second form)
+                                             (cddr form)))
+              (return-from alpha-form (alpha-form (optimize-and-macroexpand-1 form))))
+           ((let) (alpha-let (second form)
+                         (cddr form)))
+           ((let*) (alpha-let* (second form)
+                          (cddr form)))
+           ((macrolet si::%macrolet) (alpha-macrolet (second form)
+                                            (cddr form)))
+           ((multiple-value-call) (alpha-mv-call (second form)
+                                         (cddr form)))
+           ((multiple-value-prog1) (alpha-mv-prog1 (cdr form)))
+           ((progn) (alpha-progn (cdr form)))
+           ((progv)                                          (il:* il:\; 
+                                                           "Rely on the macro expansion for now.")
+              (return-from alpha-form (destructuring-bind
+                                       (vars-expr vals-expr . body)
+                                       (cdr form)
+                                       (alpha-form `(il:\\do.progv ,vars-expr ,vals-expr
+                                                           #'(lambda nil ,@body)))))
+              (alpha-progv (second form)
+                     (third form)
+                     (cdddr form)))
+           ((quote) (alpha-literal (second form)))
+           ((return-from) (alpha-return-from (second form)
+                                 (third form)))
+           ((setq il:setq) (alpha-setq (car form)
+                                  (rest form)))
+           ((tagbody) (alpha-tagbody (cdr form)))
+           ((the)                                            (il:* il:\; 
+                                                           "Ignore the THE construct for now.")
+              (alpha-form (third form)))
+           ((throw) (alpha-throw (second form)
+                           (third form)))
+           ((unwind-protect) (alpha-unwind-protect (second form)
+                                    (cddr form)))
+           (otherwise (multiple-value-bind (new-form changed-p)
+                             (optimize-and-macroexpand-1 form)
+                             (if (null changed-p)
+                                 (alpha-combination (car form)
+                                        (cdr form))
+                                 (alpha-form new-form)))))))
+
+(defun alpha-function (form &optional (context (or (context-applied-context *context*)
+                                                       *null-context*)))
+
+(il:* il:|;;;| "If it's a symbol, then turn this into either the FLET/LABELS-bound VARIABLE structure or a structure for the global symbol.  Otherwise, it must be either a LAMBDA-form or OPCODES-form and is treated as such.  Note that the internal representation of programs treats LAMBDA as a value-producing special form.")
+
+(il:* il:|;;;| "The CONTEXT argument is the return-context of the function, if known.  It is passed on to alpha-lambda.")
+
+(il:* il:|;;;| "We return a second value when the FORM is a symbol, saying whether or not the named function is supposed to be NOTINLINE.")
+
+   (cond
+      ((symbolp form)
+       (multiple-value-bind (kind struct)
+              (env-fboundp *environment* form)
+              (cond
+                 ((eq kind :function)
+                  (values (make-var-ref :variable struct)
+                         (env-inline-disallowed *environment* form)))
+                 (t (unless (null kind)
+                        (assert (eq kind :macro))
+
+                        (il:* il:|;;| "This case can only arise if we are alphatizing a FUNCTION form, since the macro would have been expanded otherwise.")
+
+                        (cerror "Use the global function definition of ~S" "The symbol ~S names a lexically-bound macro and thus cannot be used with the FUNCTION special form."
+                               form))
+
+                    (il:* il:|;;| "Account for block compilation.")
+
+                    (when (not (null *current-block*))
+                        (let ((lookup (assoc form (block-decl-fn-name-map *current-block*))))
+                             (when (not (null lookup))       (il:* il:\; 
+                                                           "This function is to be renamed.")
+                                 (setq form (cdr lookup)))))
+                    (check-for-unknown-function form)
+                    (values (make-reference-to-variable :name form :scope :global :kind :function)
+                           (env-inline-disallowed *environment* form))))))
+      (t (case (car form)
+             ((lambda il:lambda il:nlambda il:openlambda) (alpha-lambda form :context context))
+             ((il:opcodes :opcodes) (make-opcodes :bytes (cdr form)))
+             (otherwise 
+                (cerror "Use (LAMBDA () NIL) instead" 
+              "The form ~S, appearing in a functional context, is neither a symbol nor a LAMBDA-form"
+                       form)
+                (alpha-lambda '(lambda nil nil)
+                       :context context))))))
+
+(defun alpha-functional-form (form)
+   (if (and (consp form)
+            (or (eq 'quote (first form))
+                (eq 'il:function (first form)))
+            (symbolp (second form)))
+       (alpha-function (second form))
+       (let ((*context* (make-context :values-used 1 :applied-context *context*)))
+            (alpha-form form))))
+
+(defun alpha-go (tag)
+   (let ((dest (assoc tag *tagbody-stack*)))
+        (when (null dest)
+            (cond
+               ((null *tagbody-stack*)
+                (cerror "Replace the GO with NIL" 
+                       "The GO tag ~S does not appear in any enclosing TAGBODY" tag)
+                (return-from alpha-go *literally-nil*))
+               (t (cerror "Use the tag ~*~S instead" 
+                         "The GO tag ~S does not appear in any enclosing TAGBODY" tag (caar 
+                                                                                      *tagbody-stack*
+                                                                                            ))
+                  (setq dest (car *tagbody-stack*)))))
+        (make-go :tagbody (cdr dest)
+               :tag
+               (car dest))))
+
+(defun alpha-if (pred-form then-form else-form)
+   (make-if :pred (let ((*context* *predicate-context*))
+                       (alpha-form pred-form))
+          :then
+          (alpha-form then-form)
+          :else
+          (alpha-form else-form)))
+
+(defun alpha-il-function (fn close-p-form)
+
+(il:* il:|;;;| "If there is no close-p-form, then this is just like Common Lisp FUNCTION except that (IL:FUNCTION symbol) == 'symbol.")
+
+(il:* il:|;;;| "If there is a close-p-form, then turn this into a function call, remembering to quote the close-p-form and either quote or hash-quote the function.")
+
+   (il:* il:|;;| "Account for block compilation.")
+
+   (when (and (symbolp fn)
+              (not (null *current-block*)))
+       (let ((lookup (assoc fn (block-decl-fn-name-map *current-block*))))
+            (when (not (null lookup))                        (il:* il:\; 
+                                                           "This function is to be renamed.")
+                (setq fn (cdr lookup)))))
+   (if (null close-p-form)
+       (cond
+          ((and (symbolp fn)
+                (not (env-fboundp *environment* fn)))
+           (check-for-unknown-function fn)
+           (alpha-literal fn))
+          (t (alpha-function fn)))
+       (make-call :fn (make-reference-to-variable :name 'il:function :scope :global :kind :function)
+              :args
+              (list (if (symbolp fn)
+                        (alpha-literal fn)
+                        (alpha-function fn))
+                    (alpha-literal close-p-form)))))
+
+(defun alpha-labels (bindings body)
+
+(il:* il:|;;;| "Make a first pass down the list of bindings in order to set up the environment in which they will all be defined.  Then alphatize each definition and transform the whole thing into a LABELS binding structure.")
+
+   (let* ((*environment* (make-child-env *environment*))
+          (labels (make-labels))
+          (structs (mapcar #'(lambda (binding)
+                                    (unless (check-arg (car binding))
+                                        (setq binding (cons '%lose% (cdr binding))))
+                                    (let ((struct (make-variable :name (symbol-name (car binding))
+                                                         :scope :lexical :kind :function :binder 
+                                                         labels)))
+                                         (env-bind-function *environment* (car binding)
+                                                :function struct)
+                                         struct))
+                          bindings)))
+         (multiple-value-bind (forms decls)
+                (parse-body body *environment* nil)
+                (binding-contour decls (update-environment *environment*)
+                       (setf (labels-funs labels)
+                             (mapcar #'(lambda (binding struct)
+                                              (cons struct (alpha-lambda (binding-to-lambda binding)
+                                                                  :name
+
+                                                                  (il:* il:|;;| 
+                                                            "Really want name to be \"Foo in Bar\"")
+
+                                                                  (symbol-name (car binding)))))
+                                    bindings structs))
+                       (setf (labels-body labels)
+                             (alpha-progn forms))))
+         labels))
+
+(defun alpha-lambda (original-form &key ((:context *context*)
+                                             *null-context*)
+                               name)
+
+   (il:* il:|;;| "Check for something other than a CL:LAMBDA and coerce if necessary.")
+
+   (multiple-value-bind
+    (form arg-type)
+    (convert-to-cl-lambda original-form)
+
+    (il:* il:|;;| "Crack the argument list, applying any declarations that might be present.")
+
+    (let ((arg-list (second form))
+          (body (cddr form))
+          (*environment* (make-child-env *environment*)))
+         (multiple-value-bind (code decls)
+                (parse-body body *environment* t)
+                (binding-contour decls                       (il:* il:\; "Process the declarations")
+                       (update-environment *environment*)
+                       (let* ((node (make-lambda :name name :arg-type arg-type))
+                              (auxes (alpha-lambda-list arg-list node))
+                              (body-node (alpha-progn code)))
+
+                             (il:* il:|;;| "AUXES is now the list of values representing the &aux variables IN REVERSE ORDER.  We must bind them around the body one-by-one and then wrap that in the lambda node we've already created.")
+
+                             (il:for aux il:in auxes
+                                il:do (let ((binder (make-lambda :required (list (car aux))
+                                                               :body body-node)))
+                                               (setf (variable-binder (car aux))
+                                                     binder)
+                                               (setq body-node (make-call :fn binder :args
+                                                                      (list (cdr aux))))))
+                             (setf (lambda-body node)
+                                   body-node)
+
+                             (il:* il:|;;| "For Interlisp LAMBDA no-spread's, we need to save away the parameter name so that we can generate code for ARG properly.  (Yecch...)")
+
+                             (when (eq arg-type 2)
+                                 (setf (lambda-no-spread-name node)
+                                       (second original-form)))
+                             node))))))
+
+(defun alpha-lambda-list (arg-list binder)
+
+(il:* il:|;;;| "Alpha-converts the argument list of a lambda form.  Stores the results of the analysis into the appropriate slots of the LAMBDA structure in BINDER.  Returns a list of the values representing the &aux argument variables, in reverse order of binding.")
+
+   (let
+    ((state :required)
+     required optional keyword aux)
+    (dolist (arg arg-list)
+        (case arg
+            ((&optional) (if (eq state :required)
+                             (setq state :optional)
+                             (cerror "Ignore it." "Misplaced &optional in lambda-list")))
+            ((&rest) (if (member state '(:required :optional))
+                         (setq state :rest)
+                         (cerror "Ignore it." "Misplaced &rest in lambda-list")))
+            ((&ignore-rest)                                  (il:* il:\; 
+                              "Internal keyword used in translation of Interlisp spread functions.")
+               (assert (eq state :optional)
+                      nil "BUG: Misplaced &IGNORE-REST keyword.")
+               (setf (lambda-rest binder)
+                     (make-variable :binder binder))
+               (return)                                      (il:* il:\; 
+                                                    "Nothing is supposed to follow an &IGNORE-REST")
+               )
+            ((&key) (if (and (il:neq state :aux)
+                             (il:neq state :key))
+                        (setq state :key)
+                        (cerror "Ignore it." "Misplaced &key in lambda-list")))
+            ((&allow-other-keys) 
+               (unless (eq state :key)
+                      (cerror "Ignore it." "Stray &allow-other-keys in lambda-list."))
+               (setf (lambda-allow-other-keys binder)
+                     t))
+            ((&aux) (if (il:neq state :aux)
+                        (setq state :aux)
+                        (cerror "Ignore it." "Misplaced &aux in lambda-list.")))
+            (otherwise 
+               (ecase state
+                   ((:required) (when (check-arg arg)
+                                    (push (bind-parameter arg binder *environment*)
+                                          required)))
+                   ((:optional) 
+                      (if (atom arg)
+                          (when (check-arg arg)
+                              (push (list (bind-parameter arg binder *environment*)
+                                          *literally-nil*)
+                                    optional))
+                          (destructuring-bind
+                           (var &optional (init-form nil)
+                                (svar nil sv-given))
+                           arg
+                           (when (check-arg var)
+                               (let ((init-struct (alpha-argument-form init-form)))
+                                    (push `(,(bind-parameter var binder *environment*)
+                                            ,init-struct
+                                            ,@(and sv-given (check-arg svar)
+                                                   (list (bind-parameter svar binder *environment*)))
+                                            )
+                                          optional))))))
+                   ((:rest) (when (check-arg arg)
+                                (setf (lambda-rest binder)
+                                      (bind-parameter arg binder *environment*))
+                                (setq state :after-rest)))
+                   ((:after-rest) (cerror "Ignore it." "Stray argument ~S found after &rest var."))
+                   ((:key) 
+                      (if (atom arg)
+                          (when (check-arg arg)
+                              (push (list (intern (string arg)
+                                                 "KEYWORD")
+                                          (bind-parameter arg binder *environment*)
+                                          *literally-nil*)
+                                    keyword))
+                          (destructuring-bind
+                           (key&var &optional (init-form nil)
+                                  (svar nil sv-given)
+                                  &aux key var)
+                           arg
+                           (cond
+                              ((atom key&var)
+                               (when (check-arg key&var)
+
+                                   (il:* il:|;;| 
+"This is not the real legality test; that's below.  This just makes sure that the intern will work.")
+
+                                   (setq key (intern (string key&var)
+                                                    "KEYWORD")))
+                               (setq var key&var))
+                              (t (setq key (first key&var))
+                                 (setq var (second key&var))))
+                           (when (check-arg var)
+                               (let ((init-struct (alpha-argument-form init-form)))
+                                    (push `(,key ,(bind-parameter var binder *environment*)
+                                                 ,init-struct
+                                                 ,@(and sv-given (check-arg svar)
+                                                        (list (bind-parameter svar binder 
+                                                                     *environment*))))
+                                          keyword))))))
+                   ((:aux) (let (var val)
+                                (cond
+                                   ((atom arg)
+                                    (setq var arg)
+                                    (setq val nil))
+                                   (t (setq var (first arg))
+                                      (setq val (second arg))))
+                                (when (check-arg var)
+                                    (let ((tree (alpha-argument-form val)))
+                                         (push (cons (bind-parameter var binder *environment*)
+                                                     tree)
+                                               aux)))))))))
+    (setf (lambda-required binder)
+          (nreverse required))
+    (setf (lambda-optional binder)
+          (nreverse optional))
+    (setf (lambda-keyword binder)
+          (nreverse keyword))
+    aux))
+
+(defun alpha-let (bindings body)
+
+   (il:* il:|;;| "Install the new variables in a new environment and then install that environment before alphatizing the body.")
+
+   (multiple-value-bind (body decls)
+          (parse-body body *environment* nil)
+          (binding-contour decls (let ((*environment* (make-child-env *environment*)))
+
+                                 (il:* il:|;;| "The standard is losing and wants us to install the environment before alphatizing the init-forms so that SPECIAL declarations will have bigger scope.  Ugh.")
+
+                                      (update-environment *environment*)
+                                      (let ((vars nil)
+                                            (vals nil)
+                                            (new-lambda (make-lambda)))
+
+                                           (il:* il:|;;| "Alphatize the init-forms.")
+
+                                           (il:for binding il:in bindings
+                                              il:do (cond
+                                                           ((consp binding)
+                                                            (push (first binding)
+                                                                  vars)
+                                                            (push (alpha-argument-form (second 
+                                                                                              binding
+                                                                                              ))
+                                                                  vals))
+                                                           (t (push binding vars)
+                                                              (push *literally-nil* vals))))
+
+                                           (il:* il:|;;| "Bind all of the variables")
+
+                                           (setf (lambda-required new-lambda)
+                                                 (il:for var il:in (nreverse vars)
+                                                    il:collect (bind-parameter
+                                                                    (if (check-arg var)
+                                                                        var
+                                                                        '%lose%)
+                                                                    new-lambda *environment*)))
+
+                                           (il:* il:|;;| "Alphatize the body")
+
+                                           (setf (lambda-body new-lambda)
+                                                 (alpha-progn body))
+                                           (make-call :fn new-lambda :args (nreverse vals)))))))
+
+(defun alpha-let* (bindings body)
+
+(il:* il:|;;;| "Install the new variables in the environment one at a time, processing the next in an environment including those that came before.  The LET* is then represented as several nested lambdas, so we must be careful to get the BINDER links set up properly.")
+
+   (multiple-value-bind
+    (body decls)
+    (parse-body body *environment* nil)
+    (binding-contour
+     decls
+     (let ((*environment* (make-child-env *environment*))
+           (binding-list nil))
+          (update-environment *environment*)
+
+          (il:* il:|;;| "First, alphatize each of the init-forms in the correct environment.")
+
+          (il:for binding il:in bindings
+             il:do (if (consp binding)
+                           (let ((init-struct (alpha-argument-form (second binding))))
+                                (push (cons (bind-parameter (if (check-arg (first binding))
+                                                                (first binding)
+                                                                '%lose%)
+                                                   nil *environment*)
+                                            init-struct)
+                                      binding-list))
+                           (push (cons (bind-parameter (if (check-arg binding)
+                                                           binding
+                                                           '%lose%)
+                                              nil *environment*)
+                                       *literally-nil*)
+                                 binding-list)))
+
+          (il:* il:|;;| 
+"BINDING-LIST is now in reverse order, so we can construct the nested lambdas from the inside out.")
+
+          (il:bind (body-struct il:_ (alpha-progn body)) il:for pair il:in binding-list
+             il:do (let ((binder (make-lambda :required (list (car pair))
+                                            :body body-struct)))
+                            (setq body-struct (make-call :fn binder :args (list (cdr pair))))
+                            (setf (variable-binder (car pair))
+                                  binder)) il:finally (return body-struct))))))
+
+(defun alpha-literal (value)
+
+(il:* il:|;;;| "Check for certain special values that have preallocated LITERAL structures.  Otherwise, make a new one.  The test for undumpable values used to be done in both COMPILE and COMPILE-FILE, but this lost in loading PCL, which COMPILE's functions containing circular structures as literals.")
+
+   (case value
+       ((nil) *literally-nil*)
+       ((t) *literally-t*)
+       (otherwise (make-literal :value (cond
+                                          ((and (streamp *input-stream*)
+                                                             (il:* il:\; "This is COMPILE-FILE")
+                                                (not (fasl:value-dumpable-p value)))
+                                           (restart-case (error 
+                                         "The literal value ~S would not be dumpable in a FASL file."
+                                                                value)
+                                                  (nil nil :report "Use the value NIL instead" nil)
+                                                  (nil nil :report (lambda (stream)
+                                                                          (format stream 
+                                                      "Use the value ~S anyway and hope for the best"
+                                                                                 value))
+                                                       value)))
+                                          (t value))))))
+
+(defun alpha-macrolet (bindings body)
+
+(il:* il:|;;;| "Turn the bindings into expansion functions and add them into the environment for the analysis of the body.")
+
+   (let ((new-env (make-child-env *environment*)))
+        (il:for macro il:in bindings il:do (env-bind-function new-env (car macro)
+                                                              :macro
+                                                              (crack-defmacro (cons 'defmacro macro))
+                                                              ))
+        (let ((*environment* new-env))
+             (multiple-value-bind (forms decls)
+                    (parse-body body *environment* nil)
+                    (binding-contour decls (update-environment *environment*)
+                           (alpha-progn forms))))))
+
+(defun alpha-mv-call (fn-form arg-forms)
+   (let (values-used)
+        (multiple-value-bind (fn not-inline?)
+               (alpha-functional-form fn-form)
+               (cond
+                  ((and (null (cdr arg-forms))
+                        (lambda-p fn)
+                        (not (or (lambda-optional fn)
+                                 (lambda-rest fn)
+                                 (lambda-keyword fn))))      (il:* il:\; 
+                              "In this very common case, we can tell how many values are expected.")
+                   (setq values-used (length (lambda-required fn))))
+                  (t (setq values-used :unknown)))
+               (if (null arg-forms)                          (il:* il:\; 
+                                              "This is silly, but we'd better handle it correctly.")
+                   (make-call :fn fn :args nil :not-inline not-inline?)
+                   (make-mv-call :fn fn :arg-exprs (let ((*context* (make-context :values-used 
+                                                                           values-used)))
+                                                        (mapcar #'alpha-form arg-forms))
+                          :not-inline not-inline?)))))
+
+(defun alpha-mv-prog1 (forms)
+   (let ((vals-used (context-values-used *context*)))
+        (cond
+           ((null (cdr forms))
+            (alpha-form (car forms)))
+           ((and (numberp vals-used)
+                 (< vals-used 2))                            (il:* il:\; 
+                                    "The multiple values aren't wanted.  Make this a normal PROG1.")
+            (alpha-form (cons 'prog1 forms)))
+           (t (make-mv-prog1 :stmts (cons (alpha-form (first forms))
+                                          (let ((*context* *effect-context*))
+                                               (mapcar #'alpha-form (rest forms)))))))))
+
+(defun alpha-progn (forms)
+   (if (null (cdr forms))
+       (alpha-form (car forms))
+       (make-progn :stmts (let ((old-context *context*)
+                                (*context* *effect-context*))
+                               (il:for tail il:on forms
+                                  il:collect (if (null (cdr tail))
+                                                     (let ((*context* old-context))
+                                                          (alpha-form (car tail)))
+                                                     (alpha-form (car tail))))))))
+
+(defun alpha-progv (syms-expr vals-expr body-forms)
+   (make-progv :syms-expr (alpha-argument-form syms-expr)
+          :vals-expr
+          (alpha-argument-form vals-expr)
+          :stmt
+          (alpha-progn body-forms)))
+
+(defun alpha-return-from (name form)
+   (let ((dest (assoc name *block-stack*)))
+        (when (null dest)
+            (cond
+               ((null *block-stack*)
+                (cerror "Treat (RETURN-FROM name value-form) as simply value-form" 
+                       "~S, found in a RETURN-FROM, is not the name of any enclosing BLOCK" name)
+                (return-from alpha-return-from (alpha-form form)))
+               (t (cerror "Use the name ~*~S instead" 
+                         "~S, found in a RETURN-FROM, is not the name of any enclosing BLOCK" name
+                         (caar *block-stack*))
+                  (setq dest (car *block-stack*)))))
+        (make-return :block (cdr dest)
+               :value
+               (let ((*context* (block-context (cdr dest))))
+                    (alpha-form form)))))
+
+(defun alpha-setq (kind forms)
+   (let ((setqs (il:for tail il:on forms il:by (cddr tail)
+                   il:collect (when (and (eq kind 'setq)
+                                             (null (cdr tail)))
+                                        (cerror "Add an extra NIL on the end of the form" 
+                                               "Odd number of forms given to SETQ."))
+                         (make-setq :var (resolve-variable-reference *environment* (car tail)
+                                                t)
+                                :value
+                                (alpha-argument-form (cadr tail))))))
+        (if (null (cdr setqs))
+            (car setqs)
+            (make-progn :stmts setqs))))
+
+(defun alpha-tagbody (body)
+
+(il:* il:|;;;| "Break up the body into `segments', each of which is an unbroken series of forms along with the zero or more tags that begin that series of forms.")
+
+   (when (null body)
+         (return-from alpha-tagbody *literally-nil*))
+   (let ((tagbody (make-tagbody))
+         (*tagbody-stack* *tagbody-stack*))
+
+        (il:* il:|;;| "Make a first pass down the body to find all of the tags")
+
+        (il:for form il:in body il:do (when (atom form)
+                                                      (push (cons form tagbody)
+                                                            *tagbody-stack*)))
+
+        (il:* il:|;;| 
+      "On the second pass, put together the segments and alphatize all of the forms")
+
+        (do ((*context* *effect-context*)
+             (segment-list nil))
+            ((null body)
+             (setf (tagbody-segments tagbody)
+                   (nreverse segment-list)))
+          (let ((segment (make-segment)))
+               (do nil
+                   ((or (null body)
+                        (consp (car body))))
+                 (push (pop body)
+                       (segment-tags segment)))
+               (do ((form-list nil))
+                   ((or (null body)
+                        (atom (car body)))
+                    (setf (segment-stmts segment)
+                          (nreverse form-list)))
+                 (push (alpha-form (pop body))
+                       form-list))
+               (push segment segment-list)))
+        tagbody))
+
+(defun alpha-throw (tag value)
+   (make-throw :tag (alpha-argument-form tag)
+          :value
+          (let ((*context* *null-context*))
+               (alpha-form value))))
+
+(defun alpha-unwind-protect (body cleanups)
+   (make-unwind-protect :stmt (alpha-lambda (let ((cleanup-var (gensym)))
+                                                 `(lambda (,cleanup-var)
+                                                         (multiple-value-prog1 ,body
+                                                                (funcall ,cleanup-var))))
+                                     :context *context* :name 'si::*unwind-protect*)
+          :cleanup
+          (alpha-lambda `(lambda nil ,@cleanups)
+                 :context *effect-context* :name "Clean-up forms")))
+
+(defun convert-to-cl-lambda (form)
+
+   (il:* il:|;;| "Return two values: a CL:LAMBDA form equivalent to the given one and the Interlisp ARGTYPE for the form.")
+
+   (case (car form)
+       ((lambda) 
+
+          (il:* il:|;;| "Common Lisp LAMBDA's have indeterminate ARGTYPE.  The assembler will figure out whether it's 0 or 2.  The LOCALVARS declaration is because Interlisp's scoping rules have overwhelmed those of Common Lisp, may they rest in peace.")
+
+          (values `(lambda ,(second form)
+                          (declare (il:localvars . t))
+                          ,@(cddr form))
+                 nil))
+       ((il:lambda il:openlambda) (if (listp (second form))
+
+                                 (il:* il:|;;| "LAMBDA spread.  Use the Common Lisp &OPTIONAL keyword and also one made for internal compiler use that will throw away the extra arguments.")
+
+                                      (values `(lambda (&optional ,@(second form)
+                                                              &ignore-rest)
+                                                      ,@(cddr form))
+                                             0)
+
+                                 (il:* il:|;;| "LAMBDA no-spread.  Bind the parameter to the number of arguments passed.  The handling of ARG must be done in code generation, unfortunately.")
+
+                                      (values `(lambda nil (let ((,(second form)
+                                                                  (il:\\myargcount)))
+                                                                ,@(cddr form)))
+                                             2)))
+       ((il:nlambda) (if (listp (second form))
+
+                         (il:* il:|;;| 
+              "NLAMBDA spread.  Just like the LAMBDA-spread case but we have a different ARG-TYPE.")
+
+                         (values `(lambda (&optional ,@(second form)
+                                                 &ignore-rest)
+                                         ,@(cddr form))
+                                1)
+
+                         (il:* il:|;;| 
+              "NLAMBDA no-spread.  We take exactly one argument and are otherwise entirely normal.")
+
+                         (values `(lambda (,(second form))
+                                         ,@(cddr form))
+                                3)))
+       (otherwise 
+
+          (il:* il:|;;| "This is not my beautiful LAMBDA form!")
+
+          (cerror "Use (LAMBDA () NIL) instead" "The form ~S should be a LAMBDA form but is not." 
+                 form)
+          (values '(lambda nil nil)
+                 0))))
+
+(defun completely-expand (form)
+   (if (atom form)
+       form
+       (let ((new-form form)
+             changed-p)
+            (il:until (member (car new-form)
+                                 '(block catch
+                                      compiler-let
+                                      declare
+                                      eval-when
+                                      flet
+                                      il:function
+                                      function
+                                      go
+                                      if
+                                      labels
+                                      let
+                                      let*
+                                      macrolet
+                                      si::%macrolet
+                                      multiple-value-call
+                                      multiple-value-prog1
+                                      progn
+                                      progv
+                                      quote
+                                      setq
+                                      il:setq
+                                      tagbody
+                                      the
+                                      throw
+                                      unwind-protect)
+                                 :test
+                                 'eq) il:do (multiple-value-setq (new-form changed-p)
+                                                       (optimize-and-macroexpand-1 new-form))
+                                            (when (null changed-p)
+                                                (if (and (consp (car new-form))
+                                                         (eq 'il:openlambda (caar new-form)))
+                                                    (setq new-form (expand-openlambda-call
+                                                                    (car new-form)
+                                                                    (cdr new-form)))
+                                                    (return new-form))) il:finally (return 
+                                                                                             new-form
+                                                                                              )))))
+
+(defun expand-openlambda-call (fn args)
+
+(il:* il:|;;;| "The idea here is to try to do some substitution into the body of the OPENLAMBDA.  We do it here instead of in meta-evaluation because there are parts of the Interlisp system that count on their optimizers being able to find literals in their arguments.  They count on the substitution being done so that that will be the case.")
+
+(il:* il:|;;;| "It is well-known that the use of SUBLIS here is a bug: for example, if one of the arguments to the OPENLAMBDA has the same name as one of the functions called therein, the subst will still change both of them, undoubtably leading to chaos.  However, the ByteCompiler has always done it this way and nothing broke, so, since it's also very easy, we do it too.  If anything actually counts on this, though, I may kill the author.")
+
+(il:* il:|;;;| "The general details of this transformation are the way they are because it's the way the ByteCompiler did it.  Pavel will never defend this code on philosophical grounds.  (\"If this code is caught or killed, Pavel will disavow any knowledge of its actions...\")")
+
+   (let ((unsubbed-params nil)
+         (unsubbed-args nil)
+         (subst-alist nil)
+         extra-args)
+        (do* ((params (cadr fn)
+                     (cdr params))
+              (args (let ((*context* *argument-context*))
+                         (mapcar 'completely-expand args))
+                    (cdr args))
+              (arg (car args)
+                   (car args)))
+             ((null params)
+              (setq extra-args args))
+
+           (il:* il:|;;| 
+      "For each pair, if the argument is a constant, add it to the substitution we'll later apply.")
+
+           (cond
+              ((or (constantp arg)
+                   (and (atom arg)
+                        (not (symbolp arg)))
+                   (and (consp arg)
+                        (eq (car arg)
+                            'il:function)
+                        (symbolp (cadr arg))))
+               (push (cons (car params)
+                           arg)
+                     subst-alist))
+              (t (push (car params)
+                       unsubbed-params)
+                 (push arg unsubbed-args))))
+        (when (null unsubbed-args)                           (il:* il:\; 
+                                                           "We got rid of all of them.")
+            (return-from expand-openlambda-call `(progn ,@extra-args ,@(sublis subst-alist
+                                                                              (cddr fn)
+                                                                              :test
+                                                                              'eq))))
+
+        (il:* il:|;;| "Perhaps there're no extra arguments or they're all constants.  This should really be a full-blown test for side-effect freedom, but that's too much work for alphatization.")
+
+        (cond
+           ((and extra-args (notevery
+                             #'(lambda (arg)
+                                      (or (constantp arg)
+                                          (and (atom arg)
+                                               (not (symbolp arg)))
+                                          (and (consp arg)
+                                               (member (car arg)
+                                                      '(il:function function)))))))
+
+            (il:* il:|;;| "There're extra arguments in the way, so we're done.")
+
+            (setf (car unsubbed-args)
+                  `(prog1 ,(car unsubbed-args)
+                          ,@extra-args))
+            `((lambda ,(reverse unsubbed-params)
+                     ,@(sublis subst-alist (cddr fn)
+                              :test
+                              'eq))
+              ,@(reverse unsubbed-args)))
+           (t 
+              (il:* il:|;;| "There's nothing interesting between the body and the as yet unsubbed arguments, so maybe we can also substitute some variables.  Note that because the unsubbed lists are in reverse order now, we can easily examine the arguments starting with the last one and working backwards, just as we'd like.")
+
+              (il:while (and unsubbed-args (symbolp (first unsubbed-args)))
+                 il:do (push (cons (pop unsubbed-params)
+                                       (pop unsubbed-args))
+                                 subst-alist))
+              (cond
+                 ((null unsubbed-args)                       (il:* il:\; "All substituted in.")
+                  `(progn ,@(sublis subst-alist (cddr fn)
+                                   :test
+                                   'eq)))
+                 ((member (car (first unsubbed-args))
+                         '(il:setq setq))
+                  (cond
+                     ((null (cdr unsubbed-args))
+                      (push (cons (first unsubbed-params)
+                                  (cadr (first unsubbed-args)))
+                            subst-alist)
+                      `(progn ,(first unsubbed-args)
+                              ,@(sublis subst-alist (cddr fn)
+                                       :test
+                                       'eq)))
+                     (t (push (cons (pop unsubbed-params)
+                                    (cadr (first unsubbed-args)))
+                              subst-alist)
+                        (setq unsubbed-args (cons `(prog1 ,(second unsubbed-args)
+                                                       ,(first unsubbed-args))
+                                                  (cddr unsubbed-args)))
+                        `((lambda ,(reverse unsubbed-params)
+                                 ,@(sublis subst-alist (cddr fn)
+                                          :test
+                                          'eq))
+                          ,@(reverse unsubbed-args)))))
+                 (t `((lambda ,(reverse unsubbed-params)
+                             ,@(sublis subst-alist (cddr fn)
+                                      :test
+                                      'eq))
+                      ,@(reverse unsubbed-args))))))))
+
+
+
+(il:* il:|;;| "Alphatization testing")
+
+
+(defparameter *indent-increment* 3
+
+(il:* il:|;;;| "Number of spaces by which the indentation should increase in nested nodes.")
+
+   )
+
+(defvar *node-hash* nil
+   "Used by the parse-tree pretty-printer")
+
+(defvar *node-number* 0
+   "Used by the parse-tree pretty-printer")
+
+(defun test-alpha (fn)
+   (let ((tree (test-alpha-2 fn)))
+        (unwind-protect
+            (print-tree tree)
+            (release-tree tree))))
+
+(defun test-alpha-2 (fn)
+   (let ((*environment* (make-env))
+         (*context* *null-context*)
+         (*constants-hash-table* (make-hash-table))
+         (il:specvars t)
+         (il:localvars il:syslocalvars)
+         (il:globalvars il:globalvars)
+         (il:localfreevars nil)
+         (*processed-functions* nil)
+         (*unknown-functions* nil)
+         (*current-function* nil)
+         (*automatic-special-declarations* nil))
+        (declare (special il:specvars il:localvars il:localfreevars il:globalvars))
+        (alpha-lambda (cond
+                         ((consp fn)
+                          fn)
+                         ((consp (il:getd fn))
+                          (il:getd fn))
+                         (t (parse-defun (il:getdef fn 'il:functions)))))))
+
+(defun parse-defun (form)
+   (destructuring-bind (ignore name arg-list &body body)
+          form
+          (multiple-value-bind (forms decls)
+                 (parse-body body nil t)
+                 `(lambda ,arg-list ,@decls (block ,name ,@forms)))))
+
+(defun print-tree (tree)
+   (let ((*node-hash* (make-hash-table))
+         (*node-number* 0)
+         (*print-case* :upcase))
+        (print-node tree 0))
+   (terpri)
+   (values))
+
+(defun print-node (node indent)
+
+(il:* il:|;;;| "NODE is the node to print.  INDENT is the number of spaces over we are on entry to PRINT-NODE.  We should not ever print anything on the line to the left of that point.")
+
+   (let
+    ((number (and (not (literal-p node))
+                  (gethash node *node-hash*))))
+    (cond
+       (number (format t "-~S-" number))
+       (t (incf *node-number*)
+          (setf (gethash node *node-hash*)
+                *node-number*)
+          (format t "~S. ~A: " *node-number* (type-of node))
+          (let ((nested-indent (+ indent *indent-increment*)))
+               (macrolet ((new-line (&optional (delta 0))
+                                 `(format t "~%~vT" (+ nested-indent ,delta)))
+                          (print-blipper-info nil '(format t 
+                                   "  Closed-over-p: ~:[false~;true~]  New-frame-p: ~:[false~;true~]"
+                                                          (blipper-closed-over-p node)
+                                                          (blipper-new-frame-p node))))
+                      (etypecase node
+                          (block-node 
+                             (prin1 (block-name node))
+                             (print-blipper-info)
+                             (new-line)
+                             (print-node (block-stmt node)
+                                    nested-indent))
+                          (call-node 
+                             (when (caller-not-inline node)
+                                   (princ "(not inline)"))
+                             (new-line)
+                             (princ "Func: ")
+                             (print-node (call-fn node)
+                                    (+ nested-indent 6))
+                             (when (call-args node)
+                                 (new-line)
+                                 (princ "Args: ")
+                                 (il:for arg-tail il:on (call-args node)
+                                    il:do (print-node (car arg-tail)
+                                                     (+ nested-indent 6))
+                                          (when (not (null (cdr arg-tail)))
+                                                (new-line 6)))))
+                          (catch-node 
+                             (new-line)
+                             (princ "Tag:  ")
+                             (print-node (catch-tag node)
+                                    (+ nested-indent 6))
+                             (new-line)
+                             (princ "Stmt: ")
+                             (print-node (catch-stmt node)
+                                    (+ nested-indent 6)))
+                          (go-node 
+                             (format t "to ~S" (go-tag node))
+                             (new-line)
+                             (princ "Tagbody: ")
+                             (print-node (go-tagbody node)
+                                    (+ nested-indent 9)))
+                          (if-node 
+                             (new-line)
+                             (princ "Pred: ")
+                             (print-node (if-pred node)
+                                    (+ nested-indent 6))
+                             (new-line)
+                             (princ "Then: ")
+                             (print-node (if-then node)
+                                    (+ nested-indent 6))
+                             (new-line)
+                             (princ "Else: ")
+                             (print-node (if-else node)
+                                    (+ nested-indent 6)))
+                          (labels-node 
+                             (new-line)
+                             (princ "Funs: ")
+                             (il:for tail il:on (labels-funs node)
+                                il:do (print-node (caar tail)
+                                                 (+ nested-indent 6))
+                                      (new-line 10)
+                                      (print-node (cdar tail)
+                                             (+ nested-indent 10))
+                                      (when (not (null (cdr tail)))
+                                            (new-line 6)))
+                             (new-line)
+                             (princ "Body: ")
+                             (print-node (labels-body node)
+                                    (+ nested-indent 6)))
+                          (lambda-node 
+                             (new-line)
+                             (when (lambda-required node)
+                                 (princ "&req: ")
+                                 (il:for vars il:on (lambda-required node)
+                                    il:do (print-node (car vars)
+                                                     (+ nested-indent 6))
+                                          (if (null (cdr vars))
+                                              (new-line)
+                                              (new-line 6))))
+                             (when (lambda-optional node)
+                                 (princ "&opt: ")
+                                 (il:for vars il:on (lambda-optional node)
+                                    il:do (destructuring-bind (var &optional (init nil i-given)
+                                                                       (svar nil sv-given))
+                                                     (car vars)
+                                                     (cond
+                                                        ((symbolp var)
+                                                         (print-node (car vars)
+                                                                (+ nested-indent 6)))
+                                                        ((not i-given)
+                                                         (print-node var (+ nested-indent 6)))
+                                                        (t (princ "(")
+                                                           (print-node var (+ nested-indent 7))
+                                                           (new-line 7)
+                                                           (print-node init (+ nested-indent 7))
+                                                           (new-line 7)
+                                                           (when sv-given
+                                                               (print-node svar (+ nested-indent 7))
+                                                               (new-line 7))
+                                                           (princ ")"))))
+                                          (if (null (cdr vars))
+                                              (new-line)
+                                              (new-line 6))))
+                             (when (lambda-rest node)
+                                 (princ "&rest: ")
+                                 (print-node (lambda-rest node)
+                                        (+ nested-indent 7))
+                                 (new-line))
+                             (when (lambda-keyword node)
+                                 (princ "&key: ")
+                                 (il:for vars il:on (lambda-keyword node)
+                                    il:do (destructuring-bind (key var &optional (init nil 
+                                                                                           i-given)
+                                                                       (svar nil sv-given))
+                                                     (car vars)
+                                                     (format t "((~S " key)
+                                                     (new-line 8)
+                                                     (print-node var (+ nested-indent 8))
+                                                     (princ ")")
+                                                     (new-line 7)
+                                                     (print-node init (+ nested-indent 7))
+                                                     (new-line 7)
+                                                     (when sv-given
+                                                         (print-node svar (+ nested-indent 7))
+                                                         (new-line 7))
+                                                     (princ ")"))
+                                          (cond
+                                             ((null (cdr vars))
+                                              (when (lambda-allow-other-keys node)
+                                                    (princ "&allow-other-keys"))
+                                              (new-line))
+                                             (t (new-line 6)))))
+                             (when (lambda-closed-over-vars node)
+                                 (princ "Closed-over:")
+                                 (new-line 10)
+                                 (il:for vars il:on (lambda-closed-over-vars node)
+                                    il:do (print-node (car vars)
+                                                     (+ nested-indent 10))
+                                          (if (null (cdr vars))
+                                              (new-line)
+                                              (new-line 10))))
+                             (print-node (lambda-body node)
+                                    nested-indent))
+                          (literal-node (prin1 (literal-value node)))
+                          (mv-call-node 
+                             (when (caller-not-inline node)
+                                   (princ "(not inline)"))
+                             (new-line)
+                             (princ "Func: ")
+                             (print-node (mv-call-fn node)
+                                    (+ nested-indent 6))
+                             (new-line)
+                             (princ "Args: ")
+                             (il:for arg-tail il:on (mv-call-arg-exprs node)
+                                il:do (print-node (car arg-tail)
+                                                 (+ nested-indent 6))
+                                      (when (not (null (cdr arg-tail)))
+                                            (new-line 6))))
+                          (mv-prog1-node (il:for stmt il:in (mv-prog1-stmts node)
+                                            il:do (new-line)
+                                                  (print-node stmt nested-indent)))
+                          (opcodes-node (prin1 (opcodes-bytes node)))
+                          (progn-node (il:for stmt il:in (progn-stmts node)
+                                         il:do (new-line)
+                                               (print-node stmt nested-indent)))
+                          (progv-node 
+                             (new-line)
+                             (princ "Vars: ")
+                             (print-node (progv-syms-expr node)
+                                    (+ nested-indent 6))
+                             (new-line)
+                             (princ "Vals: ")
+                             (print-node (progv-vals-expr node)
+                                    (+ nested-indent 6))
+                             (new-line)
+                             (princ "Body: ")
+                             (print-node (progv-stmt node)
+                                    (+ nested-indent 6)))
+                          (return-node 
+                             (new-line)
+                             (princ "From:  ")
+                             (print-node (return-block node)
+                                    (+ nested-indent 7))
+                             (new-line)
+                             (princ "Value: ")
+                             (print-node (return-value node)
+                                    (+ nested-indent 7)))
+                          (setq-node 
+                             (new-line)
+                             (princ "Var:   ")
+                             (print-node (setq-var node)
+                                    (+ nested-indent 7))
+                             (new-line)
+                             (princ "Value: ")
+                             (print-node (setq-value node)
+                                    (+ nested-indent 7)))
+                          (tagbody-node 
+                             (print-blipper-info)
+                             (il:for segment il:in (tagbody-segments node)
+                                il:do (il:for tag il:in (segment-tags segment)
+                                             il:do (new-line)
+                                                   (princ tag))
+                                      (il:for stmt il:in (segment-stmts segment)
+                                         il:do (new-line 4)
+                                               (print-node stmt (+ nested-indent 4)))))
+                          (throw-node 
+                             (new-line)
+                             (princ "Tag:   ")
+                             (print-node (throw-tag node)
+                                    (+ nested-indent 7))
+                             (new-line)
+                             (princ "Value: ")
+                             (print-node (throw-value node)
+                                    (+ nested-indent 7)))
+                          (unwind-protect-node 
+                             (new-line)
+                             (princ "Stmt:    ")
+                             (print-node (unwind-protect-stmt node)
+                                    (+ nested-indent 9))
+                             (new-line)
+                             (princ "Cleanup: ")
+                             (print-node (unwind-protect-cleanup node)
+                                    (+ nested-indent 9)))
+                          ((or variable-struct var-ref-node) 
+                             (let ((var (if (variable-p node)
+                                            node
+                                            (var-ref-variable node))))
+                                  (format t "~S ~S ~S ~@[~*Closed-over ~]" (variable-scope var)
+                                         (variable-kind var)
+                                         (variable-name var)
+                                         (variable-closed-over var))
+                                  (when (variable-binder var)
+                                      (cond
+                                         ((gethash (variable-binder var)
+                                                 *node-hash*)
+                                          (princ "Binder: ")
+                                          (print-node (variable-binder var)
+                                                 0))
+                                         (t (new-line)
+                                            (princ "Binder: ")
+                                            (print-node (variable-binder var)
+                                                   (+ nested-indent 8))))))))))))))
+
+(defparameter context-test-form
+   '(progn (ctxt)
+           (list (if (ctxt)
+                     (ctxt))
+                 (multiple-value-list (ctxt))
+                 (multiple-value-call #'(lambda (a b)
+                                               (bar a b))
+                        (ctxt))
+                 (multiple-value-call #'(lambda (a &rest b)
+                                               (bar a b))
+                        (ctxt))
+                 (multiple-value-call #'(lambda (a b)
+                                               (bar a b))
+                        (ctxt)
+                        (ctxt))
+                 (let ((x (ctxt)))
+                      (setq x (ctxt)))
+                 ((lambda (a &optional (b (ctxt)))
+                         (ctxt))
+                  (ctxt))
+                 (multiple-value-call #'(lambda (a b)
+                                               (bar a b))
+                        ((lambda (c)
+                                (ctxt))
+                         17)))
+           (ctxt))
+   "Form for testing the alphatizer's manipulation of context information.")
+
+(defmacro ctxt ()
+   (princ-to-string *context*))
+
+
+
+(il:* il:|;;| "Arrange to use the correct compiler.")
+
+
+(il:putprops il:xclc-alpha il:filetype compile-file)
+
+
+
+(il:* il:|;;| "Arrange for the correct makefile environment")
+
+
+(il:putprops il:xclc-alpha il:makefile-environment (:readtable "XCL" :package
+                                                              (defpackage "COMPILER" (:use "LISP" 
+                                                                                           "XCL"))))
+(il:putprops il:xclc-alpha il:copyright ("Venue & Xerox Corporation" 1986 1987 1988 1990))
+(il:declare\: il:dontcopy
+  (il:filemap (nil)))
+il:stop

@@ -1,1 +1,412 @@
-(DEFINE-FILE-INFO READTABLE "INTERLISP" PACKAGE "INTERLISP")(FILECREATED " 4-Aug-2020 22:36:36" {DSK}<Users>kaplan>Local>medley3.5>lispcore>library>XCCS.;4 23636        changes to%:  (VARS XCCSCOMS)                    (FNS HEXCODE BINTOUMAPPING HEXSTRING X2U.BIN)      previous date%: "30-Jul-2020 13:55:47" {DSK}<Users>kaplan>Local>medley3.5>lispcore>library>XCCS.;1)(PRETTYCOMPRINT XCCSCOMS)(RPAQQ XCCSCOMS       ((COMS (FNS X2U.WIKI XCCS2UNICODE.PARSECELL))        (COMS (FNS X2U.BIN XCCORD GETUCODE WIN FINDUCODE))        (FNS SHOWMAPPINGS SHOWMAPPING)        (FNS COMPAREMAPPINGS COMPARECHARSETS)        (FNS MERGEMAPPINGS PRINTMERGED READMERGED)        (FNS TRANSLATECHARSET)        (FNS CONVERTU2X)        (FNS UTF8TOHEXSTRING HEXSTRING HEXCODE BINTOUMAPPING)))(DEFINEQ(X2U.WIKI  [LAMBDA (WIKIFILE)                                    (* ; "Edited 24-Jul-2020 11:11 by rmk:")    (* ;; "This scrapes the XCCS to Unicode mappings from the XCCS Wikipedia page.")    (* ;; "However, that page does not seem to correspond to the version of XCCS that Interlisp has internalized.")    (CL:WITH-OPEN-FILE (STREAM (OR WIKIFILE                        "/Users/kaplan/Desktop/Editing Xerox Character Code Standard - Wikipedia.html"                                   )                              :DIRECTION :INPUT)           (BIND CSET CSSTRING WHILE (FILEPOS "{{chset-table-header|XCCS (prefixed with "                                                     STREAM NIL NIL NIL T)              COLLECT (CL:UNLESS (AND (EQ 0 (READC STREAM))                                          (EQ 'x (READC STREAM)))                                 (HELP "no 0x"))                    [SETQ CSSTRING (OCTALSTRING (HEXCODE (CONCAT (READC STREAM)                                                                (READC STREAM]                    (CONS CSSTRING (FOR I UC FROM 0 TO 255                                      WHEN (AND (FILEPOS "{{chset-color-" STREAM NIL NIL NIL T)                                                    (SETQ UC (XCCS2UNICODE.PARSECELL STREAM)))                                      COLLECT (LIST (CONCAT CSSTRING "," (OCTALSTRING I))                                                        UC])(XCCS2UNICODE.PARSECELL  [LAMBDA (STREAM)                                      (* ; "Edited 21-Jul-2020 14:13 by rmk:")    (CL:UNLESS (STREQUAL "undef" (CONCATLIST (BIND C UNTIL (EQ '} (SETQ C (READC STREAM)))                                                COLLECT C)))        (FILEPOS "chset-" STREAM NIL NIL NIL T)        (FILEPOS "|" STREAM NIL NIL NIL T)        (CONCATLIST (BIND C UNTIL (EQ '%| (SETQ C (READC STREAM))) COLLECT C)))]))(DEFINEQ(X2U.BIN  [LAMBDA (BINFILE)                                     (* ; "Edited  4-Aug-2020 21:13 by rmk:")                                                            (* ; "Edited 21-Jul-2020 13:49 by rmk:")    (* ;; "This reads the binary file that maps from XCCS character-code ordinal positions to the corresponding Unicode code.  Result is a list of (octal-xccs-codes hex-unicodes) pairs.")    (* ;; "The file is a sequence of 2-byte UC hex codes.  Each UC code corresponds to the XC code that you would get if you took out all the undefined code-spaces in all of the preceding character sets.  The first 128-code panel of a code chart hasa 33 unused control slots at the beginning (although for charset 0 the last %"unused%" control slot is the ascii space, which is not represented in the file).  The last cell of each 128-code panel is also not used.")    (* ;; "So, the UC code at the first ordinal position in the file corresponds to XC code 33 (octal 41), then we run up to 126, skip 127, then skip another 33 to start the second 128-code panel.  And we skip the last cell of that before we move on to the next character set.")    (* ;; "But also, the next character set after charset 0 is charset 41 octal (33).  So we have to skip 256*32 positions.")    (* ;; "Finally, there are unused cells in the middle of some panels.  Those are represented in the file by the sequence %"FFFD%", which maps to the unicode black-box with a ?.  There is no need to include those.")    (CL:WITH-OPEN-FILE     (STREAM (OR BINFILE (PACK* (CAR UNICODEDIRECTORIES)                                '/XCCStoUni))            :DIRECTION :INPUT)     (* ;; "XC is the XC code corresponding to the current UC hex string.  I keeps track of the number of hex strings we have read within this panel, before we have to increment by 34")     (BIND UC CSSTRING [CHARSETFIX _ '(("57" "341" Hebrew)                                           ("56" "340" Arabic]            (CHARSET _ 0)            (LASTFP _ 0) UNTIL (EOFP STREAM)        COLLECT (SETQ CSSTRING (OCTALSTRING CHARSET))              (CL:WHEN (SASSOC CSSTRING CHARSETFIX)                  (SETQ CSSTRING (CADR (SASSOC CSSTRING CHARSETFIX))))              (CONS CSSTRING (PROG1 [NCONC [FOR XC UC FROM 33 TO 126                                              UNTIL (EOFP STREAM)                                              UNLESS (MEMBER (SETQ UC (HEXSTRING (WIN STREAM)                                                                                 4))                                                                '("FFFD" "FFFF"))                                              COLLECT (PROG1 (LIST (CONCAT CSSTRING ","                                                                              (OCTALSTRING XC))                                                                       UC LASTFP)                                                              (SETQ LASTFP (GETFILEPTR STREAM)))]                                           (FOR XC UC FROM (PLUS 128 33)                                              TO (PLUS 128 126) UNTIL (EOFP STREAM)                                              UNLESS (MEMBER (SETQ UC (HEXSTRING (WIN STREAM)                                                                                 4))                                                                '("FFFD" "FFFF"))                                              COLLECT (PROG1 (LIST (CONCAT CSSTRING ","                                                                              (OCTALSTRING XC))                                                                       UC LASTFP)                                                              (SETQ LASTFP (GETFILEPTR STREAM)))]                                 (ADD CHARSET (CL:IF (EQ CHARSET 0)                                                      33                                                      1)))])(XCCORD  [LAMBDA (XCODE)                                       (* ; "Edited 17-Jul-2020 08:11 by rmk:")    (* ;; "Returns the ordinal position of XCODE in the Xerox Character Code standard, removing all not-used slots.")    (* ;; "The first 32 of every 256 block is unused, and 34 are unused int he middle of the block (127 to 160)")    (* ;; "Also, character sets 1-32 do not exist")    (CL:UNLESS (AND (SMALLP XCODE)                    (ILESSP XCODE (CHARCODE 0))                    (IGREATERP XCODE (CHARCODE 9)))        (SETQ XCODE (CHARCODE.DECODE XCODE)))    (LET ((CHARSET (IQUOTIENT XCODE 256))          (PERCHARSET (- 256 (+ 32 34)))          (CHARSETORD 0)          (CHARINSET (IREMAINDER XCODE 256)))         (CL:UNLESS (EQ CHARSET 0)                           (* ; "33 (41Q) -> 1")             (SETQ CHARSETORD (- CHARSET 32)))         (CL:WHEN (ILESSP CHARSETORD 0)                (ERROR "UNUSED CHARACTER SET" CHARSET))         (CL:WHEN [OR (ILESSP CHARINSET 32)                      (AND (IGEQ CHARINSET 127)                           (ILEQ CHARINSET (PLUS 128 33]                (ERROR "UNUSED CHARACTER" XCODE))         (SETQ PRECHARSET (TIMES PERCHARSET CHARSETORD))         (IPLUS PRECHARSET (- CHARINSET (IF (ILEQ CHARINSET 127)                                            THEN 32                                          ELSE (PLUS 32 34])(GETUCODE  [LAMBDA (XCODE STREAM)                                (* ; "Edited 22-Jul-2020 12:07 by rmk:")                                                            (* ; "Edited 16-Jul-2020 23:37 by rmk:")    (LET ((XCODE (OR (SMALLP XCODE)                     (CHARCODE.DECODE XCODE)))          SKIP UCODE)         [SETQ SKIP (TIMES 33 (ADD1 (IQUOTIENT XCODE 128]         (SETFILEPTR STREAM (TIMES 2 (IDIFFERENCE XCODE SKIP)))         (SETQ UCODE (LOGOR (LLSH (BIN STREAM)                                  8)                            (BIN STREAM)))         (HEXSTRING UCODE])(WIN  [LAMBDA (STREAM)                                      (* ; "Edited 16-Jul-2020 23:22 by rmk:")    (LOGOR (LLSH (BIN STREAM)                 8)           (BIN STREAM])(FINDUCODE  [LAMBDA (UC BINFILE)                                  (* ; "Edited 22-Jul-2020 17:13 by rmk:")    (CL:WITH-OPEN-FILE (STREAM (OR BINFILE "{DSK}<Users>kaplan>Local>dict>unicode>xerox>XCCStoUni")                              :DIRECTION :INPUT)           (FILEPOS (CONCAT (CHARACTER (LRSH (HEXCODE UC)                                             8))                           (CHARACTER (LOGAND (HEXCODE UC)                                             255)))                  STREAM]))(DEFINEQ(SHOWMAPPINGS  [LAMBDA (MAPPINGS)                                    (* ; "Edited 24-Jul-2020 11:06 by rmk:")    (FOR M IN MAPPINGS DO (SHOWMAPPING MAPPINGS (CAR M))                                     (TERPRI T])(SHOWMAPPING  [LAMBDA (MAPPINGS CHARSET)                            (* ; "Edited 24-Jul-2020 11:08 by rmk:")    (CL:WHEN (STRPOS "," CHARSET)        (SETQ CHARSET (SUBSTRING CHARSET 1 (STRPOS "," CHARSET))))    (PRINTOUT T "Character set " (CAR M)           T)    (FOR Y IN (CDR (SASSOC CHARSET MAPPINGS)) DO (PRINTOUT T (CAR Y)                                                                    8                                                                    (CHARACTER (CHARCODE.DECODE                                                                                (CAR Y)))                                                                    "   "                                                                    (CADR Y))                                                            (CL:WHEN (CDDR Y)                                                                (PRINTOUT T "   " (CADDR Y)))                                                            (TERPRI T]))(DEFINEQ(COMPAREMAPPINGS  [LAMBDA (MAP1 MAP2)                                   (* ; "Edited 24-Jul-2020 13:39 by rmk:")    (LET [(CHARSETS1 (FOR M1 IN MAP1 COLLECT (CAR M1)))          (CHARSETS2 (FOR M2 IN MAP2 COLLECT (CAR M2]         (LIST [FOR COMMON IN (INTERSECTION CHARSETS1 CHARSETS2)                  COLLECT (CONS COMMON (COMPARECHARSETS (SASSOC COMMON MAP1)                                                  (SASSOC COMMON MAP2]               (LDIFFERENCE CHARSETS1 CHARSETS2)               (LDIFFERENCE CHARSETS2 CHARSETS1])(COMPARECHARSETS  [LAMBDA (CS1 CS2)                                     (* ; "Edited 24-Jul-2020 20:21 by rmk:")    (CL:UNLESS (STREQUAL (CAR CS1)                      (CAR CS2))           (ERROR "CHARSETS DON'T CORRESPONG"))    (FOR XC U1 U2 IN [SORT (UNION (FOR M1 IN (CDR CS1) COLLECT (CAR M1))                                          (FOR M2 IN (CDR CS2) COLLECT (CAR M2)))                                   (FUNCTION (LAMBDA (X1 X2)                                               (ILEQ (CHARCODE.DECODE X1)                                                     (CHARCODE.DECODE X2]       EACHTIME [SETQ U1 (CADR (SASSOC XC (CDR CS1]             [SETQ U2 (CADR (SASSOC XC (CDR CS2] WHEN (IF (AND U1 U2)                                                              THEN (NOT (IEQP (CHARCODE.DECODE                                                                                   U1)                                                                                  (CHARCODE.DECODE                                                                                   U2)))                                                            ELSE (OR U1 U2))       COLLECT (LIST XC U1 U2 (CHARACTER (CHARCODE.DECODE XC]))(DEFINEQ(MERGEMAPPINGS  [LAMBDA (MAP1 MAP2)                                   (* ; "Edited 25-Jul-2020 15:36 by rmk:")    (FOR CSET CS1 CS2 IN [SORT (UNION (FOR M1 IN MAP1 COLLECT (CAR M1))                                              (FOR M2 IN MAP2 COLLECT (CAR M2)))                                       (FUNCTION (LAMBDA (CS1 CS2)                                                   (ILEQ (CL:PARSE-INTEGER CS1 :RADIX 8)                                                         (CL:PARSE-INTEGER CS2 :RADIX 8]       COLLECT (SETQ CS1 (SASSOC CSET MAP1))             (SETQ CS2 (SASSOC CSET MAP2))             (CONS CSET (FOR XC UCODE1 UCODE2 UCHAR1 UCHAR2                           IN [SORT (UNION (FOR M1 IN (CDR CS1) COLLECT (CAR M1))                                               (FOR M2 IN (CDR CS2) COLLECT (CAR M2)))                                        (FUNCTION (LAMBDA (XC1 XC2)                                                    (ILEQ (CHARCODE.DECODE XC1)                                                          (CHARCODE.DECODE XC2]                           COLLECT [SETQ UCODE1 (CADR (SASSOC XC (CDR CS1]                                 [SETQ UCHAR1 (CL:WHEN UCODE1                                                  (CHARACTER (CHARCODE.DECODE UCODE1)))]                                 [SETQ UCODE2 (CADR (SASSOC XC (CDR CS2]                                 [SETQ UCHAR2 (CL:WHEN UCODE2                                                  (CHARACTER (CHARCODE.DECODE UCODE2)))]                                 (CONS XC (IF UCHAR1                                              THEN (IF (AND UCODE2 (NEQ UCHAR1 UCHAR2))                                                           THEN (LIST UCHAR1 UCHAR2 UCODE1 UCODE2                                                                          )                                                         ELSE (LIST UCHAR1 UCODE1))                                            ELSEIF UCHAR2                                              THEN (LIST UCHAR2 UCODE2)                                            ELSE (HELP "XC WITHOUT UC'S" XC])(PRINTMERGED  [LAMBDA (MERGED CHARSETS FILE)                        (* ; "Edited 25-Jul-2020 16:08 by rmk:")    [SELECTQ CHARSETS        (NOJIS (SETQ MERGED (FOR M IN MERGED UNLESS (AND (IGEQ (CL:PARSE-INTEGER                                                                            (CAR M)                                                                            :RADIX 8)                                                                           (CL:PARSE-INTEGER "60"                                                                                   :RADIX 8))                                                                     (ILESSP (CL:PARSE-INTEGER                                                                              (CAR M)                                                                              :RADIX 8)                                                                            (CL:PARSE-INTEGER "340"                                                                                    :RADIX 8)))                               COLLECT M))               (CL:UNLESS FILE                   (SETQ FILE 'MERGED-NOJIS)))        ((ALL NIL)              (CL:UNLESS FILE                 (SETQ FILE 'MERGED-ALL)))        (PROGN (SETQ CHARSETS (MKLIST CHARSETS))               [SETQ MERGED (FOR CS IN CHARSETS COLLECT (OR (SASSOC CS MERGED)                                                                        (ERROR CS "does not exist"]               (CL:UNLESS FILE                   (SETQ FILE (PACK* FILE "-" (CAR CHARSETS))))]    (SETQ FILE (PACKFILENAME 'BODY FILE 'EXTENSION 'TXT))    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :OUTPUT :EXTERNAL-FORMAT :UTF8 :IF-EXISTS :NEW-VERSION                              )           (PRINTOUT STREAM "(")           (FOR CSET IN MERGED DO (PRINTOUT STREAM "(" .P2 (CAR CSET)                                                     T)                                             (FOR MAP IN (CDR CSET)                                                DO (PRINTOUT STREAM 3 .P2 MAP T))                                             (PRINTOUT STREAM ")" T))           (PRINTOUT STREAM ")")           (CLOSEF STREAM])(READMERGED  [LAMBDA (FILE)                                        (* ; "Edited 30-Jul-2020 13:40 by rmk:")    (* ;; "Reads UTF8 without translation to XCCS")    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :INPUT :EXTERNAL-FORMAT :UTF8-RAW)                                                             (* (READC STREAM) (BIND SET UNTIL                                                           (EOFP STREAM) COLLECT                                                           (SETQ SET (READ STREAM))                                                           (PRINTOUT T (CAR) " ")))           (READ STREAM]))(DEFINEQ(TRANSLATECHARSET  [LAMBDA (MAPPINGS FROMCS TOCS)                        (* ; "Edited 26-Jul-2020 19:35 by rmk:")    (CL:WHEN (SMALLP FROMCS)        (SETQ FROMCS (CONCAT FROMCS)))    (CL:WHEN (SMALLP TOCS)        (SETQ TOCS (CONCAT TOCS)))    (LET ((CSETMAP (SASSOC FROMCS MAPPINGS))          (NEWCSETMAP))         (CL:UNLESS CSETMAP (ERROR "FROM CHARACTER SET NOT FOUND" FROMCS))         (SETQ NEWCSMAP (CONS TOCS (FOR CM IN (CDR CSETMAP)                                      COLLECT (CONS [CONCAT TOCS                                                               (OR (SUBSTRING (CAR CM)                                                                          (STRPOS "," (CAR CM)))                                                                   (HELP "INVALID CHARCODE"                                                                         (CAR CM]                                                        (CDR CM]))(DEFINEQ(CONVERTU2X  [LAMBDA NIL                                           (* ; "Edited 27-Jul-2020 14:40 by rmk:")    (FOR X IN CBUNICODETOXEROXRENDERING COLLECT (LIST [CHARCODESTRING                                                                   (OR (FIXP (CADR X))                                                                       (CHARCODE.DECODE (CADR X]                                                                  [CHARACTER                                                                   (OR (FIXP (CADR X))                                                                       (CHARCODE.DECODE (CADR X]                                                                  (HEXSTRING (CAR X)                                                                         4]))(DEFINEQ(UTF8TOHEXSTRING  [LAMBDA (UTF8STRING)                                  (* ; "Edited 28-Jul-2020 17:32 by rmk:")    (* ;; "Converts from a UTF8 encoding of a number to the hex string that represents that number")    (LET (BYTE1 BYTE1 BYTE2 BYTE3 BYTE4)         (SETQ BYTE1 (HEXCODE (SUBSTRING UTF8STRING 1 2)))         (* ;; "Distinguish on header byte, extract number of bytes so we don't read too far")         (HEXSTRING (IF (ILESSP BYTE1 128)                        THEN                               (* ;; "Test first:  Ascii is the common case")                              BYTE1                      ELSEIF (IGEQ BYTE1 (LLSH 15 4))                        THEN                             (* ; "4 bytes")                              (SETQ BYTE2 (HEXCODE (SUBSTRING UTF8STRING 3 4)))                              (CL:WHEN (ILESSP BYTE2 128)                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                              (SETQ BYTE3 (HEXCODE (SUBSTRING UTF8STRING 5 6)))                              (CL:WHEN (ILESSP BYTE3 128)                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))                              (SETQ BYTE4 (HEXCODE (SUBSTRING UTF8STRING 7 8)))                              (CL:WHEN (ILESSP BYTE4 128)                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3 BYTE4)))                              (LOGOR (LLSH (LOADBYTE BYTE1 0 3)                                           18)                                     (LLSH (LOADBYTE BYTE2 0 6)                                           12)                                     (LLSH (LOADBYTE BYTE3 0 6)                                           6)                                     (LOADBYTE BYTE4 0 6))                      ELSEIF (IGEQ BYTE1 (LLSH 7 5))                        THEN                             (* ; "3 bytes")                              (SETQ BYTE2 (HEXCODE (SUBSTRING UTF8STRING 3 4)))                              (CL:WHEN (ILESSP BYTE2 128)                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                              (SETQ BYTE3 (HEXCODE (SUBSTRING UTF8STRING 5 6)))                              (CL:WHEN (ILESSP BYTE3 128)                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))                              (LOGOR (LLSH (LOADBYTE BYTE1 0 4)                                           12)                                     (LLSH (LOADBYTE BYTE2 0 6)                                           6)                                     (LOADBYTE BYTE3 0 6))                      ELSE                               (* ; "Must be 2 bytes")                            (SETQ BYTE2 (HEXCODE (SUBSTRING UTF8STRING 3 4)))                            (CL:WHEN (ILESSP BYTE2 128)                                (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                            (LOGOR (LLSH (LOADBYTE BYTE1 0 5)                                         6)                                   (LOADBYTE BYTE2 0 6])(HEXSTRING  [LAMBDA (N)                                           (* ; "Edited  4-Aug-2020 21:19 by rmk:")    (CL:FORMAT NIL "~4,'0X" N])(HEXCODE  [LAMBDA (HEXSTRING)                               (* ; "Edited  4-Aug-2020 21:28 by rmk:")    (CL:PARSE-INTEGER HEXSTRING :RADIX 16])(BINTOUMAPPING  [LAMBDA (BINLIST)                                     (* ; "Edited  4-Aug-2020 21:28 by rmk:")    (FOR CS IN BINLIST JOIN (FOR CM IN (CDR CS)                                           COLLECT (LIST (CHARCODE.DECODE (CAR CM))                                                             (HEXCODE (CADR CM]))(DECLARE%: DONTCOPY  (FILEMAP (NIL (801 2795 (X2U.WIKI 811 . 2310) (XCCS2UNICODE.PARSECELL 2312 . 2793)) (2796 9601 (X2U.BIN 2806 . 6854) (XCCORD 6856 . 8283) (GETUCODE 8285 . 8894) (WIN 8896 . 9084) (FINDUCODE 9086 . 9599)) (9602 10870 (SHOWMAPPINGS 9612 . 9856) (SHOWMAPPING 9858 . 10868)) (10871 12765 (COMPAREMAPPINGS 10881 . 11468) (COMPARECHARSETS 11470 . 12763)) (12766 17927 (MERGEMAPPINGS 12776 . 15003) (PRINTMERGED 15005 . 17277) (READMERGED 17279 . 17925)) (17928 18901 (TRANSLATECHARSET 17938 . 18899)) (18902 19723 (CONVERTU2X 18912 . 19721)) (19724 23613 (UTF8TOHEXSTRING 19734 . 22929) (HEXSTRING 22931 . 23082) (HEXCODE 23084 . 23245) (BINTOUMAPPING 23247 . 23611)))))STOP
+(DEFINE-FILE-INFO READTABLE "INTERLISP" PACKAGE "INTERLISP")
+(FILECREATED " 4-Aug-2020 22:36:36" {DSK}<Users>kaplan>Local>medley3.5>lispcore>library>XCCS.;4 23636  
+
+      changes to%:  (VARS XCCSCOMS)
+                    (FNS HEXCODE BINTOUMAPPING HEXSTRING X2U.BIN)
+
+      previous date%: "30-Jul-2020 13:55:47" 
+{DSK}<Users>kaplan>Local>medley3.5>lispcore>library>XCCS.;1)
+
+
+(PRETTYCOMPRINT XCCSCOMS)
+
+(RPAQQ XCCSCOMS
+       ((COMS (FNS X2U.WIKI XCCS2UNICODE.PARSECELL))
+        (COMS (FNS X2U.BIN XCCORD GETUCODE WIN FINDUCODE))
+        (FNS SHOWMAPPINGS SHOWMAPPING)
+        (FNS COMPAREMAPPINGS COMPARECHARSETS)
+        (FNS MERGEMAPPINGS PRINTMERGED READMERGED)
+        (FNS TRANSLATECHARSET)
+        (FNS CONVERTU2X)
+        (FNS UTF8TOHEXSTRING HEXSTRING HEXCODE BINTOUMAPPING)))
+(DEFINEQ
+
+(X2U.WIKI
+  [LAMBDA (WIKIFILE)                                    (* ; "Edited 24-Jul-2020 11:11 by rmk:")
+
+    (* ;; "This scrapes the XCCS to Unicode mappings from the XCCS Wikipedia page.")
+
+    (* ;; "However, that page does not seem to correspond to the version of XCCS that Interlisp has internalized.")
+
+    (CL:WITH-OPEN-FILE (STREAM (OR WIKIFILE 
+                       "/Users/kaplan/Desktop/Editing Xerox Character Code Standard - Wikipedia.html"
+                                   )
+                              :DIRECTION :INPUT)
+           (BIND CSET CSSTRING WHILE (FILEPOS "{{chset-table-header|XCCS (prefixed with " 
+                                                    STREAM NIL NIL NIL T)
+              COLLECT (CL:UNLESS (AND (EQ 0 (READC STREAM))
+                                          (EQ 'x (READC STREAM)))
+                                 (HELP "no 0x"))
+                    [SETQ CSSTRING (OCTALSTRING (HEXCODE (CONCAT (READC STREAM)
+                                                                (READC STREAM]
+                    (CONS CSSTRING (FOR I UC FROM 0 TO 255
+                                      WHEN (AND (FILEPOS "{{chset-color-" STREAM NIL NIL NIL T)
+                                                    (SETQ UC (XCCS2UNICODE.PARSECELL STREAM)))
+                                      COLLECT (LIST (CONCAT CSSTRING "," (OCTALSTRING I))
+                                                        UC])
+
+(XCCS2UNICODE.PARSECELL
+  [LAMBDA (STREAM)                                      (* ; "Edited 21-Jul-2020 14:13 by rmk:")
+    (CL:UNLESS (STREQUAL "undef" (CONCATLIST (BIND C UNTIL (EQ '} (SETQ C (READC STREAM)))
+                                                COLLECT C)))
+        (FILEPOS "chset-" STREAM NIL NIL NIL T)
+        (FILEPOS "|" STREAM NIL NIL NIL T)
+        (CONCATLIST (BIND C UNTIL (EQ '%| (SETQ C (READC STREAM))) COLLECT C)))])
+)
+(DEFINEQ
+
+(X2U.BIN
+  [LAMBDA (BINFILE)                                     (* ; "Edited  4-Aug-2020 21:13 by rmk:")
+                                                            (* ; "Edited 21-Jul-2020 13:49 by rmk:")
+
+    (* ;; "This reads the binary file that maps from XCCS character-code ordinal positions to the corresponding Unicode code.  Result is a list of (octal-xccs-codes hex-unicodes) pairs.")
+
+    (* ;; "The file is a sequence of 2-byte UC hex codes.  Each UC code corresponds to the XC code that you would get if you took out all the undefined code-spaces in all of the preceding character sets.  The first 128-code panel of a code chart hasa 33 unused control slots at the beginning (although for charset 0 the last %"unused%" control slot is the ascii space, which is not represented in the file).  The last cell of each 128-code panel is also not used.")
+
+    (* ;; "So, the UC code at the first ordinal position in the file corresponds to XC code 33 (octal 41), then we run up to 126, skip 127, then skip another 33 to start the second 128-code panel.  And we skip the last cell of that before we move on to the next character set.")
+
+    (* ;; "But also, the next character set after charset 0 is charset 41 octal (33).  So we have to skip 256*32 positions.")
+
+    (* ;; "Finally, there are unused cells in the middle of some panels.  Those are represented in the file by the sequence %"FFFD%", which maps to the unicode black-box with a ?.  There is no need to include those.")
+
+    (CL:WITH-OPEN-FILE
+     (STREAM (OR BINFILE (PACK* (CAR UNICODEDIRECTORIES)
+                                '/XCCStoUni))
+            :DIRECTION :INPUT)
+
+     (* ;; "XC is the XC code corresponding to the current UC hex string.  I keeps track of the number of hex strings we have read within this panel, before we have to increment by 34")
+
+     (BIND UC CSSTRING [CHARSETFIX _ '(("57" "341" Hebrew)
+                                           ("56" "340" Arabic]
+            (CHARSET _ 0)
+            (LASTFP _ 0) UNTIL (EOFP STREAM)
+        COLLECT (SETQ CSSTRING (OCTALSTRING CHARSET))
+              (CL:WHEN (SASSOC CSSTRING CHARSETFIX)
+                  (SETQ CSSTRING (CADR (SASSOC CSSTRING CHARSETFIX))))
+              (CONS CSSTRING (PROG1 [NCONC [FOR XC UC FROM 33 TO 126
+                                              UNTIL (EOFP STREAM)
+                                              UNLESS (MEMBER (SETQ UC (HEXSTRING (WIN STREAM)
+                                                                                 4))
+                                                                '("FFFD" "FFFF"))
+                                              COLLECT (PROG1 (LIST (CONCAT CSSTRING ","
+                                                                              (OCTALSTRING XC))
+                                                                       UC LASTFP)
+                                                              (SETQ LASTFP (GETFILEPTR STREAM)))]
+                                           (FOR XC UC FROM (PLUS 128 33)
+                                              TO (PLUS 128 126) UNTIL (EOFP STREAM)
+                                              UNLESS (MEMBER (SETQ UC (HEXSTRING (WIN STREAM)
+                                                                                 4))
+                                                                '("FFFD" "FFFF"))
+                                              COLLECT (PROG1 (LIST (CONCAT CSSTRING ","
+                                                                              (OCTALSTRING XC))
+                                                                       UC LASTFP)
+                                                              (SETQ LASTFP (GETFILEPTR STREAM)))]
+                                 (ADD CHARSET (CL:IF (EQ CHARSET 0)
+                                                      33
+                                                      1)))])
+
+(XCCORD
+  [LAMBDA (XCODE)                                       (* ; "Edited 17-Jul-2020 08:11 by rmk:")
+
+    (* ;; "Returns the ordinal position of XCODE in the Xerox Character Code standard, removing all not-used slots.")
+
+    (* ;; "The first 32 of every 256 block is unused, and 34 are unused int he middle of the block (127 to 160)")
+
+    (* ;; "Also, character sets 1-32 do not exist")
+
+    (CL:UNLESS (AND (SMALLP XCODE)
+                    (ILESSP XCODE (CHARCODE 0))
+                    (IGREATERP XCODE (CHARCODE 9)))
+        (SETQ XCODE (CHARCODE.DECODE XCODE)))
+    (LET ((CHARSET (IQUOTIENT XCODE 256))
+          (PERCHARSET (- 256 (+ 32 34)))
+          (CHARSETORD 0)
+          (CHARINSET (IREMAINDER XCODE 256)))
+         (CL:UNLESS (EQ CHARSET 0)                           (* ; "33 (41Q) -> 1")
+             (SETQ CHARSETORD (- CHARSET 32)))
+         (CL:WHEN (ILESSP CHARSETORD 0)
+                (ERROR "UNUSED CHARACTER SET" CHARSET))
+         (CL:WHEN [OR (ILESSP CHARINSET 32)
+                      (AND (IGEQ CHARINSET 127)
+                           (ILEQ CHARINSET (PLUS 128 33]
+                (ERROR "UNUSED CHARACTER" XCODE))
+         (SETQ PRECHARSET (TIMES PERCHARSET CHARSETORD))
+         (IPLUS PRECHARSET (- CHARINSET (IF (ILEQ CHARINSET 127)
+                                            THEN 32
+                                          ELSE (PLUS 32 34])
+
+(GETUCODE
+  [LAMBDA (XCODE STREAM)                                (* ; "Edited 22-Jul-2020 12:07 by rmk:")
+                                                            (* ; "Edited 16-Jul-2020 23:37 by rmk:")
+    (LET ((XCODE (OR (SMALLP XCODE)
+                     (CHARCODE.DECODE XCODE)))
+          SKIP UCODE)
+         [SETQ SKIP (TIMES 33 (ADD1 (IQUOTIENT XCODE 128]
+         (SETFILEPTR STREAM (TIMES 2 (IDIFFERENCE XCODE SKIP)))
+         (SETQ UCODE (LOGOR (LLSH (BIN STREAM)
+                                  8)
+                            (BIN STREAM)))
+         (HEXSTRING UCODE])
+
+(WIN
+  [LAMBDA (STREAM)                                      (* ; "Edited 16-Jul-2020 23:22 by rmk:")
+    (LOGOR (LLSH (BIN STREAM)
+                 8)
+           (BIN STREAM])
+
+(FINDUCODE
+  [LAMBDA (UC BINFILE)                                  (* ; "Edited 22-Jul-2020 17:13 by rmk:")
+    (CL:WITH-OPEN-FILE (STREAM (OR BINFILE "{DSK}<Users>kaplan>Local>dict>unicode>xerox>XCCStoUni")
+                              :DIRECTION :INPUT)
+           (FILEPOS (CONCAT (CHARACTER (LRSH (HEXCODE UC)
+                                             8))
+                           (CHARACTER (LOGAND (HEXCODE UC)
+                                             255)))
+                  STREAM])
+)
+(DEFINEQ
+
+(SHOWMAPPINGS
+  [LAMBDA (MAPPINGS)                                    (* ; "Edited 24-Jul-2020 11:06 by rmk:")
+    (FOR M IN MAPPINGS DO (SHOWMAPPING MAPPINGS (CAR M))
+                                     (TERPRI T])
+
+(SHOWMAPPING
+  [LAMBDA (MAPPINGS CHARSET)                            (* ; "Edited 24-Jul-2020 11:08 by rmk:")
+    (CL:WHEN (STRPOS "," CHARSET)
+        (SETQ CHARSET (SUBSTRING CHARSET 1 (STRPOS "," CHARSET))))
+    (PRINTOUT T "Character set " (CAR M)
+           T)
+    (FOR Y IN (CDR (SASSOC CHARSET MAPPINGS)) DO (PRINTOUT T (CAR Y)
+                                                                    8
+                                                                    (CHARACTER (CHARCODE.DECODE
+                                                                                (CAR Y)))
+                                                                    "   "
+                                                                    (CADR Y))
+                                                            (CL:WHEN (CDDR Y)
+                                                                (PRINTOUT T "   " (CADDR Y)))
+                                                            (TERPRI T])
+)
+(DEFINEQ
+
+(COMPAREMAPPINGS
+  [LAMBDA (MAP1 MAP2)                                   (* ; "Edited 24-Jul-2020 13:39 by rmk:")
+    (LET [(CHARSETS1 (FOR M1 IN MAP1 COLLECT (CAR M1)))
+          (CHARSETS2 (FOR M2 IN MAP2 COLLECT (CAR M2]
+         (LIST [FOR COMMON IN (INTERSECTION CHARSETS1 CHARSETS2)
+                  COLLECT (CONS COMMON (COMPARECHARSETS (SASSOC COMMON MAP1)
+                                                  (SASSOC COMMON MAP2]
+               (LDIFFERENCE CHARSETS1 CHARSETS2)
+               (LDIFFERENCE CHARSETS2 CHARSETS1])
+
+(COMPARECHARSETS
+  [LAMBDA (CS1 CS2)                                     (* ; "Edited 24-Jul-2020 20:21 by rmk:")
+    (CL:UNLESS (STREQUAL (CAR CS1)
+                      (CAR CS2))
+           (ERROR "CHARSETS DON'T CORRESPONG"))
+    (FOR XC U1 U2 IN [SORT (UNION (FOR M1 IN (CDR CS1) COLLECT (CAR M1))
+                                          (FOR M2 IN (CDR CS2) COLLECT (CAR M2)))
+                                   (FUNCTION (LAMBDA (X1 X2)
+                                               (ILEQ (CHARCODE.DECODE X1)
+                                                     (CHARCODE.DECODE X2]
+       EACHTIME [SETQ U1 (CADR (SASSOC XC (CDR CS1]
+             [SETQ U2 (CADR (SASSOC XC (CDR CS2] WHEN (IF (AND U1 U2)
+                                                              THEN (NOT (IEQP (CHARCODE.DECODE
+                                                                                   U1)
+                                                                                  (CHARCODE.DECODE
+                                                                                   U2)))
+                                                            ELSE (OR U1 U2))
+       COLLECT (LIST XC U1 U2 (CHARACTER (CHARCODE.DECODE XC])
+)
+(DEFINEQ
+
+(MERGEMAPPINGS
+  [LAMBDA (MAP1 MAP2)                                   (* ; "Edited 25-Jul-2020 15:36 by rmk:")
+    (FOR CSET CS1 CS2 IN [SORT (UNION (FOR M1 IN MAP1 COLLECT (CAR M1))
+                                              (FOR M2 IN MAP2 COLLECT (CAR M2)))
+                                       (FUNCTION (LAMBDA (CS1 CS2)
+                                                   (ILEQ (CL:PARSE-INTEGER CS1 :RADIX 8)
+                                                         (CL:PARSE-INTEGER CS2 :RADIX 8]
+       COLLECT (SETQ CS1 (SASSOC CSET MAP1))
+             (SETQ CS2 (SASSOC CSET MAP2))
+             (CONS CSET (FOR XC UCODE1 UCODE2 UCHAR1 UCHAR2
+                           IN [SORT (UNION (FOR M1 IN (CDR CS1) COLLECT (CAR M1))
+                                               (FOR M2 IN (CDR CS2) COLLECT (CAR M2)))
+                                        (FUNCTION (LAMBDA (XC1 XC2)
+                                                    (ILEQ (CHARCODE.DECODE XC1)
+                                                          (CHARCODE.DECODE XC2]
+                           COLLECT [SETQ UCODE1 (CADR (SASSOC XC (CDR CS1]
+                                 [SETQ UCHAR1 (CL:WHEN UCODE1
+                                                  (CHARACTER (CHARCODE.DECODE UCODE1)))]
+                                 [SETQ UCODE2 (CADR (SASSOC XC (CDR CS2]
+                                 [SETQ UCHAR2 (CL:WHEN UCODE2
+                                                  (CHARACTER (CHARCODE.DECODE UCODE2)))]
+                                 (CONS XC (IF UCHAR1
+                                              THEN (IF (AND UCODE2 (NEQ UCHAR1 UCHAR2))
+                                                           THEN (LIST UCHAR1 UCHAR2 UCODE1 UCODE2
+                                                                          )
+                                                         ELSE (LIST UCHAR1 UCODE1))
+                                            ELSEIF UCHAR2
+                                              THEN (LIST UCHAR2 UCODE2)
+                                            ELSE (HELP "XC WITHOUT UC'S" XC])
+
+(PRINTMERGED
+  [LAMBDA (MERGED CHARSETS FILE)                        (* ; "Edited 25-Jul-2020 16:08 by rmk:")
+    [SELECTQ CHARSETS
+        (NOJIS (SETQ MERGED (FOR M IN MERGED UNLESS (AND (IGEQ (CL:PARSE-INTEGER
+                                                                            (CAR M)
+                                                                            :RADIX 8)
+                                                                           (CL:PARSE-INTEGER "60" 
+                                                                                  :RADIX 8))
+                                                                     (ILESSP (CL:PARSE-INTEGER
+                                                                              (CAR M)
+                                                                              :RADIX 8)
+                                                                            (CL:PARSE-INTEGER "340" 
+                                                                                   :RADIX 8)))
+                               COLLECT M))
+               (CL:UNLESS FILE
+                   (SETQ FILE 'MERGED-NOJIS)))
+        ((ALL NIL) 
+             (CL:UNLESS FILE
+                 (SETQ FILE 'MERGED-ALL)))
+        (PROGN (SETQ CHARSETS (MKLIST CHARSETS))
+               [SETQ MERGED (FOR CS IN CHARSETS COLLECT (OR (SASSOC CS MERGED)
+                                                                        (ERROR CS "does not exist"]
+               (CL:UNLESS FILE
+                   (SETQ FILE (PACK* FILE "-" (CAR CHARSETS))))]
+    (SETQ FILE (PACKFILENAME 'BODY FILE 'EXTENSION 'TXT))
+    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :OUTPUT :EXTERNAL-FORMAT :UTF8 :IF-EXISTS :NEW-VERSION
+                              )
+           (PRINTOUT STREAM "(")
+           (FOR CSET IN MERGED DO (PRINTOUT STREAM "(" .P2 (CAR CSET)
+                                                     T)
+                                             (FOR MAP IN (CDR CSET)
+                                                DO (PRINTOUT STREAM 3 .P2 MAP T))
+                                             (PRINTOUT STREAM ")" T))
+           (PRINTOUT STREAM ")")
+           (CLOSEF STREAM])
+
+(READMERGED
+  [LAMBDA (FILE)                                        (* ; "Edited 30-Jul-2020 13:40 by rmk:")
+
+    (* ;; "Reads UTF8 without translation to XCCS")
+
+    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :INPUT :EXTERNAL-FORMAT :UTF8-RAW)
+                                                             (* (READC STREAM) (BIND SET UNTIL
+                                                           (EOFP STREAM) COLLECT
+                                                           (SETQ SET (READ STREAM))
+                                                           (PRINTOUT T (CAR) " ")))
+           (READ STREAM])
+)
+(DEFINEQ
+
+(TRANSLATECHARSET
+  [LAMBDA (MAPPINGS FROMCS TOCS)                        (* ; "Edited 26-Jul-2020 19:35 by rmk:")
+    (CL:WHEN (SMALLP FROMCS)
+        (SETQ FROMCS (CONCAT FROMCS)))
+    (CL:WHEN (SMALLP TOCS)
+        (SETQ TOCS (CONCAT TOCS)))
+    (LET ((CSETMAP (SASSOC FROMCS MAPPINGS))
+          (NEWCSETMAP))
+         (CL:UNLESS CSETMAP (ERROR "FROM CHARACTER SET NOT FOUND" FROMCS))
+         (SETQ NEWCSMAP (CONS TOCS (FOR CM IN (CDR CSETMAP)
+                                      COLLECT (CONS [CONCAT TOCS
+                                                               (OR (SUBSTRING (CAR CM)
+                                                                          (STRPOS "," (CAR CM)))
+                                                                   (HELP "INVALID CHARCODE"
+                                                                         (CAR CM]
+                                                        (CDR CM])
+)
+(DEFINEQ
+
+(CONVERTU2X
+  [LAMBDA NIL                                           (* ; "Edited 27-Jul-2020 14:40 by rmk:")
+    (FOR X IN CBUNICODETOXEROXRENDERING COLLECT (LIST [CHARCODESTRING
+                                                                   (OR (FIXP (CADR X))
+                                                                       (CHARCODE.DECODE (CADR X]
+                                                                  [CHARACTER
+                                                                   (OR (FIXP (CADR X))
+                                                                       (CHARCODE.DECODE (CADR X]
+                                                                  (HEXSTRING (CAR X)
+                                                                         4])
+)
+(DEFINEQ
+
+(UTF8TOHEXSTRING
+  [LAMBDA (UTF8STRING)                                  (* ; "Edited 28-Jul-2020 17:32 by rmk:")
+
+    (* ;; "Converts from a UTF8 encoding of a number to the hex string that represents that number")
+
+    (LET (BYTE1 BYTE1 BYTE2 BYTE3 BYTE4)
+         (SETQ BYTE1 (HEXCODE (SUBSTRING UTF8STRING 1 2)))
+
+         (* ;; "Distinguish on header byte, extract number of bytes so we don't read too far")
+
+         (HEXSTRING (IF (ILESSP BYTE1 128)
+                        THEN 
+
+                              (* ;; "Test first:  Ascii is the common case")
+
+                              BYTE1
+                      ELSEIF (IGEQ BYTE1 (LLSH 15 4))
+                        THEN                             (* ; "4 bytes")
+                              (SETQ BYTE2 (HEXCODE (SUBSTRING UTF8STRING 3 4)))
+                              (CL:WHEN (ILESSP BYTE2 128)
+                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))
+                              (SETQ BYTE3 (HEXCODE (SUBSTRING UTF8STRING 5 6)))
+                              (CL:WHEN (ILESSP BYTE3 128)
+                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))
+                              (SETQ BYTE4 (HEXCODE (SUBSTRING UTF8STRING 7 8)))
+                              (CL:WHEN (ILESSP BYTE4 128)
+                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3 BYTE4)))
+                              (LOGOR (LLSH (LOADBYTE BYTE1 0 3)
+                                           18)
+                                     (LLSH (LOADBYTE BYTE2 0 6)
+                                           12)
+                                     (LLSH (LOADBYTE BYTE3 0 6)
+                                           6)
+                                     (LOADBYTE BYTE4 0 6))
+                      ELSEIF (IGEQ BYTE1 (LLSH 7 5))
+                        THEN                             (* ; "3 bytes")
+                              (SETQ BYTE2 (HEXCODE (SUBSTRING UTF8STRING 3 4)))
+                              (CL:WHEN (ILESSP BYTE2 128)
+                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))
+                              (SETQ BYTE3 (HEXCODE (SUBSTRING UTF8STRING 5 6)))
+                              (CL:WHEN (ILESSP BYTE3 128)
+                                  (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))
+                              (LOGOR (LLSH (LOADBYTE BYTE1 0 4)
+                                           12)
+                                     (LLSH (LOADBYTE BYTE2 0 6)
+                                           6)
+                                     (LOADBYTE BYTE3 0 6))
+                      ELSE                               (* ; "Must be 2 bytes")
+                            (SETQ BYTE2 (HEXCODE (SUBSTRING UTF8STRING 3 4)))
+                            (CL:WHEN (ILESSP BYTE2 128)
+                                (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))
+                            (LOGOR (LLSH (LOADBYTE BYTE1 0 5)
+                                         6)
+                                   (LOADBYTE BYTE2 0 6])
+
+(HEXSTRING
+  [LAMBDA (N)                                           (* ; "Edited  4-Aug-2020 21:19 by rmk:")
+    (CL:FORMAT NIL "~4,'0X" N])
+
+(HEXCODE
+  [LAMBDA (HEXSTRING)                               (* ; "Edited  4-Aug-2020 21:28 by rmk:")
+    (CL:PARSE-INTEGER HEXSTRING :RADIX 16])
+
+(BINTOUMAPPING
+  [LAMBDA (BINLIST)                                     (* ; "Edited  4-Aug-2020 21:28 by rmk:")
+    (FOR CS IN BINLIST JOIN (FOR CM IN (CDR CS)
+                                           COLLECT (LIST (CHARCODE.DECODE (CAR CM))
+                                                             (HEXCODE (CADR CM])
+)
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL (801 2795 (X2U.WIKI 811 . 2310) (XCCS2UNICODE.PARSECELL 2312 . 2793)) (2796 9601 (
+X2U.BIN 2806 . 6854) (XCCORD 6856 . 8283) (GETUCODE 8285 . 8894) (WIN 8896 . 9084) (FINDUCODE 9086 . 
+9599)) (9602 10870 (SHOWMAPPINGS 9612 . 9856) (SHOWMAPPING 9858 . 10868)) (10871 12765 (
+COMPAREMAPPINGS 10881 . 11468) (COMPARECHARSETS 11470 . 12763)) (12766 17927 (MERGEMAPPINGS 12776 . 
+15003) (PRINTMERGED 15005 . 17277) (READMERGED 17279 . 17925)) (17928 18901 (TRANSLATECHARSET 17938 . 
+18899)) (18902 19723 (CONVERTU2X 18912 . 19721)) (19724 23613 (UTF8TOHEXSTRING 19734 . 22929) (
+HEXSTRING 22931 . 23082) (HEXCODE 23084 . 23245) (BINTOUMAPPING 23247 . 23611)))))
+STOP

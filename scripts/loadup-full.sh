@@ -8,11 +8,18 @@ if [ ! -x run-medley ] ; then
 fi
 scr="-sc 1024x768 -g 1042x790"
 
-rm -f ~/rem.cm
+touch tmp/loadup.timestamp
 
 ./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/tmp/lisp.sysout
 
+if [ tmp/full.sysout -nt tmp/loadup.timestamp ]; then
+    
+    echo ---- made ----
+    ls -l tmp/full.*
+    echo --------------
 
-echo ----- made ----
-ls -l tmp/full.sysout
-echo ---------------
+else
+    echo XXXXX FAILURE XXXXX
+    ls -l tmp/full.*
+    exit -1
+fi

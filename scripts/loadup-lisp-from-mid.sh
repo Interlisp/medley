@@ -12,7 +12,7 @@ touch tmp/loadup.timestamp
 scr="-sc 1024x768 -g 1042x790"
 
 
-./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-LISP.CM tmp/init-mid.sysout
+./run-medley $scr -greet "$MEDLEYDIR/sources/LOADUP-LISP.CM" tmp/init-mid.sysout
 
 if [ tmp/lisp.sysout -nt tmp/loadup.timestamp ]; then
     

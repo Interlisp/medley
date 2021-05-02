@@ -1,19 +1,19 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
-(FILECREATED "19-Jan-93 10:49:30" {DSK}<python>lde>lispcore>sources>LLETHER.;2 139094 
+(FILECREATED " 1-May-2021 19:48:52" {DSK}<home>larry>ilisp>medley>sources>LLETHER.;2 140657 
 
-      changes to%:  (RECORDS SYSQUEUE QABLEITEM ETHERPACKET ETHERAUX NDB ROUTING ETHERTRANS 
-                           CENTICLOCK 3MBENCAPSULATION PBI)
+      changes to%:  (FNS \ETHEREVENTFN CANONICAL.HOSTNAME)
+                    (VARS LLETHERCOMS)
 
-      previous date%: " 5-Jan-93 00:36:20" {DSK}<python>lde>lispcore>sources>LLETHER.;1)
+      previous date%: "19-Jan-93 10:49:30" {DSK}<home>larry>ilisp>medley>sources>LLETHER.;1)
 
 
 (* ; "
-Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 by Venue & Xerox Corporation.  All rights reserved.
+Copyright (c) 1982-1988, 1990-1993, 2021 by Venue & Xerox Corporation.
 ")
 
 (PRETTYCOMPRINT LLETHERCOMS)
 
-(RPAQQ LLETHERCOMS 
+(RPAQQ LLETHERCOMS
        [(DECLARE%: EVAL@COMPILE DONTCOPY (FILES (SOURCE)
                                                 LLNSDECLS))
         [COMS                                                (* ; 
@@ -27,7 +27,7 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
                                                (MACROS \QUEUEHEAD)))
                     (INITRECORDS SYSQUEUE)
                     (SYSRECORDS SYSQUEUE)
-                    (FNS \ENQUEUE \DEQUEUE \QUEUELENGTH \ONQUEUE \UNQUEUE)
+                    (FNS CANONICAL.HOSTNAME \ENQUEUE \DEQUEUE \QUEUELENGTH \ONQUEUE \UNQUEUE)
                                                              (* ; 
                                                            "Queue management constructed by TCONC")
                     (EXPORT (MACROS \DETCONC \ENTCONC \PEEKTCONC]
@@ -190,8 +190,8 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
        '6)
 (DECLARE%: EVAL@COMPILE 
 
-(PUTPROPS \QUEUEHEAD MACRO ((Q)
-                            (fetch (SYSQUEUE SYSQUEUEHEAD) of Q)))
+(PUTPROPS \QUEUEHEAD MACRO ((Q)
+                                    (fetch (SYSQUEUE SYSQUEUEHEAD) of Q)))
 )
 
 (* "END EXPORTED DEFINITIONS")
@@ -212,6 +212,33 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
                         (SYSQUEUETAIL POINTER)))
 )
 (DEFINEQ
+
+(CANONICAL.HOSTNAME
+  [LAMBDA (HOSTNAME)                                   (* ; "Edited  1-May-2021 19:45 by larry")
+    (LET [(DEV (CL:ASSOC HOSTNAME \DEVICENAMETODEVICE :TEST 'STRING-EQUAL]
+         (if DEV
+             then                                        (* ; "Known device, don't ask anyone")
+                   (fetch DEVICENAME of (CDR DEV))
+           elseif (NOT (SUBRCALL ETHER-AVAILABLE))
+             then HOSTNAME
+           elseif (AND \NS.READY (STRPOS ":" HOSTNAME))
+             then                                        (* ; "Assume NS")
+                   (\CANONICAL.NSHOSTNAME HOSTNAME)
+           elseif (NUMBERP HOSTNAME)
+             then                                        (* ; "Some sort of host address")
+                   (if (AND (SMALLP HOSTNAME)
+                                (< HOSTNAME 255))
+                       then                              (* ; "valid pup address")
+                             HOSTNAME
+                     elseif \IP.READY
+                       then                              (* ; "Big number may be IP host")
+                             (IPHOSTNAME HOSTNAME))
+           else (if (NOT (LITATOM HOSTNAME))
+                        then (SETQ HOSTNAME (MKATOM HOSTNAME)))
+                 (OR (CDR (FASSOC HOSTNAME \HOSTNAMES))
+                     (AND \IP.READY (\CANONICALIZE.IP.HOSTNAME HOSTNAME))
+                     (AND \PUP.READY (\CANONICALIZE.PUP.HOSTNAME HOSTNAME))
+                     HOSTNAME])
 
 (\ENQUEUE
   [LAMBDA (Q ITEM)                                       (* bvm%: "14-Feb-85 21:55")
@@ -333,14 +360,14 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
 
 (* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE 
 
-[PUTPROPS \DETCONC MACRO (OPENLAMBDA (TQ)
-                                (PROG1 (\PEEKTCONC TQ)
-                                    (if [NULL (CAR (RPLACA TQ (CDAR TQ]
-                                        then (RPLACD TQ)))]
+(PUTPROPS \DETCONC MACRO [OPENLAMBDA (TQ)
+                                   (PROG1 (\PEEKTCONC TQ)
+                                       (if [NULL (CAR (RPLACA TQ (CDAR TQ]
+                                           then (RPLACD TQ)))])
 
-(PUTPROPS \ENTCONC MACRO (= . TCONC))
+(PUTPROPS \ENTCONC MACRO (= . TCONC))
 
-(PUTPROPS \PEEKTCONC MACRO (= . CAAR))
+(PUTPROPS \PEEKTCONC MACRO (= . CAAR))
 )
 
 (* "END EXPORTED DEFINITIONS")
@@ -1471,10 +1498,13 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
                               HOSTNAMEP _ 'NILL])
 
 (\ETHEREVENTFN
-  [LAMBDA (DEV EVENT)                                    (* ; "Edited 15-Jan-88 01:30 by bvm")
-    (SELECTQ EVENT
-        ((NIL AFTERLOGOUT AFTERSYSOUT AFTERMAKESYS AFTERSAVEVM RESTART) 
-             (PROG (NDB TURNOFFNS TIMESET)
+  [LAMBDA (DEV EVENT)                                  (* ; "Edited  1-May-2021 19:23 by larry")
+    (PROG (NDB TURNOFFNS TIMESET)
+          (OR (SUBRCALL ETHER-AVAILABLE)
+              (RETURN))
+          (SELECTQ EVENT
+              ((NIL AFTERLOGOUT AFTERSYSOUT AFTERMAKESYS AFTERSAVEVM RESTART) 
+                   (NDB TURNOFFNS TIMESET)
                    (SETQ \PUP.READY (SETQ \NS.READY (SETQ \IP.READY)))
                    (\SETETHERFLAGS)
                    (\SETLOCALNSNUMBERS)
@@ -1499,30 +1529,22 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
                        (\NSINIT EVENT)
                        (SETQ TIMESET (\NS.SETTIME]
                    (\STARTPUP EVENT)
-                   (OR TIMESET (AND (EQ \PUP.READY T)
-                                    (\PUP.SETTIME))
-                       [SELECTC \MACHINETYPE
-                           (\DANDELION (NEQ 0 (fetch DLTODVALID of \IOPAGE)))
-                           (\DAYBREAK (\DoveMisc.TODValid))
-                           (> (IDATE)
-                              (CONSTANT (IDATE " 1-JAN-88 12:00"]
-                       (\TIME.NOT.SET))
                    (COND
                       (TURNOFFNS (STOPNS)))
                    (COND
                       (\GATEWAYFLG (\INIT.GATEWAY)))
                    (for FN in RESTARTETHERFNS do (CL:FUNCALL FN EVENT))
-               T))
-        ((BEFOREMAKESYS BEFORELOGOUT BEFORESYSOUT BEFORESAVEVM) 
-             (COND
-                ((EQ EVENT 'BEFORESAVEVM)                    (* ; 
+                   T)
+              ((BEFOREMAKESYS BEFORELOGOUT BEFORESYSOUT BEFORESAVEVM) 
+                   (COND
+                      ((EQ EVENT 'BEFORESAVEVM)              (* ; 
                        "Save passwords in place outside vmem to avoid having to reenter them later")
-                 (\STASH.PASSWORDS))
-                (T                                           (* ; 
+                       (\STASH.PASSWORDS))
+                      (T                                     (* ; 
                                                            "No need to flush this before SAVEVM")
-                   (CLRHASH \ETHERPORTS)))
-             (CLRHASH LOGINPASSWORDS))
-        NIL])
+                         (CLRHASH \ETHERPORTS)))
+                   (CLRHASH LOGINPASSWORDS))
+              NIL])
 
 (\TIME.NOT.SET
   [LAMBDA NIL                                            (* ; "Edited 13-Jan-88 14:40 by bvm")
@@ -1774,25 +1796,27 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
 
 (DECLARE%: EVAL@COMPILE 
 
-(PUTPROPS ENCAPSULATE.ETHERPACKET MACRO ((NDB PACKET HOST LENGTH TYPE)
-                                         (SPREADAPPLY* (fetch NDBENCAPSULATOR of NDB)
-                                                NDB PACKET HOST LENGTH TYPE)))
+(PUTPROPS ENCAPSULATE.ETHERPACKET MACRO ((NDB PACKET HOST LENGTH TYPE)
+                                                 (SPREADAPPLY* (fetch NDBENCAPSULATOR
+                                                                  of NDB)
+                                                        NDB PACKET HOST LENGTH TYPE)))
 
-(PUTPROPS TRANSMIT.ETHERPACKET MACRO ((NDB PACKET)
-                                      (SPREADAPPLY* (fetch NDBTRANSMITTER of NDB)
-                                             NDB PACKET)))
+(PUTPROPS TRANSMIT.ETHERPACKET MACRO ((NDB PACKET)
+                                              (SPREADAPPLY* (fetch NDBTRANSMITTER of NDB)
+                                                     NDB PACKET)))
 
-[PUTPROPS BROADCASTP MACRO ((PACKET)
-                            ([LAMBDA (NDB)
-                               (AND NDB (APPLY* (fetch NDBBROADCASTP of NDB)
-                                               PACKET NDB]
-                             (fetch EPNETWORK of PACKET]
+(PUTPROPS BROADCASTP MACRO ((PACKET)
+                                    ([LAMBDA (NDB)
+                                       (AND NDB (APPLY* (fetch NDBBROADCASTP of NDB)
+                                                       PACKET NDB]
+                                     (fetch EPNETWORK of PACKET))))
 
-[PUTPROPS \CHECK.ROUTING.TABLE MACRO ((TABLE)
-                                      (if (NEQ (NTYPX TABLE)
-                                                   \ROUTING.TABLE.TYPENUM)
-                                          then (CL:ERROR 'CONDITIONS:SIMPLE-TYPE-ERROR :CULPRIT 
-                                                          TABLE :EXPECTED-TYPE 'RoutingTable]
+(PUTPROPS \CHECK.ROUTING.TABLE MACRO [(TABLE)
+                                              (if (NEQ (NTYPX TABLE)
+                                                           \ROUTING.TABLE.TYPENUM)
+                                                  then (CL:ERROR 'CONDITIONS:SIMPLE-TYPE-ERROR 
+                                                                  :CULPRIT TABLE :EXPECTED-TYPE
+                                                                  'RoutingTable])
 )
 
 (DECLARE%: DOEVAL@COMPILE DONTCOPY
@@ -2785,7 +2809,7 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
 
 (* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE 
 
-(PUTPROPS \SERIALNUMBER MACRO (NIL (fetch (IFPAGE SerialNumber) of \InterfacePage)))
+(PUTPROPS \SERIALNUMBER MACRO (NIL (fetch (IFPAGE SerialNumber) of \InterfacePage)))
 )
 
 (* "END EXPORTED DEFINITIONS")
@@ -2866,9 +2890,8 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
                                                              T])
 )
 
-(RPAQQ ROUTINGINFOMACRO 
-       (1 "Operation = " WORDS 2 "Info: " REPEAT "(" SEPR ", " INTEGER -4 WORDS SEPR ") " -2 FINALLY
-          ")"))
+(RPAQQ ROUTINGINFOMACRO (1 "Operation = " WORDS 2 "Info: " REPEAT "(" SEPR ", " INTEGER -4 WORDS
+                               SEPR ") " -2 FINALLY ")"))
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (DECLARE%: DOEVAL@COMPILE DONTCOPY
 
@@ -2926,41 +2949,41 @@ Copyright (c) 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1990, 1991, 1992, 1993 b
 )
 
 (* "FOLLOWING DEFINITIONS EXPORTED")
-(PUTPROPS \DEVICE.INPUT DOPVAL (1 MISC1 1))
+(PUTPROPS \DEVICE.INPUT DOPVAL (1 MISC1 1))
 
-(PUTPROPS \DEVICE.OUTPUT DOPVAL (2 MISC2 2))
+(PUTPROPS \DEVICE.OUTPUT DOPVAL (2 MISC2 2))
 
-(PUTPROPS \D0.STARTIO DOPVAL (1 MISC1 0))
+(PUTPROPS \D0.STARTIO DOPVAL (1 MISC1 0))
 
 (* "END EXPORTED DEFINITIONS")
 
 )
 (PUTPROPS LLETHER COPYRIGHT ("Venue & Xerox Corporation" 1982 1983 1984 1985 1986 1987 1988 1990 1991 
-1992 1993))
+1992 1993 2021))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (10827 17692 (\ENQUEUE 10837 . 13482) (\DEQUEUE 13484 . 14811) (\QUEUELENGTH 14813 . 
-15113) (\ONQUEUE 15115 . 15381) (\UNQUEUE 15383 . 17690)) (51359 55225 (\ALLOCATE.ETHERPACKET 51369 . 
-52410) (\RELEASE.ETHERPACKET 52412 . 53485) (RELEASE.PUP 53487 . 53632) (\FLUSH.PACKET.QUEUE 53634 . 
-53985) (\REQUEUE.ETHERPACKET 53987 . 54501) (\EP.PUT.AUX 54503 . 55223)) (55799 67180 (
-\SETLOCALNSNUMBERS 55809 . 57194) (\LOADNSADDRESS 57196 . 57488) (\STORENSADDRESS 57490 . 57671) (
-\PRINTNSADDRESS 57673 . 58756) (\NSADDRESS.DEFPRINT 58758 . 63703) (\NSADDRESS.PRINT.DECIMAL 63705 . 
-65836) (\LOADNSHOSTNUMBER 65838 . 66467) (\STORENSHOSTNUMBER 66469 . 66873) (PRINTNSHOSTNUMBER 66875
- . 67178)) (67293 74381 (\ETHERINIT 67303 . 67873) (\ETHEREVENTFN 67875 . 70869) (\TIME.NOT.SET 70871
- . 71197) (\SETETHERFLAGS 71199 . 72688) (\FLUSHNDBS 72690 . 73868) (\FLUSH.NDB.QUEUE 73870 . 74379)) 
-(74382 77674 (\CHECKSUM 74392 . 76324) (\HANDLE.RAW.OTHER 76326 . 76681) (\HANDLE.RAW.PACKET 76683 . 
-77195) (\ADD.PACKET.FILTER 77197 . 77429) (\DEL.PACKET.FILTER 77431 . 77672)) (85243 85768 (
-ENCAPSULATE.ETHERPACKET 85253 . 85525) (TRANSMIT.ETHERPACKET 85527 . 85766)) (86056 98652 (
-\AGE.ROUTING.TABLE 86066 . 88215) (\ADD.ROUTING.TABLE.ENTRY 88217 . 88913) (\CLEAR.ROUTING.TABLE 88915
- . 89642) (\MAP.ROUTING.TABLE 89644 . 90172) (PRINTROUTINGTABLE 90174 . 93799) (\ROUTINGTABLE.INFOHOOK
- 93801 . 98650)) (99137 105922 (\TRANSLATE.10TO3 99147 . 100931) (\NOTE.10TO3 100933 . 102549) (
-\HANDLE.RAW.10TO3 102551 . 105920)) (109904 124726 (PRINTPACKET 109914 . 110475) (\MAYBEPRINTPACKET 
-110477 . 112134) (PRINT10TO3 112136 . 113504) (PRINTPACKETDATA 113506 . 118796) (PRINTPACKETQUEUE 
-118798 . 119227) (TIME.SINCE.PACKET 119229 . 119714) (MAKE-NETWORK-TRACE-WINDOW 119716 . 123258) (
-\CHANGE.ETHER.TRACING 123260 . 124724)) (125097 125912 (\CENTICLOCK 125107 . 125910)) (126367 132467 (
-\3MBGETPACKET 126377 . 127797) (\3MB.CREATENDB 127799 . 128514) (\3MBSENDPACKET 128516 . 130699) (
-\3MBWATCHER 130701 . 131439) (\3MBENCAPSULATE 131441 . 131989) (\3MB.BROADCASTP 131991 . 132162) (
-\3MBFLUSH 132164 . 132465)) (135413 137356 (ASSURE.ETHER.ON 135423 . 135753) (INITPUPLEVEL1 135755 . 
-136235) (TURN.ON.ETHER 136237 . 136382) (RESTART.ETHER 136384 . 136758) (TURN.OFF.ETHER 136760 . 
-137078) (PRINTWORDS 137080 . 137354)) (137618 138153 (\DEVICE.INPUT 137628 . 137793) (\DEVICE.OUTPUT 
-137795 . 137989) (\D0.STARTIO 137991 . 138151)))))
+  (FILEMAP (NIL (10756 19212 (CANONICAL.HOSTNAME 10766 . 12355) (\ENQUEUE 12357 . 15002) (\DEQUEUE 15004
+ . 16331) (\QUEUELENGTH 16333 . 16633) (\ONQUEUE 16635 . 16901) (\UNQUEUE 16903 . 19210)) (52913 56779
+ (\ALLOCATE.ETHERPACKET 52923 . 53964) (\RELEASE.ETHERPACKET 53966 . 55039) (RELEASE.PUP 55041 . 55186
+) (\FLUSH.PACKET.QUEUE 55188 . 55539) (\REQUEUE.ETHERPACKET 55541 . 56055) (\EP.PUT.AUX 56057 . 56777)
+) (57353 68734 (\SETLOCALNSNUMBERS 57363 . 58748) (\LOADNSADDRESS 58750 . 59042) (\STORENSADDRESS 
+59044 . 59225) (\PRINTNSADDRESS 59227 . 60310) (\NSADDRESS.DEFPRINT 60312 . 65257) (
+\NSADDRESS.PRINT.DECIMAL 65259 . 67390) (\LOADNSHOSTNUMBER 67392 . 68021) (\STORENSHOSTNUMBER 68023 . 
+68427) (PRINTNSHOSTNUMBER 68429 . 68732)) (68847 75642 (\ETHERINIT 68857 . 69427) (\ETHEREVENTFN 69429
+ . 72130) (\TIME.NOT.SET 72132 . 72458) (\SETETHERFLAGS 72460 . 73949) (\FLUSHNDBS 73951 . 75129) (
+\FLUSH.NDB.QUEUE 75131 . 75640)) (75643 78935 (\CHECKSUM 75653 . 77585) (\HANDLE.RAW.OTHER 77587 . 
+77942) (\HANDLE.RAW.PACKET 77944 . 78456) (\ADD.PACKET.FILTER 78458 . 78690) (\DEL.PACKET.FILTER 78692
+ . 78933)) (86768 87293 (ENCAPSULATE.ETHERPACKET 86778 . 87050) (TRANSMIT.ETHERPACKET 87052 . 87291)) 
+(87581 100177 (\AGE.ROUTING.TABLE 87591 . 89740) (\ADD.ROUTING.TABLE.ENTRY 89742 . 90438) (
+\CLEAR.ROUTING.TABLE 90440 . 91167) (\MAP.ROUTING.TABLE 91169 . 91697) (PRINTROUTINGTABLE 91699 . 
+95324) (\ROUTINGTABLE.INFOHOOK 95326 . 100175)) (100662 107447 (\TRANSLATE.10TO3 100672 . 102456) (
+\NOTE.10TO3 102458 . 104074) (\HANDLE.RAW.10TO3 104076 . 107445)) (111429 126251 (PRINTPACKET 111439
+ . 112000) (\MAYBEPRINTPACKET 112002 . 113659) (PRINT10TO3 113661 . 115029) (PRINTPACKETDATA 115031 . 
+120321) (PRINTPACKETQUEUE 120323 . 120752) (TIME.SINCE.PACKET 120754 . 121239) (
+MAKE-NETWORK-TRACE-WINDOW 121241 . 124783) (\CHANGE.ETHER.TRACING 124785 . 126249)) (126622 127437 (
+\CENTICLOCK 126632 . 127435)) (127892 133992 (\3MBGETPACKET 127902 . 129322) (\3MB.CREATENDB 129324 . 
+130039) (\3MBSENDPACKET 130041 . 132224) (\3MBWATCHER 132226 . 132964) (\3MBENCAPSULATE 132966 . 
+133514) (\3MB.BROADCASTP 133516 . 133687) (\3MBFLUSH 133689 . 133990)) (136946 138889 (ASSURE.ETHER.ON
+ 136956 . 137286) (INITPUPLEVEL1 137288 . 137768) (TURN.ON.ETHER 137770 . 137915) (RESTART.ETHER 
+137917 . 138291) (TURN.OFF.ETHER 138293 . 138611) (PRINTWORDS 138613 . 138887)) (139164 139699 (
+\DEVICE.INPUT 139174 . 139339) (\DEVICE.OUTPUT 139341 . 139535) (\D0.STARTIO 139537 . 139697)))))
 STOP

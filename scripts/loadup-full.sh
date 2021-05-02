@@ -10,7 +10,7 @@ scr="-sc 1024x768 -g 1042x790"
 
 touch tmp/loadup.timestamp
 
-./run-medley $scr -greet $MEDLEYDIR/sources/LOADUP-FULL.LCOM $MEDLEYDIR/tmp/lisp.sysout
+./run-medley $scr -greet "$MEDLEYDIR/sources/LOADUP-FULL.CM" "$MEDLEYDIR/tmp/lisp.sysout"
 
 if [ tmp/full.sysout -nt tmp/loadup.timestamp ]; then
     
@@ -21,5 +21,5 @@ if [ tmp/full.sysout -nt tmp/loadup.timestamp ]; then
 else
     echo XXXXX FAILURE XXXXX
     ls -l tmp/full.*
-    exit -1
+    exit 1
 fi

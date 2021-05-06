@@ -14,13 +14,13 @@ scr="-sc 1024x768 -g 1042x790"
 
 ./run-medley -prog ldeinit -greet $MEDLEYDIR/sources/XREM.CM $scr -vmem tmp/init-mid.sysout tmp/init.dlinit
 
-if [ tmp/init-mid.sysout -nt tmp/loadup.timestamp ]; then
-    echo 
+
+echo 
+if [ tmp/loadup.timestamp -nt tmp/init-mid.sysout ]; then
+    echo XXXXX FAILURE XXXXX
+    exit 1
+else
     echo ---- made ----
     ls -l tmp/init-mid.sysout
     echo --------------
-
-else
-    echo XXXXX FAILURE XXXXX
-    exit 1
 fi

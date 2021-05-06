@@ -9,7 +9,7 @@ fi
 
 # set timestamp
 mkdir -p ./tmp
-touch ./tmp/loadup-timestamp
+touch ./tmp/loadup.timestamp
 
 ./scripts/loadup-init.sh && \
     ./scripts/loadup-mid-from-init.sh && \

@@ -1,0 +1,70 @@
+New architecture for character input-output and alternative external formats
+
+Ron Kaplan, May 2021
+
+The Medley system was built with the Xerox Character Coding standard as the target for multi-byte input and output and for the internal mapping of character codes to glyphs.
+
+This is now quite out of date, and our goal is to move to more modern conventions like Unicode and UTF-8.
+
+The coding conventions are embodied in macros that test a stream to see if it is XCCS, and to do special open-coded processing (often with the help of locally bound variables for encoding information) if it is.
+
+If it isn't XCCS, then the macros instead apply functions that are obtained from fields in the stream.  This is optimized for the default XCCS set up because in that case a separate function call is avoided, the action itself is open coded.
+
+The new architecture recognizes that there may be an advantage to specifying a system default for character processing that avoids function calls but that doesn't depend on support (binding of special variables as opposed to accessing stream fields on each call) to get that last measure of efficiency.
+
+Thus, there are 4 generic macros corresponding to the 4 character IO operations:
+
+\INCCODE
+\OUTCHAR
+\BACKCHAR
+\PEEKCCODE
+
+Each of these is defined to fetch a corresponding field from the stream (OUTCHARFN, INCCODEFN, PEEKCCODEFN, BACKCHARFN).  If that field is NIL, then each of these passes to a corresonding default macro:  
+
+\DEFAULTINCCODE
+\DEFAULTOUTCHAR
+\DEFAULTBACKCHAR
+\DEFAULTPEEKCCODE
+
+These default macros can then be redefined to make a wholesale switch of the default encoding standard.
+
+The macro \OUTCHAR, for example, is defined as
+       if the stream has an OUTCHARFN, apply it.  Otherwise do the \DEFAULTOUTCHAR
+and so on for each of the others.
+
+For the current XCCS default, \DEFAULTOUTCHAR is defined to call \XCCSOUTCHARFN.
+
+The corresponding stream fields can be set directly, but the preferred interface is to wrap up the 4 functions for a given format in an EXTERNALFORMAT datastructure.  The function
+
+	(\EXTERNALFORMAT stream formatname)
+
+applies the information in the format into the stream.  A particular (non-default) format can be specified as an optional parameter when a stream is opened, and each file device can have its own default external format.  Then there is also a variable that holds the name of the name of the system-wide default, currently :XCCS.
+
+If the default external format is applied to a stream, the relevant function fields are set to NIL to kick off the default macro for that particular function, otherwise the function is copied from the external format to the stream.
+
+An external format has the following fields:
+
+	NAME
+	INCCODEFN
+	PEEKCCODEFN
+	BACKCHARFN
+	OUTCHARFN
+	EOL
+
+The function (\INSTALL.EXTERNALFORMAT format) registers the given format under its name, so it can be retrieved when the name is given to \EXTERNALFORMAT.
+
+If EOL is not NIL, then it is an end-of-line convention that will override whatever a stream might have had by default. (The value of EOL is one of the constants LF.EOLC, CR.EOLC, CRLF.EOLC.)
+
+The system now includes external formats for
+	:XCCS   (the global default)
+	:THROOUGH  (untransformed bytes)
+
+It probably would make sense to also include a :KEYBOARD external format, to generalize that as well.
+
+UNICODE defines external formats for UTF8 with or without character translation, and also UTF16 (big-end and little-end).  When we finally make the swap, we would make :UTF8 be the default, redefine the macros, and recompile all the callers.
+
+The Japanse external formats that used to be included in the basic system are now provided by a JAPANESE in the library.
+
+Finally, there is another macro \INCHAR that applies \CHECKEOLC to the result of \INCCODE.
+
+

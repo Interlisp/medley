@@ -9,8 +9,7 @@
 #    stash it first, check out previous versions, pop the stash
 #  should never make hardlink if there is only 1
 #  Maybe only do this for Lisp sources (and LCOMs? TEdit files? Not sysouts?)
-#  should coordinate with fix-links
-
+#  should coordinate with fix-links and trimming repo size
 
 file="$1"
 
@@ -24,10 +23,10 @@ if [ ! -f "$file" ]; then
     exit 1
 fi
 
-if [ ! -z "$file.~"*"~" ]; then
-    echo file already has versions "$file.~"*"~"
-    exit 1
-fi
+for vf in `ls $file.~*`
+do echo file alead has versioned $vf
+   exit 1
+done
 
 n=1
  
@@ -36,5 +35,5 @@ do git checkout $commit "$file" && ln "$file" "$file.~"$n"~" && n=`expr $n + 1`
 done
 
 if [ $n -eq 2 ]; then
-    rm "$file".~1~
+   rm -f "$file".~1~
 fi

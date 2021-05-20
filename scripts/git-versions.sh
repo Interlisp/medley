@@ -1,10 +1,10 @@
-#!/bin/sh
+#!/bin/sh -vx
 
 #missing features:
 #  should take a directory and work for all of the files
-#  should check to see if there are already ~nn~ files in the directory
-#   maybe if they are checked in, then start at nn+1?
-#   else fail
+#  deletes any existing versions !!!
+#   then checks out any file.~nn~ files
+#   maybe if they are checked in, then start at nn+1 
 #  should check to see if file hasn't been committed
 #    stash it first, check out previous versions, pop the stash
 #  should never make hardlink if there is only 1
@@ -23,14 +23,22 @@ if [ ! -f "$file" ]; then
     exit 1
 fi
 
-for vf in `ls $file.~*`
-do echo file alead has versioned $vf
-   exit 1
-done
+rm -f "$file".~[1-9]*~
 
 n=1
- 
-for commit in `git log --since=2020-11-16 --remove-empty --reverse --format="%h" "$file"`
+
+for commit in `git log --remove-empty --reverse --format="%h" --  "$file.~[1-9]*~"` 
+do git checkout $commit "$file.~[1-9]*~"
+   for version in "$file".~[1-9]*~
+   do
+       vn=`echo $version | grep --only-matching '\\.~[1-9][0-9]*~' | grep --only-matching '[1-9][0-9]*'`
+       if [ $vn -ge $n ]; then
+	   n=`expr $vn + 1`
+       fi
+   done
+done
+   
+for commit in `git log --remove-empty --reverse --format="%h" "$file"`
 do git checkout $commit "$file" && ln "$file" "$file.~"$n"~" && n=`expr $n + 1`
 done
 

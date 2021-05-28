@@ -15,8 +15,9 @@ file="$1"
 
 if [ -d "$file" ]; then
     for dir in "$file/"*
-    do echo expanding "$dir"
-	find "$dir" -type f -iname "*[a-z0-9]" -exec $0 {} \;
+    do echo expanding "$dir" && \
+	    find "$dir" -type f -iname "*[a-z0-9]" -exec $0 {} \;
+    done
     exit 0
 fi
 

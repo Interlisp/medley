@@ -14,7 +14,7 @@ export LC_ALL=C
 file="$1"
 
 if [ -d "$file" ]; then
-    for dir in "$file/"*
+    for dir in "$file/"*[a-zA-Z0-9]
     do echo expanding "$dir" && \
 	    find "$dir" -type f -iname "*[a-z0-9]" -exec $0 {} \;
     done

@@ -14,8 +14,10 @@ export LC_ALL=C
 file="$1"
 
 if [ -d "$file" ]; then
-    echo cannot do directories "$file"
-    exit 1
+    for dir in "$file/"*
+    do echo expanding "$dir"
+	find "$dir" -type f -iname "*[a-z0-9]" -exec $0 {} \;
+    exit 0
 fi
 
 if [ ! -f "$file" ]; then
@@ -23,8 +25,8 @@ if [ ! -f "$file" ]; then
     exit 1
 fi
 
-base=`basename $file .LCOM`
-base=`basename $base .DFASL`
+base=`basename "$file" .LCOM`
+base=`basename "$base" .DFASL`
 
 rm -f "$file".~[1-9]*~
 
@@ -46,7 +48,7 @@ done
 
 for commit in `git log --remove-empty --reverse --format="%h" "$file"`
 do git checkout -q $commit "$file"
-   fcv=`tr '\r' '\n' <"$file" | tr -d '\001-\006' | head -n 2 | grep -a --only-matching '{DSK}.*'$base'\.\?;[1-9][0-9]*'  | grep --only-matching ';[1-9][0-9]*'`
+   fcv=`tr '\r' '\n' <"$file" | tr -d '\001-\006' | head -n 2 | grep -a --only-matching '{DSK}.*'"$base"'\.\?;[1-9][0-9]*'  | grep --only-matching ';[1-9][0-9]*'`
    fcv=`echo $fcv | grep --only-matching '[1-9][0-9]*'`
    if [ ! -z $fcv ]; then
        if [ $fcv -gt $n ]; then

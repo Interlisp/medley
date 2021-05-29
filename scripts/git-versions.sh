@@ -41,9 +41,11 @@ done
 
 for version in "$file".~[1-9]*~
 do  vn=`echo $version | grep --only-matching '\.~[1-9][0-9]*~' | grep --only-matching '[1-9][0-9]*'`
-    vn=`expr $vn + 1`  
-    if [ $n -lt $vn ]; then
-	n=$vn
+    if [ ! -z $vn ]; then
+	vn=`expr $vn + 1`  
+	if [ $n -lt $vn ]; then
+	    n=$vn
+	fi
     fi
 done
 
@@ -62,9 +64,11 @@ done
 
 if [ $n -eq 2 ]; then
     rm -f "$file".~1~
+else
+    git restore --staged "$file.~[1-9]*~" 2>/dev/null        
 fi
 
-git restore --staged "$file.~[1-9]*~" 2>/dev/null    
+
 
 
 

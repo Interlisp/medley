@@ -29,30 +29,29 @@ fi
 base=`basename "$file" .LCOM`
 base=`basename "$base" .DFASL`
 
+# remove old versions
 rm -f "$file".~[1-9]*~
 
 n=1
 
-# first find commits with explicit versions
+# find commits with explicit versions
 for commit in `git log --remove-empty --reverse --format="%h" -- "$file.~[1-9]*~"` 
-do git checkout -q $commit "$file.~[1-9]*~" 2>/dev/null
-done
-# should only be one commit but just in case
-
-for version in "$file".~[1-9]*~
-do  vn=`echo $version | grep --only-matching '\.~[1-9][0-9]*~' | grep --only-matching '[1-9][0-9]*'`
-    if [ ! -z $vn ]; then
-	vn=`expr $vn + 1`  
-	if [ $n -lt $vn ]; then
-	    n=$vn
-	fi
-    fi
+do git checkout -q $commit "$file.~[1-9]*~" 2>/dev/null && \
+   for version in "$file".~[1-9]*~
+   do  vn=`echo $version | sed 's/^.*\.~\([1-9][0-9]*\)~$/\1/'`
+       if [ ! -z $vn ]; then
+	   vn=`expr $vn + 1`  
+	   if [ $n -lt $vn ]; then
+	       n=$vn
+	   fi
+       fi
+   done
 done
 
 for commit in `git log --remove-empty --reverse --format="%h" "$file"`
 do git checkout -q $commit "$file"
-   fcv=`tr '\r' '\n' <"$file" | tr -d '\001-\006' | head -n 2 | grep -a --only-matching '{DSK}.*'"$base"'\.\?;[1-9][0-9]*'  | grep --only-matching ';[1-9][0-9]*'`
-   fcv=`echo $fcv | grep --only-matching '[1-9][0-9]*'`
+   fcv=`tr '\r' '\n' <"$file" | head -n 6 | grep -a --max-count=1 --only-matching '{DSK}.*'"$base"'\.\?;[1-9][0-9]*'`
+   fcv=`echo $fcv | sed 's/^.*;\([1-9][0-9]*\)$/\1/'`
    if [ ! -z $fcv ]; then
        if [ $fcv -gt $n ]; then
 	   n=$fcv
@@ -67,9 +66,3 @@ if [ $n -eq 2 ]; then
 else
     git restore --staged "$file.~[1-9]*~" 2>/dev/null        
 fi
-
-
-
-
-
-

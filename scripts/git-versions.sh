@@ -29,6 +29,8 @@ fi
 base=`basename "$file" .LCOM`
 base=`basename "$base" .DFASL`
 
+stash=`git stash push -- $file 2>&1`
+
 # remove old versions
 rm -f "$file".~[1-9]*~
 
@@ -60,9 +62,18 @@ do git checkout -q $commit "$file"
    ln "$file" "$file.~"$n"~" && n=`expr $n + 1`
 done
 
+case $stash in
+    "error*" | "No local changes*") 
+	;;
+    "*")
+	git stash pop -- $file && \
+	ln $file "$file.~"$n"~" && n=`expr $n + 1`
+    ;;
+esac
 
 if [ $n -eq 2 ]; then
     rm -f "$file".~1~
 else
     git restore --staged "$file.~[1-9]*~" 2>/dev/null        
 fi
+	

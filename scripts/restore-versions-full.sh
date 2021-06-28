@@ -80,18 +80,21 @@ base=`basename "$base" .DFASL`
 # as the version number if it isn't too small It then makes a hard
 # link (each time for each commit)
 
-for commit in `git log --remove-empty --reverse --format="%h" -- "$file"`
-do git checkout -q $commit "$file"
-   fcv=`tr '\r' '\n' <"$file" | head -n 6 | grep -ai --max-count=1 --only-matching '{DSK}.*'"$base"'\.\?;[1-9][0-9]*'`
-   fcv=`echo $fcv | sed 's/^.*;\([1-9][0-9]*\)$/\1/'`
-   if [ ! -z $fcv ]; then
-       if [ $fcv -gt $n ]; then
-	   n=$fcv
-       fi
-   fi
-   ln "$file" "$file.~"$n"~" && n=`expr $n + 1`
+for commit in `git log --reverse --format="%h" -- "$file"`
+do git checkout -q $commit "$file"  && \
+	if [ -f "$file" ]; then
+	    fcv=`tr '\r' '\n' <"$file" | head -n 6 | \
+	    grep -ai --max-count=1 --only-matching '{DSK}.*'"$base"'\.\?;[1-9][0-9]*'`
+	    fcv=`echo $fcv | sed 's/^.*;\([1-9][0-9]*\)$/\1/'`
+	    if [ ! -z $fcv ]; then
+		if [ $fcv -gt $n ]; then
+		    n=$fcv
+		fi
+	    fi
+	    ln "$file" "$file.~"$n"~" && n=`expr $n + 1`
+	fi
 done
-
+ 
 # if the 'stash' at the beginning did something, restore the stashed file
 
 case $stash in

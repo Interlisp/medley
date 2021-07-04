@@ -1,24 +1,17 @@
-FROM ubuntu:focal
-ENV DEBIAN_FRONTEND=noninteractive
+FROM billstumbo/maiko:latest
 
-RUN apt-get update && apt-get install -y build-essential clang libx11-dev
-COPY maiko /build/
-WORKDIR /build/bin
-RUN rm -rf /build/linux*
-RUN ./makeright x
-
-
-FROM ubuntu:focal
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y tightvncserver
 
 EXPOSE 5900
 
-RUN apt-get update && apt-get install -y tightvncserver
-RUN mkdir /app
-WORKDIR /app
-COPY basics ./
-COPY --from=0 /build/linux.x86_64/* ./
+# Need to refine this down to only needed directories.
+COPY . /app/medley
+
+WORKDIR /app/medley
+
+ENV MEDLEYDIR=/app/medley
+ENV MAIKODIR=/app/maiko
 
 RUN adduser --disabled-password --gecos "" medley
 USER medley
-ENTRYPOINT USER=medley Xvnc -geometry 1270x720 :0 & DISPLAY=:0 /app/ldex -g 1280x720 full.sysout
+ENTRYPOINT USER=medley Xvnc -geometry 1280x720 :0 & DISPLAY=:0 PATH="/app/maiko:$PATH" ./run-medley -full -g 1280x720 -sc 1280x720

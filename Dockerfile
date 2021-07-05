@@ -9,9 +9,6 @@ COPY . /app/medley
 
 WORKDIR /app/medley
 
-ENV MEDLEYDIR=/app/medley
-ENV MAIKODIR=/app/maiko
-
 RUN adduser --disabled-password --gecos "" medley
 USER medley
 ENTRYPOINT USER=medley Xvnc -geometry 1280x720 :0 & DISPLAY=:0 PATH="/app/maiko:$PATH" ./run-medley -full -g 1280x720 -sc 1280x720

@@ -9,11 +9,11 @@ Here are the seven book chunks:
 * [Title Page, Preface, Table of Contents](cl-impl-notes-preface.pdf)
 * Chapters 1-3: Introduction (omitted), Datatypes (omitted),
   Scope and Extent (omitted)
-* [Chapters 4-10](cl-impl-notes-ch-04-10.pdf): Type Specifiers,
+* [Chapters 4-10](cl-impl-notes-ch04-10.pdf): Type Specifiers,
   Program Structure, Predicates, Control Structure,
   Macros, Declarations, Symbols
-* [Chapter 11](cl-impl-notes-ch-11.pdf): Packages
-* [Chapters 12-15](cl-impl-notes-ch-12-15.pdf): Numbers, Characters,
+* [Chapter 11](cl-impl-notes-ch11.pdf): Packages
+* [Chapters 12-15](cl-impl-notes-ch12-15.pdf): Numbers, Characters,
   Sequences (omitted), Lists
 * Chapter 16: Hash Tables (omitted)
 * [Chapters 17-23](cl-impl-notes-ch17-23.pdf): Arrays, Strings (omitted),

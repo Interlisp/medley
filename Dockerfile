@@ -1,4 +1,9 @@
-FROM billstumbo/maiko:latest
+FROM interlisp/maiko:latest
+ARG BUILD_DATE
+LABEL name="Medley"
+LABEL description="The Medley Interlisp environment"
+LABEL url="https://github.com/Interlisp/medley"
+LABEL build-time=$BUILD_DATE
 
 RUN apt-get update && apt-get install -y tightvncserver
 

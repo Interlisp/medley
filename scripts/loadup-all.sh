@@ -14,7 +14,7 @@ touch ./tmp/loadup.timestamp
 ./scripts/loadup-init.sh && \
     ./scripts/loadup-mid-from-init.sh && \
     ./scripts/loadup-lisp-from-mid.sh && \
-    ./scripts/loadup-full.sh && \
+    ./scripts/loadup-full-from-lisp.sh && \
     ./scripts/loadup-aux.sh && \
     echo "**** DONE ****"
 

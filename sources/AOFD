@@ -1,11 +1,11 @@
-(DEFINE-FILE-INFO READTABLE "INTERLISP" PACKAGE "INTERLISP")
-(FILECREATED "13-Jun-2021 11:35:32" {DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>AOFD.;2 35745  
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10 FORMAT XCCS)
+(FILECREATED " 8-Aug-2021 00:11:00" {DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>AOFD.;3 36869  
 
-      changes to%:  (FNS CLOSEF INPUT OUTPUT RANDACCESSP \MAKEBASEBYTESTREAM \BASEBYTES.PEEKBIN 
-                         \SEARCHOPENFILES)
+      changes to%:  (FNS OPENSTRINGSTREAM MAKE-STRING-FORMAT)
+                    (VARS AOFDCOMS)
 
-      previous date%: "10-May-2021 15:44:43" 
-{DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>AOFD.;1)
+      previous date%: "13-Jun-2021 11:35:32" 
+{DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>AOFD.;2)
 
 
 (* ; "
@@ -36,7 +36,8 @@ Copyright (c) 1981-1987, 1990, 2021 by Venue & Xerox Corporation.
                    \BASEBYTES.PEEKBIN \BASEBYTES.TRUNCATEFN \BASEBYTES.OPENFN \BASEBYTES.BLOCKIO)
               (GLOBALVARS \BASEBYTESDEVICE)
               (DECLARE%: DONTEVAL@LOAD (P (\BASEBYTES.IO.INIT)))
-              (FNS OPENSTRINGSTREAM))
+              (FNS OPENSTRINGSTREAM MAKE-STRING-FORMAT)
+              (P (MAKE-STRING-FORMAT)))
         [COMS 
               (* ;; "STREAM interface for old-style strings")
 
@@ -532,41 +533,76 @@ Copyright (c) 1981-1987, 1990, 2021 by Venue & Xerox Corporation.
 (DEFINEQ
 
 (OPENSTRINGSTREAM
-  [LAMBDA (STR ACCESS)                                       (* rmk%: "28-Mar-85 08:40")
-          
-          (* ;; "Does not register the stream on \OPENFILES, nor does it search \OPENFILES for a previously opened stream.  Thus, this implementation does not side-effect the string as the 10 does.  However, the temporary coercion of strings to open streams in \GETSTREAM does simulate the side-effecting.  Note that a string stream is unnamed.")
+  [LAMBDA (STR ACCESS)                                  (* ; "Edited  8-Aug-2021 00:02 by rmk:")
+                                                             (* rmk%: "28-Mar-85 08:40")
 
-    (PROG (STREAM FATP)
-          (OR (STRINGP STR)
-              (\ILLEGAL.ARG STR))
-          (SETQ FATP (ffetch (STRINGP FATSTRINGP) of STR))
-          [SETQ STREAM (\MAKEBASEBYTESTREAM (OR (ffetch (STRINGP BASE) of STR)
-                                                T)
-                              (COND
-                                 (FATP (UNFOLD (ffetch (STRINGP OFFST) of STR)
-                                              BYTESPERWORD))
-                                 (T (ffetch (STRINGP OFFST) of STR)))
-                              (COND
-                                 (FATP (UNFOLD (ffetch (STRINGP LENGTH) of STR)
-                                              BYTESPERWORD))
-                                 (T (ffetch (STRINGP LENGTH) of STR)))
-                              (SELECTQ ACCESS
-                                  ((INPUT OUTPUT BOTH) 
-                                       ACCESS)
-                                  (NIL 'INPUT)
-                                  (\ILLEGAL.ARG ACCESS]
-          (PROGN                                             (* ; 
-                                      "Minor differences between a basebytestream and a stringstream")
-                 (if FATP
-                     then (freplace (STREAM CHARSET) of STREAM with \NORUNCODE))
-                 (freplace USERCLOSEABLE of STREAM with T)
-                 (freplace USERVISIBLE of STREAM with T)
-                 (SELECTQ (SYSTEMTYPE)
-                     (VAX (freplace F2 of STREAM with 0)
-                          (freplace STRMBINFN of STREAM with (FUNCTION \STRINGBIN)))
-                     NIL))
-          (RETURN STREAM])
+    (* ;; "We fatten thin strings at the start so that the byte-level functions (bin, bout, getfileptr, setfrileptr) give the same (2-bytes per character) picture of the byte sequence even if we started out thin.")
+
+    (* ;; "Does not register the stream on \OPENFILES, nor does it search \OPENFILES for a previously opened stream. ")
+
+    (SELECTQ ACCESS
+        ((INPUT OUTPUT BOTH))
+        (NIL (SETQ ACCESS 'INPUT))
+        (\ILLEGAL.ARG ACCESS))
+    (CL:UNLESS (STRINGP STR)
+           (\ILLEGAL.ARG STR))
+    (LET (STREAM)
+         (IF (AND (EQ ACCESS 'INPUT)
+                      (NOT (ffetch (STRINGP FATSTRINGP) of STR)))
+             THEN (\FATTENSTRING STR)
+           ELSE (\SMASHABLESTRING STR T))
+
+         (* ;; "String storage is now fat")
+
+         (SETQ STREAM (\MAKEBASEBYTESTREAM (OR (ffetch (STRINGP BASE) of STR)
+                                                   T)
+                             (UNFOLD (ffetch (STRINGP OFFST) of STR)
+                                    BYTESPERWORD)
+                             (UNFOLD (ffetch (STRINGP LENGTH) of STR)
+                                    BYTESPERWORD)
+                             ACCESS))
+
+         (* ;; "Differences between a basebytestream and a stringstream")
+
+         (\EXTERNALFORMAT STREAM :STRING)
+         (freplace USERCLOSEABLE of STREAM with T)
+         (freplace USERVISIBLE of STREAM with T)
+         STREAM])
+
+(MAKE-STRING-FORMAT
+  [LAMBDA NIL                                           (* ; "Edited  8-Aug-2021 00:10 by rmk:")
+
+    (* ;; "We are looking at an in-core string, we know that EOL is CR, that the characters have the internal (XCCS) encoding, and that the string is fat. ")
+
+    (MAKE-EXTERNALFORMAT :STRING [FUNCTION (LAMBDA (STRM COUNTP)
+                                             (DECLARE (USEDFREE *BYTECOUNTER*))
+                                             (CL:WHEN COUNTP (SETQ *BYTECOUNTER* 2))
+                                             (\WIN STRM]
+           [FUNCTION (LAMBDA (STRM NOERROR)
+                       (CL:WHEN (\PEEKBIN STRM NOERROR)
+
+                           (* ;; "This guards against the EOF error")
+
+                           (PROG1 (LOGOR (LLSH (\BIN STRM)
+                                               8)
+                                         (\PEEKBIN STRM NOERROR))
+                                  (\BACKFILEPTR STRM)))]
+           [FUNCTION (LAMBDA (STRM COUNTP)
+                       (DECLARE (USEDFREE *BYTECOUNTER*))
+                       (CL:WHEN (\BACKFILEPTR STRM)
+                           (IF (\BACKFILEPTR STRM)
+                               THEN (CL:WHEN COUNTP (SETQ *BYTECOUNTER* 2))
+                                     T
+                             ELSEIF COUNTP
+                               THEN (SETQ *BYTECOUNTER* 1)))]
+           [FUNCTION (LAMBDA (STRM CODE)
+                       (\WOUT STRM CODE)
+                       CODE]
+           NIL
+           'CR])
 )
+
+(MAKE-STRING-FORMAT)
 
 
 
@@ -748,16 +784,16 @@ Copyright (c) 1981-1987, 1990, 2021 by Venue & Xerox Corporation.
 )
 (PUTPROPS AOFD COPYRIGHT ("Venue & Xerox Corporation" 1981 1982 1983 1984 1985 1986 1987 1990 2021))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (2373 3480 (\ADD-OPEN-STREAM 2383 . 2660) (\GENERIC-UNREGISTER-STREAM 2662 . 3478)) (
-3521 10778 (CLOSEALL 3531 . 4236) (CLOSEF 4238 . 5434) (EOFCLOSEF 5436 . 5732) (INPUT 5734 . 6506) (
-OPENP 6508 . 6907) (OUTPUT 6909 . 7683) (POSITION 7685 . 8497) (RANDACCESSP 8499 . 8974) (\IOMODEP 
-8976 . 9613) (WHENCLOSE 9615 . 10776)) (10779 10901 (STREAMADDPROP 10789 . 10899)) (12065 24946 (
-\BASEBYTES.IO.INIT 12075 . 15271) (\MAKEBASEBYTESTREAM 15273 . 18585) (\MBS.OUTCHARFN 18587 . 18975) (
-\BASEBYTES.NAME.FROM.STREAM 18977 . 19440) (\BASEBYTES.BOUT 19442 . 20159) (\BASEBYTES.SETFILEPTR 
-20161 . 20782) (\BASEBYTES.READP 20784 . 21420) (\BASEBYTES.BIN 21422 . 21953) (\BASEBYTES.PEEKBIN 
-21955 . 22786) (\BASEBYTES.TRUNCATEFN 22788 . 23292) (\BASEBYTES.OPENFN 23294 . 23784) (
-\BASEBYTES.BLOCKIO 23786 . 24944)) (25069 27319 (OPENSTRINGSTREAM 25079 . 27317)) (27376 31012 (
-\STRINGSTREAM.INIT 27386 . 31010)) (31074 34646 (GETSTREAM 31084 . 31307) (\ADDOFD 31309 . 31596) (
-\CLEAROFD 31598 . 31879) (\DELETEOFD 31881 . 32032) (\GETSTREAM 32034 . 34198) (\SEARCHOPENFILES 34200
- . 34644)))))
+  (FILEMAP (NIL (2412 3519 (\ADD-OPEN-STREAM 2422 . 2699) (\GENERIC-UNREGISTER-STREAM 2701 . 3517)) (
+3560 10817 (CLOSEALL 3570 . 4275) (CLOSEF 4277 . 5473) (EOFCLOSEF 5475 . 5771) (INPUT 5773 . 6545) (
+OPENP 6547 . 6946) (OUTPUT 6948 . 7722) (POSITION 7724 . 8536) (RANDACCESSP 8538 . 9013) (\IOMODEP 
+9015 . 9652) (WHENCLOSE 9654 . 10815)) (10818 10940 (STREAMADDPROP 10828 . 10938)) (12104 24985 (
+\BASEBYTES.IO.INIT 12114 . 15310) (\MAKEBASEBYTESTREAM 15312 . 18624) (\MBS.OUTCHARFN 18626 . 19014) (
+\BASEBYTES.NAME.FROM.STREAM 19016 . 19479) (\BASEBYTES.BOUT 19481 . 20198) (\BASEBYTES.SETFILEPTR 
+20200 . 20821) (\BASEBYTES.READP 20823 . 21459) (\BASEBYTES.BIN 21461 . 21992) (\BASEBYTES.PEEKBIN 
+21994 . 22825) (\BASEBYTES.TRUNCATEFN 22827 . 23331) (\BASEBYTES.OPENFN 23333 . 23823) (
+\BASEBYTES.BLOCKIO 23825 . 24983)) (25108 28417 (OPENSTRINGSTREAM 25118 . 26835) (MAKE-STRING-FORMAT 
+26837 . 28415)) (28500 32136 (\STRINGSTREAM.INIT 28510 . 32134)) (32198 35770 (GETSTREAM 32208 . 32431
+) (\ADDOFD 32433 . 32720) (\CLEAROFD 32722 . 33003) (\DELETEOFD 33005 . 33156) (\GETSTREAM 33158 . 
+35322) (\SEARCHOPENFILES 35324 . 35768)))))
 STOP

@@ -1,11 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10 FORMAT XCCS)
-(FILECREATED " 8-Aug-2021 14:52:26" 
-{DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>LLREAD.;76 100285 
+(FILECREATED "13-Aug-2021 14:19:45" 
+{DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>LLREAD.;83 102595 
 
-      changes to%:  (FNS \INCCODE.EOLC)
+      changes to%:  (FNS \BACKCCODE \RSTRING2 \BACKCCODE.EOLC)
+                    (VARS LLREADCOMS)
 
-      previous date%: " 8-Aug-2021 13:10:22" 
-{DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>LLREAD.;75)
+      previous date%: "10-Aug-2021 10:29:44" 
+{DSK}<Users>kaplan>Local>medley3.5>git-medley>sources>LLREAD.;79)
 
 
 (* ; "
@@ -25,7 +26,7 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
               (FNS RSTRING READ-EXTENDED-TOKEN \RSTRING2))
         [COMS                                                (* ; "Core of the reader")
               (FNS \TOP-LEVEL-READ \SUBREAD \SUBREADCONCAT \ORIG-READ.SYMBOL \ORIG-INVALID.SYMBOL 
-                   \APPLYREADMACRO INREADMACROP \CHECKEOLC.CRLF)
+                   \APPLYREADMACRO INREADMACROP)
               (DECLARE%: DONTEVAL@LOAD DOCOPY (P (MOVD? '\ORIG-READ.SYMBOL '\READ.SYMBOL)
                                                  (MOVD? '\ORIG-INVALID.SYMBOL '\INVALID.SYMBOL]
         (COMS                                                (* ; "Read macro for '")
@@ -43,8 +44,8 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
         (COMS 
               (* ;; "Generic functions not compiled open")
 
-              (FNS \OUTCHAR \INCCODE \BACKCCODE \PEEKCCODE \PEEKCCODE.NOEOLC \INCCODE.EOLC 
-                   \FORMATBYTESTREAM)
+              (FNS \OUTCHAR \INCCODE \BACKCCODE \BACKCCODE.EOLC \PEEKCCODE \PEEKCCODE.NOEOLC 
+                   \INCCODE.EOLC \FORMATBYTESTREAM \CHECKEOLC.CRLF)
               (MACROS \CHECKEOLC))
         (COMS (INITVARS (*REPLACE-NO-FONT-CODE* T)
                      (*DEFAULT-NOT-CONVERTED-FAT-CODE* 8739))
@@ -461,7 +462,7 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
                            else J])
 
 (\RSTRING2
-  [LAMBDA (STRM SA RSFLG PNSTR)                         (* ; "Edited 23-Jun-2021 13:02 by rmk:")
+  [LAMBDA (STRM SA RSFLG PNSTR)                         (* ; "Edited 13-Aug-2021 13:35 by rmk:")
 
 (* ;;; "The main string reader.  Reads characters from STREAM according to the syntax table SA and returns a string.  PNSTR is an instance of the global resource \PNAMESTRING, which we can use all to ourselves as a buffer.")
 
@@ -473,29 +474,23 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
            (J 0)
            CH SNX ANSLIST ANSTAIL LASTC FATSEEN SKIPPING)
       RS2LP
-          (SETQ CH (\INCCODE STRM))
+          (SETQ CH (\INCCODE.EOLC STRM))
           [COND
-             ((OR (EQ CH (CHARCODE LF))
-                  (EQ CH (CHARCODE CR)))
+             ((EQ CH (CHARCODE EOL))
 
-              (* ;; "We just read a potential (first)  EOL character, so we have to turn it into our EOL.  Most places do this with \CHECKEOLC, but we can't do that here, because if the eol happens to be a CR-LF sequence and would terminate the read, \BACKCCODE won't work right.")
+              (* ;; "We have eaten a CR, LF, or CRLF depending on the EOL convention of STRM, and recognized it as an EOL.  If EOL is a stopatom character, we terminate the read and backup over the just read character(s) so they can be read again.")
 
               (* ;; "An escaped LF is handled below, stays as LF even from an LF file.")
 
               (COND
                  ([AND (EQ RSFLG T)
-                       (fetch STOPATOM of (\SYNCODE SA (CHARCODE CR]
-                                                             (* ; 
-                              "From RSTRING, eol terminates read.  Leave (the first) eol in buffer")
-                  (\BACKCCODE STRM)
-                  (GO FINISH))
-                 (T (COND
-                       ((AND (OR (EQ EOLC CRLF.EOLC)
-                                 (EQ EOLC ANY.EOLC))
-                             (EQ (\PEEKBIN STRM T)
-                                 (CHARCODE LF)))             (* ; "Eat the LF after the CR")
-                        (\BIN STRM)))
-                    (SETQ CH (CHARCODE EOL]
+                       (fetch STOPATOM of (\SYNCODE SA (CHARCODE EOL]
+
+                  (* ;; 
+          "From RSTRING, eol terminates read, but EOL character(s) is/are left to be read again.  ")
+
+                  (\BACKCCODE.EOLC STRM)
+                  (GO FINISH]
           (SETQ SNX (\SYNCODE SA CH))
           (SELECTC SNX
               (OTHER.RC                                      (* ; "Normal case, nothing to do"))
@@ -1117,59 +1112,6 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
                  TEM)
           (RELSTK TEM)
           (RETURN \READDEPTH])
-
-(\CHECKEOLC.CRLF
-  [LAMBDA (STREAM PEEKBINFLG COUNTP)                    (* ; "Edited  6-Aug-2021 23:30 by rmk:")
-
-    (* ;; "This is called only when a CR has been read and EOLC is either any or CRLF. This returns EOL if the next code is an LF")
-
-    (* ;; "If COUNTP, that sets *BYTECOUNTER* freely with the number of LF bytes.")
-
-    (DECLARE (USEDFREE *BYTECOUNTER*))
-    (LET (CH)
-         [SETQ CH (COND
-                     [PEEKBINFLG 
-
-                            (* ;; 
-                          "T from PEEKC.  In this case, must leave the fileptr where it was.")
-
-                            (* ;; "The CR itself hasn't been read, just peeked.  So here we have to read it, then peek at the next character to see if it is an LF, and then back out the CR")
-
-                            (COND
-                               ([EQ (CHARCODE LF)
-                                    (UNINTERRUPTABLY
-                                        
-                                        (* ;; " Since we are going to \BACKCCODE back the peeked character, we don't need to update the counter variable")
-
-                                        (\INCCODE STREAM)
-                                        (PROG1 (\PEEKCCODE STREAM T 'NOEOLC)
-
-                                            (* ;; 
-                          "This has to be a call to \PEEKCODE that doesn't itself to the checkeolc")
-
-                                            (* ;; 
-          "LF must be the next char after the CR.  We back up over the CR that \INCCODE just read.")
-
-                                            (\BACKCCODE STREAM)))]
-
-                                (* ;; "Got the CRLF, it's an EOL")
-
-                                (CHARCODE EOL))
-                               (T (CHARCODE CR]
-                     ((EQ (CHARCODE LF)
-                          (\PEEKCCODE STREAM T 'NOEOLC))
-
-                      (* ;; "Since we aren't peeking, the CR has actually been read, and we are entitled to read the LF that we just peeked at.")
-
-                      (IF COUNTP
-                          THEN (LET (NUMLFBYTES)
-                                        (DECLARE (SPECVARS NUMLFBYTES))
-                                        (\INCCODE STREAM 'NUMLFBYTES 0)
-                                        (ADD *BYTECOUNTER* NUMLFBYTES))
-                        ELSE (\INCCODE STREAM))
-                      (CHARCODE EOL))
-                     (T (CHARCODE CR]
-         CH])
 )
 (DECLARE%: DONTEVAL@LOAD DOCOPY 
 
@@ -1657,7 +1599,7 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
 (DEFINEQ
 
 (\OUTCHAR
-  [LAMBDA (STREAM CODE)                                 (* ; "Edited  8-Aug-2021 13:08 by rmk:")
+  [LAMBDA (STREAM CODE)                                 (* ; "Edited 10-Aug-2021 10:29 by rmk:")
 
     (* ;; "We can't do the EOL stuff here because we don't know whether BOUTs are legit.")
 
@@ -1673,7 +1615,8 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
                                                            (STREAM CHARPOSITION) OF STREAM)))))
     (CL:FUNCALL (OR (ffetch (STREAM OUTCHARFN) of STREAM)
                     \DEFAULTOUTCHAR)
-           STREAM CODE])
+           STREAM CODE)
+    CODE])
 
 (\INCCODE
   [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited  7-Aug-2021 00:11 by rmk:")
@@ -1696,20 +1639,69 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
                       STREAM])
 
 (\BACKCCODE
-  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited  6-Aug-2021 15:57 by rmk:")
+  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 13-Aug-2021 14:19 by rmk:")
+
+    (* ;; 
+"Format function returns T if the backup succeed, NIL otherwise (e.g at the beginning of the file)")
+
     (IF BYTECOUNTVAR
         THEN [LET ((*BYTECOUNTER* 0))
                       (DECLARE (SPECVARS *BYTECOUNTER*))
-                      (CL:FUNCALL (OR (ffetch (STREAM BACKCCODEFN) of STREAM)
-                                      \DEFAULTINCCODE)
-                             STREAM
-                             '*BYTECOUNTER* 0 (SET BYTECOUNTVAR (IPLUS (OR BYTECOUNTVAL (\EVALV1
-                                                                                         BYTECOUNTVAR
-                                                                                         ))
-                                                                       *BYTECOUNTER*]
+                      (PROG1 (CL:FUNCALL (OR (ffetch (STREAM BACKCCODEFN) of STREAM)
+                                             \DEFAULTINCCODE)
+                                    STREAM T)
+                          (SET BYTECOUNTVAR (IPLUS (OR BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR))
+                                                   *BYTECOUNTER*)))]
       ELSE (CL:FUNCALL (OR (ffetch (STREAM BACKCCODEFN) of STREAM)
                                \DEFAULTINCCODE)
                       STREAM])
+
+(\BACKCCODE.EOLC
+  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 13-Aug-2021 13:34 by rmk:")
+
+    (* ;; "If the EOLCONVENTION is CRLF, and the first backup is over an LF encoding, this looks to see whether the preceding bytes encode a CR and if so, backs up over those.")
+
+    (* ;; "Within this we operate at the external-format implementation level.")
+
+    (* ;; "Counting is unusual in general (mostly just COPYCHARS and PFCOPYBYTES) , and counting while backing up is even rarer.  So for simplicity here we just count by looking at the byte pointer.")
+
+    (LET [(STARTPOS (CL:WHEN BYTECOUNTVAR (\GETFILEPTR STREAM]
+
+         (* ;; "In almost all cases, we just execute the first backup")
+
+         (PROG1 (CL:WHEN (CL:FUNCALL (OR (ffetch (STREAM BACKCCODEFN) of STREAM)
+                                         \DEFAULTINCCODE)
+                                STREAM)
+                    (IF (AND (EQ CRLF.EOLC (FETCH (STREAM EOLCONVENTION) OF STREAM))
+                                 (EQ (CHARCODE LF)
+                                     (CL:FUNCALL (OR (ffetch (STREAM PEEKCCODEFN) of STREAM)
+                                                     \DEFAULTPEEKCCODE)
+                                            STREAM)))
+                        THEN 
+
+                              (* ;; 
+                    "We just backed over an LF in a CRLF file.  If we go one more, do we get a CR?")
+
+                              (CL:WHEN (CL:FUNCALL (OR (ffetch (STREAM BACKCCODEFN) of STREAM
+                                                              )
+                                                       \DEFAULTINCCODE)
+                                              STREAM)
+                                  (CL:UNLESS (EQ (CHARCODE CR)
+                                                 (CL:FUNCALL (OR (ffetch (STREAM PEEKCCODEFN)
+                                                                    of STREAM)
+                                                                 \DEFAULTPEEKCCODE)
+                                                        STREAM))
+
+                                      (* ;; "Not a preceding CR, reread it.")
+
+                                      (CL:FUNCALL (OR (ffetch (STREAM INCCODEFN) of STREAM)
+                                                      \DEFAULTINCCODE)
+                                             STREAM))
+                                  T)
+                      ELSE T))
+             (CL:WHEN BYTECOUNTVAR
+                 [SET BYTECOUNTVAR (IPLUS (OR BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR))
+                                          (IDIFFERENCE STARTPOS (\GETFILEPTR STREAM]))])
 
 (\PEEKCCODE
   [LAMBDA (STREAM NOERROR EOL)                          (* ; "Edited 14-Jun-2021 12:40 by rmk:")
@@ -1788,6 +1780,59 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
              (APPLY* (FETCH (EXTERNALFORMAT FORMATBYTESTREAMFN) OF FORMAT)
                     STREAM BYTESTREAM))
          BYTESTREAM])
+
+(\CHECKEOLC.CRLF
+  [LAMBDA (STREAM PEEKBINFLG COUNTP)                    (* ; "Edited  6-Aug-2021 23:30 by rmk:")
+
+    (* ;; "This is called only when a CR has been read and EOLC is either any or CRLF. This returns EOL if the next code is an LF")
+
+    (* ;; "If COUNTP, that sets *BYTECOUNTER* freely with the number of LF bytes.")
+
+    (DECLARE (USEDFREE *BYTECOUNTER*))
+    (LET (CH)
+         [SETQ CH (COND
+                     [PEEKBINFLG 
+
+                            (* ;; 
+                          "T from PEEKC.  In this case, must leave the fileptr where it was.")
+
+                            (* ;; "The CR itself hasn't been read, just peeked.  So here we have to read it, then peek at the next character to see if it is an LF, and then back out the CR")
+
+                            (COND
+                               ([EQ (CHARCODE LF)
+                                    (UNINTERRUPTABLY
+                                        
+                                        (* ;; " Since we are going to \BACKCCODE back the peeked character, we don't need to update the counter variable")
+
+                                        (\INCCODE STREAM)
+                                        (PROG1 (\PEEKCCODE STREAM T 'NOEOLC)
+
+                                            (* ;; 
+                          "This has to be a call to \PEEKCODE that doesn't itself to the checkeolc")
+
+                                            (* ;; 
+          "LF must be the next char after the CR.  We back up over the CR that \INCCODE just read.")
+
+                                            (\BACKCCODE STREAM)))]
+
+                                (* ;; "Got the CRLF, it's an EOL")
+
+                                (CHARCODE EOL))
+                               (T (CHARCODE CR]
+                     ((EQ (CHARCODE LF)
+                          (\PEEKCCODE STREAM T 'NOEOLC))
+
+                      (* ;; "Since we aren't peeking, the CR has actually been read, and we are entitled to read the LF that we just peeked at.")
+
+                      (IF COUNTP
+                          THEN (LET (NUMLFBYTES)
+                                        (DECLARE (SPECVARS NUMLFBYTES))
+                                        (\INCCODE STREAM 'NUMLFBYTES 0)
+                                        (ADD *BYTECOUNTER* NUMLFBYTES))
+                        ELSE (\INCCODE STREAM))
+                      (CHARCODE EOL))
+                     (T (CHARCODE CR]
+         CH])
 )
 (DECLARE%: EVAL@COMPILE 
 
@@ -1847,19 +1892,20 @@ Copyright (c) 1981-1988, 1990-1991, 1993, 2021 by Venue & Xerox Corporation.
 (PUTPROPS LLREAD COPYRIGHT ("Venue & Xerox Corporation" 1981 1982 1983 1984 1985 1986 1987 1988 1990 
 1991 1993 2021))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3472 11701 (LASTC 3482 . 3788) (PEEKC 3790 . 4178) (PEEKCCODE 4180 . 4473) (RATOM 4475
- . 5556) (READ 5558 . 6118) (READC 6120 . 6761) (READCCODE 6763 . 7522) (READP 7524 . 8076) (
-SETREADMACROFLG 8078 . 8377) (SKIPSEPRCODES 8379 . 9362) (SKIPSEPRS 9364 . 9750) (SKREAD 9752 . 11699)
-) (11747 20422 (CL:READ 11757 . 12306) (CL:READ-PRESERVING-WHITESPACE 12308 . 13030) (
-CL:READ-DELIMITED-LIST 13032 . 13947) (CL:PARSE-INTEGER 13949 . 20420)) (20515 33460 (RSTRING 20525 . 
-21257) (READ-EXTENDED-TOKEN 21259 . 25131) (\RSTRING2 25133 . 33458)) (33496 67202 (\TOP-LEVEL-READ 
-33506 . 35489) (\SUBREAD 35491 . 61052) (\SUBREADCONCAT 61054 . 61677) (\ORIG-READ.SYMBOL 61679 . 
-62747) (\ORIG-INVALID.SYMBOL 62749 . 63648) (\APPLYREADMACRO 63650 . 64066) (INREADMACROP 64068 . 
-64634) (\CHECKEOLC.CRLF 64636 . 67200)) (67361 67536 (READQUOTE 67371 . 67534)) (67561 79465 (READVBAR
- 67571 . 68902) (READHASHMACRO 68904 . 74714) (DEFMACRO-LAMBDA-LIST-KEYWORD-P 74716 . 74936) (
-DIGITBASEP 74938 . 75672) (READNUMBERINBASE 75674 . 77560) (ESTIMATE-DIMENSIONALITY 77562 . 77887) (
-SKIP.HASH.COMMENT 77889 . 78857) (CMLREAD.FEATURE.PARSER 78859 . 79463)) (79509 86042 (CHARACTER.READ 
-79519 . 80773) (CHARCODE.DECODE 80775 . 86040)) (90510 97729 (\OUTCHAR 90520 . 91646) (\INCCODE 91648
- . 92834) (\BACKCCODE 92836 . 93796) (\PEEKCCODE 93798 . 94114) (\PEEKCCODE.NOEOLC 94116 . 94378) (
-\INCCODE.EOLC 94380 . 96239) (\FORMATBYTESTREAM 96241 . 97727)))))
+  (FILEMAP (NIL (3549 11778 (LASTC 3559 . 3865) (PEEKC 3867 . 4255) (PEEKCCODE 4257 . 4550) (RATOM 4552
+ . 5633) (READ 5635 . 6195) (READC 6197 . 6838) (READCCODE 6840 . 7599) (READP 7601 . 8153) (
+SETREADMACROFLG 8155 . 8454) (SKIPSEPRCODES 8456 . 9439) (SKIPSEPRS 9441 . 9827) (SKREAD 9829 . 11776)
+) (11824 20499 (CL:READ 11834 . 12383) (CL:READ-PRESERVING-WHITESPACE 12385 . 13107) (
+CL:READ-DELIMITED-LIST 13109 . 14024) (CL:PARSE-INTEGER 14026 . 20497)) (20592 33069 (RSTRING 20602 . 
+21334) (READ-EXTENDED-TOKEN 21336 . 25208) (\RSTRING2 25210 . 33067)) (33105 64245 (\TOP-LEVEL-READ 
+33115 . 35098) (\SUBREAD 35100 . 60661) (\SUBREADCONCAT 60663 . 61286) (\ORIG-READ.SYMBOL 61288 . 
+62356) (\ORIG-INVALID.SYMBOL 62358 . 63257) (\APPLYREADMACRO 63259 . 63675) (INREADMACROP 63677 . 
+64243)) (64404 64579 (READQUOTE 64414 . 64577)) (64604 76508 (READVBAR 64614 . 65945) (READHASHMACRO 
+65947 . 71757) (DEFMACRO-LAMBDA-LIST-KEYWORD-P 71759 . 71979) (DIGITBASEP 71981 . 72715) (
+READNUMBERINBASE 72717 . 74603) (ESTIMATE-DIMENSIONALITY 74605 . 74930) (SKIP.HASH.COMMENT 74932 . 
+75900) (CMLREAD.FEATURE.PARSER 75902 . 76506)) (76552 83085 (CHARACTER.READ 76562 . 77816) (
+CHARCODE.DECODE 77818 . 83083)) (87553 100039 (\OUTCHAR 87563 . 88699) (\INCCODE 88701 . 89887) (
+\BACKCCODE 89889 . 90779) (\BACKCCODE.EOLC 90781 . 93540) (\PEEKCCODE 93542 . 93858) (
+\PEEKCCODE.NOEOLC 93860 . 94122) (\INCCODE.EOLC 94124 . 95983) (\FORMATBYTESTREAM 95985 . 97471) (
+\CHECKEOLC.CRLF 97473 . 100037)))))
 STOP

@@ -1,11 +1,11 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10 FORMAT XCCS)
-(FILECREATED " 6-Aug-2021 10:30:15" 
-{DSK}<Users>kaplan>Local>medley3.5>git-medley>library>UNICODE.;185 64537  
+(FILECREATED " 8-Aug-2021 13:10:17" 
+{DSK}<Users>kaplan>Local>medley3.5>git-medley>library>UNICODE.;191 64912  
 
-      changes to%:  (FNS \UTF16.BACKCCODEFN)
+      changes to%:  (FNS UTF8.OUTCHARFN UTF16BE.OUTCHARFN)
 
-      previous date%: " 5-Aug-2021 22:34:22" 
-{DSK}<Users>kaplan>Local>medley3.5>git-medley>library>UNICODE.;184)
+      previous date%: " 7-Aug-2021 13:56:58" 
+{DSK}<Users>kaplan>Local>medley3.5>git-medley>library>UNICODE.;190)
 
 
 (PRETTYCOMPRINT UNICODECOMS)
@@ -19,7 +19,7 @@
               (INITVARS (EXTERNALEOL 'LF))
               (FNS MAKE-UNICODE-FORMATS)
               (P (MAKE-UNICODE-FORMATS EXTERNALEOL))
-              (ADDVARS (*DEFAULT-EXTERNALFORMATS* (UNIX :UTF8)))
+              (ADDVARS (*DEFAULT-EXTERNALFORMATS* (UNIX :UTF-8)))
               (FNS UNICODE.UNMAPPED)
               (FNS XCCS-UTF8-AFTER-OPEN)
               (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS UNICODE.TRANSLATE))
@@ -78,18 +78,19 @@
 (DEFINEQ
 
 (UTF8.OUTCHARFN
-  [LAMBDA (STREAM CHARCODE RAW)                         (* ; "Edited  5-Aug-2021 22:34 by rmk:")
+  [LAMBDA (STREAM CHARCODE RAW)                         (* ; "Edited  8-Aug-2021 13:02 by rmk:")
                                                             (* ; "Edited 17-Aug-2020 08:45 by rmk:")
                                                             (* ; "Edited 30-Jan-2020 23:08 by rmk:")
 
-    (* ;; "Perhaps the translation table should already do the mapping for EOL to LF, but that seems to be a separate property of the stream")
+    (* ;; "Perhaps the translation table should already do the mapping for EOL to LF, but that seems to be a separate property of the stream. Also, CRLF=2 bytes.")
 
     (* ;; "Print UTF8 sequence for CHARCODE.  Do not do XCCS to Unicode translation if RAW.")
 
     (IF (EQ CHARCODE (CHARCODE EOL))
-        THEN (\BOUTEOL STREAM)
-      ELSE (CHANGE (FETCH (STREAM CHARPOSITION) OF STREAM)
-                      (IPLUS DATUM 1))                       (* ; "Avoid overflow")
+        THEN (FREPLACE (STREAM CHARPOSITION) OF STREAM WITH 0)
+              (\BOUTEOL STREAM)
+      ELSE (CHANGE (FFETCH (STREAM CHARPOSITION) OF STREAM)
+                      (IPLUS16 1 DATUM))
             (FOR C INSIDE (CL:IF RAW
                                       CHARCODE
                                       (UNICODE.TRANSLATE CHARCODE *XCCSTOUNICODE*))
@@ -121,62 +122,170 @@
                                                      (LOADBYTE C 0 6)))
                         ELSE (ERROR "CHARCODE too big for UTF8" C])
 
-(UTF8.INCCODEFN  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL RAW)        (* ; "Edited 15-Jun-2021 13:35 by rmk:")                                                            (* ; "Edited  6-Aug-2020 17:13 by rmk:")    (* ;; "Do not do UNICODE to XCSS translation if RAW.")    (* ;; "Test for smallp because the stream's End-of-file operation may suppress the error")    (LET (BYTE1 BYTE2 BYTE3 BYTE4 CODE (COUNT 1))         (SETQ BYTE1 (\BIN STREAM))         (* ;; "Distinguish on header bytes (modulo peculiar EOF behavior--the caller will get whatever ended up in BYTE1")         (CL:WHEN (SMALLP BYTE1)             [SETQ CODE              (IF (ILESSP BYTE1 128)                  THEN                         (* ;;                       "Test first:  Ascii is the common case.  EOL requires its own translation")                        (SELCHARQ BYTE1                             (CR (SELECTC (FETCH (STREAM EOLCONVENTION) OF STREAM)                                     (CR.EOLC                (* ; "Also eq BYTE1")                                              (CHARCODE EOL))                                     (CRLF.EOLC (IF (EQ (CHARCODE LF)                                                            (\PEEKBIN STREAM T))                                                    THEN (\BIN STREAM)                                                          (CL:WHEN BYTECOUNTVAR                                                              (SETQ BYTECOUNTVAR (IDIFFERENCE                                                                                         BYTECOUNTVAL                                                                                        2)))                                                          (CHARCODE EOL)                                                  ELSE BYTE1))                                     BYTE1))                             (LF (CL:IF (EQ LF.EOLC (FETCH (STREAM EOLCONVENTION) OF STREAM))                                     (CHARCODE EOL)                                     BYTE1))                             BYTE1)                ELSEIF (IGEQ BYTE1 (LLSH 15 4))                  THEN                                   (* ; "4 bytes")                        (SETQ BYTE2 (\BIN STREAM))                        (CL:WHEN (OR (NOT (SMALLP BYTE2))                                     (ILESSP BYTE2 128))                            (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                        (SETQ BYTE3 (\BIN STREAM))                        (CL:WHEN (OR (NOT (SMALLP BYTE3))                                     (ILESSP BYTE3 128))                            (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))                        (SETQ BYTE4 (\BIN STREAM))                        (CL:WHEN (OR (NOT (SMALLP BYTE4))                                     (ILESSP BYTE4 128))                            (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3 BYTE4)))                        (SETQ COUNT 4)                        (LOGOR (LLSH (LOADBYTE BYTE1 0 3)                                     18)                               (LLSH (LOADBYTE BYTE2 0 6)                                     12)                               (LLSH (LOADBYTE BYTE3 0 6)                                     6)                               (LOADBYTE BYTE4 0 6))                ELSEIF (IGEQ BYTE1 (LLSH 7 5))                  THEN                                   (* ; "3 bytes")                        (SETQ BYTE2 (\BIN STREAM))                        (CL:WHEN (OR (NOT (SMALLP BYTE2))                                     (ILESSP BYTE2 128))                            (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                        (SETQ BYTE3 (\BIN STREAM))                        (CL:WHEN (OR (NOT (SMALLP BYTE3))                                     (ILESSP BYTE3 128))                            (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))                        (SETQ COUNT 3)                        (LOGOR (LLSH (LOADBYTE BYTE1 0 4)                                     12)                               (LLSH (LOADBYTE BYTE2 0 6)                                     6)                               (LOADBYTE BYTE3 0 6))                ELSE                                     (* ; "Must be 2 bytes")                      (SETQ COUNT 2)                      (SETQ BYTE2 (\BIN STREAM))                      (CL:WHEN (OR (NOT (SMALLP BYTE2))                                   (ILESSP BYTE2 128))                          (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                      (LOGOR (LLSH (LOADBYTE BYTE1 0 5)                                   6)                             (LOADBYTE BYTE2 0 6])         (CL:UNLESS (OR RAW (NOT (SMALLP CODE)))             (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))         (CL:WHEN BYTECOUNTVAR             (SET BYTECOUNTVAR (IDIFFERENCE BYTECOUNTVAL COUNT)))         CODE])
+(UTF8.INCCODEFN
+  [LAMBDA (STREAM COUNTP RAW)                           (* ; "Edited  6-Aug-2021 16:02 by rmk:")
+                                                            (* ; "Edited  6-Aug-2020 17:13 by rmk:")
+
+    (* ;; "Do not do UNICODE to XCSS translation if RAW.")
+
+    (* ;; "Test for smallp because the stream's End-of-file operation may suppress the error")
+
+    (DECLARE (USEDFREE *BYTECOUNTER*))
+    (LET (BYTE1 BYTE2 BYTE3 BYTE4 CODE (COUNT 1))
+         (SETQ BYTE1 (\BIN STREAM))
+
+         (* ;; "Distinguish on header bytes (modulo peculiar EOF behavior--the caller will get whatever ended up in BYTE1")
+
+         (CL:WHEN (SMALLP BYTE1)
+             [SETQ CODE (IF (ILESSP BYTE1 128)
+                            THEN 
+
+                                  (* ;; 
+                         "Test first:  Ascii is the common case.  EOL requires its own translation")
+
+                                  (SELCHARQ BYTE1
+                                       (CR (SELECTC (FETCH (STREAM EOLCONVENTION) OF STREAM)
+                                               (CR.EOLC      (* ; "Also eq BYTE1")
+                                                        (CHARCODE EOL))
+                                               (CRLF.EOLC (IF (EQ (CHARCODE LF)
+                                                                      (\PEEKBIN STREAM T))
+                                                              THEN (\BIN STREAM)
+                                                                    (CL:WHEN COUNTP (SETQ COUNT 2))
+                                                                    (CHARCODE EOL)
+                                                            ELSE BYTE1))
+                                               BYTE1))
+                                       (LF (CL:IF (EQ LF.EOLC (FETCH (STREAM EOLCONVENTION)
+                                                                 OF STREAM))
+                                               (CHARCODE EOL)
+                                               BYTE1))
+                                       BYTE1)
+                          ELSEIF (IGEQ BYTE1 (LLSH 15 4))
+                            THEN                         (* ; "4 bytes")
+                                  (SETQ BYTE2 (\BIN STREAM))
+                                  (CL:WHEN (OR (NOT (SMALLP BYTE2))
+                                               (ILESSP BYTE2 128))
+                                      (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))
+                                  (SETQ BYTE3 (\BIN STREAM))
+                                  (CL:WHEN (OR (NOT (SMALLP BYTE3))
+                                               (ILESSP BYTE3 128))
+                                      (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))
+                                  (SETQ BYTE4 (\BIN STREAM))
+                                  (CL:WHEN (OR (NOT (SMALLP BYTE4))
+                                               (ILESSP BYTE4 128))
+                                      (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3 BYTE4)))
+                                  (SETQ COUNT 4)
+                                  (LOGOR (LLSH (LOADBYTE BYTE1 0 3)
+                                               18)
+                                         (LLSH (LOADBYTE BYTE2 0 6)
+                                               12)
+                                         (LLSH (LOADBYTE BYTE3 0 6)
+                                               6)
+                                         (LOADBYTE BYTE4 0 6))
+                          ELSEIF (IGEQ BYTE1 (LLSH 7 5))
+                            THEN                         (* ; "3 bytes")
+                                  (SETQ BYTE2 (\BIN STREAM))
+                                  (CL:WHEN (OR (NOT (SMALLP BYTE2))
+                                               (ILESSP BYTE2 128))
+                                      (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))
+                                  (SETQ BYTE3 (\BIN STREAM))
+                                  (CL:WHEN (OR (NOT (SMALLP BYTE3))
+                                               (ILESSP BYTE3 128))
+                                      (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))
+                                  (SETQ COUNT 3)
+                                  (LOGOR (LLSH (LOADBYTE BYTE1 0 4)
+                                               12)
+                                         (LLSH (LOADBYTE BYTE2 0 6)
+                                               6)
+                                         (LOADBYTE BYTE3 0 6))
+                          ELSE                           (* ; "Must be 2 bytes")
+                                (SETQ COUNT 2)
+                                (SETQ BYTE2 (\BIN STREAM))
+                                (CL:WHEN (OR (NOT (SMALLP BYTE2))
+                                             (ILESSP BYTE2 128))
+                                    (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))
+                                (LOGOR (LLSH (LOADBYTE BYTE1 0 5)
+                                             6)
+                                       (LOADBYTE BYTE2 0 6])
+         (CL:UNLESS (OR RAW (NOT (SMALLP CODE)))
+             (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))
+         (CL:WHEN COUNTP (SETQ *BYTECOUNTER* COUNT))
+         CODE])
 
 (UTF8.PEEKCCODEFN  [LAMBDA (STREAM NOERROR RAW)                          (* ; "Edited 14-Jun-2021 22:53 by rmk:")    (* ;; "Modeled this after \EUCPEEK on LLREAD.  In the multi-byte (non-ASCII) case, backs the file pointer to the beginning by the proper number of \BACKFILEPTRs, and returns a count of 0.  Returns NIL if NOERROR and either invalid UTF8 or end of file.")    (* ;; "Could be that the caller takes care of backing up the file position if the number of binned-bytes is returned.")    (* ;; "Do not do UNICODE to XCCS translation if RAW")    (PROG (BYTE1 BYTE2 BYTE3 BYTE4 CODE)          (SETQ BYTE1 (\PEEKBIN STREAM NOERROR))     (* ;; "Distinguish on header bytex")          (CL:UNLESS BYTE1 (RETURN NIL))          [IF (ILESSP BYTE1 128)              THEN                     (* ;;                   "Test first:  Ascii is the common case.  No need to back up, since we peeked.")                    (SETQ CODE BYTE1)            ELSEIF (IGEQ BYTE1 (LLSH 15 4))              THEN                                       (* ; "4 bytes")                    (\BIN STREAM)                    (CL:UNLESS (AND (SETQ BYTE2 (\PEEKBIN STREAM NOERROR))                                    (IGEQ BYTE2 128))                        (\BACKFILEPTR STREAM)                        (OR NOERROR (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                        (RETURN CODE))                    (\BIN STREAM)                    (CL:UNLESS (AND (SETQ BYTE3 (\PEEKBIN STREAM NOERROR))                                    (IGEQ BYTE3 128))                        (\BACKFILEPTR STREAM)                        (\BACKFILEPTR STREAM)                        (OR NOERROR (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))                        (RETURN CODE))                    (\BIN STREAM)                    (SETQ BYTE4 (\PEEKBIN STREAM NOERROR))   (* ;                                                            "PEEK the last, no need to back it up")                    (\BACKFILEPTR STREAM)                    (\BACKFILEPTR STREAM)                    (\BACKFILEPTR STREAM)                    (IF (AND BYTE4 (IGEQ BYTE4 128))                        THEN (SETQ CODE (LOGOR (LLSH (LOADBYTE BYTE1 0 3)                                                         18)                                                   (LLSH (LOADBYTE BYTE2 0 6)                                                         12)                                                   (LLSH (LOADBYTE BYTE3 0 6)                                                         6)                                                   (LOADBYTE BYTE4 0 6)))                      ELSEIF NOERROR                      ELSE (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3 BYTE4)))            ELSEIF (IGEQ BYTE1 (LLSH 7 5))              THEN                                       (* ; "3 bytes")                    (\BIN STREAM)                    (CL:UNLESS (AND (SETQ BYTE2 (\PEEKBIN STREAM NOERROR))                                    (IGEQ BYTE2 128))                        (\BACKFILEPTR STREAM)                        (OR NOERROR (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2)))                        (RETURN CODE))                    (\BIN STREAM)                    (SETQ BYTE3 (\PEEKBIN STREAM NOERROR))                    (\BACKFILEPTR STREAM)                    (\BACKFILEPTR STREAM)                    (IF (AND BYTE3 (IGEQ BYTE3 128))                        THEN (SETQ CODE (LOGOR (LLSH (LOADBYTE BYTE1 0 4)                                                         12)                                                   (LLSH (LOADBYTE BYTE2 0 6)                                                         6)                                                   (LOADBYTE BYTE3 0 6)))                      ELSEIF NOERROR                      ELSE (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2 BYTE3)))            ELSE                                         (* ; "Must be 2 bytes")                  (\BIN STREAM)                  (SETQ BYTE2 (\PEEKBIN STREAM NOERROR))                  (\BACKFILEPTR STREAM)                  (IF (AND BYTE2 (IGEQ BYTE2 128))                      THEN (SETQ CODE (LOGOR (LLSH (LOADBYTE BYTE1 0 5)                                                       6)                                                 (LOADBYTE BYTE2 0 6)))                    ELSEIF NOERROR                    ELSE (ERROR "INVALID UTF8 SEQUENCE" (LIST BYTE1 BYTE2]          (CL:WHEN (AND CODE (NOT RAW))              (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))          (RETURN CODE])
 
 (\UTF8.BACKCCODEFN
-  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 15-Jun-2021 13:38 by rmk:")
+  [LAMBDA (STREAM COUNTP)                               (* ; "Edited  6-Aug-2021 16:04 by rmk:")
 
     (* ;; "\BACKFILEPTR is NIL at beginning of FILE, just return COUNT")
 
+    (DECLARE (USEDFREE *BYTECOUNTER*))
     (BIND (C _ 0) WHILE (CL:WHEN (\BACKFILEPTR STREAM)
-                                    (ADD C 1)
+                                    (ADD C -1)
                                     (EQ 2 (LRSH (\PEEKBIN STREAM)
-                                                6))) REPEATUNTIL (EQ C 4)
-       FINALLY (CL:WHEN BYTECOUNTVAR
-                       (SET BYTECOUNTVAR (IPLUS BYTECOUNTVAL C)))])
+                                                6))) REPEATUNTIL (EQ C -4)
+       FINALLY (CL:WHEN COUNTP (SETQ *BYTECOUNTER* C])
 )
 (DEFINEQ
 
 (UTF16BE.OUTCHARFN
-  [LAMBDA (STREAM CHARCODE RAW)                         (* ; "Edited 17-Aug-2020 08:48 by rmk:")
+  [LAMBDA (STREAM CHARCODE RAW)                         (* ; "Edited  8-Aug-2021 13:09 by rmk:")
                                                             (* ; "Edited 30-Jan-2020 23:08 by rmk:")
 
     (* ;; "PRINT UTF16 sequence for CHARCODE.  Do not do XCCS to UNICODE translation if RAW.")
 
-    (CHANGE (FETCH (STREAM CHARPOSITION) OF STREAM)
-           (CL:IF (EQ CHARCODE (CHARCODE EOL))
-               0
-               (IPLUS DATUM 1)))
+    (* ;; "Not sure about EOL conversion if truly %"raw%"")
+
+    (IF (EQ CHARCODE (CHARCODE EOL))
+        THEN (FREPLACE (STREAM CHARPOSITION) OF STREAM WITH 0)
+      ELSE (CHANGE (FFETCH (STREAM CHARPOSITION) OF STREAM)
+                      (IPLUS16 1 DATUM)))
     (FOR C INSIDE (CL:IF RAW
                               CHARCODE
                               (UNICODE.TRANSLATE CHARCODE *XCCSTOUNICODE*))
-       DO (\BOUT STREAM (LRSH C 8))
-             (\BOUT STREAM (LOGAND C 255])
+       DO (\WOUT STREAM C])
 
-(UTF16BE.INCCODEFN  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL RAW)        (* ; "Edited 15-Jun-2021 13:36 by rmk:")    (* ;;   "Do not do UNICODE to XCCS translation if RAW.  Test for SMALLPin case of funky EOF behavior")    (LET (CODE BYTE1 BYTE2 COUNT)         (IF [AND (SMALLP (SETQ BYTE1 (\BIN STREAM)))                      (SMALLP (SETQ BYTE2 (\BIN STREAM]             THEN (SETQ COUNT 2)                   (SETQ CODE (LOGOR (LLSH (\BIN STREAM)                                           8)                                     (\BIN STREAM)))                   (CL:UNLESS RAW                       (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))                   (AND BYTECOUNTVAR (SET BYTECOUNTVAR (IDIFFERENCE BYTECOUNTVAL COUNT)))                   CODE           ELSE (ERROR "ODD NUMBER OF BYTES IN UTF16 FILE" STREAM])
+(UTF16BE.INCCODEFN
+  [LAMBDA (STREAM COUNTP RAW)                           (* ; "Edited  6-Aug-2021 16:05 by rmk:")
+
+    (* ;; 
+  "Do not do UNICODE to XCCS translation if RAW.  Test for SMALLPin case of funky EOF behavior")
+
+    (DECLARE (USEDFREE *BYTECOUNTER*))
+    (LET (CODE BYTE1 BYTE2 COUNT)
+         (IF [AND (SMALLP (SETQ BYTE1 (\BIN STREAM)))
+                      (SMALLP (SETQ BYTE2 (\BIN STREAM]
+             THEN (SETQ COUNT 2)
+                   (SETQ CODE (LOGOR (LLSH (\BIN STREAM)
+                                           8)
+                                     (\BIN STREAM)))
+                   (CL:UNLESS RAW
+                       (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))
+                   (CL:WHEN COUNTP (SETQ *BYTECOUNTER* COUNT))
+                   CODE
+           ELSE (ERROR "ODD NUMBER OF BYTES IN UTF16 FILE" STREAM])
 
 (UTF16BE.PEEKCCODEFN  [LAMBDA (STREAM NOERROR RAW)                          (* ; "Edited 14-Jun-2021 22:58 by rmk:")    (* ;; "Could be that the caller takes care of backing up the file position if the number of binned-bytes is returned.")    (* ;; "Do not do UNICODE to XCCS translation if RAW")    (LET (BYTE1 BYTE2 CODE)         (SETQ BYTE1 (\PEEKBIN STREAM NOERROR))         (IF BYTE1             THEN (\BIN STREAM)                   (SETQ BYTE2 (\PEEKBIN STREAM NOERROR))                   (\BACKFILEPTR STREAM)                   (IF BYTE2                       THEN (SETQ CODE (LOGOR (LLSH BYTE1 8)                                                  BYTE2))                             (CL:IF RAW                                 CODE                                 (UNICODE.TRANSLATE CODE *UNICODETOXCCS*))                     ELSEIF NOERROR                       THEN NIL)           ELSEIF NOERROR             THEN NIL           ELSE (ERROR "INVALID UTF16 CHARACTER" (LIST BYTE1 BYTE2])
 
 (\UTF16.BACKCCODEFN
-  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited  6-Aug-2021 10:15 by rmk:")
+  [LAMBDA (STREAM COUNTP)                               (* ; "Edited  6-Aug-2021 16:07 by rmk:")
 
     (* ;; "\BACKFILEPTR is NIL at beginning of FILE, do nothing.")
 
     (* ;; "Common for big-ending and little-ending")
 
+    (DECLARE (USEDFREE *BYTECOUNTER*))
     (CL:WHEN (\BACKFILEPTR STREAM)
-        [IF (\BACKFILEPTR STREAM)
-            THEN (AND BYTECOUNTVAR (SET BYTECOUNTVAR (IPLUS BYTECOUNTVAL 2)))
-          ELSE (AND BYTECOUNTVAR (SET BYTECOUNTVAR (ADD1 BYTECOUNTVAL])])
+        (IF (\BACKFILEPTR STREAM)
+            THEN (CL:WHEN COUNTP (SETQ *BYTECOUNTER* -2))
+          ELSEIF COUNTP
+            THEN (SETQ *BYTECOUNTER* -1)))])
 )
 
 (RPAQ? EXTERNALEOL 'LF)
 (DEFINEQ
 
 (MAKE-UNICODE-FORMATS
-  [LAMBDA (EXTERNALEOL)                                 (* ; "Edited  1-Aug-2021 23:18 by rmk:")
+  [LAMBDA (EXTERNALEOL)                                 (* ; "Edited  6-Aug-2021 16:08 by rmk:")
 
     (* ;; "RAW formats do not do XCCS/Unicode translation, just deal with the byte encoding.")
 
@@ -187,9 +296,8 @@
            (FUNCTION \UTF8.BACKCCODEFN)
            (FUNCTION UTF8.OUTCHARFN)
            NIL EXTERNALEOL)
-    (MAKE-EXTERNALFORMAT :UTF-8-RAW [FUNCTION (LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)
-                                                (UTF8.INCCODEFN STREAM BYTECOUNTVAR BYTECOUNTVAL
-                                                       T]
+    (MAKE-EXTERNALFORMAT :UTF-8-RAW [FUNCTION (LAMBDA (STREAM COUNTP)
+                                                (UTF8.INCCODEFN STREAM COUNTP T]
            [FUNCTION (LAMBDA (STREAM NOERROR)
                        (UTF8.PEEKCCODEFN STREAM NOERROR T]
            (FUNCTION \UTF8.BACKCCODEFN)
@@ -201,9 +309,8 @@
            (FUNCTION \UTF16.BACKCCODEFN)
            (FUNCTION UTF16BE.OUTCHARFN)
            NIL EXTERNALEOL)
-    (MAKE-EXTERNALFORMAT :UTF-16BE-RAW [FUNCTION (LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)
-                                                   (UTF16BE.INCCODEFN STREAM BYTECOUNTVAR 
-                                                          BYTECOUNTVAL T]
+    (MAKE-EXTERNALFORMAT :UTF-16BE-RAW [FUNCTION (LAMBDA (STREAM COUNTP)
+                                                   (UTF16BE.INCCODEFN STREAM COUNTP T]
            [FUNCTION (LAMBDA (STREAM NOERROR)
                        (UTF16BE.PEEKCCODEFN STREAM NOERROR T]
            (FUNCTION \UTF16.BACKCCODEFN)
@@ -214,7 +321,7 @@
 
 (MAKE-UNICODE-FORMATS EXTERNALEOL)
 
-(ADDTOVAR *DEFAULT-EXTERNALFORMATS* (UNIX :UTF8))
+(ADDTOVAR *DEFAULT-EXTERNALFORMATS* (UNIX :UTF-8))
 (DEFINEQ
 
 (UNICODE.UNMAPPED
@@ -993,15 +1100,15 @@
 )
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4105 17365 (UTF8.OUTCHARFN 4115 . 6895) (UTF8.INCCODEFN 6897 . 12013) (UTF8.PEEKCCODEFN
- 12015 . 16789) (\UTF8.BACKCCODEFN 16791 . 17363)) (17366 20563 (UTF16BE.OUTCHARFN 17376 . 18109) (
-UTF16BE.INCCODEFN 18111 . 18994) (UTF16BE.PEEKCCODEFN 18996 . 20067) (\UTF16.BACKCCODEFN 20069 . 20561
-)) (20593 22591 (MAKE-UNICODE-FORMATS 20603 . 22589)) (22687 23993 (UNICODE.UNMAPPED 22697 . 23991)) (
-23994 24530 (XCCS-UTF8-AFTER-OPEN 24004 . 24528)) (25600 25949 (XTOUCODE 25610 . 25778) (UTOXCODE 
-25780 . 25947)) (25989 42172 (READ-UNICODE-MAPPING-FILENAMES 25999 . 27161) (READ-UNICODE-MAPPING 
-27163 . 30461) (WRITE-UNICODE-MAPPING 30463 . 34680) (WRITE-UNICODE-INCLUDED 34682 . 39404) (
-WRITE-UNICODE-MAPPING-HEADER 39406 . 40638) (WRITE-UNICODE-MAPPING-FILENAME 40640 . 42170)) (45509 
-53982 (MAKE-UNICODE-TRANSLATION-TABLES 45519 . 53980)) (54403 62307 (HEXSTRING 54413 . 55574) (
-UTF8HEXSTRING 55576 . 57781) (NUTF8CODEBYTES 57783 . 58446) (NUTF8STRINGBYTES 58448 . 58929) (
-XTOUSTRING 58931 . 61942) (XCCSSTRING 61944 . 62305)) (62308 63777 (SHOWCHARS 62318 . 63775)))))
+  (FILEMAP (NIL (4120 17800 (UTF8.OUTCHARFN 4130 . 6961) (UTF8.INCCODEFN 6963 . 12453) (UTF8.PEEKCCODEFN
+ 12455 . 17229) (\UTF8.BACKCCODEFN 17231 . 17798)) (17801 21127 (UTF16BE.OUTCHARFN 17811 . 18635) (
+UTF16BE.INCCODEFN 18637 . 19536) (UTF16BE.PEEKCCODEFN 19538 . 20609) (\UTF16.BACKCCODEFN 20611 . 21125
+)) (21157 22965 (MAKE-UNICODE-FORMATS 21167 . 22963)) (23062 24368 (UNICODE.UNMAPPED 23072 . 24366)) (
+24369 24905 (XCCS-UTF8-AFTER-OPEN 24379 . 24903)) (25975 26324 (XTOUCODE 25985 . 26153) (UTOXCODE 
+26155 . 26322)) (26364 42547 (READ-UNICODE-MAPPING-FILENAMES 26374 . 27536) (READ-UNICODE-MAPPING 
+27538 . 30836) (WRITE-UNICODE-MAPPING 30838 . 35055) (WRITE-UNICODE-INCLUDED 35057 . 39779) (
+WRITE-UNICODE-MAPPING-HEADER 39781 . 41013) (WRITE-UNICODE-MAPPING-FILENAME 41015 . 42545)) (45884 
+54357 (MAKE-UNICODE-TRANSLATION-TABLES 45894 . 54355)) (54778 62682 (HEXSTRING 54788 . 55949) (
+UTF8HEXSTRING 55951 . 58156) (NUTF8CODEBYTES 58158 . 58821) (NUTF8STRINGBYTES 58823 . 59304) (
+XTOUSTRING 59306 . 62317) (XCCSSTRING 62319 . 62680)) (62683 64152 (SHOWCHARS 62693 . 64150)))))
 STOP

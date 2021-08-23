@@ -13,9 +13,10 @@ EASTASIA:
        August 1, 2001.
     The current set of mappings are available from 
            https://unicode.org/Public/UNIDATA/Unihan.zip
+    The format of these files is given in https://unicode.org/reports/tr38/
  
 ISO8859:
-	These are the mapping tables of the ISO 8859 series (1 through 9)
+	These are the mapping tables of the ISO 8859 series (1 through 16)
 
 VENDORS:
 	Miscellaneous mapping tables for small codesets, typically provided

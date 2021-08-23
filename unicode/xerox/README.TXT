@@ -42,5 +42,54 @@ Finally, no cells are allocated for the unused/reserved character sets (1 throug
 
 The JIS character sets seem to be complete and accurate. There are sporadic missing codes and errors in some of the other sets that required hand correction.
 
+Here is more information about that file, particularly about the unknown blocks at the end of the file, as provided by Peter Craven
 
+It contains blocks of two times 94 characters, mapping to the left and
+right side of Character Sets. The blocks occur as follows in the file:
+
+- character set 000 (block 0)
+- character set 041 (block 1)
+- character set 042 (block 2)
+...
+- character set 050 (block 8)
+- character set 052 (block 9) ;; extended cyrillic
+- character set 057 (block 10) ;; vertically written japanese symbols
+- character set 164 (block 11) ;; miscellaneous japanese symbols
+- character set 165 (block 12) ;; jis extra
+- character set 166 (block 13) ;; symbols 4
+- character set 340 (block 14) ;; arabic
+- character set 341 (block 15) ;; hebrew
+- character set 342 (block 16) ;; ipa
+- character set 343 (block 17) ;; korean
+- character set 344 (block 18) ;; armenian/georgian
+- character set 345 (block 19) ;; devanagari
+- character set 346 (block 20) ;; bengali
+- character set 347 (block 21) ;; gurmukhi
+- character set 350 (block 22) ;; thai
+- character set 353 (block 23) ;; general and technical symbols 3
+- character set 354 (block 24) ;; extended itc dingbats 2 and general symbols
+- character set 355 (block 25) ;; itc dingbats 1
+- character set 356 (block 26) ;; general and technical symbols 2
+- character set 357 (block 27) ;; general and technical symbols 1
+- character set 365 (block 28) ;; initial, medial, and final arabic characters
+- character set 060 (block 29) ;; CJK
+...
+- character set 163 (block 96) ;; CJK
+
+Blocks 97 to 148 (which all contain both a left and a right side) are
+Chinese characters (to my limited knowledge some of these are definitely
+not Japanese), but I have no idea which standard they follow.
+
+94 * 2 * 2 (two bytes for each left and right side) * 149 (number of
+blocks) = 56024, which matches the total file size exactly.
+
+And a little more, from John Cowan, about the unknown character sets at the end:
+
+The order of the first few characters matches with this list of 3000
+most frequent Hanzi[fn:1] almost exactly, when looking at the
+Traditional Forms. So this is probably an attempt to encode Chinese in
+order of frequency. This seems to encode 94 * 2 * 52 blocks = 9776
+characters.
+ 
+See https://onedrive.live.com/?authkey=%21AFZ83zRXy1tjL%5Fo&cid=A0A919DEAF7F6BC7&id=A0A919DEAF7F6BC7%21228&parId=root&o=OneUp
 

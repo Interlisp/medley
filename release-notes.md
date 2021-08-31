@@ -2,9 +2,10 @@ We've moved to separate releases of medley and maiko.
 Just get the latest version of each.
 
 Or, you could pick up the medley release and build your own maiko.
-Medley release is here:
-
-     `$tag.tgz`
+Medley release is here (below): 
+```
+     $tag.tgz
+```
 
 Maiko relese is [here](https://github.com/Interlisp/maiko/releases)
 

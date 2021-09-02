@@ -1,3 +1,5 @@
+This may be obsolete:  (RMK 2021/08)
+
 The following is a listing of the differences between IBM's mappings
 of certain IBM code pages and Unicode, and the mappings for IBM code
 pages that came from various sources and were earlier made available

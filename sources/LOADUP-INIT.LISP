@@ -1,8 +1,16 @@
 (* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
 
+(LOAD? (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
 (CNDIR (MEDLEYDIR "tmp"))
 (DRIBBLE "init.dribble")
-(MOVD 'NILL 'PAGEFULLFN)
+
+(UNADVISE)
+(ADVISE 'PAGEFULLFN '(RETURN))
+(ADVISE '(ERROR IN \DO-DEFINE-FILE-INFO) '(RETURN))
+(MOVD? 'NILL 'SETTEMPLATE)
+(DEFINEQ (RRE (LAMBDA (X Y) Y)))
+(MOVD? 'RRE 'READ-READER-ENVIRONMENT)
+
 (LOAD (MEDLEYDIR "sources" "MAKEINIT.LCOM"))
 (MAKEINITGREET)
 (DRIBBLE)

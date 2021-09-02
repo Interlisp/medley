@@ -28,10 +28,9 @@ tar cfz medley/tmp/$tag.tgz                               \
     medley/fonts/postscriptfonts                          \
     medley/library/                                       \
     medley/lispusers/                                     \
-
-#    medley/fonts/big medley/fonts/other                  \
-#   medley/sources/
-#   medley/internal/library                               \
+    medley/fonts/big medley/fonts/other                   \
+    medley/sources/                                       \
+    medley/internal/library                               \
 
 cd medley
 

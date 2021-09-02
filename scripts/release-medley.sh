@@ -16,8 +16,9 @@ cd ..
 echo making medley zip $tag 
 
 tar cfz medley/tmp/$tag.tgz                               \
-    --exclude-backups --exclude="*.PDF"                   \
+    --exclude-backups                                     \
     medley/docs/dinfo                                     \
+    medley/docs/Documentation\ Tools                      \
     medley/greetfiles/SIMPLE-INIT                         \
     medley/run-medley                                     \
     medley/scripts                                        \

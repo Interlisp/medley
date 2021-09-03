@@ -10,6 +10,9 @@ scr="-sc 1024x768 -g 1042x790"
 
 touch tmp/loadup.timestamp
 
+# Keep (GREET) from finding an init file
+export HOME=/dev/null
+
 ./run-medley $scr -greet "$MEDLEYDIR/sources/LOADUP-FULL.CM" "$MEDLEYDIR/tmp/lisp.sysout"
 
 if [ tmp/full.sysout -nt tmp/loadup.timestamp ]; then

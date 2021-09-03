@@ -9,6 +9,9 @@ fi
 
 scr="-sc 1024x768 -g 1042x790"
 
+# Keep (GREET) from finding an init file
+export HOME=/dev/null
+
 mkdir -p "$MEDLEYDIR/tmp"
 touch tmp/loadup.timestamp
 

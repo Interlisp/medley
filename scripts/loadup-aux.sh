@@ -9,6 +9,9 @@ fi
 
 touch tmp/loadup.timestamp
 
+# Keep (GREET) from finding an init file
+export HOME=/dev/null
+
 scr="-sc 1024x768 -g 1042x790"
 
 echo '" (IL:MEDLEY-INIT-VARS)(IL:LOAD(QUOTE MEDLEY-UTILS))(IL:MAKE-EXPORTS-ALL)(IL:MAKE-WHEREIS-HASH)(IL:LOGOUT T)"' > tmp/loadup-aux.cm

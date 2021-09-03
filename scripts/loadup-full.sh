@@ -6,6 +6,10 @@ if [ ! -x run-medley ] ; then
     echo must run from MEDLEYDIR ;
     exit 1 ;
 fi
+
+# Keep (GREET) from finding an init file
+export HOME=/dev/null
+
 scr="-sc 1024x768 -g 1042x790"
 
 touch tmp/loadup.timestamp

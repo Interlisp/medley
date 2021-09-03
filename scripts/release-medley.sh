@@ -16,7 +16,7 @@ cd ..
 echo making medley zip $tag 
 
 tar cfz medley/tmp/$tag.tgz                               \
-    --exclude-backups                                     \
+    --exclude "*~" --exclude "*#*                         \
     medley/docs/dinfo                                     \
     medley/docs/Documentation\ Tools                      \
     medley/greetfiles/SIMPLE-INIT                         \

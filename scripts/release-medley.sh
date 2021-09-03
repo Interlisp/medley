@@ -16,8 +16,9 @@ cd ..
 echo making medley zip $tag 
 
 tar cfz medley/tmp/$tag.tgz                               \
-    --exclude-backups --exclude="*.PDF"                   \
+    --exclude "*~" --exclude "*#*"                        \
     medley/docs/dinfo                                     \
+    medley/docs/Documentation\ Tools                      \
     medley/greetfiles/SIMPLE-INIT                         \
     medley/run-medley                                     \
     medley/scripts                                        \
@@ -28,10 +29,9 @@ tar cfz medley/tmp/$tag.tgz                               \
     medley/fonts/postscriptfonts                          \
     medley/library/                                       \
     medley/lispusers/                                     \
-
-#    medley/fonts/big medley/fonts/other                  \
-#   medley/sources/
-#   medley/internal/library                               \
+    medley/fonts/big medley/fonts/other                   \
+    medley/sources/                                       \
+    medley/internal/library                               \
 
 cd medley
 

@@ -2,9 +2,10 @@ We've moved to separate releases of medley and maiko.
 Just get the latest version of each.
 
 Or, you could pick up the medley release and build your own maiko.
-Medley release is here:
-
-     `medley-`releasename`.tgz`
+Medley release is here (below): 
+```
+     $tag.tgz
+```
 
 Maiko relese is [here](https://github.com/Interlisp/maiko/releases)
 
@@ -14,7 +15,7 @@ To use (from a shell/terminal window):
   ```
   tar -xvfz $tag.tgz
   ```
-x  and the maiko file for your os.arch, e.g.,
+  and the maiko file for your os.arch, e.g.,
 ```
      tar -xvfz maiko-210823.linux.x86_64.tgz
 ```

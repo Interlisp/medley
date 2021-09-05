@@ -1,12 +1,9 @@
-We've moved to separate releases of medley and maiko.
+There are separate releases of medley and maiko.
 Just get the latest version of each.
 
-Or, you could pick up the medley release and build your own maiko.
-Medley release is here:
+Alternatively, you can pick up the medley release, and build your own maiko.
 
-     `medley-`releasename`.tgz`
-
-Maiko relese is [here](https://github.com/Interlisp/maiko/releases)
+Get the Maiko release [here](https://github.com/Interlisp/maiko/releases).
 
 To use (from a shell/terminal window):
 
@@ -14,15 +11,19 @@ To use (from a shell/terminal window):
   ```
   tar -xvfz $tag.tgz
   ```
-x  and the maiko file for your os.arch, e.g.,
+
+2. Unpack the maiko file for your operating system and CPU type,e.g.,
+
 ```
      tar -xvfz maiko-210823.linux.x86_64.tgz
 ```
-  This should leave you with two directories, `medley` and `maiko`.
+
+3. This should leave you with two directories, `medley` and `maiko`.
   Then you can 
    ```
    cd medley
    ./run-medley -full
    ```
-   
+
+
 

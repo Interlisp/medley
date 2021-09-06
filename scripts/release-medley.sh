@@ -35,7 +35,7 @@ tar cfz medley/tmp/$tag.tgz                               \
     medley/internal/library                               \
 
     
-    tar -cfz medley/tmp/$tag-loadups-only.tgz             \
+tar cfz medley/tmp/$tag-loadups-only.tgz                  \
     medley/loadups/lisp.sysout                            \
     medley/loadups/full.sysout                            \
     medley/loadups/whereis.hash                           \

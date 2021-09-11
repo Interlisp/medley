@@ -1,4 +1,5 @@
 #!/bin/sh
+
 export MEDLEYDIR=`pwd`
 if [ ! -x run-medley ] ; then
     echo run from MEDLEYDIR
@@ -13,7 +14,7 @@ fi
 
 cd ..
 
-echo making medley zip $tag 
+echo making $tag 
 
 tar cfz medley/tmp/$tag.tgz                               \
     --exclude "*~" --exclude "*#*"                        \
@@ -33,12 +34,21 @@ tar cfz medley/tmp/$tag.tgz                               \
     medley/sources/                                       \
     medley/internal/library                               \
 
+    
+tar cfz medley/tmp/$tag-loadups-only.tgz                  \
+    medley/loadups/lisp.sysout                            \
+    medley/loadups/full.sysout                            \
+    medley/loadups/whereis.hash                           \
+    medley/library/exports.all                            \
+    medley/library/RDSYS medley/library/RDSYS.LCOM
+	
 cd medley
 
 echo making release
 sed s/'$tag'/$tag/g < release-notes.md > tmp/release-notes.md
 gh release create $tag -F tmp/release-notes.md -p -t $tag
 
-echo uploaded $tag.tgz
+echo uploading
 gh release upload $tag tmp/$tag.tgz --clobber
+gh release upload $tag tmp/$tag-loadups-only.tgz --clobber
 

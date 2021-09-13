@@ -15,7 +15,7 @@ mkdir -p $MEDLEYDIR/tmp/logindir
 export HOME=$MEDLEYDIR/tmp/logindir
 export LOGINDIR=$MEDLEYDIR/tmp/logindir
 
-./run-medley $scr -greet "$MEDLEYDIR/sources/LOADUP-FULL.CM" "$MEDLEYDIR/tmp/lisp.sysout"
+./run-medley $scr -loadup "$MEDLEYDIR/sources/LOADUP-FULL.CM" "$MEDLEYDIR/tmp/lisp.sysout"
 
 if [ tmp/full.sysout -nt tmp/loadup.timestamp ]; then
     

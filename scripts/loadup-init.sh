@@ -16,7 +16,7 @@ export LOGINDIR=$MEDLEYDIR/tmp/logindir
 
 touch tmp/loadup.timestamp
 
-./run-medley $scr -greet "$MEDLEYDIR"/sources/LOADUP-INIT.LISP loadups/starter.sysout
+./run-medley $scr -loadup "$MEDLEYDIR"/sources/LOADUP-INIT.LISP loadups/starter.sysout
 
 if [ tmp/init.dlinit -nt tmp/loadup.timestamp ]; then
     

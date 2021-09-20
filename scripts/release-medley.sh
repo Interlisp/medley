@@ -1,4 +1,5 @@
 #!/bin/sh
+
 export MEDLEYDIR=`pwd`
 if [ ! -x run-medley ] ; then
     echo run from MEDLEYDIR
@@ -13,18 +14,24 @@ fi
 
 cd ..
 
-echo making medley zip $tag 
+echo making $tag-loadups.tgz
 
-tar cfz medley/tmp/$tag.tgz                               \
+tar cfz medley/tmp/$tag-loadups.tgz                       \
+    medley/loadups/lisp.sysout                            \
+    medley/loadups/full.sysout                            \
+    medley/loadups/whereis.hash                           \
+    medley/library/exports.all                            \
+    medley/library/RDSYS medley/library/RDSYS.LCOM
+	
+echo making $tag-runtime.tgz
+
+tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
     medley/docs/dinfo                                     \
     medley/docs/Documentation\ Tools                      \
     medley/greetfiles/SIMPLE-INIT                         \
     medley/run-medley                                     \
     medley/scripts                                        \
-    medley/loadups/lisp.sysout                            \
-    medley/loadups/full.sysout                            \
-    medley/loadups/whereis.hash                           \
     medley/fonts/displayfonts  medley/fonts/altofonts     \
     medley/fonts/postscriptfonts                          \
     medley/library/                                       \
@@ -33,12 +40,13 @@ tar cfz medley/tmp/$tag.tgz                               \
     medley/sources/                                       \
     medley/internal/library                               \
 
+    
 cd medley
 
 echo making release
 sed s/'$tag'/$tag/g < release-notes.md > tmp/release-notes.md
 gh release create $tag -F tmp/release-notes.md -p -t $tag
 
-echo uploaded $tag.tgz
-gh release upload $tag tmp/$tag.tgz --clobber
+echo uploading
+gh release upload $tag tmp/$tag-loadups.tgz tmp/$tag-runtime.tgz --clobber
 

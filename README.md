@@ -1,25 +1,65 @@
 # Medley 
 
-
-
-
 This repository is for the Lisp environment of [Medley Interlisp](https://Interlisp.org).
 
 We've made great process in sorting out what we have (some dusty corners notwithstanding), but there's quite a bit more work to do. Please report problems!
 
 See [Medley Interlisp Wiki](https://github.com/Interlisp/medley/wiki/) for an overview, and other pointers.
 
-A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko), which is the implementation (in C) of the Medley virtual machine. 
+A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko), which is the implementation (in C) of the Medley virtual machine.
 
+## Using releases
 
-## Instructions for Building and Running
+There are separate releases of medley and maiko.  Just get the latest version of each.
+
+Alternatively, you can pick up the medley release, and build your own maiko (which is delivered as binaries `lde` `ldex` and `ldeinit`.) We can build for other OS arch pairs depending on what is available for GitHub actions.
+
+Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the one corresponding to your operating system and processor (for Windows with WSL or Intel linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for M1.)
+
+The medley release comes in two parts, found [here](https://github.com/Interlisp/medley/releases)
+1. The "loadups" (download `medley-`YYMMDD`-loadups.tgz`)
+2. The "runtime" (download `medley-`YYMMDD`-runtime.tgz`)
+
+To download both using the 'gh' GitHub command line:
+```
+   gh release download -R Interlisp/medley -p "*"
+```
+
+ (from a shell/terminal window):
+
+1. Unpack the medley loadups file
+   ```
+   tar -xvfz medley-211015-loadups.tgz
+   ```
+
+2. Unpack the medley runtime OR clone the Medly repo
+   (the "medley runtime" is just a subset of the whole repo)
+   
+   ```
+   git clone https://github.com/Interlisp/medley
+   ```
+   OR
+   ```
+   tar -xvfz medley-211015-runtime.tgz
+   ```
+   
+3. Unpack the maiko file for your operating system and CPU type, e.g.,
+
+   ```
+   tar -xvfz maiko-210823.linux.x86_64.tgz
+   ```
+
+3. This should leave you with two directories, `medley` and `maiko`.
 
 ### Setting up X
 
-Medley Interlisp needs an X-Server to manage its display. Most Linux desktops have one. There are a number of free open source X-servers for windows. Mac users should head over to [XQuartz.org](https://xquartz.org/releases) -- be sure to pick a version if you have a newer Mac.
+Medley Interlisp needs an X-Server to manage its display. Most Linux desktops have one. Windows 11 with WSL includes an X-Server. For Windows 10 with WSL2, there are a number of open-source X servers; for example vcxsrv.
+
+Mac users should get [XQuartz from XQuartz.org](https://xquartz.org/releases).
+
+Medley manages the display entirely, doesn't use X fonts and manages it's own window system.
 
 If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.) It also presumes you have a 3-button mouse; the scroll-wheel on some mice act as one with some difficulty.) XQuartz Preferences/Input has "Emulate three button mouse" option.
-
 
 ### Running Medley Interlisp
 
@@ -35,9 +75,6 @@ Or, if you wish to start Medley up with a different SYSOUT:
 $ cd medley
 $ ./run-medley <SYSOUT-file-name>
 ```
-
-Once the system comes up, give it a few seconds to initialize.
-
 The first time the system is run it loads the system image that comes
 with the system.  When you exit the system (or "do a `SaveVM`" menu
 option) the state of your machine is saved in a file named

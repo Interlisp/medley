@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "12-Oct-2021 14:57:29" 
-{DSK}<Users>kaplan>Local>medley3.5>git-medley>lispusers>MODERNIZE.;28 25303  
+(FILECREATED "16-Oct-2021 15:42:11" 
+{DSK}<Users>kaplan>Local>medley3.5>git-medley>lispusers>MODERNIZE.;41 30305  
 
-      changes to%:  (FNS MODERNWINDOW.BUTTONEVENTFN \MODERNIZED.TEDIT.BUTTONEVENTFN)
+      changes to%:  (FNS MODERNIZED.TB.BUTTONEVENTFN)
 
-      previous date%: "12-Oct-2021 08:34:48" 
-{DSK}<Users>kaplan>Local>medley3.5>git-medley>lispusers>MODERNIZE.;26)
+      previous date%: "16-Oct-2021 15:29:38" 
+{DSK}<Users>kaplan>Local>medley3.5>git-medley>lispusers>MODERNIZE.;40)
 
 
 (PRETTYCOMPRINT MODERNIZECOMS)
@@ -15,7 +15,8 @@
        [
         (* ;; "Externals")
 
-        (COMS (FNS MODERNWINDOW MODERNWINDOW.SETUP UNMODERNWINDOW MODERNWINDOW.UNSETUP)
+        (COMS (FNS MODERNWINDOW MODERNWINDOW.SETUP UNMODERNWINDOW MODERNWINDOW.UNSETUP 
+                   \MODERNIZED.FREEMENU.BUTTONEVENTFN)
               (INITVARS (MODERN-WINDOW-MARGIN 25)))
         
         (* ;; "Internals")
@@ -25,6 +26,7 @@
               (* ;; "Behavior for some known window creators")
 
               (FNS MODERN-ADD-EXEC MODERN-SNAPW TOTOPW.MODERNIZE MODERN-MENUBUTTONFN)
+              (FNS \MODERNIZED.FREEMENU.BUTTONEVENTFN MODERNIZED.TB.BUTTONEVENTFN)
               
               (* ;; "Add some Meta commands")
 
@@ -44,9 +46,10 @@
                                                  (* (MODERNWINDOW.SETUP 'ONEDINSPECT.BUTTONEVENTFN))
                                                  (MODERNWINDOW.SETUP 'ICMLARRAY.TITLECOMMANDFN)
                                                  
-                                                 (* ;; "Freemenu")
+                                                 (* ;; "File browser")
 
-                                                 (MODERNWINDOW.SETUP '\FM.BUTTONEVENTFN)
+                                                 (MODERNWINDOW.SETUP '\FM.BUTTONEVENTFN 
+                                                        '\MODERNIZED.FREEMENU.BUTTONEVENTFN)
                                                  
                                                  (* ;; "SEDIT")
 
@@ -69,9 +72,10 @@
                                                  (MODERNWINDOW (PROCESSPROP (TTY.PROCESS)
                                                                       'WINDOW))
                                                  
-                                                 (* ;; "Table browser (for filebrowser)")
+                                                 (* ;; "Table browser  and filebrowser)")
 
-                                                 (MODERNWINDOW.SETUP 'TB.BUTTONEVENTFN)
+                                                 (MODERNWINDOW.SETUP 'TB.BUTTONEVENTFN 
+                                                        'MODERNIZED.TB.BUTTONEVENTFN)
                                                  
                                                  (* ;; "Grapher")
 
@@ -190,6 +194,17 @@
                                   PKGNAME))
          (CL:WHEN (GETD RENAMEDORIG)
                 (MOVD RENAMEDORIG ORIGFN])
+
+(\MODERNIZED.FREEMENU.BUTTONEVENTFN
+  [LAMBDA (W STREAM)                                    (* ; "Edited 13-Oct-2021 15:15 by rmk:")
+
+    (* ;; "If a free menu is attached to another window, we don't want the corners of the free menu that abut another window to be hot-spots for moving or reshaping.  In fact, if the menu window has a main window, use the main window's  region as the cornerregion")
+
+    (MODERNWINDOW.BUTTONEVENTFN W (FUNCTION MODERN-ORIG-\FM.BUTTONEVENTFN)
+           NIL NIL (WINDOWPROP (CENTRALWINDOW W)
+                          'REGION)
+           (WINDOWPROP (CENTRALWINDOW W)
+                  'TITLE])
 )
 
 (RPAQ? MODERN-WINDOW-MARGIN 25)
@@ -201,27 +216,49 @@
 (DEFINEQ
 
 (MODERNWINDOW.BUTTONEVENTFN
-  [LAMBDA (WINDOW ORIGFUNCTION ANYWHERE TITLEPROPORTION CORNERREGION)
-                                                            (* ; "Edited 12-Oct-2021 14:56 by rmk:")
+  [LAMBDA (WINDOW ORIGFUNCTION ANYWHERE TITLEPROPORTION CORNERREGION TOPMARGIN)
+                                                            (* ; "Edited 16-Oct-2021 15:25 by rmk:")
 
-    (* ;; "CORNERREGION is the region that determines the identification of corner and title clicks, presumably excludes uninteresting menus and other attachments that would also be part of the moving and reshaping region (the ATTACHEDREGION below).")
+    (* ;; "WINDOW is the window  that received the click and that should be passed through to the original function, if we don't pick it off here.")
 
-    (if (AND (MOUSESTATE (ONLY LEFT))
-                 (EQ LASTKEYBOARD 0))
-        then (TOTOPW WINDOW)
-              (CL:UNLESS CORNERREGION                        (* ; 
-                                                         "Could cover a bunch of Tedit split-panes")
-                  (SETQ CORNERREGION (WINDOWPROP WINDOW 'REGION)))
-              (LET [CORNER TOPMARGIN (ATTACHEDREGION (ATTACHEDWINDOWREGION (CENTRALWINDOW WINDOW]
+    (* ;; "However, that window may be an auxiliary window (an attached menu? or a lower split-pane in Tedit) whose region and title intuitively should not be used to control shaping and moving behavior.  That behavior is determined by the CORNERREGION and TITLED parameters.")
+
+    (* ;; "If CORNERREGION is given, we know that there are two windows in play.  In that case also  TOPMARGIN  tells us the hotband at the top of the cornerregion where the move/shaping click is recognized, T to mean that it has an ordinary title bar. .")
+
+    (* ;; "For windows without a top margin, the shape/move region is MODERN-WINDOW-MARGIN points below the top, in the clipping region of the window. ")
+
+    (* ;; "Not sure about using MODERN-WINDOW-MARGIN for the top region of an untitle window.  Maybe it should be 2 times the border width in that case, and the MODERN-WINDOW-MARGIN separately defines the rectangle that constitutes a corner.")
+
+    (LET (CORNER ATTACHEDREGION)
+         (IF CORNERREGION
+             THEN 
+
+                   (* ;; "Caller tells us whether the corner window has a title.")
+
+                   (CL:UNLESS (FIXP TOPMARGIN)
+                       (SETQ TOPMARGIN (if TOPMARGIN
+                                           then (FONTPROP WindowTitleDisplayStream 'HEIGHT)
+                                         else MODERN-WINDOW-MARGIN)))
+           ELSE (SETQ CORNERREGION (WINDOWPROP WINDOW 'REGION)) 
+                                                             (* ; "WINDOW is the corner window")
+                 (SETQ TOPMARGIN (if (WINDOWPROP WINDOW 'TOPMARGIN)
+                                   elseif (WINDOWPROP WINDOW 'TITLE)
+                                     then (FONTPROP WindowTitleDisplayStream 'HEIGHT)
+                                   else MODERN-WINDOW-MARGIN)))
+         (if (AND (MOUSESTATE (ONLY LEFT))
+                      (EQ LASTKEYBOARD 0)
+                      (INSIDE? CORNERREGION LASTMOUSEX LASTMOUSEY))
+             then 
+
+                   (* ;; "INSIDE? check because we may be called by a click in WINDOW that is outside the corner region, we just pass it through.")
+
+                   (TOTOPW WINDOW)
+                   (SETQ ATTACHEDREGION (ATTACHEDWINDOWREGION (CENTRALWINDOW WINDOW))) 
 
                    (* ;; "If the window has a TOPMARGIN property, that tells us that it does not have a canonical title but may still have a title-like attached window just above the main window.  The TOPMARGIN should be 0 in that case.")
 
                    (* ;; "This is particularly the case of FILEBROWSER windows, where the modified ATTACHEDWINDOWTOTOPFN drives the click here. ")
 
-                   (SETQ TOPMARGIN (if (WINDOWPROP WINDOW 'TOPMARGIN)
-                                     elseif (WINDOWPROP WINDOW 'TITLE)
-                                       then (FONTPROP WindowTitleDisplayStream 'HEIGHT)
-                                     else MODERN-WINDOW-MARGIN))
                    (SETQ CORNER (INCORNER.REGION CORNERREGION TOPMARGIN))
                    (if CORNER
                        then 
@@ -262,31 +299,28 @@
                                          STARTINGREGION))
                              T
                      elseif (OR ANYWHERE (NEARTOP CORNERREGION TOPMARGIN TITLEPROPORTION))
-                       then 
-
-                             (* ;; "")
-
-                             (NEARESTCORNER ATTACHEDREGION)
+                       then (NEARESTCORNER ATTACHEDREGION)
                              (MOVEW (CENTRALWINDOW WINDOW))
                              T
                      elseif [OR ORIGFUNCTION (SETQ ORIGFUNCTION (WINDOWPROP WINDOW 
                                                                            'PREMODERN-BUTTONEVENTFN]
-                       then (APPLY* ORIGFUNCTION WINDOW)))
-      elseif [OR ORIGFUNCTION (SETQ ORIGFUNCTION (WINDOWPROP WINDOW 'PREMODERN-BUTTONEVENTFN]
-        then (APPLY* ORIGFUNCTION WINDOW])
+                       then (APPLY* ORIGFUNCTION WINDOW))
+           elseif [OR ORIGFUNCTION (SETQ ORIGFUNCTION (WINDOWPROP WINDOW 
+                                                                 'PREMODERN-BUTTONEVENTFN]
+             then (APPLY* ORIGFUNCTION WINDOW])
 
 (NEARTOP
-  [LAMBDA (MAINREGION TOPMARGIN TITLEPROPORTION)        (* ; "Edited 24-Jun-2021 14:51 by rmk:")
+  [LAMBDA (CORNERREGION TOPMARGIN TITLEPROPORTION)      (* ; "Edited 13-Oct-2021 21:28 by rmk:")
 
-    (* ;; "True if the MOUSEY is near the top of MAINREGION.  That means in the title bar for titled windows, otherwise a short distance below the top of the window.  (Could be in the border?)")
+    (* ;; "True if the MOUSEY is near the top of CORNERREGION.  That means in the title bar for titled windows, otherwise a short distance below the top of the window.  (Could be in the border?)")
 
-    (* ;; "If TITLEPROPORTION is N, then the click must be within that proportion of the window-width from either edge. ")
+    (* ;; "If TITLEPROPORTION is N, then the click must be within that proportion of the window-width from either edge. ")
 
-    (AND (IGREATERP LASTMOUSEY (IDIFFERENCE (FETCH TOP OF MAINREGION)
+    (AND (IGREATERP LASTMOUSEY (IDIFFERENCE (FETCH TOP OF CORNERREGION)
                                       TOPMARGIN))
          (OR (NOT TITLEPROPORTION)
-             (LET ((WIDTH (FETCH WIDTH of MAINREGION))
-                   (LEFT (FETCH LEFT OF MAINREGION)))
+             (LET ((WIDTH (FETCH WIDTH of CORNERREGION))
+                   (LEFT (FETCH LEFT OF CORNERREGION)))
                   (OR (ILESSP LASTMOUSEX (IPLUS LEFT (TIMES WIDTH TITLEPROPORTION)))
                       (IGREATERP LASTMOUSEX (IPLUS LEFT (TIMES WIDTH (DIFFERENCE 1 TITLEPROPORTION])
 
@@ -308,25 +342,25 @@
                (FETCH TOP OF REGION))])
 
 (INCORNER.REGION
-  [LAMBDA (MAINREGION TOPMARGIN)                        (* ; "Edited 22-Feb-2021 16:27 by rmk:")
+  [LAMBDA (CORNERREGION TOPMARGIN)                      (* ; "Edited 13-Oct-2021 15:04 by rmk:")
 
-    (* ;; "MAINREGION, LASTMOUSEX, LASTMOUSEY in screen coordinates.")
+    (* ;; "CORNERREGION, LASTMOUSEX, LASTMOUSEY in screen coordinates.")
 
-    (* ;; "TOPMARGIN is the height of the titlebar for titled windows, otherwise the margin at the top of the window's content that we regard as the top. ")
+    (* ;; "TOPMARGIN is the height of the titlebar for titled windows, otherwise the margin at the top of the window's content that we regard as the top. ")
 
-    (IF (ILEQ (IABS (IDIFFERENCE LASTMOUSEX (FETCH LEFT OF MAINREGION)))
+    (IF (ILEQ (IABS (IDIFFERENCE LASTMOUSEX (FETCH LEFT OF CORNERREGION)))
                   MODERN-WINDOW-MARGIN)
-        THEN (IF (NEARTOP MAINREGION TOPMARGIN)
+        THEN (IF (NEARTOP CORNERREGION TOPMARGIN)
                      THEN 'LEFTTOP
                    ELSEIF (ILEQ LASTMOUSEY (IPLUS MODERN-WINDOW-MARGIN (FETCH BOTTOM
-                                                                              OF MAINREGION)))
+                                                                              OF CORNERREGION)))
                      THEN 'LEFTBOTTOM)
-      ELSEIF (ILEQ (IABS (IDIFFERENCE LASTMOUSEX (FETCH RIGHT OF MAINREGION)))
+      ELSEIF (ILEQ (IABS (IDIFFERENCE LASTMOUSEX (FETCH RIGHT OF CORNERREGION)))
                        MODERN-WINDOW-MARGIN)
-        THEN (IF (NEARTOP MAINREGION TOPMARGIN)
+        THEN (IF (NEARTOP CORNERREGION TOPMARGIN)
                      THEN 'RIGHTTOP
                    ELSEIF (ILEQ LASTMOUSEY (IPLUS MODERN-WINDOW-MARGIN (FETCH BOTTOM
-                                                                              OF MAINREGION)))
+                                                                              OF CORNERREGION)))
                      THEN 'RIGHTBOTTOM])
 )
 
@@ -388,6 +422,44 @@
              THEN (MOVEW WINDOW)
            ELSE (MODERN-ORIG-MENUBUTTONFN WINDOW])
 )
+(DEFINEQ
+
+(\MODERNIZED.FREEMENU.BUTTONEVENTFN
+  [LAMBDA (W STREAM)                                    (* ; "Edited 13-Oct-2021 15:15 by rmk:")
+
+    (* ;; "If a free menu is attached to another window, we don't want the corners of the free menu that abut another window to be hot-spots for moving or reshaping.  In fact, if the menu window has a main window, use the main window's  region as the cornerregion")
+
+    (MODERNWINDOW.BUTTONEVENTFN W (FUNCTION MODERN-ORIG-\FM.BUTTONEVENTFN)
+           NIL NIL (WINDOWPROP (CENTRALWINDOW W)
+                          'REGION)
+           (WINDOWPROP (CENTRALWINDOW W)
+                  'TITLE])
+
+(MODERNIZED.TB.BUTTONEVENTFN
+  [LAMBDA (W STREAM)                                    (* ; "Edited 16-Oct-2021 15:40 by rmk:")
+
+    (* ;; "If a free menu is attached to another window, we don't want the corners of the free menu that abut another window to be hot-spots for moving or reshaping.  In fact, if the menu window has a main window, use the main window's  region as the cornerregion")
+
+    (LET ((CW (CENTRALWINDOW W))
+          CORNERREG TOPMARGIN)
+         (CL:WHEN (WINDOWPROP CW 'FILEBROWSER)
+             [SETQ CORNERREG (UNIONREGIONS (WINDOWPROP (FB.GETWINDOW CW 'HEADING)
+                                                  'REGION)
+                                    (WINDOWPROP (FB.GETWINDOW CW 'COUNTER)
+                                           'REGION)
+                                    (WINDOWPROP (FB.GETWINDOW CW 'BROWSER)
+                                           'REGION]
+             [SETQ TOPMARGIN (IPLUS (FETCH (REGION HEIGHT) OF (WINDOWPROP (FB.GETWINDOW
+                                                                                   CW
+                                                                                   'HEADING)
+                                                                             'REGION))
+                                    (FETCH (REGION HEIGHT) OF (WINDOWPROP (FB.GETWINDOW
+                                                                                   CW
+                                                                                   'COUNTER)
+                                                                             'REGION])
+         (MODERNWINDOW.BUTTONEVENTFN W (FUNCTION MODERN-ORIG-TB.BUTTONEVENTFN)
+                NIL NIL CORNERREG TOPMARGIN])
+)
 
 
 
@@ -420,17 +492,19 @@
                TEDIT.READTABLE))])
 
 (\MODERNIZED.TEDIT.BUTTONEVENTFN
-  [LAMBDA (W STREAM)                                    (* ; "Edited 12-Oct-2021 14:27 by rmk:")
+  [LAMBDA (W STREAM)                                    (* ; "Edited 13-Oct-2021 21:43 by rmk:")
 
     (* ;; "If a TEDIT window has been split, we have to make sure that movement happens only for clicks at the top of the main window and at the bottom of the bottom-most split window.  Clicks near the split lines must be ignored.  Essentially, the %"region%" of the Tedit window is the union of the regions of all of its split-panes.")
 
     (* ;; "We pass the pain that received the click, because that's what the original \TEDIT.BUTTONEVENTFN needs to see, if we decide not to shape or move.")
 
     (MODERNWINDOW.BUTTONEVENTFN W (FUNCTION MODERN-ORIG-\TEDIT.BUTTONEVENTFN)
-           NIL NIL (APPLY (FUNCTION UNIONREGIONS)
+           NIL NIL [APPLY (FUNCTION UNIONREGIONS)
                           (bind PANE _ (CENTRALWINDOW W) collect (WINDOWPROP PANE
                                                                                 'REGION)
-                             repeatwhile (SETQ PANE (WINDOWPROP PANE 'TEDIT-NEXT-PANE-DOWN])
+                             repeatwhile (SETQ PANE (WINDOWPROP PANE 'TEDIT-NEXT-PANE-DOWN]
+           (WINDOWPROP (CENTRALWINDOW W)
+                  'TITLE])
 
 (TEDIT.SELECTALL
   [LAMBDA (STREAM TEXTOBJ SEL)                          (* ; "Edited  3-May-2020 17:29 by rmk:")
@@ -463,10 +537,10 @@
 (MODERNWINDOW.SETUP 'ICMLARRAY.TITLECOMMANDFN)
 
 
-(* ;; "Freemenu")
+(* ;; "File browser")
 
 
-(MODERNWINDOW.SETUP '\FM.BUTTONEVENTFN)
+(MODERNWINDOW.SETUP '\FM.BUTTONEVENTFN '\MODERNIZED.FREEMENU.BUTTONEVENTFN)
 
 
 (* ;; "SEDIT")
@@ -500,10 +574,10 @@
                          'WINDOW))
 
 
-(* ;; "Table browser (for filebrowser)")
+(* ;; "Table browser  and filebrowser)")
 
 
-(MODERNWINDOW.SETUP 'TB.BUTTONEVENTFN)
+(MODERNWINDOW.SETUP 'TB.BUTTONEVENTFN 'MODERNIZED.TB.BUTTONEVENTFN)
 
 
 (* ;; "Grapher")
@@ -538,10 +612,12 @@
 (ADDTOVAR LAMA MODERN-ADD-EXEC)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4845 10473 (MODERNWINDOW 4855 . 6310) (MODERNWINDOW.SETUP 6312 . 9261) (UNMODERNWINDOW 
-9263 . 9657) (MODERNWINDOW.UNSETUP 9659 . 10471)) (10538 18976 (MODERNWINDOW.BUTTONEVENTFN 10548 . 
-15873) (NEARTOP 15875 . 16795) (NEARESTCORNER 16797 . 17676) (INCORNER.REGION 17678 . 18974)) (19034 
-21356 (MODERN-ADD-EXEC 19044 . 19475) (MODERN-SNAPW 19477 . 20020) (TOTOPW.MODERNIZE 20022 . 20450) (
-MODERN-MENUBUTTONFN 20452 . 21354)) (21397 23609 (TEDIT.MODERNIZE 21407 . 22221) (
-\MODERNIZED.TEDIT.BUTTONEVENTFN 22223 . 23278) (TEDIT.SELECTALL 23280 . 23607)))))
+  (FILEMAP (NIL (5135 11412 (MODERNWINDOW 5145 . 6600) (MODERNWINDOW.SETUP 6602 . 9551) (UNMODERNWINDOW 
+9553 . 9947) (MODERNWINDOW.UNSETUP 9949 . 10761) (\MODERNIZED.FREEMENU.BUTTONEVENTFN 10763 . 11410)) (
+11477 21412 (MODERNWINDOW.BUTTONEVENTFN 11487 . 18287) (NEARTOP 18289 . 19217) (NEARESTCORNER 19219 . 
+20098) (INCORNER.REGION 20100 . 21410)) (21470 23792 (MODERN-ADD-EXEC 21480 . 21911) (MODERN-SNAPW 
+21913 . 22456) (TOTOPW.MODERNIZE 22458 . 22886) (MODERN-MENUBUTTONFN 22888 . 23790)) (23793 26222 (
+\MODERNIZED.FREEMENU.BUTTONEVENTFN 23803 . 24450) (MODERNIZED.TB.BUTTONEVENTFN 24452 . 26220)) (26263 
+28542 (TEDIT.MODERNIZE 26273 . 27087) (\MODERNIZED.TEDIT.BUTTONEVENTFN 27089 . 28211) (TEDIT.SELECTALL
+ 28213 . 28540)))))
 STOP

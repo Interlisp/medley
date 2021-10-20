@@ -1,0 +1,83 @@
+# Interlisp workflow to build Medley release
+name: Build Medley Release
+
+# Run this workflow on push to master
+on:
+  push:
+    branches:
+      - master
+
+# Jobs that compose this workflow
+jobs:
+  # Build Loadup
+  loadup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set release tag if currently undefined
+        if: ${{ env.tag == null }}
+        run:  |
+          echo "tag=medley-`date +%y%m%d`" >> $GITHUB_ENV
+
+      - name: Checkout Medley
+        uses: actions/checkout@v2
+
+      - name: Get the latest Maiko Release
+        uses: actions/checkout@v2
+        with:
+          repository: interlisp/maiko
+          path: maiko
+
+      - name: install compiler
+        run: sudo apt-get update && sudo apt-get install -y make clang libx11-dev gcc x11vnc xvfb
+
+      - name: install vnc
+        run: sudo apt-get install -y tightvncserver
+
+      - name: Compile Maiko
+        working-directory: maiko/bin
+        run: ./makeright  x && ./makeright init
+
+      - name: Build Loadout
+        run: pwd && Xvnc -once -geometry 1280x720 :0 & DISPLAY=:0 PATH="/maiko:$PATH" scripts/loadup-all.sh
+
+      - name: Build release tar get libs
+        run: |
+          tar cfz tmp/$tag-loadups.tgz    \
+            tmp/lisp.sysout               \
+            tmp/full.sysout               \
+            tmp/whereis.hash              \
+            tmp/exports.all               \
+            tmp/RDSYS/                    \
+            tmp/RDSYS.LCOM   
+      
+      - name: tar part 2
+        run: |
+          tar cfz tmp/$tag-runtime.tgz                    \
+                     --exclude "*~" --exclude "*#*"       \
+                     docs/dinfo                           \
+                     docs/Documentation\ Tools            \
+                     greetfiles/SIMPLE-INIT               \
+                     run-medley                           \
+                     scripts                              \
+                     fonts/displayfonts                   \
+                     fonts/altofonts                      \
+                     fonts/postscriptfonts                \
+                     library/                             \
+                     lispusers/                           \
+                     fonts/big                            \
+                     fonts/other                          \
+                     sources/                             \
+                     internal/library      
+
+      - name: Release notes
+        run: |
+          sed s/'$tag'/$tag/g < release-notes.md > tmp/release-notes.md  &&
+          ls tmp && env
+      
+      - name: push the release
+        uses: ncipollo/release-action@v1.8.10
+        with: 
+          artifacts: tmp/${{ env.tag }}-loadups.tgz,tmp/${{ env.tag }}-runtime.tgz
+          tag: ${{ env.tag }}
+          bodyfile: tmp/release-notes.md
+          token: ${{ secrets.GITHUB_TOKEN }}

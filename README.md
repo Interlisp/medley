@@ -2,45 +2,51 @@
 
 This repository is for the Lisp environment of [Medley Interlisp](https://Interlisp.org).
 
-We've made great process in sorting out what we have (some dusty corners notwithstanding), but there's quite a bit more work to do. Please report problems!
-
-See [Medley Interlisp Wiki](https://github.com/Interlisp/medley/wiki/) for an overview, and other pointers.
+See the [Medley Interlisp Wiki](https://github.com/Interlisp/medley/wiki/) for an overview and pointers to available documentation.
 
 A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko), which is the implementation (in C) of the Medley virtual machine.
 
 ## Using releases
 
-There are separate releases of medley and maiko.  Just get the latest version of each.
+There currently are separate releases of medley and maiko; get the latest version of each.
+There (soon) will also be Docker containers with the latest, and a way to try out Medley in the cloud (without installing).
 
-Alternatively, you can pick up the medley release, and build your own maiko (which is delivered as binaries `lde` `ldex` and `ldeinit`.) We can build for other OS arch pairs depending on what is available for GitHub actions.
+
+### Getting releases
 
 Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the one corresponding to your operating system and processor (for Windows with WSL or Intel linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for M1.)
+
+Or, build your own maiko (the binaries `lde` `ldex` and `ldeinit`.) We can build for other OS arch pairs depending on what is available for GitHub actions.
 
 The medley release comes in two parts, found [here](https://github.com/Interlisp/medley/releases)
 1. The "loadups" (download `medley-`YYMMDD`-loadups.tgz`)
 2. The "runtime" (download `medley-`YYMMDD`-runtime.tgz`)
 
-To download both using the 'gh' GitHub command line:
+You don't need the "runtime" if you've cloned this (medley) repo.
+If you happen to have the 'gh' GitHub command line installed you can download both using
 ```
    gh release download -R Interlisp/medley -p "*"
 ```
+but otherwise just click on the link(s) to the parts you need.
 
- (from a shell/terminal window):
+### Unpacking releases
 
-1. Unpack the medley loadups file
-   ```
-   tar -xvfz medley-211015-loadups.tgz
-   ```
+From a shell/terminal window:
 
-2. Unpack the medley runtime OR clone the Medly repo
+1. Choose where you want to install medley and maiko.
+Unpack the medley loadups file
+
+*  `cd ` ~parent~
+*  `tar -xvfz medley-`YYMMDD`-loadups.tgz`
+
+2. Unpack the medley runtime OR clone the Medley repo
    (the "medley runtime" is just a subset of the whole repo)
    
-   ```
-   git clone https://github.com/Interlisp/medley
-   ```
+* `tar -xvfz medley-`YYMMDD`-runtime.tgz` 
+
    OR
    ```
-   tar -xvfz medley-211015-runtime.tgz
+   git clone https://github.com/Interlisp/medley
    ```
    
 3. Unpack the maiko file for your operating system and CPU type, e.g.,
@@ -53,7 +59,7 @@ To download both using the 'gh' GitHub command line:
 
 ### Setting up X
 
-Medley Interlisp needs an X-Server to manage its display. Most Linux desktops have one. Windows 11 with WSL includes an X-Server. For Windows 10 with WSL2, there are a number of open-source X servers; for example vcxsrv.
+Medley Interlisp currently needs an X-Server to manage its display. Most Linux desktops have one. Windows 11 with WSL includes an X-Server. For Windows 10 with WSL2, there are a number of open-source X servers; for example vcxsrv.
 
 Mac users should get [XQuartz from XQuartz.org](https://xquartz.org/releases).
 
@@ -110,8 +116,12 @@ files. A .TEDIT or .TXT file is probably documentation
 for the package of same name, at least in the library,
 internal/library, lispusers.
 
+
+
+
+
 The current repo has both Lisp sources and compiled .LCOM and .DFASL
-files, because some files don't compile in a vanilla lisp.sysout .
+files.
 
 Each directory should have a README.md, but briefly
 
@@ -122,9 +132,7 @@ Each directory should have a README.md, but briefly
 - library  -- packages that were supported (30 years ago)
 - lispusers -- packages that were only half supported (ditto)
 - loadups   -- has sysouts and other builds
-- patches -- for cases where reloading doesn't wor
 - scripts  -- some scripts for fixing up things
-- sunloadup --  support information for making a new lisp.sysout from scratch
 - sources   -- sources for Interlisp and Common Lisp implementations
 - unicode  -- data files for support of XCCS to and from Unicode mappings
 

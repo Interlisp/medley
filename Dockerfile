@@ -1,6 +1,7 @@
 FROM interlisp/maiko:latest
 ARG BUILD_DATE
 LABEL name="Medley"
+# LABEL tags=${tags}
 LABEL description="The Medley Interlisp environment"
 LABEL url="https://github.com/Interlisp/medley"
 LABEL build-time=$BUILD_DATE
@@ -9,8 +10,8 @@ RUN apt-get update && apt-get install -y tightvncserver
 
 EXPOSE 5900
 
-# Need to refine this down to only needed directories.
-COPY . /app/medley
+# Copy and uncompress loadup and required source files.
+ADD *.tgz /app
 
 WORKDIR /app/medley
 

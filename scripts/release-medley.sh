@@ -29,7 +29,7 @@ tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
     medley/docs/dinfo                                     \
     medley/docs/Documentation\ Tools                      \
-    medley/greetfiles/SIMPLE-INIT                         \
+    medley/greetfiles                                     \
     medley/run-medley                                     \
     medley/scripts                                        \
     medley/fonts/displayfonts  medley/fonts/altofonts     \

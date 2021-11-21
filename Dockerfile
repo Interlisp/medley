@@ -1,4 +1,4 @@
-FROM interlisp/maiko:latest
+FROM ubuntu:focal
 ARG BUILD_DATE
 LABEL name="Medley"
 # LABEL tags=${tags}

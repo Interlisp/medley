@@ -125,16 +125,25 @@ files.
 
 Each directory should have a README.md, but briefly
 
-- docs -- Documentation files (either PDFs or online help)
-- fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
-- greetfiles -- various configuration setups
-- internal -- These _were_ internal to Venue; now internal/library and internal/test
-- library  -- packages that were supported (30 years ago)
-- lispusers -- packages that were only half supported (ditto)
-- loadups   -- has sysouts and other builds
-- scripts  -- some scripts for fixing up things
-- sources   -- sources for Interlisp and Common Lisp implementations
-- unicode  -- data files for support of XCCS to and from Unicode mappings
+* BUILDING.md -- instructions on how to make your own loadups
+* clos -- early implementation of Common Lisp Object System
+* CLTL2 -- files submitted to bring Medley up to the conformance to "Common Lisp, the Language" 2nd edition. Not enough to conform to the ANSII standard lisp.
+* Dockerfile -- used when building Docker containers with Medley
+* docs -- Documentation files (either PDFs or online help; see medley/wiki)
+* fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
+* greetfiles -- various configuration setups
+* internal -- These _were_ internal to Venue; now internal/library and internal/test
+* library  -- packages that were supported (30 years ago)
+* lispusers -- User contributed packages that were only half supported (ditto)
+* loadups   -- has sysouts and other builds plus a few remnants
+* obsolete  -- files we should remove from the repo
+* rooms -- implementation of ROOMS window / desktop manager
+* run-medley -- script to enhance the options of running medley
+* scripts  -- some scripts for fixing up things
+* sources   -- sources for Interlisp and Common Lisp implementations
+* unicode  -- data files for support of XCCS to and from Unicode mappings
 
 plus
    Dockerfile, and scripts for building and running medley
+   tmp directory for use during build processes
+

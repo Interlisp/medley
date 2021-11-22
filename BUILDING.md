@@ -1,10 +1,14 @@
 # How to build a medley release
 
 Originally done only with shell scripts:
-
+```
 ./scripts/loadup-all.sh 
+```
+to make the loadups
+```
 ./scripts/loadup-and-release.sh
-
+```
+to go on to make the tgz files and release them
 
 # Using github actions
 

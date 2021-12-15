@@ -1,19 +1,24 @@
 FROM ubuntu:focal
-ARG BUILD_DATE
+ARG build_date
+ARG medley_release
+ARG maiko_release
 LABEL name="Medley"
 # LABEL tags=${tags}
 LABEL description="The Medley Interlisp environment"
 LABEL url="https://github.com/Interlisp/medley"
-LABEL build-time=$BUILD_DATE
+LABEL build-time=$build_date
+ENV BUILD_DATE=$build_date
+ENV MEDLEY_RELEASE=$medley_release
+ENV MAIKO_RELEASE=$maiko_release
 
 RUN apt-get update && apt-get install -y tightvncserver
 
 EXPOSE 5900
 
 # Copy and uncompress loadup and required source files.
-ADD *.tgz /app
+ADD *.tgz /home
 
-WORKDIR /app/medley
+WORKDIR /home/medley
 
 RUN adduser --disabled-password --gecos "" medley
 USER medley

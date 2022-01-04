@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "22-Dec-2021 10:37:46" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>comparetext.;20 39405  
+(FILECREATED "30-Dec-2021 21:22:01" 
+{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>comparetext.;100 48929  
 
-      :CHANGES-TO (FNS IMCOMPARE.COLLECT.HASH.CHUNKS COMPARETEXT)
-                  (RECORDS IMCOMPARE.CHUNK)
+      :CHANGES-TO (FNS COMPARETEXT.TEXTOBJ)
 
-      :PREVIOUS-DATE "19-Dec-2021 12:45:35" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>comparetext.;19)
+      :PREVIOUS-DATE "27-Dec-2021 15:56:54" 
+{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>comparetext.;98)
 
 
 (* ; "
@@ -17,132 +16,296 @@ Copyright (c) 1984-1985, 1993, 1998 by Xerox Corporation.
 (PRETTYCOMPRINT COMPARETEXTCOMS)
 
 (RPAQQ COMPARETEXTCOMS
-       ((FNS COMPARETEXT IMCOMPARE.BOXNODE IMCOMPARE.CHUNKS IMCOMPARE.COLLECT.HASH.CHUNKS 
-             IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH IMCOMPARE.FIND.TEDIT.TEXT.OBJECT IMCOMPARE.HASH
-             IMCOMPARE.LEFTBUTTONFN IMCOMPARE.LENGTHEN.ATOM IMCOMPARE.MERGE.CONNECTED.CHUNKS 
-             IMCOMPARE.MERGE.UNCONNECTED.CHUNKS IMCOMPARE.MIDDLEBUTTONFN IMCOMPARE.SHOW.DIST 
-             IMCOMPARE.UPDATE.SYMBOL.TABLE)
-        (P (MOVD 'COMPARETEXT 'IMCOMPARE))
-        (INITVARS (IMCOMPARE.LAST.NODE NIL)
-               (IMCOMPARE.LAST.GRAPH.WINDOW NIL))
-        (RECORDS IMCOMPARE.CHUNK IMCOMPARE.SYMB)
+       ((FNS COMPARETEXT COMPARETEXT.WINDOW COMPARETEXT.TEXTOBJ COMPARETEXT.SETSEL CHUNKNODELABEL 
+             IMCOMPARE.BOXNODE IMCOMPARE.CHUNKS IMCOMPARE.COLLECT.HASH.CHUNKS IMCOMPARE.DISPLAYGRAPH
+             IMCOMPARE.HASH IMCOMPARE.MERGE.CONNECTED.CHUNKS IMCOMPARE.MERGE.UNCONNECTED.CHUNKS 
+             IMCOMPARE.SHOW.DIST IMCOMPARE.UPDATE.SYMBOL.TABLE)
+        (FNS IMCOMPARE.LEFTBUTTONFN IMCOMPARE.MIDDLEBUTTONFN IMCOMPARE.COPYBUTTONFN)
         (FILES (SYSLOAD)
-               GRAPHER)
-        (DECLARE%: EVAL@COMPILE DONTCOPY (FILES (LOADCOMP)
-                                                GRAPHER))))
+               GRAPHER REGIONMANAGER)
+        (FNS TAIL1 TAIL2)
+                                                             (* ; "Debugging")
+        (INITVARS (COMPARETEXT.ALLCHUNKS T)
+               (COMPARETEXT.AUTOTEDIT T))
+        (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS IMCOMPARE.CHUNK IMCOMPARE.SYMB)
+               (FILES (LOADCOMP)
+                      GRAPHER))))
 (DEFINEQ
 
 (COMPARETEXT
-  [LAMBDA (NEWFILENAME OLDFILENAME HASH.TYPE GRAPH.REGION FILELABELS)
-                                                             (* ; "Edited 22-Dec-2021 10:35 by rmk")
+  [LAMBDA (FILE1 FILE2 HASH.TYPE REGION FILELABELS)          (* ; "Edited 22-Dec-2021 23:49 by rmk")
                                                              (* ; "Edited 15-Dec-2021 16:23 by rmk")
                                                              (* ; "Edited 13-Dec-2021 12:21 by rmk")
                                                              (* ; "Edited  8-Nov-2021 08:44 by rmk:")
                                                              (* mjs " 8-Jan-84 21:06")
 
-    (* ;; "Compares the two files, and produces a graph showing their corresponding chunks.  The courseness of the 'chunking' is determined by HASH.TYPE, which may be PARA, LINE, or WORD.  HASH.TYPE = NIL defaults to PARA.  The file difference graph is displayed at GRAPHREGION.  If GRAPH.REGION = NIL, the user is asked to specify a region.  If GRAPH.REGION = T, a standard region is used.")
+    (* ;; "Compares the two files, and produces a graph showing their corresponding chunks.  The courseness of the 'chunking' is determined by HASH.TYPE, which may be PARA, LINE, or WORD.  HASH.TYPE = NIL defaults to PARA.  The file difference graph is displayed at REGION.  If REGION = NIL, the user is asked to specify a region.  If REGION = T, a standard region is used.")
 
     (SELECTQ HASH.TYPE
         ((PARA LINE WORD))
         (NIL (SETQ HASH.TYPE 'PARA))
         (ERROR (CONCAT "Unrecognize HASHTYPE " HASH.TYPE)))
-    (LET ((NEWFILE (FINDFILE NEWFILENAME T))
-          (OLDFILE (FINDFILE OLDFILENAME T)))
-         (CL:UNLESS (AND OLDFILE NEWFILE)
-             (ERROR "Can't find both files" (LIST NEWFILENAME OLDFILENAME)))
+    (LET ((FULLFILE1 (FINDFILE FILE1 T))
+          (FULLFILE2 (FINDFILE FILE2 T)))
+         (CL:UNLESS (AND FULLFILE1 FULLFILE2)
+             (ERROR "Can't find both files" (LIST FILE1 FILE2)))
          (IMCOMPARE.CHUNKS (create IMCOMPARE.CHUNK
-                                  FILENAME _ NEWFILE
+                                  FILENAME _ FULLFILE1
                                   FILEPTR _ 0)
                 (create IMCOMPARE.CHUNK
-                       FILENAME _ OLDFILE
+                       FILENAME _ FULLFILE2
                        FILEPTR _ 0)
-                HASH.TYPE
-                (if (EQ GRAPH.REGION T)
-                    then (create REGION
-                                LEFT _ 25
-                                BOTTOM _ 25
-                                WIDTH _ 500
-                                HEIGHT _ 150)
-                  elseif GRAPH.REGION
-                  else (CLRPROMPT)
-                       (printout PROMPTWINDOW "Please specify a window for the file difference graph"
-                              T)
-                       (GETREGION))
-                FILELABELS])
+                HASH.TYPE NIL FILELABELS])
+
+(COMPARETEXT.WINDOW
+  [LAMBDA (GRAPH REGION)                                     (* ; "Edited 27-Dec-2021 13:47 by rmk")
+                                                             (* ; "Edited 25-Dec-2021 11:40 by rmk")
+                                                             (* ; "Edited 22-Dec-2021 15:51 by rmk")
+
+    (* ;; "Set up the graph WINDOW. If REGION isn't provided we prompt with a region that is wide enough for the graph and high enough for at least an initial segment.")
+
+    (LET [WINDOW GRAPHREGION GWIDTH (FILEPREFIX (CAR (GRAPHERPROP GRAPH 'FILELABELS]
+         [SETQ REGION
+          (if (EQ REGION T)
+              then (create REGION
+                          LEFT _ 25
+                          BOTTOM _ 25
+                          WIDTH _ 500
+                          HEIGHT _ 150)
+            elseif (REGIONP REGION)
+            else (CLRPROMPT)
+                 (printout PROMPTWINDOW "Please specify a region for the comparison graph" T)
+                 (SETQ GRAPHREGION (GRAPHREGION GRAPH))
+                 (SETQ GWIDTH (FETCH (REGION WIDTH) OF GRAPHREGION)) 
+
+                 (* ;; "I don't know why the graphregion doesn't include the last line")
+
+                 (SETQ REGION (RELGETREGION (IPLUS (TIMES 2 WBorder)
+                                                   GWIDTH)
+                                     [IMIN 200 (IPLUS (FETCH (REGION HEIGHT) OF GRAPHREGION)
+                                                      (ITIMES 2 (FONTHEIGHT DEFAULTFONT]
+                                     'RIGHT
+                                     'TOP]
+         [SETQ WINDOW (CREATEW REGION (CONCAT "Compare text" (CL:IF FILEPREFIX
+                                                                 (CONCAT " of " FILEPREFIX)
+                                                                 "")
+                                             " showing "
+                                             (CL:IF (GRAPHERPROP GRAPH 'ALLCHUNKS)
+                                                 "all"
+                                                 "only different")
+                                             " chunks, hashed by "
+                                             (SELECTQ (GRAPHERPROP GRAPH 'HASH.TYPE)
+                                                 (PARA "paragraph")
+                                                 (LINE "line")
+                                                 (WORD "word")
+                                                 (SHOULDNT]
+         (GETPROMPTWINDOW WINDOW)
+         (CL:WHEN (EQ GWIDTH (FETCH (REGION WIDTH) OF (WINDOWREGION WINDOW)))
+             (WINDOWPROP WINDOW 'MAXSIZE (CONS GWIDTH MAX.SMALLP)))
+         (GETPROMPTWINDOW WINDOW)
+         [WINDOWADDPROP WINDOW 'CLOSEFN (FUNCTION (LAMBDA (W)
+                                                    (LET (TOBJ TWINDOW)
+                                                         (CL:WHEN (AND (SETQ TOBJ (WINDOWPROP
+                                                                                   W
+                                                                                   'COL1TEXTOBJ))
+                                                                       (SETQ TWINDOW
+                                                                        (WFROMDS (TEXTSTREAM TOBJ)))
+                                                                       (OPENWP TWINDOW))
+                                                                (CLOSEW TWINDOW))
+                                                         (CL:WHEN (AND (SETQ TOBJ (WINDOWPROP
+                                                                                   W
+                                                                                   'COL2TEXTOBJ))
+                                                                       (SETQ TWINDOW
+                                                                        (WFROMDS (TEXTSTREAM TOBJ)))
+                                                                       (OPENWP TWINDOW))
+                                                                (CLOSEW TWINDOW]
+         WINDOW])
+
+(COMPARETEXT.TEXTOBJ
+  [LAMBDA (NODE WINDOW INCOL1)                               (* ; "Edited 30-Dec-2021 21:21 by rmk")
+                                                             (* ; "Edited 27-Dec-2021 15:56 by rmk")
+
+    (* ;; "Returns the text object for the chunk column in the graphwindow WINDOW, on the left if INCOL1.  If the windows are automatic, they are lined up under the middle of WINDOW.")
+
+    (DECLARE (USEDFREE COMPARETEXT.AUTOTEDIT))
+    (LET (TEXTOBJ TSTREAM TWINDOW REGION (NODEID (FETCH (GRAPHNODE NODEID) OF NODE)))
+         (CL:UNLESS [AND [SETQ TEXTOBJ (WINDOWPROP WINDOW (CL:IF INCOL1
+                                                              'COL1TEXTOBJ
+                                                              'COL2TEXTOBJ)]
+                         (OPENWP (WFROMDS (TEXTSTREAM TEXTOBJ]
+             (SETQ REGION (RELCREATEREGION 475 600 (CL:IF INCOL1
+                                                       'RIGHT
+                                                       'LEFT)
+                                 'TOP
+                                 (CL:IF INCOL1
+                                     `(,WINDOW 0.5 -1)
+                                     `(,WINDOW 0.5 1))
+                                 `(,WINDOW BOTTOM -2)
+                                 T))
+             [SETQ TSTREAM (TEXTSTREAM (TEDIT (CL:IF (FIXP (CAR NODEID))
+                                                  (FETCH (IMCOMPARE.CHUNK FILENAME) of NODEID)
+                                                  NODEID)
+                                              (IF COMPARETEXT.AUTOTEDIT
+                                                  THEN 
+                                                       (* ;; 
+                                               "Just use it as created, don't prompt for adjustments")
+
+                                                       REGION
+                                                ELSE (RELGETREGION REGION NIL (CL:IF INCOL1
+                                                                                  'RIGHT
+                                                                                  'LEFT)
+                                                            'TOP))
+                                              NIL
+                                              `(READONLY T LEAVETTY T]
+             (SETQ TWINDOW (WFROMDS TSTREAM))
+             (SETQ TEXTOBJ (TEXTOBJ TSTREAM))
+             (WINDOWPROP WINDOW (CL:IF INCOL1
+                                    'COL1TEXTOBJ
+                                    'COL2TEXTOBJ)
+                    TEXTOBJ)
+             [WINDOWPROP TWINDOW 'TITLE (CL:IF INCOL1
+                                            (CADR (GRAPHERPROP (WINDOWPROP WINDOW 'GRAPH)
+                                                         'FILELABELS))
+                                            (CADDR (GRAPHERPROP (WINDOWPROP WINDOW 'GRAPH)
+                                                          'FILELABELS)))]
+             [WINDOWADDPROP WINDOW 'MOVEFN (FUNCTION (LAMBDA (W NEWPOS)
+                                                       (LET ((DELTA (PTDIFFERENCE NEWPOS (
+                                                                                       WINDOWPOSITION
+                                                                                          W)))
+                                                             TOBJ TW)
+                                                            (CL:WHEN (SETQ TOBJ (WINDOWPROP
+                                                                                 W
+                                                                                 'COL1TEXTOBJ))
+                                                                (MOVEW (SETQ TW (WFROMDS (TEXTSTREAM
+                                                                                          TOBJ)))
+                                                                       (PTPLUS DELTA (WINDOWPOSITION
+                                                                                      TW))))
+                                                            (CL:WHEN (SETQ TOBJ (WINDOWPROP
+                                                                                 W
+                                                                                 'COL2TEXTOBJ))
+                                                                (MOVEW (SETQ TW (WFROMDS (TEXTSTREAM
+                                                                                          TOBJ)))
+                                                                       (PTPLUS DELTA (WINDOWPOSITION
+                                                                                      TW))))
+                                                            NIL])
+         TEXTOBJ])
+
+(COMPARETEXT.SETSEL
+  [LAMBDA (TEXTOBJ NODE)                                     (* ; "Edited 25-Dec-2021 10:52 by rmk")
+
+    (* ;; "25 so that we normalize with a little bit of context")
+
+    (LET* ((CHUNK (FETCH (GRAPHNODE NODEID) OF NODE))
+           (FILEPTR (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK)))
+          (TEDIT.SETSEL TEXTOBJ (IMAX 1 (IDIFFERENCE FILEPTR 25))
+                 0
+                 'LEFT)
+          (TEDIT.NORMALIZECARET TEXTOBJ)
+          (TEDIT.SETSEL TEXTOBJ FILEPTR (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK)
+                 'LEFT)
+          (TEDIT.NORMALIZECARET TEXTOBJ)
+          (AND NIL (TTY.PROCESS (WINDOWPROP (CAR (fetch (TEXTOBJ \WINDOW) of TEXTOBJ))
+                                       'PROCESS])
+
+(CHUNKNODELABEL
+  [LAMBDA (CHUNK MIN.LENGTH EXTENDER)                        (* ; "Edited 25-Dec-2021 11:56 by rmk")
+                                                             (* ; "Edited 13-Dec-2021 21:18 by rmk")
+                                                             (* mjs "30-Dec-83 15:11")
+
+    (* ;; "Label for CHUNK  is at least MIN.LENGTH characters long, by concatenating the first character of EXTENDER (or space, if not given) to the front")
+
+    (LET ((FILEPTR (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK))
+          (LENGTH (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK))
+          X)
+         (SETQ X (CONCAT FILEPTR ":" LENGTH))
+         (AND NIL (IF (ILESSP (NCHARS X)
+                             MIN.LENGTH)
+                      THEN (CONCAT (ALLOCSTRING (IDIFFERENCE MIN.LENGTH (NCHARS X))
+                                          (CL:IF EXTENDER
+                                              (NTHCHAR EXTENDER 1)
+                                              " "))
+                                  X)
+                    ELSE X))
+         X])
 
 (IMCOMPARE.BOXNODE
-  [LAMBDA (NODE WINDOW)                                  (* rmk%: "14-Dec-84 13:40")
-    (if IMCOMPARE.LAST.NODE
-        then (RESET/NODE/BORDER IMCOMPARE.LAST.NODE 'INVERT IMCOMPARE.LAST.GRAPH.WINDOW)
-              (SETQ IMCOMPARE.LAST.NODE NIL)
-              (SETQ IMCOMPARE.LAST.GRAPH.WINDOW NIL))
-    (if NODE
-        then (RESET/NODE/BORDER NODE 'INVERT WINDOW)
-              (SETQ IMCOMPARE.LAST.NODE NODE)
-              (SETQ IMCOMPARE.LAST.GRAPH.WINDOW WINDOW])
+  [LAMBDA (WINDOW NODE1 NODE2)                               (* ; "Edited 25-Dec-2021 12:01 by rmk")
+                                                             (* rmk%: "14-Dec-84 13:40")
+
+    (* ;; "Marks NODE1 and NODE2 as having been selected, removing marks on previous nodes.")
+
+    (LET [(LASTNODES (WINDOWPROP WINDOW 'LASTNODES]          (* ; "FLIPNODE ?")
+         (CL:WHEN (CAR LASTNODES)
+             (FLIPNODE (CAR LASTNODES)
+                    WINDOW))
+         (CL:WHEN (CADR LASTNODES)
+             (FLIPNODE (CADR LASTNODES)
+                    WINDOW))
+         (CL:WHEN NODE1 (FLIPNODE NODE1 WINDOW))
+         (CL:WHEN NODE2 (FLIPNODE NODE2 WINDOW))
+         (WINDOWPROP WINDOW 'LASTNODES (LIST NODE1 NODE2])
 
 (IMCOMPARE.CHUNKS
-  [LAMBDA (NEWFILE.SPEC.CHUNK OLDFILE.SPEC.CHUNK HASH.TYPE GRAPH.REGION FILELABELS)
-                                                             (* ; "Edited 18-Dec-2021 13:21 by rmk")
-                                                             (* ; "Edited 15-Dec-2021 16:28 by rmk")
-                                                             (* ; "Edited 13-Dec-2021 12:32 by rmk")
-                                                             (* rmk%: " 8-Sep-84 00:06")
+  [LAMBDA (CHUNK1 CHUNK2 HASH.TYPE REGION FILELABELS)        (* ; "Edited 25-Dec-2021 13:02 by rmk")
+                                                             (* ; "Edited 23-Dec-2021 00:02 by rmk")
+                                                             (* ; "Edited  8-Sep-1984 00:06 by rmk")
 
-    (* ;; "This is the main text-comparison function.  It compares the text in the two chunks <which may be small pieces of files, or entire files> and produces a graph showing how the sub-chunks of the two main chunks are related.  The two main chunks may be in the same file, and the file may actually be an open Tedit textstream.  The main chunks are broken down according to HASH.TYPE, which may be PARA <chunk by paragraph>, LINE, WORD,  or  PARA.  The file difference graph is displayed at GRAPH.REGION.")
+    (* ;; "This is the main text-comparison function.  It compares the text in the two chunks <which may be small pieces of files, or entire files> and produces a graph showing how the sub-chunks of the two main chunks are related.  The two main chunks may be in the same file, and the file may actually be an open Tedit textstream.  The main chunks are broken down according to HASH.TYPE, which may be PARA <chunk by paragraph>, LINE, WORD,  or  PARA.  The file difference graph is displayed at REGION.")
 
     (* ;; "This text comparison algorithm is originally from the article 'A Technique for Isolating Differences Between Files' by Paul Heckel, in CACM, V21, #4, April 1978 --- major difference is that I use lists instead of arrays")
 
     (* ;; "")
 
-    (* ;; "Collect lists of chunks from each of the main chunks, dividing them according to HASH.TYPE.  We start with whole-file chunks to provide the interface that the")
+    (* ;; "Collect lists of chunks from each of the main chunks, dividing them according to HASH.TYPE.  We start with whole-file chunk. but this works also for a chunk that corresponds to a subsection of a file.")
 
     (LET ((CHUNK.SYMBOL.TABLE (HASHARRAY 500))
-          (NEWFILE.CHUNK.LIST (IMCOMPARE.COLLECT.HASH.CHUNKS NEWFILE.SPEC.CHUNK HASH.TYPE))
-          (OLDFILE.CHUNK.LIST (IMCOMPARE.COLLECT.HASH.CHUNKS OLDFILE.SPEC.CHUNK HASH.TYPE)))
+          (CHUNKLIST1 (IMCOMPARE.COLLECT.HASH.CHUNKS CHUNK1 HASH.TYPE))
+          (CHUNKLIST2 (IMCOMPARE.COLLECT.HASH.CHUNKS CHUNK2 HASH.TYPE)))
 
-         (* ;; "Update the chunk symbol table.  For each hash value, this table records the number of 'new' chunks with that hash value, the number of 'old' chunks with that value, and a pointer to the place in OLD.CHUNK.LIST <not to an OLD c hunk itself>.")
+         (* ;; "Update the chunk symbol table.  For each hash value, this table records the number of file1 chunks with that hash value, the number of file2 chunks with that value, and a pointer to a tail of CHUNKLIST2 (not to a chunk itself).")
 
-         (IMCOMPARE.UPDATE.SYMBOL.TABLE NEWFILE.CHUNK.LIST CHUNK.SYMBOL.TABLE NIL)
-         (IMCOMPARE.UPDATE.SYMBOL.TABLE OLDFILE.CHUNK.LIST CHUNK.SYMBOL.TABLE T)
+         (IMCOMPARE.UPDATE.SYMBOL.TABLE CHUNKLIST1 CHUNK.SYMBOL.TABLE NIL)
+         (IMCOMPARE.UPDATE.SYMBOL.TABLE CHUNKLIST2 CHUNK.SYMBOL.TABLE T)
 
-         (* ;; "For every new chunk whose hash value matches EXACTLY ONE old chunk's value, 'connect' it to the old chunk by setting the new chunk's OTHERCHUNK field to point to the appropriate place in the old chunk list <not the old chunk directly>.  Also, make sure that OTHERCHUNK of the matching old chunk is non-NIL, so that unconnected old chunks will be merged correctly.")
+         (* ;; "For every file1 chunk whose hash value matches EXACTLY ONE file2 chunk's value, 'connect' it to the file2 chunk by setting the file1 chunk's OTHERCHUNK field to point to the appropriate tail of the file1 chunk list <not the chunk directly>.  Also, make sure that OTHERCHUNK of the matching file1 chunk is non-NIL, so that unconnected file1 chunks will be merged correctly.")
 
-         (for NEW.CHUNK in NEWFILE.CHUNK.LIST bind SYMB
-            do (SETQ SYMB (GETHASH (fetch (IMCOMPARE.CHUNK HASHVALUE) of NEW.CHUNK)
-                                 CHUNK.SYMBOL.TABLE))
-               (if (AND (EQ 1 (fetch (IMCOMPARE.SYMB NEWCOUNT) of SYMB))
-                        (EQ 1 (fetch (IMCOMPARE.SYMB OLDCOUNT) of SYMB)))
-                   then (replace (IMCOMPARE.CHUNK OTHERCHUNK) of NEW.CHUNK with (fetch (
-                                                                                       IMCOMPARE.SYMB
-                                                                                        OLDPTR)
-                                                                                   of SYMB))
-                        (replace (IMCOMPARE.CHUNK OTHERCHUNK) of (CAR (fetch (IMCOMPARE.SYMB OLDPTR)
-                                                                         of SYMB)) with T)))
+         (for C1 in CHUNKLIST1 bind SYMB do (SETQ SYMB (GETHASH (fetch (IMCOMPARE.CHUNK HASHVALUE)
+                                                                   of C1)
+                                                              CHUNK.SYMBOL.TABLE))
+                                            (if (AND (EQ 1 (fetch (IMCOMPARE.SYMB NEWCOUNT)
+                                                              of SYMB))
+                                                     (EQ 1 (fetch (IMCOMPARE.SYMB OLDCOUNT)
+                                                              of SYMB)))
+                                                then (replace (IMCOMPARE.CHUNK OTHERCHUNK)
+                                                        of C1 with (fetch (IMCOMPARE.SYMB OLDPTR)
+                                                                      of SYMB))
+                                                     (replace (IMCOMPARE.CHUNK OTHERCHUNK)
+                                                        of (CAR (fetch (IMCOMPARE.SYMB OLDPTR)
+                                                                   of SYMB)) with T)))
 
          (* ;; "Merge connected chunks forward")
 
-         (IMCOMPARE.MERGE.CONNECTED.CHUNKS NEWFILE.CHUNK.LIST NIL)
+         (IMCOMPARE.MERGE.CONNECTED.CHUNKS CHUNKLIST1 NIL)
 
          (* ;; "Merge connected chunks backwards")
 
-         (SETQ NEWFILE.CHUNK.LIST (DREVERSE NEWFILE.CHUNK.LIST))
-         (SETQ OLDFILE.CHUNK.LIST (DREVERSE OLDFILE.CHUNK.LIST))
-         (IMCOMPARE.MERGE.CONNECTED.CHUNKS NEWFILE.CHUNK.LIST T)
-         (SETQ NEWFILE.CHUNK.LIST (DREVERSE NEWFILE.CHUNK.LIST))
-         (SETQ OLDFILE.CHUNK.LIST (DREVERSE OLDFILE.CHUNK.LIST))
+         (SETQ CHUNKLIST1 (DREVERSE CHUNKLIST1))
+         (SETQ CHUNKLIST2 (DREVERSE CHUNKLIST2))
+         (IMCOMPARE.MERGE.CONNECTED.CHUNKS CHUNKLIST1 T)
+         (SETQ CHUNKLIST1 (DREVERSE CHUNKLIST1))
+         (SETQ CHUNKLIST2 (DREVERSE CHUNKLIST2))
 
          (* ;; "Merge unconnected chunks")
 
-         (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS NEWFILE.CHUNK.LIST)
-         (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS OLDFILE.CHUNK.LIST)
+         (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS CHUNKLIST1)
+         (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS CHUNKLIST2)
 
          (* ;; "The file comparison is complete.  Format and display the file difference graph")
 
-         (IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH NEWFILE.SPEC.CHUNK OLDFILE.SPEC.CHUNK HASH.TYPE 
-                GRAPH.REGION NEWFILE.CHUNK.LIST OLDFILE.CHUNK.LIST FILELABELS])
+         (IMCOMPARE.DISPLAYGRAPH CHUNK1 CHUNK2 HASH.TYPE REGION CHUNKLIST1 CHUNKLIST2 FILELABELS])
 
 (IMCOMPARE.COLLECT.HASH.CHUNKS
-  [LAMBDA (CHUNK HASH.TYPE)                                  (* ; "Edited 22-Dec-2021 10:37 by rmk")
+  [LAMBDA (CHUNK HASH.TYPE)                                  (* ; "Edited 24-Dec-2021 22:30 by rmk")
                                                              (* ; "Edited 13-Dec-2021 16:32 by rmk")
                                                              (* ; "Edited 23-Dec-98 16:54 by rmk:")
                                                              (* mjs " 8-Jan-84 20:57")
@@ -151,158 +314,155 @@ Copyright (c) 1984-1985, 1993, 1998 by Xerox Corporation.
 
     (* ;; "It is overkill to open raw text streams as TEDIT stream.  So we open, test for TEDIT and if so, close and reoopen.  TEDIT may not yet honor external formats other than XCCS for rawtext files.")
 
-    (BIND (FILENAME _ (fetch (IMCOMPARE.CHUNK FILENAME) of CHUNK))
-          STREAM ENDPOS FIRST (SETQ STREAM (OPENSTREAM FILENAME 'INPUT 'OLD))
-                              (CL:WHEN (\TEDIT.FORMATTEDP1 STREAM)
-                                  (CLOSEF STREAM)            (* ; 
+    (RESETLST
+        (BIND (FILENAME _ (fetch (IMCOMPARE.CHUNK FILENAME) of CHUNK))
+              STREAM ENDPOS FIRST [RESETSAVE (SETQ STREAM (OPENSTREAM FILENAME 'INPUT 'OLD))
+                                         '(PROGN (CLOSEF? OLDVALUE]
+                                  (CL:WHEN (\TEDIT.FORMATTEDP1 STREAM)
+                                                             (* ; 
                                                "The OBJECTCHAR is produced in place of image objects")
-                                  [SETQ STREAM (OPENTEXTSTREAM FILENAME NIL NIL NIL
-                                                      `(OBJECTBYTE ,(CHARCODE NULL])
-                              (SETFILEINFO STREAM 'EOL 'ANY)
-                              (CL:UNLESS (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK)
+                                      [RESETSAVE [SETQ STREAM
+                                                  (OPENTEXTSTREAM STREAM NIL NIL NIL
+                                                         `(OBJECTBYTE ,(CHARCODE NULL]
+                                             '(PROGN (CLOSEF? OLDVALUE])
+                                  (SETFILEINFO STREAM 'EOL 'ANY)
+                                  (CL:UNLESS (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK)
 
-                                  (* ;; 
+                                      (* ;; 
                          "For TEDIT files, the character length isn't known until after text-opening")
 
-                                  (REPLACE (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK
-                                     WITH (GETFILEINFO STREAM 'LENGTH)))
-                              (SETFILEPTR STREAM (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK))
-                              (SETQ ENDPOS (IPLUS (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK)
-                                                  (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK)))
-       WHILE (SETQ CHUNK (IMCOMPARE.HASH STREAM HASH.TYPE ENDPOS))
-       COLLECT (REPLACE FILENAME OF CHUNK WITH FILENAME)
-             CHUNK FINALLY (CLOSEF STREAM])
+                                      (REPLACE (IMCOMPARE.CHUNK CHUNKLENGTH) of CHUNK
+                                         WITH (GETFILEINFO STREAM 'LENGTH)))
+                                  (SETFILEPTR STREAM (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK))
+                                  (SETQ ENDPOS (IPLUS (fetch (IMCOMPARE.CHUNK FILEPTR) of CHUNK)
+                                                      (fetch (IMCOMPARE.CHUNK CHUNKLENGTH)
+                                                         of CHUNK)))
+           WHILE (SETQ CHUNK (IMCOMPARE.HASH STREAM HASH.TYPE ENDPOS))
+           COLLECT (REPLACE FILENAME OF CHUNK WITH FILENAME)
+                 CHUNK))])
 
-(IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH
-  [LAMBDA (NEWFILE.SPEC.CHUNK OLDFILE.SPEC.CHUNK HASH.TYPE GRAPH.REGION NEWFILE.CHUNK.LIST 
-                 OLDFILE.CHUNK.LIST FILELABELS)              (* ; "Edited 18-Dec-2021 13:16 by rmk")
-                                                             (* ; "Edited 16-Dec-2021 10:48 by rmk")
-                                                             (* ; "Edited 13-Dec-2021 12:19 by rmk")
+(IMCOMPARE.DISPLAYGRAPH
+  [LAMBDA (CHUNK1 CHUNK2 HASH.TYPE REGION CHUNKLIST1 CHUNKLIST2 FILELABELS)
+                                                             (* ; "Edited 27-Dec-2021 11:58 by rmk")
+                                                             (* ; "Edited 23-Dec-2021 00:14 by rmk")
                                                              (* mjs "11-Jul-85 09:10")
 
-(* ;;; "format and display the graph")
+    (* ;; "Format and display the graph")
 
-    (LET ((NEWFILENAME (fetch (IMCOMPARE.CHUNK FILENAME) of NEWFILE.SPEC.CHUNK))
-          (OLDFILENAME (fetch (IMCOMPARE.CHUNK FILENAME) of OLDFILE.SPEC.CHUNK))
-          NEWFILELABEL OLDFILELABEL (OLD.CHUNK.NODE.FROM.NODES NIL)
-          (BORDERSIZE 1)
-          GRAPH.WINDOW NEW.CHUNK.NODES OLD.CHUNK.NODES OLD.CHUNK.XCOORD NEW.CHUNK.XCOORD 
-          YCOORD.INCREMENT DIFF.GRAPH)
+    (DECLARE (USEDFREE COMPARETEXT.ALLCHUNKS))
+    (LET ((FULLFILE1 (fetch (IMCOMPARE.CHUNK FILENAME) of CHUNK1))
+          (FULLFILE2 (fetch (IMCOMPARE.CHUNK FILENAME) of CHUNK2))
+          FILE1LABEL FILE2LABEL FILEPREFIX 2TO1MAP (BORDERSIZE 1)
+          NODES1 NODES2 COL1HEADER COL1X COL2HEADER COL2X YINCREMENT GRAPH TEMP1)
 
-(* ;;; "set up GRAPH.WINDOW.  This is done first so you can get the width and height of strings to be printed in the window.")
+         (* ;; "Create the nodes for the column headers")
 
-         (SETQ NEWFILELABEL (OR (CAR (LISTP FILELABELS))
-                                NEWFILENAME))
-         (SETQ OLDFILELABEL (OR (CADR (LISTP FILELABELS))
-                                OLDFILENAME))
-         [SETQ GRAPH.WINDOW (CREATEW GRAPH.REGION (CONCAT "Text File Differences, hashed by "
-                                                         (SELECTQ HASH.TYPE
-                                                             ((PARA NIL) 
-                                                                  "Paragraph")
-                                                             (LINE "Line")
-                                                             (WORD "Word")
-                                                             (SHOULDNT]
-         (WINDOWPROP GRAPH.WINDOW 'IMPARE.HASH.TYPE HASH.TYPE)
-         [WINDOWADDPROP GRAPH.WINDOW 'CLOSEFN (FUNCTION (LAMBDA (WINDOW)
-                                                          (if (EQ WINDOW IMCOMPARE.LAST.GRAPH.WINDOW)
-                                                              then (SETQ IMCOMPARE.LAST.GRAPH.WINDOW
-                                                                    NIL)
-                                                                   (SETQ IMCOMPARE.LAST.NODE NIL]
-         (SETQ NEW.CHUNK.XCOORD (IQUOTIENT (STRINGWIDTH NEWFILELABEL GRAPH.WINDOW)
-                                       2))
-         [SETQ OLD.CHUNK.XCOORD (IPLUS NEW.CHUNK.XCOORD (IMAX 100 (IPLUS NEW.CHUNK.XCOORD
-                                                                         (IQUOTIENT (STRINGWIDTH
-                                                                                     OLDFILELABEL 
-                                                                                     GRAPH.WINDOW)
-                                                                                2)
-                                                                         20]
-         [SETQ YCOORD.INCREMENT (IMINUS (IPLUS 2 (ITIMES 2 BORDERSIZE)
-                                               (fetch (REGION HEIGHT) of (STRINGREGION NEWFILELABEL 
-                                                                                GRAPH.WINDOW]
+         (SETQ FILE1LABEL (OR (CAR (LISTP FILELABELS))
+                              FULLFILE1))
+         (SETQ FILE2LABEL (OR (CADR (LISTP FILELABELS))
+                              FULLFILE2))
+         (CL:WHEN (SETQ FILEPREFIX (FB.GREATEST.PREFIX FILE1LABEL FILE2LABEL))
+             [SETQ FILE1LABEL (SUBSTRING FILE1LABEL (ADD1 (NCHARS FILEPREFIX]
+             [SETQ FILE2LABEL (SUBSTRING FILE2LABEL (ADD1 (NCHARS FILEPREFIX])
+         (SETQ COL1X (IQUOTIENT (STRINGWIDTH FILE1LABEL DEFAULTFONT)
+                            2))
+         (SETQ COL1HEADER (NODECREATE FULLFILE1 FILE1LABEL (CREATEPOSITION COL1X 0)
+                                 NIL NIL DEFAULTFONT -2))
+         [SETQ COL2X (IPLUS COL1X (IMAX 100 (IPLUS COL1X 30 (IQUOTIENT (STRINGWIDTH FILE2LABEL 
+                                                                              DEFAULTFONT)
+                                                                   2]
+         (SETQ COL2HEADER (NODECREATE FULLFILE2 FILE2LABEL (CREATEPOSITION COL2X 0)
+                                 NIL NIL DEFAULTFONT -2))
 
-(* ;;; "collect new-chunk graph nodes, while accumulating OLD.CHUNK.NODE.FROM.NODES, assoc list from old-chunks to new-chunks")
+         (* ;; "It would be nice to get corresponding chunks at the same positions in their lists, so that equality lines will be horizontal.  Different numbers of inserts above can throw that off, we try to insert NIL spaces to even things up.")
 
-         (SETQ NEW.CHUNK.NODES (for NEW.CHUNK in NEWFILE.CHUNK.LIST as Y from YCOORD.INCREMENT
-                                  by YCOORD.INCREMENT bind CORRESPONDING.OLD.CHUNK
-                                  collect (SETQ CORRESPONDING.OLD.CHUNK (CAR (fetch (IMCOMPARE.CHUNK
-                                                                                     OTHERCHUNK)
-                                                                                of NEW.CHUNK)))
-                                        (if CORRESPONDING.OLD.CHUNK
-                                            then (SETQ OLD.CHUNK.NODE.FROM.NODES
-                                                  (CONS (CONS CORRESPONDING.OLD.CHUNK NEW.CHUNK)
-                                                        OLD.CHUNK.NODE.FROM.NODES))) 
+         [FOR C1TAIL C1 O1 ON CHUNKLIST1 AS C2TAIL C2 ON CHUNKLIST2
+            EACHTIME (SETQ C1 (CAR C1TAIL))
+                  (SETQ C2 (CAR C2TAIL))
+                  (SETQ O1 (CAR (FETCH OTHERCHUNK OF C1))) UNLESS (EQ C2 O1)
+            DO (IF (AND O1 (EQ O1 (CADR C2TAIL)))
+                   THEN 
+                        (* ;; 
+                        "We push NIL into the C1TAIL cell that C1 formerly occupied, move C1 down ")
+
+                        (ATTACH NIL C1TAIL)
+                 ELSEIF [EQ C2 (CAR (FETCH OTHERCHUNK OF (SETQ C1 (CADR C1TAIL]
+                   THEN (ATTACH NIL C2TAIL)                  (* ; 
+                             "OTHERCHUNK is the tail that contains C2, so it also has to be updated.")
+                        (REPLACE OTHERCHUNK OF C1 WITH (CDR C2TAIL))) 
+
+               (* ;; "Make them run out at the same time.")
+
+               (IF (AND (CDR C1TAIL)
+                        (NULL (CDR C2TAIL)))
+                   THEN (RPLACD C2TAIL (CONS))
+                 ELSEIF (AND (CDR C2TAIL)
+                             (NULL (CDR C1TAIL)))
+                   THEN (RPLACD C1TAIL (CONS]
+         [SETQ YINCREMENT (IMINUS (IPLUS 2 (ITIMES 2 BORDERSIZE)
+                                         (FONTPROP DEFAULTFONT 'HEIGHT]
+
+         (* ;; "Collect new-chunk graph nodes, while accumulating 2TO1MAP, assoc list from file2 chunks to  file1 chunks. We skip the NILs inserted above (although Y increments).")
+
+         [SETQ NODES1 (for C1 C2 in CHUNKLIST1 as Y from YINCREMENT by YINCREMENT
+                         collect (CL:WHEN C1
+                                     (CL:WHEN (SETQ C2 (CAR (fetch (IMCOMPARE.CHUNK OTHERCHUNK)
+                                                               of C1)))
+                                         (PUSH 2TO1MAP (CONS C2 C1)))
                                                              (* ; 
                                            "Start out with 2 point white border, so we can invert it")
-                                        (NODECREATE NEW.CHUNK (IMCOMPARE.LENGTHEN.ATOM
-                                                               (PACK* (fetch (IMCOMPARE.CHUNK FILEPTR
-                                                                                    ) of NEW.CHUNK)
-                                                                      ":"
-                                                                      (fetch (IMCOMPARE.CHUNK 
-                                                                                    CHUNKLENGTH)
-                                                                         of NEW.CHUNK))
-                                                               12)
-                                               (create POSITION
-                                                      XCOORD _ NEW.CHUNK.XCOORD
-                                                      YCOORD _ Y)
-                                               (if CORRESPONDING.OLD.CHUNK
-                                                   then (LIST CORRESPONDING.OLD.CHUNK)
-                                                 else NIL)
-                                               NIL DEFAULTFONT -2)))
-         (SETQ OLD.CHUNK.NODES (for OLD.CHUNK in OLDFILE.CHUNK.LIST as Y from YCOORD.INCREMENT
-                                  by YCOORD.INCREMENT bind CORRESPONDING.NEW.CHUNK
-                                  collect (SETQ CORRESPONDING.NEW.CHUNK (CDR (ASSOC OLD.CHUNK 
-                                                                            OLD.CHUNK.NODE.FROM.NODES
-                                                                                    )))
-                                        (NODECREATE OLD.CHUNK (IMCOMPARE.LENGTHEN.ATOM
-                                                               (PACK* (fetch (IMCOMPARE.CHUNK FILEPTR
-                                                                                    ) of OLD.CHUNK)
-                                                                      ":"
-                                                                      (fetch (IMCOMPARE.CHUNK 
-                                                                                    CHUNKLENGTH)
-                                                                         of OLD.CHUNK))
-                                                               12 "-")
-                                               (create POSITION
-                                                      XCOORD _ OLD.CHUNK.XCOORD
-                                                      YCOORD _ Y)
-                                               NIL
-                                               (if CORRESPONDING.NEW.CHUNK
-                                                   then (LIST CORRESPONDING.NEW.CHUNK)
-                                                 else NIL)
-                                               DEFAULTFONT -2)))
-         (SETQ DIFF.GRAPH (create GRAPH
-                                 DIRECTEDFLG _ T
-                                 SIDESFLG _ T
-                                 GRAPHNODES _
-                                 (NCONC (LIST (NODECREATE NEWFILENAME NEWFILELABEL
-                                                     (create POSITION
-                                                            XCOORD _ NEW.CHUNK.XCOORD
-                                                            YCOORD _ 0)
-                                                     NIL NIL DEFAULTFONT -2))
-                                        NEW.CHUNK.NODES
-                                        (LIST (NODECREATE OLDFILENAME OLDFILELABEL
-                                                     (create POSITION
-                                                            XCOORD _ OLD.CHUNK.XCOORD
-                                                            YCOORD _ 0)
-                                                     NIL NIL DEFAULTFONT -2))
-                                        OLD.CHUNK.NODES)))
-         (GRAPHERPROP DIFF.GRAPH 'FILELABELS (LIST NEWFILELABEL OLDFILELABEL))
-                                                             (* ; 
-                                                    "So Middle mouse graphs can get the right labels")
-         (GRAPHERPROP DIFF.GRAPH 'HASH.TYPE HASH.TYPE)
-         (SHOWGRAPH DIFF.GRAPH GRAPH.WINDOW (FUNCTION IMCOMPARE.LEFTBUTTONFN)
+                                     (NODECREATE C1 (CHUNKNODELABEL C1 10)
+                                            (CREATEPOSITION COL1X Y)
+                                            (CL:WHEN C2 (CONS C2))
+                                            NIL DEFAULTFONT -2))]
+         [SETQ NODES2 (for C2 C1 in CHUNKLIST2 as Y from YINCREMENT by YINCREMENT
+                         collect (CL:WHEN C2
+                                     (SETQ C1 (CDR (ASSOC C2 2TO1MAP)))
+                                     (NODECREATE C2 (CHUNKNODELABEL C2 10 (AND NIL "-"))
+                                            (CREATEPOSITION COL2X Y)
+                                            NIL
+                                            (CL:WHEN C1 (CONS C1))
+                                            DEFAULTFONT -2))]
+
+         (* ;; "Now eliminate all the C1/C2 node pairs that are at the same Yposition.  Those would just have uninformative horizontal lines representing no differences.  Maybe this can be done on the fly--don't construct such pairs--but that will come later.  The node")
+
+         (IF COMPARETEXT.ALLCHUNKS
+             THEN (SETQ NODES1 (DREMOVE NIL NODES1))
+                  (SETQ NODES2 (DREMOVE NIL NODES2))
+           ELSE 
+                (* ;; "The nodes in both lists correspond, with NILs padding where needed.  We can simplify the picture if we take out equivalent chunks, otherwise we show all their horizontal lines.")
+
+                (FOR N1 KEPT1 KEPT2 (YPOS _ YINCREMENT) IN NODES1 AS N2 IN NODES2
+                   UNLESS [AND N1 N2 (EQ (FETCH NODEID OF N2)
+                                         (CAR (FETCH OTHERCHUNK OF (FETCH NODEID OF N1]
+                   DO (CL:WHEN N1
+                          (PUSH KEPT1 N1)
+                          (REPLACE YCOORD OF (FETCH NODEPOSITION OF N1) WITH YPOS))
+                      (CL:WHEN N2
+                          (PUSH KEPT2 N2)
+                          (REPLACE YCOORD OF (FETCH NODEPOSITION OF N2) WITH YPOS))
+                      (ADD YPOS YINCREMENT) FINALLY (SETQ NODES1 KEPT1)
+                                                  (SETQ NODES2 KEPT2)))
+
+         (* ;; 
+ "Keep column xcords so leftbutton can tell a node's column, keep labels for new middle mouse graph ")
+
+         [SETQ GRAPH (create GRAPH
+                            DIRECTEDFLG _ T
+                            SIDESFLG _ T
+                            GRAPHNODES _ (NCONC (LIST COL1HEADER)
+                                                NODES1
+                                                (LIST COL2HEADER)
+                                                NODES2)
+                            GRAPH.PROPS _ `(HASH.TYPE ,HASH.TYPE FILELABELS (,FILEPREFIX ,FILE1LABEL
+                                                                                   ,FILE2LABEL)
+                                                  COL1X
+                                                  ,COL1X COL2X ,COL2X ALLCHUNKS 
+                                                  ,COMPARETEXT.ALLCHUNKS]
+         (SHOWGRAPH GRAPH (COMPARETEXT.WINDOW GRAPH REGION)
+                (FUNCTION IMCOMPARE.LEFTBUTTONFN)
                 (FUNCTION IMCOMPARE.MIDDLEBUTTONFN)
                 T NIL])
-
-(IMCOMPARE.FIND.TEDIT.TEXT.OBJECT
-  [LAMBDA (FILE)                                             (* ; "Edited 16-Dec-2021 08:40 by rmk")
-                                                             (* mjs " 2-Jan-84 16:19")
-
-    (* ;; "returns the Tedit text object of the first Tedit window which is currently looking at FILE, if there is one.  Returns NIL if none is found.")
-
-    (for W in (OPENWINDOWS) bind POSS.TOBJ when [AND (SETQ POSS.TOBJ (WINDOWPROP W 'TEXTOBJ))
-                                                     (EQ FILE (FULLNAME (fetch (TEXTOBJ TXTFILE)
-                                                                           of POSS.TOBJ]
-       unless (TEDIT.STREAMCHANGEDP POSS.TOBJ) do (RETURN POSS.TOBJ])
 
 (IMCOMPARE.HASH
   [LAMBDA (STREAM HASH.TYPE ENDPOS)                          (* ; "Edited 19-Dec-2021 09:07 by rmk")
@@ -369,58 +529,6 @@ Copyright (c) 1984-1985, 1993, 1998 by Xerox Corporation.
                     FILEPTR _ STARTPOS
                     CHUNKLENGTH _ (IDIFFERENCE (GETFILEPTR STREAM)
                                          STARTPOS)))])
-
-(IMCOMPARE.LEFTBUTTONFN
-  [LAMBDA (GNODE WINDOW)                                     (* ; "Edited 18-Dec-2021 13:02 by rmk")
-                                                             (* mjs " 2-Apr-85 14:21")
-    (if GNODE
-        then (LET ((NODEID (fetch (GRAPHNODE NODEID) of GNODE)))
-                  (IF (FIXP (CAR NODEID))
-                      THEN (IMCOMPARE.BOXNODE GNODE WINDOW)
-                           [LET ((FILEPTR 1)
-                                 (CHUNKLENGTH 0)
-                                 (TEDIT.TEXT.OBJECT NIL)
-                                 FILE)
-                                (SETQ FILE (fetch (IMCOMPARE.CHUNK FILENAME) of NODEID))
-                                (SETQ FILEPTR (fetch (IMCOMPARE.CHUNK FILEPTR) of NODEID))
-                                (SETQ CHUNKLENGTH (fetch (IMCOMPARE.CHUNK CHUNKLENGTH) of NODEID))
-                                (SETQ TEDIT.TEXT.OBJECT (IMCOMPARE.FIND.TEDIT.TEXT.OBJECT FILE))
-                                (if TEDIT.TEXT.OBJECT
-                                    then (TEDIT.SETSEL TEDIT.TEXT.OBJECT (IMAX 1 (IDIFFERENCE FILEPTR
-                                                                                        25))
-                                                0
-                                                'LEFT)
-                                         (TEDIT.NORMALIZECARET TEDIT.TEXT.OBJECT)
-                                         (TEDIT.SETSEL TEDIT.TEXT.OBJECT FILEPTR CHUNKLENGTH
-                                                'LEFT)
-                                         (TEDIT.NORMALIZECARET TEDIT.TEXT.OBJECT)
-                                         (TTY.PROCESS (WINDOWPROP (CAR (fetch (TEXTOBJ \WINDOW)
-                                                                          of TEDIT.TEXT.OBJECT))
-                                                             'PROCESS))
-                                  else (TEDIT FILE NIL NIL (LIST 'SEL (LIST FILEPTR CHUNKLENGTH]
-                    ELSEIF (AND (LITATOM NODEID)
-                                (INFILEP NODEID))
-                      THEN 
-                           (* ;; 
-                           "A file name as a column header, do TEDIT on the whole file, no selection")
-
-                           (TEDIT-SEE NODEID)
-                    ELSE (SHOULDNT])
-
-(IMCOMPARE.LENGTHEN.ATOM
-  [LAMBDA (X MIN.LENGTH EXTENDER)                            (* ; "Edited 13-Dec-2021 21:18 by rmk")
-                                                             (* mjs "30-Dec-83 15:11")
-
-    (* ;; "makes sure that the atom X is at least MIN.LENGTH characters long, by concatenating the first character of EXTENDER (or space, if not given) to the front")
-
-    (IF (ILESSP (NCHARS X)
-               MIN.LENGTH)
-        THEN (PACK* (ALLOCSTRING (IDIFFERENCE MIN.LENGTH (NCHARS X))
-                           (CL:IF EXTENDER
-                               (NTHCHAR EXTENDER 1)
-                               " "))
-                    X)
-      ELSE X])
 
 (IMCOMPARE.MERGE.CONNECTED.CHUNKS
   [LAMBDA (NEW.CHUNK.LIST BACKWARDS.FLG)                 (* mjs " 6-Jan-84 10:35")
@@ -490,46 +598,6 @@ Copyright (c) 1984-1985, 1993, 1998 by Xerox Corporation.
                                                            list)
                                                       (RPLACD CHUNK.LST (CDDR CHUNK.LST])
 
-(IMCOMPARE.MIDDLEBUTTONFN
-  [LAMBDA (GNODE WINDOW)
-
-    (* ;; "Edited 16-Dec-2021 10:55 by rmk: Remove previous HASH.TYPE from the middle mouse menu")
-                                                             (* ; "Edited 16-Dec-2021 10:51 by rmk")
-                                                             (* mjs " 6-Jan-84 11:37")
-
-    (* ;; "This function is called if the MIDDLE mouse button is pressed over a graph node.  The selected node is IMCOMPARE-ed with the last node selected <which is boxed>.  The type of hashing used <PARA, LINE, or WORD> is selected from a pop-up menu.  If none of the hashing types is selected, the current node is boxed.  The pop-up menu is always located a little above the current cursor position, so a quick double-MIDDLE-click is an easy way to change the current boxed node.")
-
-    (if GNODE
-        then (PROG (INNER.HASH.TYPE)
-                   (CLRPROMPT)
-                   (printout PROMPTWINDOW "Please select the type of hashing you wish." T)
-                   [SETQ INNER.HASH.TYPE (MENU (create MENU
-                                                      ITEMS _ (REMOVE (GRAPHERPROP
-                                                                       (WINDOWPROP WINDOW
-                                                                              'GRAPH)
-                                                                       'HASH.TYPE)
-                                                                     '(PARA LINE WORD))
-                                                      MENUOFFSET _
-                                                      (create POSITION
-                                                             XCOORD _ 20
-                                                             YCOORD _ -20]
-                   (if (NULL INNER.HASH.TYPE)
-                       then                                  (* ; 
-                                  "if no hash type is selected, just box the current node and return")
-                            (IMCOMPARE.BOXNODE GNODE WINDOW)
-                            (RETURN))
-                   (if (NULL IMCOMPARE.LAST.NODE)
-                       then (CLRPROMPT)
-                            (PRIN1 "You must select another graph node first." PROMPTWINDOW)
-                            (RETURN))
-                   (printout PROMPTWINDOW "Comparing chunks by " INNER.HASH.TYPE T)
-                   (IMCOMPARE.CHUNKS (fetch (GRAPHNODE NODEID) of IMCOMPARE.LAST.NODE)
-                          (fetch (GRAPHNODE NODEID) of GNODE)
-                          INNER.HASH.TYPE
-                          (WINDOWPROP WINDOW 'REGION)
-                          (GRAPHERPROP (WINDOWPROP WINDOW 'GRAPH)
-                                 'FILELABELS])
-
 (IMCOMPARE.SHOW.DIST
   [LAMBDA (LST MAX)                                      (* mjs "30-Dec-83 15:13")
     (PROG ((WINDOW (CREATEW))
@@ -570,12 +638,124 @@ Copyright (c) 1984-1985, 1993, 1998 by Xerox Corporation.
                      (replace (IMCOMPARE.SYMB NEWCOUNT) of SYMB
                         with (ADD1 (fetch (IMCOMPARE.SYMB NEWCOUNT) of SYMB])
 )
+(DEFINEQ
 
-(MOVD 'COMPARETEXT 'IMCOMPARE)
+(IMCOMPARE.LEFTBUTTONFN
+  [LAMBDA (NODE WINDOW)                                      (* ; "Edited 25-Dec-2021 23:29 by rmk")
+                                                             (* ; "Edited 22-Dec-2021 21:41 by rmk")
+                                                             (* ; "Edited 18-Dec-2021 13:02 by rmk")
+                                                             (* mjs " 2-Apr-85 14:21")
+    (CL:WHEN NODE
+        (LET [(INCOL1 (EQ (GRAPHERPROP (WINDOWPROP WINDOW 'GRAPH)
+                                 'COL1X)
+                          (FETCH (POSITION XCOORD) OF (FETCH (GRAPHNODE NODEPOSITION) OF NODE]
+             (IF (FIXP (CAR (fetch (GRAPHNODE NODEID) of NODE)))
+                 THEN (IMCOMPARE.BOXNODE WINDOW NODE (FOR N (YPOS _ (FETCH YCOORD
+                                                                       OF (FETCH NODEPOSITION
+                                                                             OF NODE)))
+                                                        IN (FETCH GRAPHNODES
+                                                              OF (WINDOWPROP WINDOW 'GRAPH))
+                                                        UNLESS (EQ N NODE)
+                                                        WHEN (EQ YPOS (FETCH YCOORD
+                                                                         OF (FETCH NODEPOSITION
+                                                                               OF N)))
+                                                        DO 
+                                                           (* ;; 
+                                   "We won't match the other label node because it has a unique ypos")
 
-(RPAQ? IMCOMPARE.LAST.NODE NIL)
+                                                           (COMPARETEXT.SETSEL (COMPARETEXT.TEXTOBJ
+                                                                                N WINDOW (NOT INCOL1)
+                                                                                )
+                                                                  N)
+                                                           (RETURN N)))
+                      (COMPARETEXT.SETSEL (COMPARETEXT.TEXTOBJ NODE WINDOW INCOL1)
+                             NODE)
+               ELSE 
+                    (* ;; "The column header, set up the file window with no selection.")
 
-(RPAQ? IMCOMPARE.LAST.GRAPH.WINDOW NIL)
+                    (COMPARETEXT.TEXTOBJ NODE WINDOW INCOL1))))])
+
+(IMCOMPARE.MIDDLEBUTTONFN
+  [LAMBDA (NODE WINDOW)                                      (* ; "Edited 27-Dec-2021 11:59 by rmk")
+                                                             (* ; "Edited 25-Dec-2021 11:51 by rmk")
+                                                             (* ; "Edited 24-Dec-2021 10:42 by rmk")
+                                                             (* ; "Edited 22-Dec-2021 16:08 by rmk")
+
+    (* ;; "Edited 16-Dec-2021 10:55 by rmk: Remove previous HASH.TYPE from the middle mouse menu")
+                                                             (* ; "Edited 16-Dec-2021 10:51 by rmk")
+                                                             (* mjs " 6-Jan-84 11:37")
+
+    (* ;; "This function is called if the MIDDLE mouse button is pressed over a graph node.  The selected node is IMCOMPARE-ed with the last node selected <which is boxed>.  The type of hashing used <PARA, LINE, or WORD> is selected from a pop-up menu.  If none of the hashing types is selected, the current node is boxed.  The pop-up menu is always located a little above the current cursor position, so a quick double-MIDDLE-click is an easy way to change the current boxed node.")
+
+    (CL:WHEN NODE
+        [PROG (INNER.HASH.TYPE REGION (LASTNODES (WINDOWPROP WINDOW 'LASTNODES))
+                     (PWINDOW (GETPROMPTWINDOW WINDOW)))
+              (CLEARW PWINDOW)
+              (CL:UNLESS LASTNODES
+                  (PRIN3 "Select nodes to be expanded" PWINDOW)
+                  (RETURN))
+              [SETQ INNER.HASH.TYPE (MENU (create MENU
+                                                 TITLE _ "New hash type?"
+                                                 ITEMS _ (REMOVE (GRAPHERPROP (WINDOWPROP
+                                                                               WINDOW
+                                                                               'GRAPH)
+                                                                        'HASH.TYPE)
+                                                                '(PARA LINE WORD))
+                                                 MENUOFFSET _
+                                                 (create POSITION
+                                                        XCOORD _ 20
+                                                        YCOORD _ -20]
+              (printout PWINDOW "Comparing chunks by " INNER.HASH.TYPE T)
+
+         (* ;; "Offset the region a little bit, so that the parent region is visible")
+
+              [SETQ REGION (COPY (WINDOWPROP WINDOW 'REGION]
+              (ADD (FETCH (REGION LEFT) OF REGION)
+                   30)
+              (ADD (FETCH (REGION BOTTOM) OF REGION)
+                   -30)
+              (IMCOMPARE.CHUNKS (FETCH (GRAPHNODE NODEID) OF (CAR LASTNODES))
+                     (FETCH (GRAPHNODE NODEID) OF (CADR LASTNODES))
+                     INNER.HASH.TYPE REGION (CDR (GRAPHERPROP (WINDOWPROP WINDOW 'GRAPH)
+                                                        'FILELABELS])])
+
+(IMCOMPARE.COPYBUTTONFN
+  [LAMBDA (WINDOW NODE)                                      (* ; "Edited 25-Dec-2021 13:26 by rmk")
+                                                             (* ; "")
+
+    (* ;; "The grapher calls this with the window but not the node. So there must be some internal grapher stuff to find the node from the mouse coordinates.  The goal would be to at least do a COPYINSERT of the filename.")
+
+    (HELP])
+)
+
+(FILESLOAD (SYSLOAD)
+       GRAPHER REGIONMANAGER)
+(DEFINEQ
+
+(TAIL1
+  [LAMBDA (ALL)                                              (* ; "Edited 25-Dec-2021 21:54 by rmk")
+    (FOR X IN (CL:IF ALL
+                  CHUNKLIST1
+                  C1TAIL) COLLECT (LIST (FETCH FILEPTR OF X)
+                                        (FETCH FILEPTR OF (CAR (FETCH OTHERCHUNK OF X])
+
+(TAIL2
+  [LAMBDA (ALL)                                              (* ; "Edited 25-Dec-2021 21:29 by rmk")
+    (FOR X IN (CL:IF ALL
+                  CHUNKLIST2
+                  C2TAIL) COLLECT (LIST (FETCH FILEPTR OF X)
+                                        (FETCH OTHERCHUNK OF X])
+)
+
+
+
+(* ; "Debugging")
+
+
+(RPAQ? COMPARETEXT.ALLCHUNKS T)
+
+(RPAQ? COMPARETEXT.AUTOTEDIT T)
+(DECLARE%: EVAL@COMPILE DONTCOPY 
 (DECLARE%: EVAL@COMPILE
 
 (RECORD IMCOMPARE.CHUNK (HASHVALUE FILEPTR CHUNKLENGTH FILENAME . OTHERCHUNK)
@@ -584,20 +764,18 @@ Copyright (c) 1984-1985, 1993, 1998 by Xerox Corporation.
 (RECORD IMCOMPARE.SYMB (NEWCOUNT OLDCOUNT . OLDPTR))
 )
 
-(FILESLOAD (SYSLOAD)
-       GRAPHER)
-(DECLARE%: EVAL@COMPILE DONTCOPY 
 
 (FILESLOAD (LOADCOMP)
        GRAPHER)
 )
 (PUTPROPS COMPARETEXT COPYRIGHT ("Xerox Corporation" 1984 1985 1993 1998))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1334 38876 (COMPARETEXT 1344 . 3554) (IMCOMPARE.BOXNODE 3556 . 4072) (IMCOMPARE.CHUNKS 
-4074 . 8592) (IMCOMPARE.COLLECT.HASH.CHUNKS 8594 . 11053) (IMCOMPARE.DISPLAY.FILE.DIFFERENCE.GRAPH 
-11055 . 20136) (IMCOMPARE.FIND.TEDIT.TEXT.OBJECT 20138 . 20912) (IMCOMPARE.HASH 20914 . 25101) (
-IMCOMPARE.LEFTBUTTONFN 25103 . 27545) (IMCOMPARE.LENGTHEN.ATOM 27547 . 28249) (
-IMCOMPARE.MERGE.CONNECTED.CHUNKS 28251 . 31747) (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS 31749 . 33704) (
-IMCOMPARE.MIDDLEBUTTONFN 33706 . 36541) (IMCOMPARE.SHOW.DIST 36543 . 36989) (
-IMCOMPARE.UPDATE.SYMBOL.TABLE 36991 . 38874)))))
+  (FILEMAP (NIL (1344 41549 (COMPARETEXT 1354 . 2933) (COMPARETEXT.WINDOW 2935 . 7132) (
+COMPARETEXT.TEXTOBJ 7134 . 12023) (COMPARETEXT.SETSEL 12025 . 12815) (CHUNKNODELABEL 12817 . 13938) (
+IMCOMPARE.BOXNODE 13940 . 14707) (IMCOMPARE.CHUNKS 14709 . 19062) (IMCOMPARE.COLLECT.HASH.CHUNKS 19064
+ . 21842) (IMCOMPARE.DISPLAYGRAPH 21844 . 29570) (IMCOMPARE.HASH 29572 . 33759) (
+IMCOMPARE.MERGE.CONNECTED.CHUNKS 33761 . 37257) (IMCOMPARE.MERGE.UNCONNECTED.CHUNKS 37259 . 39214) (
+IMCOMPARE.SHOW.DIST 39216 . 39662) (IMCOMPARE.UPDATE.SYMBOL.TABLE 39664 . 41547)) (41550 47707 (
+IMCOMPARE.LEFTBUTTONFN 41560 . 44137) (IMCOMPARE.MIDDLEBUTTONFN 44139 . 47255) (IMCOMPARE.COPYBUTTONFN
+ 47257 . 47705)) (47760 48451 (TAIL1 47770 . 48124) (TAIL2 48126 . 48449)))))
 STOP

@@ -14,7 +14,7 @@ There (soon) will also be Docker containers with the latest, and a way to try ou
 
 ### Getting releases
 
-Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the one corresponding to your operating system and processor (for Windows with WSL or Intel linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for M1.)
+Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the one corresponding to your operating system and processor (for Windows with WSL or Intel Linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for M1.)
 
 Or, build your own maiko (the binaries `lde` `ldex` and `ldeinit`.) We can build for other OS arch pairs depending on what is available for GitHub actions.
 
@@ -99,7 +99,7 @@ Or from the Common Lisp prompt with:
 ```
 (IL:LOGOUT)
 ```
-When you logout of the system, Medley automatically creates a binary
+When you log out of the system, Medley automatically creates a binary
 dump of your system located in your home directory named
 `lisp.virtualmem`. The next time you run the system, if you don't
 specify a specific image to run, Medley restores that image so that

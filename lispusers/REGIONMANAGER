@@ -1,0 +1,598 @@
+(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
+
+(FILECREATED " 2-Jan-2022 16:01:26" 
+{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>REGIONMANAGER.;99 31663  
+
+      :CHANGES-TO (FNS SET-TYPED-REGIONS \RELCREATEREGION.REF \RELCREATEREGION.SIZE)
+
+      :PREVIOUS-DATE " 1-Jan-2022 23:14:42" 
+{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>REGIONMANAGER.;95)
+
+
+(PRETTYCOMPRINT REGIONMANAGERCOMS)
+
+(RPAQQ REGIONMANAGERCOMS
+       [
+        (* ;; "Typed regions")
+
+        [COMS (FNS SET-TYPED-REGIONS)
+              (FNS RM-CREATEW RM-CLOSEW RM-GETREGION CLOSE-TYPED-W)
+              (INITVARS (TYPED-REGIONS))
+              (GLOBALVARS TYPED-REGIONS)
+              (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS TYPED-REGION REGION-SOURCE))
+              (INITRECORDS TYPED-REGION REGION-SOURCE)
+              (P (MOVD? 'CREATEW 'CREATEW.ORIG)
+                 (MOVD? 'CLOSEW 'CLOSEW.ORIG)
+                 (MOVD? 'GETREGION 'GETREGION.ORIG)
+                 (MOVD 'RM-CREATEW 'CREATEW)
+                 (MOVD 'RM-CLOSEW 'CLOSEW)
+                 (MOVD 'RM-GETREGION 'GETREGION]
+        
+        (* ;; "Relative regions")
+
+        (COMS (FNS RELCREATEREGION RELGETREGION)
+              (FNS \RELCREATEREGION.REF \RELCREATEREGION.SIZE))
+        
+        (* ;; "Composite application construction")
+
+        (COMS (FNS RM-ATTACHWINDOW)
+              (P (MOVD? 'ATTACHWINDOW 'ATTACHWINDOW.ORIG)
+                 (MOVD 'RM-ATTACHWINDOW 'ATTACHWINDOW))
+              (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS RFIELDDIFF])
+
+
+
+(* ;; "Typed regions")
+
+(DEFINEQ
+
+(SET-TYPED-REGIONS
+  [LAMBDA (TYPELISTS REPLACE)                                (* ; "Edited  2-Jan-2022 16:01 by rmk")
+                                                             (* ; "Edited 29-Dec-2021 16:17 by rmk")
+                                                             (* ; "Edited 28-Dec-2021 12:59 by rmk")
+                                                             (* ; "Edited 27-Nov-2021 08:55 by rmk:")
+                                                             (* ; "Edited 26-Oct-2021 18:04 by rmk:")
+
+    (* ;; "User can pre-initialize a sequence of regions for a given type.  Generally, TYPELISTS is a list of the form")
+
+    (* ;; "     ((TYPEATOM1 . REGIONS)...(TYPEATOMn . REGIONS).  Copies of the regions of TYPELIST are added in front of any regions that might already be present for that type.   The regions have haslinks to its type and an inuse status indicator.")
+
+    (* ;; "")
+
+    (* ;; "Convenience cases:")
+
+    (* ;; 
+    "      TYPEATOM:  Interpreted as ((TYPEATOM)):  No region specified, but regions can accumulate")
+
+    (* ;; "")
+
+    (* ;; "       (TYPEATOM .REGIONS):  Interpreted as ((TYPEATOM . REGIONS).")
+
+    (if (LITATOM TYPELISTS)
+        then (SETQ TYPELISTS (CONS (CONS TYPELISTS)))
+      elseif (LITATOM (LISTP TYPELISTS))
+        then (SETQ TYPELISTS (CONS TYPELISTS)))
+    (for TL TYPE REGIONS PREV in TYPELISTS
+       do (SETQ TYPE (CAR TL))
+          (SETQ REGIONS (CDR TL))
+          (CL:UNLESS (AND TYPE (LITATOM TYPE)
+                          (for R in REGIONS always (REGIONP R)))
+                 (ERROR "Not a TYPED-REGIONS specification" REGIONS))
+          (SETQ REGIONS (COPY REGIONS))                      (* ; 
+                                                   "Not to be confused with any other equal regions.")
+          (if (SETQ PREV (ASSOC TYPE TYPED-REGIONS))
+              then [RPLACD PREV (CL:IF REPLACE
+                                    REGIONS
+                                    (NCONC REGIONS (CDR PREV)))]
+            else (push TYPED-REGIONS (CONS TYPE REGIONS])
+)
+(DEFINEQ
+
+(RM-CREATEW
+  [LAMBDA (REGION TITLE BORDERSIZE NOOPENFLG PROPS)          (* ; "Edited  1-Jan-2022 23:12 by rmk")
+                                                             (* ; "Edited 29-Dec-2021 19:25 by rmk")
+
+    (* ;; "Generic CREATEW function for managed regions.  If REGIONTYPE is specified (as REGION or in PROPS), then we try to find a previous region for that type that is currently unused, create one if needed.")
+
+    (* ;; "We have to bracket the original window creation because the we have to mark that the window uses that region, to put it back in the pool when the window is closed.")
+
+    (LET (WINDOW REGIONTYPE TYPEDREGION TYPELIST)
+         [SETQ REGIONTYPE (if (AND REGION (LITATOM REGION))
+                              then (PROG1 REGION (SETQ REGION NIL))
+                            else (LISTGET PROPS 'REGION-TYPE]
+         (SETQ TYPELIST (ASSOC REGIONTYPE TYPED-REGIONS))
+
+         (* ;; "We have REGIONTYPE, but maybe also a region that already has a source. Maybe we should make sure that the source is of that type?")
+
+         (* ;; "Note: REGION can also be a screenregion, that falls through.")
+
+         (IF (REGIONP REGION)
+             THEN (SETQ TYPEDREGION (FETCH REGION-SOURCE OF REGION))
+           ELSEIF TYPELIST
+             THEN 
+                  (* ;; 
+ "If we don't find an unused region, CREATEW will create one in the ordinary way.  We type it below.")
+
+                  [SETQ TYPEDREGION (FIND R FOUND in (CDR TYPELIST)
+                                       SUCHTHAT (NOT (fetch REGION-INUSE of R]
+                  (SETQ REGION TYPEDREGION))
+         (SETQ WINDOW (CREATEW.ORIG REGION TITLE BORDERSIZE NOOPENFLG PROPS))
+
+         (* ;; "CREATEW doesn't call the user-entry GETREGION, so we have to trap and install its return region here.")
+
+         (CL:WHEN (AND TYPELIST (NULL TYPEDREGION))          (* ; 
+                                                        "If not, we don't record this even if typed.")
+             (SETQ TYPEDREGION (OR (FETCH REGION-SOURCE OF (SETQ REGION (WINDOWREGION WINDOW)))
+                                   (COPY REGION)))
+             (NCONC1 TYPELIST TYPEDREGION))
+         (CL:WHEN TYPEDREGION
+             (replace REGION-INUSE of TYPEDREGION with T)
+             (WINDOWPROP WINDOW 'TYPED-REGION TYPEDREGION)
+             (WINDOWPROP WINDOW 'REGION-TYPE REGIONTYPE))
+         WINDOW])
+
+(RM-CLOSEW
+  [LAMBDA (WINDOW)                                           (* ; "Edited 29-Dec-2021 15:44 by rmk")
+                                                             (* ; "Edited 28-Dec-2021 11:02 by rmk")
+                                                             (* ; "Edited 27-Nov-2021 10:00 by rmk:")
+                                                             (* ; "Edited 26-Oct-2021 21:54 by rmk:")
+                                                             (* ; 
+                                                             "Edited 25-Apr-94 10:08 by sybalsky")
+                                                             (* ; "")
+
+    (* ;; 
+   "Makes the window's typed region available for reuse, if the window is marked with a TYPEDREGION.")
+
+    (* ;; "It's possible that the window exists and can be reopened after it has been closed.  The glitch in that case is that we may have decided to make the window's region available to another window, and if this window is opened again it will come on top of that other one (if it hasn't moved). Oh well.")
+
+    (LET [(TYPEDREGION (WINDOWPROP WINDOW 'TYPED-REGION]
+         (CL:WHEN (AND (CLOSEW.ORIG WINDOW)
+                       TYPEDREGION)
+             (REPLACE REGION-INUSE OF TYPEDREGION WITH NIL)
+             (WINDOWPROP WINDOW 'TYPED-REGION NIL)
+             T)])
+
+(RM-GETREGION
+  [LAMBDA (MINWIDTH MINHEIGHT INITREGION NEWREGIONFN NEWREGIONFNARG INITCORNERS)
+                                                             (* ; "Edited  1-Jan-2022 21:49 by rmk")
+
+    (* ;; "If INITREGION is a type atom and a region of that type is available, then use it as the INITREGION.  Otherwise, add a copy of the new region to the available list, and assert that the new region has the copy as its source.")
+
+    (* ;; "We don't know what will happen to the new region, but if it ends up as a region for CREATEW, the source information enables us to mark its source as inuse.")
+
+    (* ;; "This allows for the possibility that the application is actually asking the user for a constellation region that will be shrunk in anticipation of future satellite attachments.  A future retrieval will return the original size and position, and it will then presumably be shrunk in the same way.")
+
+    (LET (REGION (TYPELIST (ASSOC (CL:WHEN (AND INITREGION (LITATOM INITREGION))
+                                         INITREGION)
+                                  TYPED-REGIONS)))
+         (FOR R in (CDR TYPELIST) UNLESS (fetch REGION-INUSE of R)
+            WHEN [AND (OR (NULL MINWIDTH)
+                          (ILEQ MINWIDTH (FETCH WIDTH OF R)))
+                      (OR (NULL MINHEIGHT)
+                          (ILEQ MINHEIGHT (FETCH HEIGHT OF R]
+            DO 
+               (* ;; "Copy so the caller can update the region without affecting the recyclable source, but remember what it is based on.  We don't mark it as used here, maybe a window won't be built around it and it will fade away.  However, there is the risk that another GETREGION will find the same source before it is given to a window, in which case 2 windows might open up in the same place.")
+
+               (SETQ REGION (COPY R))
+               (REPLACE REGION-SOURCE OF REGION WITH R)
+               (RETURN))
+
+         (* ;; "If we found a good one, we're done.  Otherwise, run the normal code, but save the new region if it is typed.")
+
+         (CL:UNLESS REGION
+             (SETQ REGION (GETREGION.ORIG MINWIDTH MINHEIGHT INITREGION NEWREGIONFN NEWREGIONFNARG 
+                                 INITCORNERS))
+             (CL:WHEN TYPELIST
+
+                 (* ;; 
+          "The new region is based on a typed region.  The saved source is a copy of what we return.")
+
+                 (NCONC1 TYPELIST (REPLACE REGION-SOURCE OF REGION WITH (COPY REGION)))))
+         REGION])
+
+(CLOSE-TYPED-W
+  [LAMBDA (TYPE)                                             (* ; "Edited 29-Dec-2021 15:58 by rmk")
+                                                             (* ; "Edited 27-Nov-2021 11:50 by rmk:")
+
+    (* ;; "Closes all windows of REGIONTYPE inside TYPE")
+
+    (CL:WHEN TYPE
+        (for W R in (OPENWINDOWS) when (AND (SETQ WT (WINDOWPROP W 'REGION-TYPE))
+                                            (EQMEMB WT TYPE)) do (CLOSEW W)))])
+)
+
+(RPAQ? TYPED-REGIONS )
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS TYPED-REGIONS)
+)
+(DECLARE%: EVAL@COMPILE DONTCOPY 
+(DECLARE%: EVAL@COMPILE
+
+(HASHLINK TYPED-REGION (REGION-INUSE REGION-INUSE-HASH))
+
+(HASHLINK REGION-SOURCE (REGION-SOURCE REGION-SOURCE-HASH))
+)
+
+(DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-INUSE-HASH))
+
+(SETUPHASHARRAY 'REGION-INUSE-HASH NIL)
+
+(DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-SOURCE-HASH))
+
+(SETUPHASHARRAY 'REGION-SOURCE-HASH NIL)
+)
+
+(DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-INUSE-HASH))
+
+(SETUPHASHARRAY 'REGION-INUSE-HASH NIL)
+
+(DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-SOURCE-HASH))
+
+(SETUPHASHARRAY 'REGION-SOURCE-HASH NIL)
+
+(MOVD? 'CREATEW 'CREATEW.ORIG)
+
+(MOVD? 'CLOSEW 'CLOSEW.ORIG)
+
+(MOVD? 'GETREGION 'GETREGION.ORIG)
+
+(MOVD 'RM-CREATEW 'CREATEW)
+
+(MOVD 'RM-CLOSEW 'CLOSEW)
+
+(MOVD 'RM-GETREGION 'GETREGION)
+
+
+
+(* ;; "Relative regions")
+
+(DEFINEQ
+
+(RELCREATEREGION
+  [LAMBDA (WIDTH HEIGHT CORNERX CORNERY REFX REFY ONSCREEN)  (* ; "Edited 30-Dec-2021 20:54 by rmk")
+                                                             (* ; "Edited 27-Dec-2021 15:54 by rmk")
+
+    (* ;; "The region is oriented so that he REFX and REFY are at the corner named by CORNERX/Y. ")
+
+    (* ;; "Creates a WIDTH-HEIGHT region relative to the CORNER and REF parameters.")
+
+    (* ;; "CORNERX and CORNERY default to LEFT and BOTTOM.  ")
+
+    (* ;; "REFX and REFY default to the current cursor screen coordinates.  Otherwise,  ")
+
+    (* ;; "   REFX is a position and REFY is NIL: REFX and REFY are extracted from the position")
+
+    (* ;; "   Positive integers: absolute screen coordinates")
+
+    (* ;; 
+ "   (region spec) or (window spec) pairs: coordinates relative to the region or the window's region")
+
+    (* ;; "         Spec can name the X/Y endpoints (e.g. LEFT/0 or RIGHT/1) or a floating point proportion of the distance on the relevant dimension (e.g. .5= the midpoint.")
+
+    (* ;; "If ONSCREEN, the width or height is adjusted so that the corner opposite to the fixed corner is always visible.")
+
+    (* ;; "")
+
+    (* ;; "Resolve the width and height, if based on a region or window ")
+
+    (SETQ WIDTH (\RELCREATEREGION.SIZE WIDTH 'X))
+    (SETQ HEIGHT (\RELCREATEREGION.SIZE HEIGHT 'Y))
+
+    (* ;; "Resolve the corner")
+
+    (CL:UNLESS CORNERX
+        (SETQ CORNERX 'LEFT))
+    (CL:UNLESS CORNERY
+        (SETQ CORNERY 'BOTTOM))
+    (CL:WHEN (AND (LISTP CORNERX)
+                  (NULL CORNERY))
+        (SETQ CORNERY (CADR CORNERX))
+        (SETQ CORNERX (CAR CORNERX)))
+
+    (* ;; "Resolve the reference point")
+
+    [IF (AND (POSITIONP REFX)
+             (NULL REFY))
+        THEN (SETQ REFY (FETCH (POSITION YCOORD) OF REFX))
+             (SETQ REFX (FETCH (POSITION XCOORD) OF REFX))
+      ELSE (GETMOUSESTATE)
+           (SETQ REFX (\RELCREATEREGION.REF REFX 'X))
+           (SETQ REFY (\RELCREATEREGION.REF REFY 'Y]
+
+    (* ;; "Align the new-region corner with the reference point")
+
+    (LET* ((LEFT REFX)
+           (BOTTOM REFY)
+           (RIGHT (IPLUS LEFT WIDTH))
+           (TOP (IPLUS BOTTOM HEIGHT)))
+          (CL:WHEN (EQ 'RIGHT CORNERX)
+              (SETQ RIGHT LEFT)
+              (SETQ LEFT (IDIFFERENCE LEFT WIDTH)))
+          (CL:WHEN (EQ 'TOP CORNERY)
+              (SETQ TOP BOTTOM)
+              (SETQ BOTTOM (IDIFFERENCE BOTTOM HEIGHT)))
+          (CL:WHEN ONSCREEN                                  (* ; "Keep the region on the screen.  ")
+              (CL:WHEN (ILESSP LEFT 0)
+                  (ADD WIDTH LEFT)
+                  (SETQ LEFT 0))
+              (CL:WHEN (ILESSP BOTTOM 0)
+                  (ADD HEIGHT BOTTOM)
+                  (SETQ BOTTOM 0))
+              (CL:WHEN (IGREATERP RIGHT SCREENWIDTH)
+                  (ADD WIDTH (IDIFFERENCE SCREENWIDTH RIGHT)))
+              (CL:WHEN (IGREATERP TOP SCREENHEIGHT)
+                  (ADD HEIGHT (IDIFFERENCE SCREENHEIGHT TOP))))
+          (CREATEREGION LEFT BOTTOM WIDTH HEIGHT])
+
+(RELGETREGION
+  [LAMBDA (WIDTH HEIGHT CORNERX CORNERY REFX REFY MINSIZE)   (* ; "Edited 28-Dec-2021 23:13 by rmk")
+                                                             (* ; "Edited 10-Dec-2021 10:15 by rmk")
+
+    (* ;; "Prompts for a relative region as created by RELCREATEREGION. Initially the anchored corner is fixed and the cursor is moved to the diagonally opposite corner.  If MINSIZE, the WIDTH and HEIGHT are taken to be the minimums that are acceptable, modulo the fact that the opposite corner is guaranteed to be visibleand, the size of the ghost region can only grow.  If not MINSIZE, we also allow the user to shrink the ghost region.")
+
+    (CL:WHEN (AND (LISTP CORNERX)
+                  (NULL CORNERY))
+        (SETQ CORNERY (CADR CORNERX))
+        (SETQ CORNERX (CAR CORNERX)))
+    (CL:UNLESS CORNERX
+        (SETQ CORNERX 'LEFT))
+    (CL:UNLESS CORNERY
+        (SETQ CORNERY 'BOTTOM))
+    (LET* ((REGION (OR (REGIONP WIDTH)
+                       (RELCREATEREGION WIDTH HEIGHT CORNERX CORNERY REFX REFY T)))
+           (BASEX (FETCH (REGION LEFT) OF REGION))
+           (BASEY (FETCH (REGION BOTTOM) OF REGION))
+           (RWIDTH (FETCH (REGION WIDTH) OF REGION))
+           (RHEIGHT (FETCH (REGION HEIGHT) OF REGION))
+           (OPPX (IPLUS BASEX RWIDTH))
+           (OPPY (IPLUS BASEY RHEIGHT)))
+
+          (* ;; "Default parameters assume the anchor is  (LEFT BOTTOM)")
+
+          (CL:WHEN (EQ 'RIGHT CORNERX)
+                 (SWAP BASEX OPPX))
+          (CL:WHEN (EQ 'TOP CORNERY)
+                 (SWAP BASEY OPPY))
+          (\CURSORPOSITION OPPX OPPY)
+          (CL:UNLESS MINSIZE                                 (* ; "No minimum size constraint")
+              (SETQ RWIDTH NIL)
+              (SETQ RHEIGHT NIL))
+          (GETREGION RWIDTH RHEIGHT REGION NIL NIL (LIST BASEX BASEY OPPX OPPY])
+)
+(DEFINEQ
+
+(\RELCREATEREGION.REF
+  [LAMBDA (REF WHICH)                                        (* ; "Edited  2-Jan-2022 11:01 by rmk")
+
+    (* ;; "REF can be NIL, an absolute screen position, the atom SCREEN, or a list of (anchor fraction adjustment) where anchor can be a region, window, or the atom SCREEN, fraction can be a number or atoms LEFT/RIGHT/BOTTOM/TOP as apropriate.")
+                                                             (* ; "Edited 30-Dec-2021 17:49 by rmk")
+    (LET (ANCHOR VAL SIZE FRACTION SPEC (BASE 0))
+
+         (* ;; "Would be nice if the screen had a region")
+
+         (IF (NULL REF)
+             THEN (CL:IF (EQ WHICH 'X)
+                      LASTMOUSEX
+                      LASTMOUSEY)
+           ELSEIF (AND (FIXP REF)
+                       (NOT (MINUSP REF)))
+             THEN REF
+           ELSEIF (EQ REF 'SCREEN)
+             THEN 
+                  (* ;; "LEFT and BOTTOM are 0")
+
+                  0
+           ELSEIF [AND (LISTP REF)
+                       (SETQ ANCHOR (OR (REGIONP (CAR REF))
+                                        (AND (WINDOWP (CAR REF))
+                                             (WINDOWREGION (CAR REF)))
+                                        (AND (EQ (CAR REF)
+                                                 'SCREEN)
+                                             'SCREEN]
+             THEN (SETQ SPEC (CDR REF))
+                  [IF (EQ WHICH 'X)
+                      THEN (IF (EQ ANCHOR 'SCREEN)
+                               THEN (SETQ SIZE SCREENWIDTH)
+                             ELSE (SETQ BASE (FETCH (REGION LEFT) OF ANCHOR))
+                                  (SETQ SIZE (FETCH (REGION WIDTH) OF ANCHOR)))
+                           (SETQ FRACTION (SELECTQ (CAR SPEC)
+                                              ((NIL LEFT) 
+                                                   0)
+                                              (RIGHT 1)
+                                              (CAR SPEC)))
+                    ELSE (IF (EQ ANCHOR 'SCREEN)
+                             THEN (SETQ SIZE SCREENHEIGHT)
+                           ELSE (SETQ BASE (FETCH (REGION BOTTOM) OF ANCHOR))
+                                (SETQ SIZE (FETCH (REGION HEIGHT) OF ANCHOR)))
+                         (SETQ FRACTION (SELECTQ (CAR SPEC)
+                                            ((NIL BOTTOM) 
+                                                 0)
+                                            (TOP 1)
+                                            (CAR SPEC]
+                  [SETQ VAL (IPLUS BASE (ROUND (TIMES FRACTION SIZE]
+                  (CL:WHEN (CADR SPEC)
+                      (ADD VAL (CADR SPEC)))
+                  VAL
+           ELSE (\ILLEGAL.ARG REF])
+
+(\RELCREATEREGION.SIZE
+  [LAMBDA (PARAM WHICH)                                      (* ; "Edited  2-Jan-2022 11:00 by rmk")
+                                                             (* ; "Edited 30-Dec-2021 17:51 by rmk")
+
+    (* ;; 
+    "PARAM can be  FIXP or (region anchor adjustment) which determine size relative to the region.")
+
+    (LET (VAL ANCHOR SPEC)
+         (IF (FIXP PARAM)
+           ELSEIF [SETQ ANCHOR (OR (REGIONP PARAM)
+                                   (AND (WINDOWP PARAM)
+                                        (WINDOWREGION PARAM]
+             THEN (CL:IF (EQ WHICH 'X)
+                      (FETCH WIDTH OF ANCHOR)
+                      (FETCH HEIGHT OF ANCHOR))
+           ELSEIF (LISTP PARAM)
+             THEN (IF (SETQ ANCHOR (OR (REGIONP (CAR PARAM))
+                                       (AND (WINDOWP (CAR PARAM))
+                                            (WINDOWREGION (CAR PARAM)))
+                                       (AND (EQ (CAR PARAM)
+                                                'SCREEN)
+                                            'SCREEN)
+                                       (\ILLEGAL.ARG PARAM)))
+                      THEN [SETQ VAL (CL:IF (EQ WHICH 'X)
+                                         (CL:IF (EQ ANCHOR 'SCREEN)
+                                             SCREENWIDTH
+                                             (FETCH WIDTH OF ANCHOR))
+                                         (CL:IF (EQ ANCHOR 'SCREEN)
+                                             SCREENHEIGHT
+                                             (FETCH HEIGHT OF ANCHOR)))]
+                           (SETQ SPEC (CDR PARAM))
+                           (CL:WHEN (CAR SPEC)
+                               (SETQ VAL (ROUND (TIMES (CAR SPEC)
+                                                       VAL))))
+                           (CL:WHEN (CADR SPEC)
+                               (ADD VAL (CADR SPEC)))
+                           VAL)
+           ELSEIF (EQ PARAM 'SCREEN)
+             THEN (CL:IF (EQ WHICH 'X)
+                      SCREENWIDTH
+                      SCREENHEIGHT)
+           ELSE (\ILLEGAL.ARG PARAM])
+)
+
+
+
+(* ;; "Composite application construction")
+
+(DEFINEQ
+
+(RM-ATTACHWINDOW
+  [LAMBDA (WINDOWTOATTACH MAINWINDOW EDGE POSITIONONEDGE WINDOWCOMACTION TAKEFROMCENTRAL)
+                                                             (* ; "Edited 29-Dec-2021 09:36 by rmk")
+                                                             (* ; "Edited 28-Nov-2021 16:10 by rmk:")
+
+    (* ;; "MAINWINDOW may not be the central window, could be attached to an attachment.")
+
+    (* ;; "If the central window is under construction, we shrink it down so that the new attachment fits within the original footprint of the central window and all of its previous attachments.")
+
+    (* ;; "This addresses the common situation where the user provides a region for the central window and the constellation of windows that will surround it, and the whole constellation is supposed to stay within that original bounding box, even as new attachments (promptwindows, menus...) are tacked on.")
+
+    (* ;; "")
+
+    (* ;; "A second extension:  If WINDOWCOMACTION is a list, smash it into the PASSTOMAINCOMS.  ATTACHWINDOW.ORIG only allows a few atomic-value options.")
+
+    (LET (MIN (CENTRALWINDOW (CENTRALWINDOW MAINWINDOW))
+              CENTRALREGION NEWALLREGION ORIGALLREGION NEWCENTRALREGION VAL)
+         (CL:WHEN (OR TAKEFROMCENTRAL (WINDOWPROP CENTRALWINDOW 'UNDERCONSTRUCTION))
+             (SETQ ORIGALLREGION (ATTACHEDWINDOWREGION CENTRALWINDOW))
+             (SETQ CENTRALREGION (WINDOWREGION CENTRALWINDOW)))
+         (SETQ VAL (ATTACHWINDOW.ORIG WINDOWTOATTACH MAINWINDOW EDGE POSITIONONEDGE WINDOWCOMACTION))
+         (CL:WHEN ORIGALLREGION
+             (SETQ NEWALLREGION (ATTACHEDWINDOWREGION CENTRALWINDOW))
+             (CL:UNLESS (EQUAL ORIGALLREGION NEWALLREGION)
+
+                 (* ;; "Something changed, presumably the total region expanded, so something has to shrink to stay within the original region.  We want to shrink the main window only, keeping everything else as it was.  Hopefully, previously attached windows that wanted a fixed size on the relevant dimension have a MINSIZE that won't let them shrink.  And hopefully the central window does allow shrinking, otherwise nothing happens.")
+
+                 (* ;; "It also could be that the region hasn't changed, if the new window hides in the shadow of a previously attached one.")
+
+                 (SETQ NEWCENTRALREGION (SELECTQ EDGE
+                                            (LEFT (CREATE REGION USING CENTRALREGION LEFT _
+                                                                       (PLUS (FETCH (REGION LEFT)
+                                                                                OF CENTRALREGION)
+                                                                             (RFIELDDIFF LEFT 
+                                                                                    ORIGALLREGION 
+                                                                                    NEWALLREGION))
+                                                                       WIDTH _
+                                                                       (DIFFERENCE
+                                                                        (FETCH (REGION WIDTH)
+                                                                           OF CENTRALREGION)
+                                                                        (RFIELDDIFF WIDTH 
+                                                                               NEWALLREGION 
+                                                                               ORIGALLREGION))))
+                                            (RIGHT (CREATE REGION USING CENTRALREGION WIDTH _
+                                                                        (DIFFERENCE
+                                                                         (FETCH (REGION WIDTH)
+                                                                            OF CENTRALREGION)
+                                                                         (RFIELDDIFF WIDTH 
+                                                                                NEWALLREGION 
+                                                                                ORIGALLREGION))))
+                                            (TOP (CREATE REGION USING CENTRALREGION HEIGHT _
+                                                                      (DIFFERENCE (FETCH (REGION
+                                                                                          HEIGHT)
+                                                                                     OF CENTRALREGION
+                                                                                         )
+                                                                             (RFIELDDIFF HEIGHT 
+                                                                                    NEWALLREGION 
+                                                                                    ORIGALLREGION))))
+                                            (BOTTOM (CREATE REGION
+                                                       USING CENTRALREGION BOTTOM _
+                                                             (PLUS (FETCH (REGION BOTTOM)
+                                                                      OF CENTRALREGION)
+                                                                   (RFIELDDIFF BOTTOM ORIGALLREGION 
+                                                                          NEWALLREGION))
+                                                             HEIGHT _ (DIFFERENCE (FETCH (REGION
+                                                                                          HEIGHT)
+                                                                                     OF CENTRALREGION
+                                                                                         )
+                                                                             (RFIELDDIFF HEIGHT 
+                                                                                    NEWALLREGION 
+                                                                                    ORIGALLREGION))))
+                                            (SHOULDNT)))
+
+                 (* ;; "We want to reshape only the central window. We detach the new (just attached) window, do the shrinking, then reattach. If other attached windows get reshaped, that's par for the course.  Presumably they are specified as fixed on the relevant dimension, or the user doesn't care.")
+
+                 (* ;; "Maybe this little wrinkle is solving a non-problem--if the user cares about whether or not the new window will shrink, now or with later reshaping, then he should have specified its own minsize property.")
+
+                 (* ;; "On the otherhand, maybe we should remove all of the SHAPEW's (or but in DONT)  in the PASSTOMAIN coms of all the windows attached directly or indirectly to the central window, do the reshaping, and then restore.")
+
+                 (DETACHWINDOW WINDOWTOATTACH MAINWINDOW)
+                 (SHAPEW CENTRALWINDOW NEWCENTRALREGION)
+
+                 (* ;; "Now reattach the new window")
+
+                 (SETQ VAL (ATTACHWINDOW.ORIG WINDOWTOATTACH MAINWINDOW EDGE POSITIONONEDGE 
+                                  WINDOWCOMACTION))
+
+                 (* ;; "This is a little error check for debugging, to catch cases where there might be interactions with other interfering strategies.  If the new window turned out to be bigger on the relevant dimension than the original set up, then we simply have to relax.")
+
+                 (* ;; "If the new window is bigger than the original region on the other dimenion dimension, then we have to relax our requirement.  We use ATTACHEDWINDOWREGION in case the new window is already a conglomerate.")
+
+                 (CL:UNLESS (OR (EQUAL ORIGALLREGION (ATTACHEDWINDOWREGION CENTRALWINDOW))
+                                (SELECTQ EDGE
+                                    ((TOP BOTTOM) 
+                                         (GEQ (FETCH (REGION WIDTH) OF (ATTACHEDWINDOWREGION
+                                                                        WINDOWTOATTACH
+                                                                        'REGION))
+                                              (FETCH (REGION WIDTH) OF ORIGALLREGION)))
+                                    ((LEFT RIGHT) 
+                                         (GEQ (FETCH (REGION HEIGHT) OF (ATTACHEDWINDOWREGION
+                                                                         WINDOWTOATTACH
+                                                                         'REGION))
+                                              (FETCH (REGION HEIGHT) OF ORIGALLREGION)))
+                                    NIL))
+                     (HELP ORIGALLREGION (ATTACHEDWINDOWREGION MAINWINDOW)))
+                 (CL:WHEN (LISTP WINDOWCOMACTION)
+
+                     (* ;; "Maybe this should be done in the ORIG function--an oversight?")
+
+                     (WINDOWPROP WINDOWTOATTACH 'PASSTOMAINCOMS WINDOWCOMACTION))))
+         VAL])
+)
+
+(MOVD? 'ATTACHWINDOW 'ATTACHWINDOW.ORIG)
+
+(MOVD 'RM-ATTACHWINDOW 'ATTACHWINDOW)
+(DECLARE%: EVAL@COMPILE DONTCOPY 
+(DECLARE%: EVAL@COMPILE 
+
+(PUTPROPS RFIELDDIFF MACRO ((FIELD R1 R2)
+                            (DIFFERENCE (FETCH (REGION FIELD) OF R1)
+                                   (FETCH (REGION FIELD) OF R2))))
+)
+)
+(DECLARE%: DONTCOPY
+  (FILEMAP (NIL (1602 3789 (SET-TYPED-REGIONS 1612 . 3787)) (3790 10791 (RM-CREATEW 3800 . 6307) (
+RM-CLOSEW 6309 . 7710) (RM-GETREGION 7712 . 10298) (CLOSE-TYPED-W 10300 . 10789)) (11707 16778 (
+RELCREATEREGION 11717 . 14876) (RELGETREGION 14878 . 16776)) (16779 21898 (\RELCREATEREGION.REF 16789
+ . 19646) (\RELCREATEREGION.SIZE 19648 . 21896)) (21951 31293 (RM-ATTACHWINDOW 21961 . 31291)))))
+STOP

@@ -1,11 +1,11 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 3-Jan-2022 20:02:51" {DSK}<Users>kaplan>Local>medley3.5>my-medley>sources>COREIO.;4 55136  
+(FILECREATED "18-Jan-2022 11:22:04" {DSK}<Users>kaplan>Local>medley3.5>my-medley>sources>COREIO.;14 58002  
 
-      :CHANGES-TO (FNS \CORE.SETFILEINFO)
+      :CHANGES-TO (FNS \CORE.DIRECTORYNAMEP)
 
-      :PREVIOUS-DATE "22-Nov-2021 09:25:42" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>sources>COREIO.;3)
+      :PREVIOUS-DATE "11-Jan-2022 16:45:02" 
+{DSK}<Users>kaplan>Local>medley3.5>my-medley>sources>COREIO.;13)
 
 
 (* ; "
@@ -27,6 +27,8 @@ Copyright (c) 1981-1988, 1990, 1993, 1999, 2018 by Venue & Xerox Corporation.
              \CORE.SETACCESSTIME \CORE.SETFILEINFO \CORE.GETNEXTBUFFER \CORE.UNPACKFILENAME)
         (FNS COREDEVICE \CREATECOREDEVICE)
         (FNS \NODIRCOREFDEV \NODIRCORE.OPENFILE)
+        (FNS FILEDIRCASEARRAY)
+        (VARS (FILEDIRCASEARRAY (FILEDIRCASEARRAY)))
         (DECLARE%: DONTCOPY (RECORDS CORE.PAGEENTRY COREFILEINFOBLK CORESTREAM COREDEVICE 
                                    COREGENFILESTATE))
         (INITRECORDS COREFILEINFOBLK)
@@ -90,10 +92,34 @@ Copyright (c) 1981-1988, 1990, 1993, 1999, 2018 by Venue & Xerox Corporation.
           (RETURN (fetch IOFILEFULLNAME of INFOBLOCK])
 
 (\CORE.DIRECTORYNAMEP
-  [LAMBDA (DIRNAME DEV)                                  (* ; "Edited 19-Feb-93 16:04 by jds")
-    (LET [(DIR (UNPACKFILENAME.STRING DIRNAME 'DIRECTORY]
-         (AND DIRNAME DIR (> (NCHARS DIR)
-                             0])
+  [LAMBDA (DIRNAME DEV)                                      (* ; "Edited 18-Jan-2022 11:17 by rmk")
+                                                             (* ; "Edited 10-Jan-2022 22:33 by rmk")
+
+    (* ;; 
+ "Edited  9-Jan-2022 12:42 by rmk: Using the new FILEDIRCASEARRAY so that slashes and brackets match")
+
+    (* ;; "Edited  5-Jan-2022 15:03 by rmk: The previous definition didn't actually check to see if the directory existed.  %"existed%" for COREIO means there is at least one file currently in that directory.")
+
+    (* ;; "Edited 19-Feb-93 16:04 by jds")
+
+    (CL:WHEN DIRNAME
+
+        (* ;; "The DIRNAME could be just {CORE}, which always is OK, or {CORE}xxx.  If the latter, then we want it to be a directory and not a file  (assuming that xxx and xxx> can't both exist.")
+
+        (IF (EQ (CHARCODE })
+                (NTHCHARCODE DIRNAME -1))
+          ELSE (CL:UNLESS (MEMB (NTHCHARCODE DIRNAME -1)
+                                (CHARCODE (> /)))
+                   (SETQ DIRNAME (CONCAT DIRNAME ">"))) 
+
+               (* ;; "DIRPOS because caller may not have stripped off the device. This will match the first < or / (or >)")
+
+               (FOR ENTRY (DIRPOS _ (STRPOS "<" DIRNAME 1 NIL NIL NIL FILEDIRCASEARRAY))
+                  FIRST (CL:UNLESS (EQ DIRPOS 1)
+                            (SETQ DIRNAME (SUBSTRING DIRNAME DIRPOS)))
+                  IN (CDR (FETCH COREDIRECTORY OF DEV)) WHEN (STRPOS DIRNAME (CAR ENTRY)
+                                                                    1 NIL T NIL FILEDIRCASEARRAY)
+                  DO (RETURN T))))])
 
 (\CORE.FINDPAGE
   [LAMBDA (STREAM PN)                                    (* bvm%: "20-Apr-85 13:32")
@@ -351,28 +377,30 @@ Copyright (c) 1981-1988, 1990, 1993, 1999, 2018 by Venue & Xerox Corporation.
                 (RETURN INFOBLOCK])
 
 (\CORE.NAMESCAN
-  [LAMBDA (NAME NAMELST CREATEFLG)                       (* ; "Edited 23-Oct-87 17:11 by bvm:")
+  [LAMBDA (NAME NAMELST CREATEFLG)
+
+    (* ;; "Edited 11-Jan-2022 09:30 by rmk: Matching with FILEDIRCASEARRAY, for /")
+
+    (* ;; "Edited 23-Oct-87 17:11 by bvm:")
+
     (COND
        ((LISTP NAMELST)
         (bind NEWSEG NEXTNAME while [AND (CDR NAMELST)
-                                                 (COND
-                                                    ((STRING-EQUAL (SETQ NEXTNAME (CAAR (CDR NAMELST)
-                                                                                        ))
-                                                            NAME)
+                                         (COND
+                                            ((STRING.EQUAL (SETQ NEXTNAME (CAAR (CDR NAMELST)))
+                                                    NAME FILEDIRCASEARRAY)
                                                              (* ; "Found it")
-                                                     (RETURN (CADR NAMELST)))
-                                                    (T (UALPHORDER NEXTNAME NAME]
-           do                                            (* ; 
-         "Segments are in order, so stop when (CDR NAMELST) is lexicographically greater than NAME")
-                 (SETQ NAMELST (CDR NAMELST)) finally (RETURN (COND
-                                                                     ((AND CREATEFLG (SETQ NEWSEG
-                                                                                      (
-                                                                                  \CORE.NAMESEGMENT
-                                                                                       NAME)))
-                                                                      (RPLACD NAMELST
-                                                                             (CONS NEWSEG
-                                                                                   (CDR NAMELST)))
-                                                                      NEWSEG])
+                                             (RETURN (CADR NAMELST)))
+                                            (T (ALPHORDER NEXTNAME NAME FILEDIRCASEARRAY]
+           do                                                (* ; 
+           "Segments are in order, so stop when (CDR NAMELST) is lexicographically greater than NAME")
+              (SETQ NAMELST (CDR NAMELST)) finally (RETURN (COND
+                                                              ((AND CREATEFLG (SETQ NEWSEG
+                                                                               (\CORE.NAMESEGMENT
+                                                                                NAME)))
+                                                               (RPLACD NAMELST (CONS NEWSEG
+                                                                                     (CDR NAMELST)))
+                                                               NEWSEG])
 
 (\CORE.NAMESEGMENT
   [LAMBDA (NAME)                                         (* rmk%: "24-FEB-84 21:14")
@@ -710,7 +738,12 @@ Copyright (c) 1981-1988, 1990, 1993, 1999, 2018 by Venue & Xerox Corporation.
           (RETURN T])
 
 (\CORE.UNPACKFILENAME
-  [LAMBDA (NAME)                                         (* ; "Edited  3-Nov-87 12:12 by bvm:")
+  [LAMBDA (NAME)                                             (* ; "Edited 10-Jan-2022 22:42 by rmk")
+
+    (* ;; "rmk; Convert / in ROOT to < or >")
+                                                             (* ; "Edited 10-Jan-2022 21:14 by rmk")
+
+    (* ;; "Edited  3-Nov-87 12:12 by bvm:")
 
     (* ;; "Breaks up a file name atom into its fields which it sets freely in its caller")
 
@@ -729,6 +762,17 @@ Copyright (c) 1981-1988, 1990, 1993, 1999, 2018 by Venue & Xerox Corporation.
               (SETQ DOT SEMI)))
           (SETQ ROOT (OR (SUBSTRING NAME START (SUB1 DOT))
                          ""))
+          (CL:WHEN (STRPOS "/" ROOT)
+
+              (* ;; "If ROOT has slashes, convert to < ..> ..>")
+
+              (SETQ ROOT (DSUBST (CHARCODE >)
+                                (CHARCODE /)
+                                (CHCON ROOT)))
+              (CL:WHEN (EQ (CAR ROOT)
+                           (CHARCODE >))
+                  (RPLACA ROOT (CHARCODE <)))
+              (SETQ ROOT (CONCATCODES ROOT)))
           (SETQ EXT (COND
                        ((< DOT (- SEMI 1))
                         (SUBSTRING NAME (ADD1 DOT)
@@ -858,6 +902,24 @@ Copyright (c) 1981-1988, 1990, 1993, 1999, 2018 by Venue & Xerox Corporation.
     (\CORE.SETACCESSTIME NAME ACCESS)
     NAME])
 )
+(DEFINEQ
+
+(FILEDIRCASEARRAY
+  [LAMBDA NIL                                                (* ; "Edited  8-Jan-2022 20:15 by rmk")
+
+    (* ;; "Returns a case array suitable for case insensitive directory matching:  <, >, and / all map together in any position.  Presumably there are other well-formedness conditions that put < and > only in their proper positions.")
+                                                             (* ; "Edited  8-Jan-2022 20:12 by rmk")
+    (for I (CA _ (CASEARRAY)) from (CHARCODE a) to (CHARCODE z)
+       do [SETCASEARRAY CA I (IDIFFERENCE I (CONSTANT (IDIFFERENCE (CHARCODE a)
+                                                             (CHARCODE A]
+       finally (SETCASEARRAY CA (CHARCODE <)
+                      (CHARCODE /))
+             (SETCASEARRAY CA (CHARCODE >)
+                    (CHARCODE /))
+             (RETURN CA])
+)
+
+(RPAQ FILEDIRCASEARRAY (FILEDIRCASEARRAY))
 (DECLARE%: DONTCOPY 
 (DECLARE%: EVAL@COMPILE
 
@@ -955,16 +1017,16 @@ Copyright (c) 1981-1988, 1990, 1993, 1999, 2018 by Venue & Xerox Corporation.
 (PUTPROPS COREIO COPYRIGHT ("Venue & Xerox Corporation" 1981 1982 1983 1984 1985 1986 1987 1988 1990 
 1993 1999 2018))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1707 44342 (\CORE.CLOSEFILE 1717 . 2490) (\CORE.DELETEFILE 2492 . 4478) (
-\CORE.DIRECTORYNAMEP 4480 . 4741) (\CORE.FINDPAGE 4743 . 7972) (\CORE.GENERATEFILES 7974 . 10561) (
-\CORE.NEXTFILEFN 10563 . 11062) (\CORE.FILEINFOFN 11064 . 11293) (\CORE.GETFILEHANDLE 11295 . 13449) (
-\CORE.GETFILEINFO 13451 . 14414) (\CORE.GETFILEINFO.FROM.INFOBLOCK 14416 . 15953) (\CORE.GETFILENAME 
-15955 . 18244) (\CORE.GETINFOBLOCK 18246 . 20869) (\CORE.NAMESCAN 20871 . 22638) (\CORE.NAMESEGMENT 
-22640 . 23077) (\CORE.OPENFILE 23079 . 26198) (\COREFILE.SETPARAMETERS 26200 . 28381) (
-\CORE.PACKFILENAME 28383 . 28778) (\CORE.RELEASEPAGES 28780 . 29381) (\CORE.SETFILEPTR 29383 . 30482) 
-(\CORE.UPDATEOF 30484 . 32113) (\CORE.BACKFILEPTR 32115 . 34323) (\CORE.SETEOFPTR 34325 . 36194) (
-\CORE.SETACCESSTIME 36196 . 36821) (\CORE.SETFILEINFO 36823 . 39125) (\CORE.GETNEXTBUFFER 39127 . 
-43083) (\CORE.UNPACKFILENAME 43085 . 44340)) (44343 47976 (COREDEVICE 44353 . 44524) (
-\CREATECOREDEVICE 44526 . 47974)) (47977 50278 (\NODIRCOREFDEV 47987 . 48584) (\NODIRCORE.OPENFILE 
-48586 . 50276)))))
+  (FILEMAP (NIL (1796 46254 (\CORE.CLOSEFILE 1806 . 2579) (\CORE.DELETEFILE 2581 . 4567) (
+\CORE.DIRECTORYNAMEP 4569 . 6250) (\CORE.FINDPAGE 6252 . 9481) (\CORE.GENERATEFILES 9483 . 12070) (
+\CORE.NEXTFILEFN 12072 . 12571) (\CORE.FILEINFOFN 12573 . 12802) (\CORE.GETFILEHANDLE 12804 . 14958) (
+\CORE.GETFILEINFO 14960 . 15923) (\CORE.GETFILEINFO.FROM.INFOBLOCK 15925 . 17462) (\CORE.GETFILENAME 
+17464 . 19753) (\CORE.GETINFOBLOCK 19755 . 22378) (\CORE.NAMESCAN 22380 . 23927) (\CORE.NAMESEGMENT 
+23929 . 24366) (\CORE.OPENFILE 24368 . 27487) (\COREFILE.SETPARAMETERS 27489 . 29670) (
+\CORE.PACKFILENAME 29672 . 30067) (\CORE.RELEASEPAGES 30069 . 30670) (\CORE.SETFILEPTR 30672 . 31771) 
+(\CORE.UPDATEOF 31773 . 33402) (\CORE.BACKFILEPTR 33404 . 35612) (\CORE.SETEOFPTR 35614 . 37483) (
+\CORE.SETACCESSTIME 37485 . 38110) (\CORE.SETFILEINFO 38112 . 40414) (\CORE.GETNEXTBUFFER 40416 . 
+44372) (\CORE.UNPACKFILENAME 44374 . 46252)) (46255 49888 (COREDEVICE 46265 . 46436) (
+\CREATECOREDEVICE 46438 . 49886)) (49889 52190 (\NODIRCOREFDEV 49899 . 50496) (\NODIRCORE.OPENFILE 
+50498 . 52188)) (52191 53096 (FILEDIRCASEARRAY 52201 . 53094)))))
 STOP

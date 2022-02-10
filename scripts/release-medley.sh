@@ -19,9 +19,7 @@ echo making $tag-loadups.tgz
 tar cfz medley/tmp/$tag-loadups.tgz                       \
     medley/loadups/lisp.sysout                            \
     medley/loadups/full.sysout                            \
-    medley/loadups/whereis.hash                           \
-    medley/library/exports.all                            \
-    medley/library/RDSYS medley/library/RDSYS.LCOM
+    medley/loadups/whereis.hash                           
 	
 echo making $tag-runtime.tgz
 
@@ -30,6 +28,7 @@ tar cfz medley/tmp/$tag-runtime.tgz                       \
     medley/docs/dinfo                                     \
     medley/docs/Documentation\ Tools                      \
     medley/greetfiles                                     \
+    medley/rooms                                          \
     medley/run-medley                                     \
     medley/scripts                                        \
     medley/fonts/displayfonts  medley/fonts/altofonts     \

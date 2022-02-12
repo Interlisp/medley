@@ -1,112 +1,245 @@
-#  based on https://blog.oddbit.com/post/2020-09-25-building-multi-architecture-im/
----
-# Interlisp workflow to build Docker Image that support multiple architectures
-name: Build Medley Docker image
+#*******************************************************************************
+# buidDocker.yml
+#
+# Workflow to build and push a multiplatform (amd64, arm64 & arm7) Linux Docker
+# image for Medley. This workflow uses the latest Maiko docker image and the 
+# latest Medley release on github.
+#
+# This workflow contains a sentry that causes it to skip the build (as identified
+# by its commit SHA) if its already been done.  Setting the "force" input to true
+# will bypass this sentry,
+#
+# Updated 2022-01-18 by Frank Halasz from on earlier buildDocker.yml
+#
+# Copyright 2022 by Interlisp.org
+#
+# ******************************************************************************
 
-# Run this workflow on demand
+name: 'Build/Push Docker Image'
+
+# Run this workflow on ...
 on:
   workflow_dispatch:
+    force:
+      description: "Force build even if build already successfully completed for this commit"
+      type: choice
+      options:
+      - 'false'
+      - 'true'
+  
+  workflow_call:
+    outputs:
+      successful:
+        description: "'True' if medley docker build completed successully"
+        value: ${{ jobs.complete.outputs.build_successful }}
+    inputs:
+      force:
+        description: "Force build even if build already successfully completed for this commit"
+        required: false
+        type: string
+        default: 'false'
+    secrets:
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
 
-# Jobs that compose this workflow
+defaults:
+  run:
+    shell: bash
+    
+
 jobs:
-  # Job to build the docker image
-  docker:
+
+######################################################################################
+
+  # Regularize the inputs so they can be referenced the same way whether they are
+  # the result of a workflow_dispatch or a workflow_call
+
+  inputs:
     runs-on: ubuntu-latest
+    outputs:
+      force: ${{ steps.force.outputs.force }}
     steps:
-      # Checkout the branch
-      - name: Checkout
+      - id: force
+        run: >
+          if [ '${{ toJSON(inputs) }}' = 'null'  ];
+          then echo ::set-output name=force::'${{ github.event.inputs.force }}'; echo "workflow_dispatch";
+          else echo ::set-output name=force::'${{ inputs.force }}'; echo "workflow_call";
+          fi
+        
+
+
+######################################################################################
+
+  # Use sentry-action to determine if this release has already been built
+  # based on the latest commit to the repo
+
+  sentry:
+    needs: inputs
+    runs-on: ubuntu-latest
+    outputs:
+      release_not_built: ${{ steps.check.outputs.release_not_built }}
+
+    steps: 
+      # Checkout the actions for this repo owner
+      - name: Checkout Actions
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          path: ./Actions_${{ github.sha }}
+      - run: mv ./Actions_${{ github.sha }}/actions ../actions && rm -rf ./Actions_${{ github.sha }}
+
+      # Check if build already run for this commit
+      - name: Build already completed? 
+        id: check
+        continue-on-error: true
+        uses: ./../actions/check-sentry-action
+        with:
+          tag: "docker"
+
+######################################################################################
+
+  #
+  #  Build and push the medley docker image
+  #
+
+  build_and-push:
+
+    runs-on: ubuntu-latest
+
+    needs: [inputs, sentry]
+    if: |
+      needs.sentry.outputs.release_not_built == 'true'
+      || needs.inputs.outputs.force == 'true'
+    
+    steps:
+      # Checkout latest commit
+      - name: Checkout Medley
         uses: actions/checkout@v2
 
-      # Get the Medley Release Information
-      - name: Get Medley Release Information
-        id: medley_version
-        uses: abatilo/release-info-action@v1.3.0
-        with:
-          owner: Interlisp
-          repo: medley
-
-      # Get the Maiko Release Information
-      - name: Get Maiko Release Information
-        id: maiko_version
-        uses: abatilo/release-info-action@v1.3.0
-        with:
-          owner: Interlisp
-          repo: maiko
-
-      # Setup needed environment variables
-      - name: Prepare
-        id: prep
+      # Set repo env variables
+      - name: Set repo/docker env variables
+        id: repo_env
         run: |
-          DOCKERHUB_ACCOUNT=interlisp
-          DOCKER_IMAGE=${DOCKERHUB_ACCOUNT}/${GITHUB_REPOSITORY#*/}
-          VERSION=latest
-          MAIKO_RELEASE=${{ steps.maiko_version.outputs.latest_tag }}
-          MEDLEY_RELEASE=${{ steps.medley_version.outputs.latest_tag }}
+          REPO_NAME=${GITHUB_REPOSITORY#*/}
+          echo "REPO_NAME=${REPO_NAME}" >> ${GITHUB_ENV}
+          echo ::set-output name=repo_name::${REPO_NAME}
+          DOCKER_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "DOCKER_OWNER=${DOCKER_OWNER}" >> ${GITHUB_ENV}
+          echo ::set-output name=docker_owner::${DOCKER_OWNER}
 
-          TAGS="${DOCKER_IMAGE}:${MEDLEY_RELEASE},${DOCKER_IMAGE}:${VERSION},${DOCKER_IMAGE}:${MAIKO_RELEASE}"
+      # Get tag of latest Medley release.
+      - name: Get Medley Release Information
+        id: release_info
+        uses: abatilo/release-info-action@v1.3.0
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: medley
           
-          # Set output parameters.
-          echo ::set-output name=tags::${TAGS}
+      # Get asset tars from latest Medley release
+      - name: Download Release Assets
+        uses: robinraju/release-downloader@v1.2
+        with:
+          repository: ${{ github.repository_owner }}/medley
+          token: ${{ secrets.GITHUB_TOKEN }}
+          latest: true
+          fileName: "*"
+          out-file-path: "release_tars"
+
+      # Get Maiko release information about latest Maiko Docker Image
+      - name: Get info from latest Maiko image
+        id: maiko_setup
+        run: |
+          docker pull ${DOCKER_OWNER}/maiko:latest
+          MAIKO_RELEASE=$(docker run --entrypoint /bin/bash ${DOCKER_OWNER}/maiko:latest -c "echo \${MAIKO_RELEASE}")
+          echo "MAIKO_RELEASE=${MAIKO_RELEASE}" >> ${GITHUB_ENV}
+          echo ::set-output name=maiko_release::${MAIKO_RELEASE}
+
+      # Setup environment variables
+      - name: Setup Environment Variables
+        id: setup_env
+        run: |
+          RELEASE_TAG=${{ steps.release_info.outputs.latest_tag }}
+          DOCKER_IMAGE=${DOCKER_OWNER}/${REPO_NAME}
+          DOCKER_TAGS="${DOCKER_IMAGE}:latest,${DOCKER_IMAGE}:${RELEASE_TAG#*-}_${MAIKO_RELEASE#*-}"
+          echo ::set-output name=docker_tags::${DOCKER_TAGS}
           echo ::set-output name=docker_image::${DOCKER_IMAGE}
           echo ::set-output name=build_time::$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          echo ::set-output name=version::${VERSION}
-          echo ::set-output name=maiko_release::${MAIKO_RELEASE}
-          echo ::set-output name=medley_release::${MEDLEY_RELEASE}
+          echo ::set-output name=release_tag::${RELEASE_TAG}
+          echo "release_tag=${RELEASE_TAG}" >> ${GITHUB_ENV}
 
-      # Download Medley Release Assets
-      - name: Download Release Assets
-        uses: robinraju/release-downloader@v1.2
-        with:
-          repository: Interlisp/medley
-          token: ${{ secrets.GITHUB_TOKEN }}
-          latest: true
-          fileName: "*"
-
-      # Download Maiko Release Assets
-      - name: Download Release Assets
-        uses: robinraju/release-downloader@v1.2
-        with:
-          repository: Interlisp/maiko
-          token: ${{ secrets.GITHUB_TOKEN }}
-          latest: true
-          fileName: "*"
-
-      # Setup Docker Machine Emulation environment
+      # Setup the Docker Machine Emulation environment.  
       - name: Set up QEMU
         uses: docker/setup-qemu-action@master
         with:
-          platforms: all
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
 
-      # Setup Docker Buildx function
+      # Setup the Docker Buildx funtion
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@master
 
-      # Login to DockerHub - required to store the image
+      # Login into DockerHub - required to store the created image
       - name: Login to DockerHub
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
+          username: ${{ steps.repo_env.outputs.docker_owner }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Start the Docker Build using the Dockerfilein the repository
-      - name: Build
+      # Do the Docker Build using the Dockerfile in the repository
+      # checked out and the release tars just downloaded.
+      # Push the result to Docker Hub
+      - name: Build Docker Image for Push to Docker Hub
         uses: docker/build-push-action@v2
         with:
           builder: ${{ steps.buildx.outputs.name }}
-          context: .
-          file: ./Dockerfile
-          # Platforms
-          #  linux/amd64 -- Standard x86_64
-          #  linux/arm64 -- Apple M1
-          #  linux/arm/v7 -- Raspberry pi
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-          # Push the created image
-          push: true
-          # tags to assign to the Docker image
-          tags: ${{ steps.prep.outputs.tags }}
           build-args: |
-            medley_release=${{steps.prep.outputs.medley_release}}
-            maiko_release=${{steps.prep.outputs.maiko_release}}
-            build_date=${{steps.prep.outputs.build_time}}
+            BUILD_DATE=${{ steps.setup_env.outputs.build_time }}
+            RELEASE_TAG=${{ steps.setup_env.outputs.release_tag }}
+            MAIKO_RELEASE=${{ steps.setup_env.outputs.maiko_release }}
+            DOCKER_OWNER=${{ steps.repo_env.outputs.docker_owner }}
+            REPO_OWNER=${{ github.repository_owner }}
+          context: ./release_tars
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          # Push the result to DockerHub
+          push: true
+          tags: ${{ steps.setup_env.outputs.docker_tags }}
+
+######################################################################################
+
+  # Use set-sentry-action to determine set the sentry that says this release has
+  # been successfully built
+
+  complete:
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      build_successful: ${{ steps.output.outputs.build_successful }}
+
+    needs: [inputs, sentry, build_and-push]
+
+    steps: 
+      # Checkout the actions for this repo owner
+      - name: Checkout Actions
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          path: ./Actions_${{ github.sha }}
+      - run: mv ./Actions_${{ github.sha }}/actions ../actions && rm -rf ./Actions_${{ github.sha }}
+
+      # Set sentry
+      - name: Set flag that build for this commit has been completed
+        id: set
+        uses: ./../actions/set-sentry-action
+        with:
+          tag: "docker"
+     
+      - name: Output
+        id: output
+        run: |
+          echo ::set-output name=build_successful::'true'
+          
+######################################################################################

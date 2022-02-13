@@ -7,9 +7,9 @@
 #
 # ******************************************************************************
 
-ARG DOCKER_OWNER=interlisp
+ARG DOCKER_NAMESPACE=interlisp
 
-FROM ${DOCKER_OWNER}/maiko:latest
+FROM ${DOCKER_NAMESPACE}/maiko:latest
 
 # Add tightvnc server to the image
 RUN apt-get update && apt-get install -y tightvncserver
@@ -31,6 +31,9 @@ ENV MEDLEY_RELEASE=$RELEASE_TAG
 
 ARG INSTALL_LOCATION=/usr/local/interlisp
 ENV INSTALL_LOCATION=${INSTALL_LOCATION}
+
+ARG DOCKER_NAMESPACE=interlisp
+ENV DOCKER_NAMESPACE=${DOCKER_NAMESPACE}
 
 # Copy over the release tars
 RUN mkdir -p ${INSTALL_LOCATION}

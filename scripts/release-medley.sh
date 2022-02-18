@@ -26,7 +26,6 @@ echo making $tag-runtime.tgz
 tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
     medley/docs/dinfo                                     \
-    medley/docs/Documentation\ Tools                      \
     medley/greetfiles                                     \
     medley/rooms                                          \
     medley/run-medley                                     \
@@ -37,7 +36,7 @@ tar cfz medley/tmp/$tag-runtime.tgz                       \
     medley/lispusers/                                     \
     medley/fonts/big medley/fonts/other                   \
     medley/sources/                                       \
-    medley/internal/library                               \
+    medley/internal/                                      \
 
     
 cd medley

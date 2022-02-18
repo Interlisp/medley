@@ -31,7 +31,7 @@ tar cfz medley/tmp/$tag-runtime.tgz                       \
     medley/run-medley                                     \
     medley/scripts                                        \
     medley/fonts/displayfonts  medley/fonts/altofonts     \
-    medley/fonts/postscriptfonts                          \
+    medley/fonts/xerox medley/fonts/adobe                 \
     medley/library/                                       \
     medley/lispusers/                                     \
     medley/fonts/big medley/fonts/other                   \

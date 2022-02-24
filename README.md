@@ -2,32 +2,32 @@
 
 This repository is for the Lisp environment of [Medley Interlisp](https://Interlisp.org).
 
-See the [Medley Interlisp Wiki](https://github.com/Interlisp/medley/wiki/) for an overview and pointers to available documentation.
+See the [Documentation links](https://github.com/Interlisp/medley/wiki/Documentation) for an overview and pointers to documentation.
+In particular [Running](https://github.com/Interlisp/medley/wiki/Running) explains other methods of getting Medley Interlisp.
 
-A sub-project is [Interlisp/maiko](https://github.com/Interlisp/maiko), which is the implementation (in C) of the Medley virtual machine.
+[Interlisp/maiko](https://github.com/Interlisp/maiko), is the repo for the implementation (in C) of the Medley virtual machine.
 
 ## Using releases
 
 There currently are separate releases of medley and maiko; get the latest version of each.
-There (soon) will also be Docker containers with the latest, and a way to try out Medley in the cloud (without installing).
-
 
 ### Getting releases
 
-Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the one corresponding to your operating system and processor (for Windows with WSL or Intel Linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for M1.)
+Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the .tgz file corresponding to your operating system and processor (for Windows with WSL or Intel Linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for M1.)
 
-Or, build your own maiko (the binaries `lde` `ldex` and `ldeinit`.) We can build for other OS arch pairs depending on what is available for GitHub actions.
+Or, build your own maiko (the binaries `lde` `ldex` and `ldeinit`) We can build for other OS arch pairs depending on what is available for GitHub actions.
 
 The medley release comes in two parts, found [here](https://github.com/Interlisp/medley/releases)
 1. The "loadups" (download `medley-`YYMMDD`-loadups.tgz`)
 2. The "runtime" (download `medley-`YYMMDD`-runtime.tgz`)
 
-You don't need the "runtime" if you've cloned this (medley) repo.
+You don't need the "runtime" if you've cloned this (medley) repo, but you'll still need the "loadups" release.
+
 If you happen to have the 'gh' GitHub command line installed you can download both using
 ```
    gh release download -R Interlisp/medley -p "*"
 ```
-but otherwise just click on the link(s) to the parts you need.
+but otherwise just click on the link(s) below to the parts you need.
 
 ### Unpacking releases
 

@@ -1,31 +1,135 @@
-# Interlisp workflow to build Medley release
-name: Build Medley Release
+#*******************************************************************************
+# buidLoadup.yml
+#
+# Interlisp workflow to build Medley release and push it to github. This workflow
+# is platform independent - but runs on Linux/amd64.
+#
+# This workflow contains a sentry that causes it to skip the build (as identified
+# by its commit SHA) if its already been done.  Setting the "force" input to true
+# will bypass this sentry,
+#
+# 2022-01-17 Frank Halasz based on an earlier version of buildLoadup for Medley.
+#
+# Copyright 2022 by Interlisp.org
+#
+# ******************************************************************************
 
-# Run this workflow on push to master
+name: Build/Push Medley Release
+
+# Run this workflow on ...
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description:  'Release Tag'
+      force:
+        description: "Force build even if build already successfully completed for this commit"
+        type: choice
+        options:
+        - 'false'
+        - 'true'
 
-# Jobs that compose this workflow
+  workflow_call:
+    outputs:
+      successful:
+        description: "'True' if medley build completed successully"
+        value: ${{ jobs.complete.outputs.build_successful }}
+    inputs:
+      force:
+        description: "Force build even if build already successfully completed for this commit"
+        required: false
+        type: string
+        default: 'false'
+
+defaults:
+  run:
+    shell: bash
+    
+  
 jobs:
-  # Build Loadup
-  loadup:
+
+######################################################################################
+
+  # Regularize the inputs so they can be referenced the same way whether they are
+  # the result of a workflow_dispatch or a workflow_call
+
+  inputs:
     runs-on: ubuntu-latest
+    outputs:
+      force: ${{ steps.force.outputs.force }}
     steps:
-      - name: Set release tag if currently undefined
-        if: ${{ github.event.inputs.tag == null }}
-        run:  |
-          echo "tag=medley-`date +%y%m%d`" >> $GITHUB_ENV
+      - id: force
+        run: >
+          if [ '${{ toJSON(inputs) }}' = 'null'  ];
+          then echo ::set-output name=force::'${{ github.event.inputs.force }}'; echo "workflow_dispatch";
+          else echo ::set-output name=force::'${{ inputs.force }}'; echo "workflow_call";
+          fi
+        
 
-      - name: Set release tag to input value
-        if: ${{ github.event.inputs.tag != null }}
-        run: |
-          echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
 
+######################################################################################
+
+  # Use sentry-action to determine if this release has already been built
+  # based on the latest commit to the repo
+
+  sentry:
+    needs: inputs
+    runs-on: ubuntu-latest
+    outputs:
+      release_not_built: ${{ steps.check.outputs.release_not_built }}
+
+    steps: 
+      # Checkout the actions for this repo owner
+      - name: Checkout Actions
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          path: ./Actions_${{ github.sha }}
+      - run: mv ./Actions_${{ github.sha }}/actions ../actions && rm -rf ./Actions_${{ github.sha }}
+
+      # Check if build already run for this commit
+      - name: Build already completed? 
+        id: check
+        continue-on-error: true
+        uses: ./../actions/check-sentry-action
+        with:
+          tag: "loadup"
+
+######################################################################################
+
+  # Do the loadup
+  # 
+
+  loadup:
+
+    runs-on: ubuntu-latest
+
+    needs: [inputs, sentry]
+    if: |
+      needs.sentry.outputs.release_not_built == 'true'
+      || needs.inputs.outputs.force == 'true'
+    
+    steps:
+      # Checkout the actions for this repo owner
+      - name: Checkout Actions
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          path: ./Actions_${{ github.sha }}
+      - run: mv ./Actions_${{ github.sha }}/actions ../actions && rm -rf ./Actions_${{ github.sha }}
+
+      # Checkout latest commit
       - name: Checkout Medley
         uses: actions/checkout@v2
+
+      # Setup release tag
+      - name: Setup Release Tag
+        id: tag
+        uses: ./../actions/release-tag-action
+
+      # Setup environment variables
+      - name: Setup Environment Variables
+        id: setup_env
+        run: |
+          echo ::set-output name=build_time::$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
       # Get Maiko release information, retrieves the name of the latest
       # release.  Used to download the correct Maiko release
@@ -33,14 +137,14 @@ jobs:
         id: latest_version
         uses: abatilo/release-info-action@v1.3.0
         with:
-          owner: Interlisp
+          owner: ${{ github.repository_owner }}
           repo: maiko
           
       # Download Maiko Release Assets
       - name: Download Release Assets
         uses: robinraju/release-downloader@v1.2
         with:
-          repository: Interlisp/maiko
+          repository: ${{ github.repository_owner }}/maiko
           token: ${{ secrets.GITHUB_TOKEN }}
           latest: true
           fileName: "${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz" 
@@ -49,7 +153,7 @@ jobs:
         run: |
           tar -xvzf "${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz"
 
-      - name: install vnc
+      - name: Install vnc
         run: sudo apt-get update && sudo apt-get install -y tightvncserver
 
       - name: Build Loadout
@@ -59,47 +163,91 @@ jobs:
           PATH="$PWD/maiko:$PATH" 
           scripts/loadup-all.sh
 
-      - name: Build release tar git libs
+      - name: Build loadups release tar
         run: |
-          cp -p tmp/full.sysout tmp/lisp.sysout tmp/whereis.hash loadups/
+          cp -p tmp/full.sysout tmp/lisp.sysout tmp/*.dribble tmp/whereis.hash loadups/
           cp -p tmp/exports.all tmp/RDSYS tmp/RDSYS.LCOM library/
           cd ..
-          tar cfz medley/tmp/$tag-loadups.tgz        \
+          tar cfz medley/tmp/${release_tag}-loadups.tgz        \
             medley/loadups/lisp.sysout               \
             medley/loadups/full.sysout               \
-            medley/loadups/whereis.hash
-
-      - name: tar part 2
+            medley/loadups/whereis.hash              \
+            medley/library/exports.all               \
+            medley/library/RDSYS/                    \
+            medley/library/RDSYS.LCOM   
+        env:
+          release_tag: ${{ steps.tag.outputs.release_tag }}
+      
+      - name: Build runtime release tar
         run: |
           cd ..
-          tar cfz medley/tmp/$tag-runtime.tgz                    \
+          tar cfz medley/tmp/${release_tag}-runtime.tgz                    \
                      --exclude "*~" --exclude "*#*"              \
                      medley/docs/dinfo                           \
+                     medley/docs/Documentation\ Tools            \
                      medley/greetfiles                           \
-                     medley/rooms                                \
                      medley/run-medley                           \
                      medley/scripts                              \
                      medley/fonts/displayfonts                   \
                      medley/fonts/altofonts                      \
-                     medley/fonts/xerox                          \
-                     medley/fonts/adobe                          \
                      medley/fonts/postscriptfonts                \
-                     medley/library                              \
-                     medley/lispusers                            \
+                     medley/library/                             \
+                     medley/lispusers/                           \
                      medley/fonts/big                            \
                      medley/fonts/other                          \
-                     medley/sources                              \
-                     medley/internal      
+                     medley/sources/                             \
+                     medley/internal/library      
+        env:
+          release_tag: ${{ steps.tag.outputs.release_tag }}
 
       - name: Release notes
         run: |
-          sed s/'$tag'/$tag/g < release-notes.md > tmp/release-notes.md
+          sed s/'$tag'/${{ steps.tag.outputs.release_tag }}/g < release-notes.md > tmp/release-notes.md
       
-      - name: push the release
+      - name: Push the release
         uses: ncipollo/release-action@v1.8.10
         with: 
-          artifacts: tmp/${{ env.tag }}-loadups.tgz,tmp/${{ env.tag }}-runtime.tgz
-          tag: ${{ env.tag }}
+          artifacts: tmp/${{ env.release_tag }}-loadups.tgz,tmp/${{ env.release_tag }}-runtime.tgz
+          tag: ${{ env.release_tag }}
           draft: true
           bodyfile: tmp/release-notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          release_tag: ${{ steps.tag.outputs.release_tag }}
+
+######################################################################################
+
+  # Use set-sentry-action to determine set the sentry that says this release has
+  # been successfully built
+
+  complete:
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      build_successful: ${{ steps.output.outputs.build_successful }}
+
+    needs: [inputs, sentry, loadup]
+
+    steps: 
+      # Checkout the actions for this repo owner
+      - name: Checkout Actions
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          path: ./Actions_${{ github.sha }}
+      - run: mv ./Actions_${{ github.sha }}/actions ../actions && rm -rf ./Actions_${{ github.sha }}
+
+      # Set sentry
+      - name: Set flag that build for this commit has been completed
+        id: set
+        uses: ./../actions/set-sentry-action
+        with:
+          tag: "loadup"
+
+      - name: Output
+        id: output
+        run: |
+          echo ::set-output name=build_successful::'true'
+          
+######################################################################################

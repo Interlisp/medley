@@ -20,25 +20,25 @@ tar cfz medley/tmp/$tag-loadups.tgz                       \
     medley/loadups/lisp.sysout                            \
     medley/loadups/full.sysout                            \
     medley/loadups/whereis.hash                           \
-    medley/library/exports.all                            \
-    medley/library/RDSYS medley/library/RDSYS.LCOM
+    medley/library/exports.all
 	
 echo making $tag-runtime.tgz
 
 tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
     medley/docs/dinfo                                     \
-    medley/docs/Documentation\ Tools                      \
+    medley/docs/doctools                                  \
     medley/greetfiles                                     \
+    medley/rooms                                          \
     medley/run-medley                                     \
     medley/scripts                                        \
     medley/fonts/displayfonts  medley/fonts/altofonts     \
+    medley/fonts/xerox medley/fonts/adobe                 \
     medley/fonts/postscriptfonts                          \
-    medley/library/                                       \
-    medley/lispusers/                                     \
-    medley/fonts/big medley/fonts/other                   \
-    medley/sources/                                       \
-    medley/internal/library                               \
+    medley/library                                        \
+    medley/lispusers                                      \
+    medley/sources                                        \
+    medley/internal
 
     
 cd medley

@@ -127,7 +127,7 @@ Each directory should have a README.md, but briefly
 * docs -- Documentation files (in TEdit format PDFs or online help; look [here](https://github.com/Interlisp/medley/Documentation)
 * fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
 * greetfiles -- various configuration setups
-* internal -- These _were_ internal to Venu
+* internal -- These _were_ internal to Venue
 * library  -- packages that were supported (30 years ago)
 * lispusers -- User contributed packages that were only half supported (ditto)
 * loadups   -- has sysouts and other builds plus a few remnants

@@ -113,12 +113,7 @@ you can continue right where you left off.
 File Names and Extensions: Most Interlisp source file names are
 UPPERCASE and Interlisp didn't use file extensions for its source
 files. A .TEDIT or .TXT file is probably documentation
-for the package of same name, at least in the library,
-internal/library, lispusers.
-
-
-
-
+for the package of same name, at least in the library, lispusers.
 
 The current repo has both Lisp sources and compiled .LCOM and .DFASL
 files.
@@ -129,15 +124,15 @@ Each directory should have a README.md, but briefly
 * clos -- early implementation of Common Lisp Object System
 * CLTL2 -- files submitted to bring Medley up to the conformance to "Common Lisp, the Language" 2nd edition. Not enough to conform to the ANSII standard lisp.
 * Dockerfile -- used when building Docker containers with Medley
-* docs -- Documentation files (either PDFs or online help; see medley/wiki)
+* docs -- Documentation files (in TEdit format PDFs or online help; look [here](https://github.com/Interlisp/medley/Documentation)
 * fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
 * greetfiles -- various configuration setups
-* internal -- These _were_ internal to Venue; now internal/library and internal/test
+* internal -- These _were_ internal to Venue
 * library  -- packages that were supported (30 years ago)
 * lispusers -- User contributed packages that were only half supported (ditto)
 * loadups   -- has sysouts and other builds plus a few remnants
 * obsolete  -- files we should remove from the repo
-* rooms -- implementation of ROOMS window / desktop manager
+* rooms -- implementation of ROOMS window/desktop manager
 * run-medley -- script to enhance the options of running medley
 * scripts  -- some scripts for fixing up things
 * sources   -- sources for Interlisp and Common Lisp implementations

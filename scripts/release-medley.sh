@@ -19,26 +19,28 @@ echo making $tag-loadups.tgz
 tar cfz medley/tmp/$tag-loadups.tgz                       \
     medley/loadups/lisp.sysout                            \
     medley/loadups/full.sysout                            \
-    medley/loadups/whereis.hash                           
+    medley/loadups/whereis.hash                           \
+    medley/library/exports.all
 	
 echo making $tag-runtime.tgz
 
 tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
     medley/docs/dinfo                                     \
+    medley/doctools                                       \
     medley/greetfiles                                     \
     medley/rooms                                          \
     medley/run-medley                                     \
     medley/scripts                                        \
     medley/fonts/displayfonts  medley/fonts/altofonts     \
     medley/fonts/xerox medley/fonts/adobe                 \
-    medley/library/                                       \
-    medley/lispusers/                                     \
     medley/fonts/big medley/fonts/other                   \
-    medley/sources/                                       \
-    medley/internal/                                      \
-
-    
+    medley/fonts/postscriptfonts                          \
+    medley/library                                        \
+    medley/lispusers                                      \
+    medley/sources                                        \
+    medley/internal
+   
 cd medley
 
 echo making release

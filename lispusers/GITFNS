@@ -1,11 +1,11 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 5-Mar-2022 19:52:30" {DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>GITFNS.;108 71762  
+(FILECREATED " 7-Mar-2022 08:14:19" {DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>GITFNS.;129 74976  
 
-      :CHANGES-TO (FNS CDGITDIR)
+      :CHANGES-TO (FNS GIT-GET-DIFFERENT-FILES)
 
-      :PREVIOUS-DATE " 5-Mar-2022 12:08:34" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>GITFNS.;107)
+      :PREVIOUS-DATE " 6-Mar-2022 21:51:16" 
+{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>GITFNS.;128)
 
 
 (PRETTYCOMPRINT GITFNSCOMS)
@@ -216,13 +216,15 @@
 
 (DEFCOMMAND cob (BRANCH)
 
-   (* ;; "Switches to BRANCH. Defaults to my current branch, T means my next branch (under wherever we are now ")
+   (* ;; "Switches to BRANCH. T means my current branch, NEW/NEXT means my next branch (under wherever we are now).  Default is to bring up a menu of locally available branches.")
 
     (SELECTQ (U-CASE BRANCH)
-        (NIL (GIT-CHECKOUT (GIT-MY-CURRENT-BRANCH)))
-        ((T NEW) 
+        (T (GIT-CHECKOUT (GIT-MY-CURRENT-BRANCH)))
+        ((NEW NEXT) 
              (GIT-MAKE-BRANCH))
-        (GIT-CHECKOUT BRANCH)))
+        (GIT-CHECKOUT (OR BRANCH (PICK-BRANCH NIL "Branches" 'LOCAL))
+               BRANCH
+               'LOCAL)))
 
 (DEFCOMMAND b? (BRANCH) (GIT-WHICH-BRANCH))
 
@@ -481,7 +483,7 @@
 (GIT-BRANCH-DIFF
   [LAMBDA (BRANCH1 BRANCH2)
 
-    (* ;; "Edited 28-Feb-2022 22:27 by rmk: returns an ALIST that classifies how the files in BRANCH1 and BRANCH2 differ (changed, renamed, added, deleted, copied).")
+    (* ;; "Edited  6-Mar-2022 14:52 by rmk: returns an ALIST that classifies how the files in BRANCH1 and BRANCH2 differ (changed, renamed, added, deleted, copied).")
 
     (* ;; "This returns an ALIST that classifies how the files in BRANCH1 and BRANCH2 differ (changed, renamed, added, deleted, copied).")
 
@@ -513,11 +515,14 @@
                     (M (CL:IF (SETQ POS (STRPOS "	" L))
                            (PUSH CHANGED (SUBSTRING L (ADD1 POS)))
                            (ERROR "CHANGED NOT RECOGNIZED" L)))
-                    (C (IF (SETQ POS (STRPOS "	" L))
-                           THEN [PUSH COPIED (LIST [SUBSTRING L (ADD1 POS)
-                                                          (SUB1 (SETQ POS (STRPOS "	" L (ADD1 POS]
-                                                   (SUBSTRING L (ADD1 POS]
-                         ELSE (HELP "COPY NOT UNDERSTOOD" L)))
+                    (C (IF (AND (EQ (CHARCODE TAB)
+                                    (NTHCHARCODE L 5))
+                                (SETQ POS (STRPOS "	" L 7)))
+                           THEN [PUSH COPIED (LIST (SUBSTRING L 6 (SUB1 POS))
+                                                   (SUBSTRING L (ADD1 POS))
+                                                   (OR (FIXP (SUBATOM L 2 4))
+                                                       (HELP "C without a number" L]
+                         ELSE (HELP "COPY NOT RECOGNIZED" L)))
                     (R (IF (AND (EQ (CHARCODE TAB)
                                     (NTHCHARCODE L 5))
                                 (SETQ POS (STRPOS "	" L 7)))
@@ -550,17 +555,19 @@
 (GIT-GET-FILE
   [LAMBDA (BRANCH GITFILE LOCALFILE NOERROR)
 
-    (* ;; "Edited 24-Feb-2022 19:42 by rmk: the stream, not the name because of the NODIRCORE case.")
+    (* ;; "Edited  6-Mar-2022 17:45 by rmk: the stream, not the name because of the NODIRCORE case.")
 
     (* ;; "Returns the stream, not the name because of the NODIRCORE case.")
 
     (* ;; "If  GITFILE in (remote) BRANCH exists, it is copied to LOCALFILE and LOCALFILE is returned.  If it doesn't exist, return value is NIL if NOERROR, otherwise an ERROR.")
 
+    (CL:WHEN (AND BRANCH (STRPOS "local/" BRANCH 1 NIL T))
+        (SETQ BRANCH (SUBSTRING BRANCH 7)))
     (CL:WITH-OPEN-STREAM (s (CREATE-PROCESS-STREAM (CONCAT (CDGITDIR)
                                                           "git show " BRANCH ":" GITFILE)))
            (SETFILEINFO s 'ENDOFSTREAMOP (FUNCTION NILL))
            (LET (BYTES)
-                (IF (FOR I B C FROM 1 WHILE (SETQ C (NTHCHARCODE "fatal: path '" I))
+                (IF (FOR I B C FROM 1 WHILE (SETQ C (NTHCHARCODE "fatal: " I))
                        DO 
                           (* ;; 
                           "Returns NIL if we run off the fatal string with a match, otherwise T")
@@ -588,7 +595,8 @@
                   ELSE (ERROR "GIT FILE NOT FOUND" GITFILE])
 
 (GIT-FILE-EXISTS?
-  [LAMBDA (BRANCH GITFILE)                                   (* ; "Edited 10-Feb-2022 20:55 by rmk")
+  [LAMBDA (BRANCH GITFILE)                                   (* ; "Edited  6-Mar-2022 19:04 by rmk")
+                                                             (* ; "Edited 10-Feb-2022 20:55 by rmk")
                                                              (* ; "Edited 10-Dec-2021 21:30 by rmk")
 
     (* ;; "T if GITFILE exists on BRANCH.  If s is EOFP, the file exists but is empty")
@@ -596,7 +604,7 @@
     (CL:WITH-OPEN-STREAM (s (CREATE-PROCESS-STREAM (CONCAT (CDGITDIR)
                                                           "git show " BRANCH ":" GITFILE)))
            (SETFILEINFO s 'ENDOFSTREAMOP (FUNCTION NILL))
-           (NOT (FOR I C FROM 1 WHILE (SETQ C (NTHCHARCODE "fatal: path '" I))
+           (NOT (FOR I C FROM 1 WHILE (SETQ C (NTHCHARCODE "fatal: " I))
                    ALWAYS (EQ (BIN s)
                               C])
 
@@ -627,7 +635,10 @@
          (CAR RESULT])
 
 (GIT-FILE-DATE
-  [LAMBDA (GFILE BRANCH)                                     (* ; "Edited  3-Jan-2022 19:43 by rmk")
+  [LAMBDA (GFILE BRANCH)                                     (* ; "Edited  6-Mar-2022 17:41 by rmk")
+                                                             (* ; "Edited  3-Jan-2022 19:43 by rmk")
+    (CL:WHEN (AND NIL BRANCH (STRPOS "local/" BRANCH 1 NIL T))
+        (SETQ BRANCH (SUBSTRING BRANCH 7)))
     (LET [(DATE (CAR (GIT-COMMAND (CONCAT "git log -1 --pretty=%"format:%%cD%" "
                                          (CL:IF BRANCH
                                              (CONCAT BRANCH " -- ")
@@ -692,46 +703,46 @@
            ELSE (HELP "Unexpected git result" RESULT])
 
 (GIT-BRANCHES
-  [LAMBDA (WHERE)                                            (* ; "Edited 24-Feb-2022 21:20 by rmk")
+  [LAMBDA (WHERE)                                            (* ; "Edited  6-Mar-2022 08:54 by rmk")
+                                                             (* ; "Edited 24-Feb-2022 21:20 by rmk")
                                                              (* ; "Edited  8-Dec-2021 08:43 by rmk")
                                                             (* ; "Edited 17-Nov-2021 18:20 by rmk:")
                                                             (* ; "Edited 16-Nov-2021 09:21 by rmk:")
 
-    (* ;; 
-   "Strips of the %"* %" that indicates the current branch and the 2-space padding on other branches")
+    (* ;; "Strips of the %"* %" that indicates the current branch and the 2-space padding on other branches.  Packs local/ on to local branches")
 
-    (LET [(LOCAL (CL:WHEN (MEMB (U-CASE WHERE)
+    (LET [[LOCAL (CL:WHEN (MEMB (U-CASE WHERE)
                                 '(NIL ALL LOCAL))
-                        (GIT-COMMAND "git branch")))
+                     (FOR B IN (GIT-COMMAND "git branch") COLLECT (PACK* "local/" (SUBATOM B 3))))]
           (REMOTE (CL:WHEN (MEMB (U-CASE WHERE)
                                  '(NIL ALL REMOTE T))
-                         (GIT-COMMAND "git branch -r"]
-         (SORT (FOR B IN (APPEND LOCAL REMOTE) COLLECT (SUBATOM B 3])
+                      (FOR B IN (GIT-COMMAND "git branch -r") COLLECT (SUBATOM B 3)))]
+         (SORT (APPEND LOCAL REMOTE])
 
 (GIT-BRANCH-EXISTS?
-  [LAMBDA (BRANCH WHERE NOERROR)                             (* ; "Edited 16-Dec-2021 08:50 by rmk")
-                                                             (* ; "Edited  8-Dec-2021 08:44 by rmk")
-                                                             (* ; "Edited 19-Nov-2021 15:13 by rmk:")
-                                                             (* ; "Edited 17-Nov-2021 18:24 by rmk:")
+  [LAMBDA (BRANCH WHERE NOERROR)                             (* ; "Edited  6-Mar-2022 15:28 by rmk")
+                                                             (* ; "Edited 16-Dec-2021 08:50 by rmk")
+                                                             (* ; "Edited  8-Dec-2021 08:44 by rmk")
+                                                            (* ; "Edited 19-Nov-2021 15:13 by rmk:")
+                                                            (* ; "Edited 17-Nov-2021 18:24 by rmk:")
 
     (* ;; "Returns the canonical name of the branch (xxx or origin/xxx) depending on whether BRANCH is local/xxx or origin/xxx")
-                                                             (* ; "Edited 16-Nov-2021 09:25 by rmk:")
-    (IF (STRPOS "origin/" BRANCH)
-        THEN (SETQ WHERE 'REMOTE)
-      ELSEIF (STRPOS "local/" BRANCH 1 NIL T)
-        THEN (SETQ WHERE 'LOCAL)
-             (SETQ BRANCH (SUBATOM BRANCH 7)))
-    (IF (CAR (MEMB (MKATOM BRANCH)
-                   (GIT-BRANCHES WHERE)))
+                                                            (* ; "Edited 16-Nov-2021 09:25 by rmk:")
+    (IF [CAR (MEMB (MKATOM BRANCH)
+                   (GIT-BRANCHES (IF (STRPOS "origin/" BRANCH 1 NIL T)
+                                     THEN 'REMOTE
+                                   ELSEIF (STRPOS "local/" BRANCH 1 NIL T)
+                                     THEN 'LOCAL]
       ELSEIF (NOT NOERROR)
         THEN (ERROR "Unknown branch" BRANCH])
 
 (PICK-BRANCH
-  [LAMBDA (BRANCHES TITLE)                                   (* ; "Edited 25-Feb-2022 09:02 by rmk")
+  [LAMBDA (BRANCHES TITLE WHERE)                             (* ; "Edited  6-Mar-2022 08:55 by rmk")
+                                                             (* ; "Edited 25-Feb-2022 09:02 by rmk")
     (MENU (CREATE MENU
                  TITLE _ (OR TITLE 'Branches)
                  ITEMS _ (OR (LISTP BRANCHES)
-                             (GIT-BRANCHES BRANCHES))
+                             (GIT-BRANCHES WHERE))
                  MENUFONT _ DEFAULTFONT])
 
 (GIT-PULL-REQUESTS
@@ -793,7 +804,8 @@
                      0])
 
 (GIT-MY-BRANCHES
-  [LAMBDA NIL                                                (* ; "Edited 19-Jan-2022 13:20 by rmk")
+  [LAMBDA NIL                                                (* ; "Edited  6-Mar-2022 21:50 by rmk")
+                                                             (* ; "Edited 19-Jan-2022 13:20 by rmk")
                                                              (* ; "Edited  8-Jan-2022 09:53 by rmk")
                                                              (* ; "Edited 12-Dec-2021 11:46 by rmk")
 
@@ -803,7 +815,7 @@
 
     (* ;; "The return list is sorted so that lower n's come before later n's.  The last element is my current branch")
 
-    (FOR B (INITS _ (GIT-INITIALS))
+    (FOR B (INITS _ (CONCAT "local/" (GIT-INITIALS)))
          INC IN (GIT-BRANCHES) FIRST (SETQ INC (NCHARS INITS))
        WHEN (STRPOS INITS B 1 NIL T NIL UPPERCASEARRAY) COLLECT B
        FINALLY (RETURN (SORT $$VAL (FUNCTION (LAMBDA (A B)
@@ -823,10 +835,11 @@
 (DEFINEQ
 
 (GIT-ADD-WORKTREE
-  [LAMBDA (BRANCH REMOTEONLY)                                (* ; "Edited 12-Dec-2021 11:57 by rmk")
-                                                             (* ; "Edited 25-Nov-2021 08:45 by rmk:")
-                                                             (* ; "Edited 19-Nov-2021 19:01 by rmk:")
-                                                             (* ; "Edited 17-Nov-2021 18:25 by rmk:")
+  [LAMBDA (BRANCH REMOTEONLY)                                (* ; "Edited  6-Mar-2022 15:51 by rmk")
+                                                             (* ; "Edited 12-Dec-2021 11:57 by rmk")
+                                                            (* ; "Edited 25-Nov-2021 08:45 by rmk:")
+                                                            (* ; "Edited 19-Nov-2021 19:01 by rmk:")
+                                                            (* ; "Edited 17-Nov-2021 18:25 by rmk:")
     (SETQ BRANCH (GITORIGIN BRANCH (NOT REMOTEONLY)))
     (CL:UNLESS (OR (GIT-BRANCH-EXISTS? BRANCH NIL T)
                    (GIT-BRANCH-EXISTS? BRANCH T))
@@ -894,12 +907,14 @@
 (DEFINEQ
 
 (GIT-GET-DIFFERENT-FILES
-  [LAMBDA (BRANCH1 BRANCH2 DIR1 DIR2)                        (* ; "Edited 24-Feb-2022 23:57 by rmk")
+  [LAMBDA (BRANCH1 BRANCH2 DIR1 DIR2)                        (* ; "Edited  7-Mar-2022 08:14 by rmk")
+                                                             (* ; "Edited 24-Feb-2022 23:57 by rmk")
                                                              (* ; "Edited 23-Feb-2022 18:47 by rmk")
                                                              (* ; "Edited 12-Feb-2022 18:35 by rmk")
                                                              (* ; "Edited 23-Jan-2022 21:45 by rmk")
                                                              (* ; "Edited 11-Jan-2022 11:03 by rmk")
                                                              (* ; "Edited  5-Jan-2022 08:01 by rmk")
+    (DECLARE (USEDFREE FROMGITN))
 
     (* ;; "Ask git for the files that differ between the branches, copy those files down to local DIR1 and DIR2, return the directories and a list of (dir1-file1 file2) mappings for renamed and copied files.")
 
@@ -930,49 +945,66 @@
              (SETQ DIR2 (CONCAT FROMGIT "<" (UNSLASHIT BRANCH2)
                                ">")))
          (FOR DLIST IN DIFFS
-            DO
-            (SELECTQ (CAR DLIST)
-                (ADDED                                       (* ; 
+            DO (SELECTQ (CAR DLIST)
+                   (ADDED                                    (* ; 
                                                   "Shouldn't exist in MERGE, should exist in BRANCH1")
-                       (FOR GFILE IN (CDR DLIST) DO (GIT-GET-FILE BRANCH1 GFILE (CONCAT DIR1 GFILE))))
-                (DELETED                                     (* ; 
-                                                  "Shouldn't exist in BRANCH1, should exist in MERGE")
-                         (FOR GFILE IN (CDR DLIST) DO (GIT-GET-FILE MERGE GFILE (CONCAT DIR2 GFILE))))
-                (CHANGED                                     (* ; "Should exist in both branches")
-                         (FOR GFILE IN (CDR DLIST) DO (GIT-GET-FILE BRANCH1 GFILE (CONCAT DIR1 GFILE)
-                                                             )
-                                                      (GIT-GET-FILE MERGE GFILE (CONCAT DIR2 GFILE))))
-                (RENAMED 
-                         (* ;; "These entries are from-to filename pairs.  If (CADDR) is 100, only need to fetch one, mappings is returned so the connection can be reestablished higher up.  If renamed, it has disappared from the first location and appeared in the second.  The destination is in the CADR, the CAR file doesn't exist.  But we store the files in DIR1 because they are coming from branch1")
+                          (FOR GFILE IN (CDR DLIST) DO (GIT-GET-FILE BRANCH1 GFILE (CONCAT DIR1 GFILE
+                                                                                          ))))
+                   (DELETED 
+                            (* ;; "Shouldn't exist in BRANCH1, should exist in MERGE.  But maybe git is just confused in marking a file that exists in the wrong place as a delete instead of an add, or maybe it may think of a file that doesn't exist at all as having been deleted.  Try for both, but don't cause an error.")
 
-                         [FOR GFILE IN (CDR DLIST)
-                            DO (IF (EQ (CADDR GFILE)
-                                       100)
-                                   THEN (PUSH MAPPINGS (LIST [FULLNAME (GIT-GET-FILE
-                                                                        BRANCH1
-                                                                        (CADR GFILE)
-                                                                        (CONCAT DIR1 (CADR GFILE]
-                                                             (CONCAT DIR2 (CAR GFILE))
-                                                             'R))
-                                 ELSE                        (* ; 
-                                                             "Deleted from MERGE, added to BRANCH1")
-                                      (GIT-GET-FILE MERGE (CAR GFILE)
-                                             (CONCAT DIR1 (CAR GFILE)))
-                                      (GIT-GET-FILE BRANCH1 (CADR GFILE)
-                                             (CONCAT DIR2 (CADR GFILE])
-                (COPIED 
-                        (* ;; "Same issue as for renaming")
+                            (FOR GFILE IN (CDR DLIST) DO (OR (GIT-GET-FILE MERGE GFILE
+                                                                    (CONCAT DIR2 GFILE)
+                                                                    T)
+                                                             (GIT-GET-FILE BRANCH1 GFILE
+                                                                    (CONCAT DIR1 GFILE)
+                                                                    T))))
+                   (CHANGED                                  (* ; "Should exist in both branches")
+                            (FOR GFILE IN (CDR DLIST) DO (GIT-GET-FILE BRANCH1 GFILE (CONCAT DIR1 
+                                                                                            GFILE))
+                                                         (GIT-GET-FILE MERGE GFILE (CONCAT DIR2 GFILE
+                                                                                          ))))
+                   ((RENAMED COPIED) 
 
-                        [FOR GFILE IN (CDR DLIST)
-                           DO (PUSH MAPPINGS (LIST [FULLNAME (GIT-GET-FILE BRANCH1 (CADR GFILE)
-                                                                    (CONCAT DIR1 (CADR GFILE]
-                                                   (CONCAT DIR2 (CAR GFILE))
-                                                   'C])
-                (HELP "UNKNOWN GIT-DIFF TAG" DLIST)))
+                                 (* ;; "These entries are from-to filename pairs.  If (CADDR) is 100, only need to fetch one, because it presumably has disappeared in MERGE and reappeared in BRANCH1. MAPPINGS is returned so the connection can be reestablished higher up.  ")
+
+                        
+                        (* ;; "If renamed and then changed, for now treat as unrelated adds and deletes:  put both files in the fromgit directory.  Perhaps the mapping should still figure out how to relate them.")
+
+                        (* ;; "For copied files, presumably 2 files are exactly the same.  But we hope we can show them on the same line, by virtue of the mapping.")
+
+                        (FOR GFILE F1 IN (CDR DLIST)
+                           DO 
+                              (* ;; "F1 is the file in branch 1, if any, F2 is in branch 2")
+
+                              [SETQ F1 (GIT-GET-FILE BRANCH1 (CADR GFILE)
+                                              (CONCAT DIR1 (CADR GFILE]
+                              (IF (EQ (CADDR GFILE)
+                                      100)
+                                  THEN 
+
+                                 (* ;; "A little tricky to figure out what corresponds to the real file in the mapping, which directory it belongs to.  Maybe the first one should always be one that exists, the second may just be a useful name.  But we have to know whether to match against INFO1 or INFO2")
+
+                                       (PUSH MAPPINGS (LIST (FULLNAME F1)
+                                                            (SLASHIT (U-CASE (CONCAT DIR2
+                                                                                    (CAR GFILE)))
+                                                                   T)
+                                                            (NTHCHAR (CAR DLIST)
+                                                                   1)
+                                                            100))
+                                ELSE 
+                                     (* ;; 
+                                    "If not a perfect match, then the directory should figure it out")
+
+                                     (GIT-GET-FILE MERGE (CAR GFILE)
+                                            (CONCAT DIR2 (CAR GFILE))
+                                            T))))
+                   (HELP "UNKNOWN GIT-DIFF TAG" DLIST)))
          (LIST DIR1 DIR2 MAPPINGS))])
 
 (GIT-COMPARE-BRANCHES
-  [LAMBDA (BRANCH1 BRANCH2 LOCAL)                            (* ; "Edited 22-Feb-2022 22:53 by rmk")
+  [LAMBDA (BRANCH1 BRANCH2 LOCAL)                            (* ; "Edited  6-Mar-2022 19:52 by rmk")
+                                                             (* ; "Edited 22-Feb-2022 22:53 by rmk")
                                                              (* ; "Edited 19-Feb-2022 10:21 by rmk")
                                                              (* ; "Edited 13-Feb-2022 21:27 by rmk")
                                                              (* ; "Edited  2-Feb-2022 08:46 by rmk")
@@ -1028,7 +1060,9 @@
                                                    (REPLACE (CDENTRY INFO2) OF CDE
                                                       WITH (CREATE CDINFO
                                                                   FULLNAME _ (CADR MAP)
-                                                                  DATE _ ""
+                                                                  DATE _ (CL:IF (EQ 'R (CADDR MAP))
+                                                                             " <-"
+                                                                             " ==")
                                                                   LENGTH _ ""
                                                                   AUTHOR _ ""
                                                                   TYPE _ ""
@@ -1056,7 +1090,7 @@
   [LAMBDA (SUBDIRS SELECT EXCLUDEDFILES TEDIT FIXDIRECTORYDATES UPDATE HOST1 HOST2)
 
     (* ;; 
-    "Edited 26-Feb-2022 11:58 by rmk: my medley subdirectories with the current local git branch.")
+    "Edited  6-Mar-2022 21:51 by rmk: my medley subdirectories with the current local git branch.")
 
     (* ;; "Compares my medley subdirectories with the current local git branch.")
 
@@ -1066,7 +1100,7 @@
         (SETQ SUBDIRS (CAR SUBDIRS)))
     (SETQ SUBDIRS (L-CASE SUBDIRS))
     (PRINTOUT T "Comparing " (SELECTQ SUBDIRS
-                                 (nil (SETQ SUBDIRS '(sources library lispusers)))
+                                 (nil (SETQ SUBDIRS '(scripts sources library lispusers)))
                                  (all (SETQ SUBDIRS (ALLSUBDIRS HOST1 HOST2))
                                       "ALL subdirectories")
                                  SUBDIRS)
@@ -1347,7 +1381,8 @@
            " ; "])
 
 (GIT-COMMAND
-  [LAMBDA (CMD ALL NOERROR)                                  (* ; "Edited 25-Feb-2022 09:25 by rmk")
+  [LAMBDA (CMD ALL NOERROR)                                  (* ; "Edited  6-Mar-2022 15:53 by rmk")
+                                                             (* ; "Edited 25-Feb-2022 09:25 by rmk")
                                                              (* ; "Edited  3-Jan-2022 10:47 by rmk")
                                                             (* ; "Edited 24-Nov-2021 16:44 by rmk:")
                                                             (* ; "Edited 16-Nov-2021 09:07 by rmk:")
@@ -1372,9 +1407,9 @@
                           (OR ALL (NOT (STRPOS ".git" LINE 1 NIL T] COLLECT LINE
               FINALLY (CL:UNLESS NOERROR
                           (CL:WHEN (OR (EQ 1 (STRPOS "fatal" (CAR $$VAL)
-                                                    1 NIL NIL T))
+                                                    1 NIL T))
                                        (EQ 1 (STRPOS "gh: Command not found" (CAR $$VAL)
-                                                    1 NIL NIL T)))
+                                                    1 NIL T)))
                               (ERROR (CONCAT "Git command %"" CMD "%" failed")
                                      (CAR $$VAL))))])
 
@@ -1402,22 +1437,22 @@
         (ERROR "INITIALS is not set"])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4679 5525 (GIT-CLONEP 4689 . 5523)) (7851 9831 (ALLSUBDIRS 7861 . 9029) (MEDLEYSUBDIRS 
-9031 . 9470) (GITSUBDIRS 9472 . 9829)) (9832 15306 (TOGIT 9842 . 11990) (FROMGIT 11992 . 12970) (
-GIT-DELETE-FILE 12972 . 13866) (MYMEDLEY-DELETE-FILES 13868 . 15304)) (15307 17456 (MYMEDLEYSUBDIR 
-15317 . 15763) (GITSUBDIR 15765 . 16088) (STRIPDIR 16090 . 16461) (STRIPHOST 16463 . 16699) (STRIPNAME
- 16701 . 17454)) (17457 18985 (GFILE4MFILE 17467 . 17713) (MFILE4GFILE 17715 . 18057) (
-GIT-REPO-FILENAME 18059 . 18983)) (19034 29384 (GIT-COMMIT 19044 . 19622) (GIT-PUSH 19624 . 20180) (
-GIT-PULL 20182 . 20588) (GIT-BRANCH-DIFF 20590 . 24388) (GIT-APPROVAL 24390 . 24591) (GIT-GET-FILE 
-24593 . 26796) (GIT-FILE-EXISTS? 26798 . 27522) (GIT-REMOTE-UPDATE 27524 . 28566) (GIT-REMOTE-ADD 
-28568 . 28875) (GIT-FILE-DATE 28877 . 29382)) (29429 35048 (GIT-CHECKOUT 29439 . 29680) (
-GIT-WHICH-BRANCH 29682 . 30266) (GIT-MAKE-BRANCH 30268 . 31759) (GIT-BRANCHES 31761 . 32739) (
-GIT-BRANCH-EXISTS? 32741 . 33802) (PICK-BRANCH 33804 . 34148) (GIT-PULL-REQUESTS 34150 . 35046)) (
-35078 37783 (GIT-MY-CURRENT-BRANCH 35088 . 35261) (GIT-MY-BRANCHP 35263 . 36182) (GIT-MY-NEXT-BRANCH 
-36184 . 36625) (GIT-MY-BRANCHES 36627 . 37781)) (37829 41599 (GIT-ADD-WORKTREE 37839 . 39599) (
-GIT-REMOVE-WORKTREE 39601 . 40179) (GIT-LIST-WORKTREES 40181 . 40985) (WORKTREEDIR 40987 . 41597)) (
-41647 68101 (GIT-GET-DIFFERENT-FILES 41657 . 46747) (GIT-COMPARE-BRANCHES 46749 . 52241) (
-GIT-COMPARE-WITH-MYMEDLEY 52243 . 55963) (GIT-COMPARE-WORKTREE 55965 . 59442) (GITCDOBJBUTTONFN 59444
- . 64448) (GIT-CD-LABELFN 64450 . 65532) (GIT-CD-MENUFN 65534 . 68099)) (68171 71739 (CDGITDIR 68181
- . 68877) (GIT-COMMAND 68879 . 70852) (GITORIGIN 70854 . 71431) (GIT-INITIALS 71433 . 71737)))))
+  (FILEMAP (NIL (4694 5540 (GIT-CLONEP 4704 . 5538)) (8022 10002 (ALLSUBDIRS 8032 . 9200) (MEDLEYSUBDIRS
+ 9202 . 9641) (GITSUBDIRS 9643 . 10000)) (10003 15477 (TOGIT 10013 . 12161) (FROMGIT 12163 . 13141) (
+GIT-DELETE-FILE 13143 . 14037) (MYMEDLEY-DELETE-FILES 14039 . 15475)) (15478 17627 (MYMEDLEYSUBDIR 
+15488 . 15934) (GITSUBDIR 15936 . 16259) (STRIPDIR 16261 . 16632) (STRIPHOST 16634 . 16870) (STRIPNAME
+ 16872 . 17625)) (17628 19156 (GFILE4MFILE 17638 . 17884) (MFILE4GFILE 17886 . 18228) (
+GIT-REPO-FILENAME 18230 . 19154)) (19205 30157 (GIT-COMMIT 19215 . 19793) (GIT-PUSH 19795 . 20351) (
+GIT-PULL 20353 . 20759) (GIT-BRANCH-DIFF 20761 . 24741) (GIT-APPROVAL 24743 . 24944) (GIT-GET-FILE 
+24946 . 27246) (GIT-FILE-EXISTS? 27248 . 28075) (GIT-REMOTE-UPDATE 28077 . 29119) (GIT-REMOTE-ADD 
+29121 . 29428) (GIT-FILE-DATE 29430 . 30155)) (30202 36259 (GIT-CHECKOUT 30212 . 30453) (
+GIT-WHICH-BRANCH 30455 . 31039) (GIT-MAKE-BRANCH 31041 . 32532) (GIT-BRANCHES 32534 . 33708) (
+GIT-BRANCH-EXISTS? 33710 . 34907) (PICK-BRANCH 34909 . 35359) (GIT-PULL-REQUESTS 35361 . 36257)) (
+36289 39121 (GIT-MY-CURRENT-BRANCH 36299 . 36472) (GIT-MY-BRANCHP 36474 . 37393) (GIT-MY-NEXT-BRANCH 
+37395 . 37836) (GIT-MY-BRANCHES 37838 . 39119)) (39167 43059 (GIT-ADD-WORKTREE 39177 . 41059) (
+GIT-REMOVE-WORKTREE 41061 . 41639) (GIT-LIST-WORKTREES 41641 . 42445) (WORKTREEDIR 42447 . 43057)) (
+43107 71214 (GIT-GET-DIFFERENT-FILES 43117 . 49552) (GIT-COMPARE-BRANCHES 49554 . 55346) (
+GIT-COMPARE-WITH-MYMEDLEY 55348 . 59076) (GIT-COMPARE-WORKTREE 59078 . 62555) (GITCDOBJBUTTONFN 62557
+ . 67561) (GIT-CD-LABELFN 67563 . 68645) (GIT-CD-MENUFN 68647 . 71212)) (71284 74953 (CDGITDIR 71294
+ . 71990) (GIT-COMMAND 71992 . 74066) (GITORIGIN 74068 . 74645) (GIT-INITIALS 74647 . 74951)))))
 STOP

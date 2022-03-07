@@ -26,8 +26,9 @@ echo making $tag-runtime.tgz
 
 tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
+    --exclude exports.all                                 \
     medley/docs/dinfo                                     \
-    medley/docs/doctools                                  \
+    medley/doctools                                       \
     medley/greetfiles                                     \
     medley/rooms                                          \
     medley/run-medley                                     \
@@ -40,7 +41,6 @@ tar cfz medley/tmp/$tag-runtime.tgz                       \
     medley/sources                                        \
     medley/internal
 
-    
 cd medley
 
 echo making release

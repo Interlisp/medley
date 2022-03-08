@@ -11,8 +11,8 @@ ARG DOCKER_NAMESPACE=interlisp
 
 FROM ${DOCKER_NAMESPACE}/maiko:latest
 
-# Add tightvnc server to the image
-RUN apt-get update && apt-get install -y tightvncserver
+# Add tightvnc server and xclip to the image
+RUN apt-get update && apt-get install -y tightvncserver && apt-get install -y xclip
 
 #  Handle ARGs, ENV variables, and LABELs
 ARG BUILD_DATE=unknown

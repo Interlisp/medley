@@ -1,11 +1,10 @@
-This directory has:
+See [Documentation links](https://github.com/Interlisp/medley/wiki/Documentation)
+a complete list of available documentation. Much of the documentation still
+needs review and updating.
+
+This directory has source (.TEDIT) for some documents that are found elsewhere.
+
 
 * dinfo  -- files for HelpSys man command Interlisp Reference Manual
-* Documentation Tools -- should be moved into Library
-
- * Various conversions of Medley legacy documentation
- 
- Needs to be cleaned up. Putting PDF files in the repo doesn't seem right; 
- we can make PS and PDF files as part of building a loadup
  
  

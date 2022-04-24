@@ -37,12 +37,12 @@ From a shell/terminal window:
 Unpack the medley loadups file
 
 *  `cd ` ~parent~
-*  `tar -xvfz medley-`YYMMDD`-loadups.tgz`
+*  `tar xvzf medley-`YYMMDD`-loadups.tgz`
 
 2. Unpack the medley runtime OR clone the Medley repo
    (the "medley runtime" is just a subset of the whole repo)
    
-* `tar -xvfz medley-`YYMMDD`-runtime.tgz` 
+* `tar xvzf medley-`YYMMDD`-runtime.tgz` 
 
    OR
    ```
@@ -52,7 +52,7 @@ Unpack the medley loadups file
 3. Unpack the maiko file for your operating system and CPU type, e.g.,
 
    ```
-   tar -xvfz maiko-210823.linux.x86_64.tgz
+   tar xvzf maiko-210823.linux.x86_64.tgz
    ```
 
 3. This should leave you with two directories, `medley` and `maiko`.

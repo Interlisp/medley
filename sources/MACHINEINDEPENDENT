@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "19-May-2022 16:22:57" 
-{DSK}<Users>kaplan>Local>medley3.5>working-medley>sources>MACHINEINDEPENDENT.;27 113751 
+(FILECREATED "22-May-2022 13:19:56" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>sources>MACHINEINDEPENDENT.;34 117192 
 
-      :CHANGES-TO (FNS DOFILESLOAD)
+      :CHANGES-TO (FNS LISPFILETYPE LISPSOURCEFILEP)
+                  (VARS MACHINEINDEPENDENTCOMS)
 
-      :PREVIOUS-DATE "19-May-2022 16:19:10" 
-{DSK}<Users>kaplan>Local>medley3.5>working-medley>sources>MACHINEINDEPENDENT.;26)
+      :PREVIOUS-DATE "19-May-2022 16:22:57" 
+{DSK}<Users>kaplan>Local>medley3.5>working-medley>sources>MACHINEINDEPENDENT.;27)
 
 
 (* ; "
@@ -48,7 +49,7 @@ with the terms of said license.
                      "Functions for retrieving and remembering FILEMAPs and file reader environments")
               (FNS FILEMAP \PARSE-FILE-HEADER GET-ENVIRONMENT-AND-FILEMAP 
                    LOOKUP-ENVIRONMENT-AND-FILEMAP GET-FILEMAP-FROM-FILECREATED \FILEMAP-HASHOVERFLOW
-                   FLUSHFILEMAPS LISPSOURCEFILEP GETFILEMAP PUTFILEMAP UPDATEFILEMAP)
+                   FLUSHFILEMAPS LISPSOURCEFILEP LISPFILETYPE GETFILEMAP PUTFILEMAP UPDATEFILEMAP)
               [INITVARS (*FILEMAP-LIMIT* 20)
                      (*FILEMAP-VERSIONS* 2)
                      (*FILEMAP-HASH* (HASHARRAY *FILEMAP-LIMIT* (FUNCTION \FILEMAP-HASHOVERFLOW)
@@ -1647,24 +1648,80 @@ WRITEFILE OF ")
     ROOTNAME])
 
 (LISPSOURCEFILEP
-  [LAMBDA (FILE)                                        (* ; "Edited  9-Jul-2021 22:12 by rmk:")
+  [LAMBDA (FILE)
 
-(* ;;; "If the first few characters of FILE `look like' those output by MAKEFILE then return the alleged address in the file of its FILEMAP expression.")
+    (* ;; "Edited 22-May-2022 09:49 by rmk: If FILE is a stream but not open for input, open it")
+
+    (* ;; "Edited  9-Jul-2021 22:12 by rmk:")
+
+(* ;;; "If the first few characters of FILE `look like' those output by MAKEFILE then return the alleged address in the file of its FILEMAP expression.")
 
     (RESETLST
-        (CL:UNLESS (STREAMP FILE)
+        (CL:UNLESS (AND (STREAMP FILE)
+                        (GETSTREAM FILE 'INPUT T))
             [RESETSAVE NIL (LIST 'CLOSEF (SETQ FILE (OPENSTREAM FILE 'INPUT])
         (CL:WHEN (RANDACCESSP FILE)
             (LET ((HERE (GETFILEPTR FILE)))
                  (CL:MULTIPLE-VALUE-BIND (ENV MAP)
                         [\PARSE-FILE-HEADER FILE (FUNCTION (LAMBDA (STREAM)
-                                                             (* ; 
-                                               "Pointed now right after the FILECREATED expression")
-                                                                 (CAR (NLSETQ (SKREAD STREAM)
-                                                                             (SKREAD STREAM)
-                                                                             (FIXP (READ STREAM]
+                                                             (* ; 
+                                                 "Pointed now right after the FILECREATED expression")
+                                                             (CAR (NLSETQ (SKREAD STREAM)
+                                                                         (SKREAD STREAM)
+                                                                         (FIXP (READ STREAM]
                         (SETFILEPTR FILE HERE)
                         (CL:VALUES ENV MAP)))))])
+
+(LISPFILETYPE
+  [LAMBDA (FILE)                                             (* ; "Edited 22-May-2022 13:18 by rmk")
+
+    (* ;; "If FILE is a Lisp file, returns values TYPE FILEDATE SOURCEDATE, where TYPE is SOURCE, COMPILED, or NIL, DATE is the filedate of FILE and SOURCEDATE is the date of the source file for a compiled file (if it can be determined).")
+
+    (* ;; "Could be extended to return a subtypes (MANAGED/UNMANAGED for source files, LCOM or DFASL for compiled.")
+
+    (* ;; "If not RANDACCESSP, this depends on the fact that another stream can be opened on the file. (MULTIPLE-STREAM-PER-FILE.ALLOWED ?)")
+
+    (CL:WHEN FILE
+        (LET (TYPE DATE SDATE)                               (* ; 
+                                                             "VALUES has to be outside of the NLSETQ")
+             [NLSETQ (RESETLST
+                         [LET (STREAM)
+                              [COND
+                                 [(AND (SETQ STREAM (\GETSTREAM FILE 'INPUT T))
+                                       (RANDACCESSP STREAM))
+                                  (RESETSAVE NIL `(SETFILEPTR ,STREAM ,(GETFILEPTR STREAM]
+                                 (T (RESETSAVE NIL `(CLOSEF ,(SETQ STREAM (OPENSTREAM FILE
+                                                                                 'INPUT]
+                              (SETFILEPTR STREAM 0)
+                              (SETQ TYPE
+                               (COND
+                                  ((SETQ DATE (FASL-FILEDATE STREAM T))
+
+                                   (* ;; " Aha, a Dfasl file")
+
+                                 (* ;; " Having decided it's a DFASL, FASL-FILEDATE T returned the compiled date, calling again with NIL returns the source date. Better would be for FASL-FILEDATE to return both in a single call, as a multiple value.")
+
+                                   (SETFILEPTR STREAM 0)
+                                   (SETQ SDATE (FASL-FILEDATE STREAM NIL))
+                                   'COMPILED)
+                                  (T                         (* ; "Any other filetype")
+                                     (SETFILEPTR STREAM 0)   (* ; "Reset: don't know what FASL did")
+                                     (CL:MULTIPLE-VALUE-BIND
+                                      (ENV FORM)
+                                      (\PARSE-FILE-HEADER STREAM 'RETURN)
+                                      (CL:WHEN (EQ (CAR (LISTP FORM))
+                                                   'FILECREATED)
+
+                                          (* ;; "Compiled if 2 dates, otherwise source")
+
+                                          [SETQ DATE (CAR (LISTP (CDR FORM]
+                                          (SETQ FORM (WITH-READER-ENVIRONMENT ENV (READ STREAM)))
+                                          (IF (EQ (CAR (LISTP FORM))
+                                                  'FILECREATED)
+                                              THEN [SETQ SDATE (CAR (LISTP (CDR FORM]
+                                                   'COMPILED
+                                            ELSE 'SOURCE))])]
+             (CL:VALUES TYPE DATE SDATE)))])
 
 (GETFILEMAP
   [LAMBDA (STREAM FL)                                    (* bvm%: "27-Aug-86 15:48")
@@ -2397,23 +2454,23 @@ This has little hope of working any more.")
 (PUTPROPS MACHINEINDEPENDENT COPYRIGHT ("Venue & Xerox Corporation" T 1983 1984 1985 1986 1987 1988 
 1989 1990 1991 2021 2022))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (12850 26275 (LOAD? 12860 . 14711) (FILESLOAD 14713 . 15002) (DOFILESLOAD 15004 . 22630)
- (FINDFILE-WITH-EXTENSIONS 22632 . 25831) (READ-FILECREATED 25833 . 26273)) (26392 31713 (DMPHASH 
-26402 . 27996) (HASHOVERFLOW 27998 . 31711)) (32469 63806 (BKBUFS 32479 . 33598) (CHANGENAME 33600 . 
-33861) (CHNGNM 33863 . 35711) (CLBUFS 35713 . 36986) (DEFINE 36988 . 37712) (FNS.PUTDEF 37714 . 41129)
- (EQMEMB 41131 . 41313) (EQUALN 41315 . 42144) (FNCHECK 42146 . 44153) (FNTYP1 44155 . 44252) (LCSKIP 
-44254 . 45098) (MAPRINT 45100 . 46046) (MKLIST 46048 . 46198) (NAMEFIELD 46200 . 47725) (NLIST 47727
- . 48062) (PRINTBELLS 48064 . 48190) (PROMPTCHAR 48192 . 50082) (RAISEP 50084 . 50345) (READFILE 50347
- . 52691) (READLINE 52693 . 58133) (REMPROPLIST 58135 . 59023) (RESETBUFS 59025 . 59475) (TAB 59477 . 
-60073) (UNSAVED1 60075 . 61180) (WRITEFILE 61182 . 62924) (CLOSE-AND-MAYBE-DELETE 62926 . 63270) (
-UNSAFE.TO.MODIFY 63272 . 63804)) (66130 69074 (FILEDATE 66140 . 69072)) (69304 93043 (FILEMAP 69314 . 
-69784) (\PARSE-FILE-HEADER 69786 . 73601) (GET-ENVIRONMENT-AND-FILEMAP 73603 . 75830) (
-LOOKUP-ENVIRONMENT-AND-FILEMAP 75832 . 78023) (GET-FILEMAP-FROM-FILECREATED 78025 . 78849) (
-\FILEMAP-HASHOVERFLOW 78851 . 83515) (FLUSHFILEMAPS 83517 . 84140) (LISPSOURCEFILEP 84142 . 85321) (
-GETFILEMAP 85323 . 85742) (PUTFILEMAP 85744 . 87935) (UPDATEFILEMAP 87937 . 93041)) (93709 97295 (
-LVLPRINT 93719 . 93892) (LVLPRIN1 93894 . 94076) (LVLPRIN2 94078 . 94310) (LVLPRIN 94312 . 95326) (
-LVLPRIN0 95328 . 97293)) (97329 102246 (FLUSHRIGHT 97339 . 98154) (PRINTPARA 98156 . 99254) (
-PRINTPARA1 99256 . 102244)) (102282 104567 (SUBLIS 102292 . 102900) (SUBPAIR 102902 . 104130) (DSUBLIS
- 104132 . 104565)) (104590 105190 (CONSTANTOK 104600 . 105188)) (106943 107648 (NLAMBDA.ARGS 106953 . 
-107646)))))
+  (FILEMAP (NIL (12928 26353 (LOAD? 12938 . 14789) (FILESLOAD 14791 . 15080) (DOFILESLOAD 15082 . 22708)
+ (FINDFILE-WITH-EXTENSIONS 22710 . 25909) (READ-FILECREATED 25911 . 26351)) (26470 31791 (DMPHASH 
+26480 . 28074) (HASHOVERFLOW 28076 . 31789)) (32547 63884 (BKBUFS 32557 . 33676) (CHANGENAME 33678 . 
+33939) (CHNGNM 33941 . 35789) (CLBUFS 35791 . 37064) (DEFINE 37066 . 37790) (FNS.PUTDEF 37792 . 41207)
+ (EQMEMB 41209 . 41391) (EQUALN 41393 . 42222) (FNCHECK 42224 . 44231) (FNTYP1 44233 . 44330) (LCSKIP 
+44332 . 45176) (MAPRINT 45178 . 46124) (MKLIST 46126 . 46276) (NAMEFIELD 46278 . 47803) (NLIST 47805
+ . 48140) (PRINTBELLS 48142 . 48268) (PROMPTCHAR 48270 . 50160) (RAISEP 50162 . 50423) (READFILE 50425
+ . 52769) (READLINE 52771 . 58211) (REMPROPLIST 58213 . 59101) (RESETBUFS 59103 . 59553) (TAB 59555 . 
+60151) (UNSAVED1 60153 . 61258) (WRITEFILE 61260 . 63002) (CLOSE-AND-MAYBE-DELETE 63004 . 63348) (
+UNSAFE.TO.MODIFY 63350 . 63882)) (66208 69152 (FILEDATE 66218 . 69150)) (69382 96484 (FILEMAP 69392 . 
+69862) (\PARSE-FILE-HEADER 69864 . 73679) (GET-ENVIRONMENT-AND-FILEMAP 73681 . 75908) (
+LOOKUP-ENVIRONMENT-AND-FILEMAP 75910 . 78101) (GET-FILEMAP-FROM-FILECREATED 78103 . 78927) (
+\FILEMAP-HASHOVERFLOW 78929 . 83593) (FLUSHFILEMAPS 83595 . 84218) (LISPSOURCEFILEP 84220 . 85511) (
+LISPFILETYPE 85513 . 88762) (GETFILEMAP 88764 . 89183) (PUTFILEMAP 89185 . 91376) (UPDATEFILEMAP 91378
+ . 96482)) (97150 100736 (LVLPRINT 97160 . 97333) (LVLPRIN1 97335 . 97517) (LVLPRIN2 97519 . 97751) (
+LVLPRIN 97753 . 98767) (LVLPRIN0 98769 . 100734)) (100770 105687 (FLUSHRIGHT 100780 . 101595) (
+PRINTPARA 101597 . 102695) (PRINTPARA1 102697 . 105685)) (105723 108008 (SUBLIS 105733 . 106341) (
+SUBPAIR 106343 . 107571) (DSUBLIS 107573 . 108006)) (108031 108631 (CONSTANTOK 108041 . 108629)) (
+110384 111089 (NLAMBDA.ARGS 110394 . 111087)))))
 STOP

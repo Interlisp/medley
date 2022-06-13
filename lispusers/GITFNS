@@ -1,15 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "19-May-2022 19:19:14" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>lispusers>GITFNS.;296 97537  
+(FILECREATED " 4-Jun-2022 20:44:07" 
+{DSK}<Users>kaplan>Local>medley3.5>working-medley>lispusers>GITFNS.;313 100657 
 
-      :CHANGES-TO (FNS GIT-MY-CURRENT-BRANCH GIT-MAKE-BRANCH GIT-NEXT-WORKING-BRANCH GIT-BRANCH-NUM 
-                       GIT-MY-BRANCHP GIT-MY-BRANCHES)
-                  (VARS GITFNSCOMS)
-                  (COMMANDS cob)
+      :CHANGES-TO (FNS GIT-BRANCH-DIFF)
 
-      :PREVIOUS-DATE "19-May-2022 14:08:39" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>lispusers>GITFNS.;295)
+      :PREVIOUS-DATE "29-May-2022 21:59:23" 
+{DSK}<Users>kaplan>Local>medley3.5>working-medley>lispusers>GITFNS.;312)
 
 
 (PRETTYCOMPRINT GITFNSCOMS)
@@ -73,7 +70,8 @@
         (* ;; "Branches")
 
         (FNS GIT-BRANCH-NUM GIT-CHECKOUT GIT-WHICH-BRANCH GIT-MAKE-BRANCH GIT-BRANCHES 
-             GIT-BRANCH-EXISTS? GIT-PICK-BRANCH GIT-PRC-MENU GIT-PULL-REQUESTS)
+             GIT-BRANCH-EXISTS? GIT-PICK-BRANCH GIT-PRC-MENU GIT-PULL-REQUESTS GIT-SHORT-BRANCH-NAME
+             GIT-LONG-NAME)
         
         (* ;; "My branches")
 
@@ -91,8 +89,9 @@
         
         (* ;; "Comparisons")
 
-        (FNS GIT-GET-DIFFERENT-FILES GIT-COMPARE-BRANCHES GIT-COMPARE-WITH-WORKINGMEDLEY 
-             GIT-COMPARE-WORKTREE GITCDOBJBUTTONFN GIT-CD-LABELFN GIT-CD-MENUFN)
+        (FNS GIT-GET-DIFFERENT-FILES GIT-BRANCHES-COMPARE-DIRECTORIES GIT-WORKING-COMPARE-DIRECTORIES
+             GIT-COMPARE-WORKTREE GITCDOBJBUTTONFN GIT-CD-LABELFN GIT-CD-MENUFN 
+             GIT-WORKING-COMPARE-FILES GIT-BRANCHES-COMPARE-FILES)
         (INITVARS (FROMGITN 0))
         
         (* ;; "")
@@ -389,14 +388,28 @@
                                                          THEN (SETQ PROJECT (CAR STAIL))
                                                               (GO $$OUT))
                                                    (CAR STAIL)))
-         (GIT-COMPARE-WITH-WORKINGMEDLEY SUBDIRS NIL NIL NIL T PROJECT)))
+         (GIT-WORKING-COMPARE-DIRECTORIES SUBDIRS NIL NIL NIL T PROJECT)))
 
 (DEFCOMMAND bbc (BRANCH1 BRANCH2 LOCAL PROJECT)
 
    (* ;; "Compares 2 git branches.  Defaults to local/ if LOCAL, otherwise defaults to origin/.  BRANCH2 defaults to the main branch (origin/ or local/ depending on LOCAL)")
 
     (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
-   (GIT-COMPARE-BRANCHES BRANCH1 (OR BRANCH2 (GIT-MAINBRANCH PROJECT LOCAL))
+   (SETQ BRANCH1 (SELECTQ (U-CASE BRANCH1)
+                     ((NIL T) 
+                          (GIT-MY-CURRENT-BRANCH PROJECT))
+                     ((LOCAL REMOTE ORIGIN) 
+                          (GIT-PICK-BRANCH (GIT-BRANCHES BRANCH1 PROJECT T)))
+                     (OR (GIT-LONG-NAME BRANCH1 NIL PROJECT)
+                         BRANCH1)))
+   (SETQ BRANCH2 (SELECTQ (U-CASE BRANCH2)
+                     ((NIL T) 
+                          (GIT-MAINBRANCH PROJECT LOCAL))
+                     ((LOCAL REMOTE ORIGIN) 
+                          (GIT-PICK-BRANCH (GIT-BRANCHES BRANCH2 PROJECT T)))
+                     (OR (GIT-LONG-NAME BRANCH2 NIL PROJECT)
+                         BRANCH2)))
+   (GIT-BRANCHES-COMPARE-DIRECTORIES BRANCH1 (OR BRANCH2 (GIT-MAINBRANCH PROJECT LOCAL))
           LOCAL PROJECT))
 
 (DEFCOMMAND prc (REMOTEBRANCH DRAFTS PROJECT)
@@ -412,22 +425,22 @@
                   (SETQ RB NIL)
            ELSEIF (GIT-GET-PROJECT DRAFTS T)
              THEN (SETQ PROJECT DRAFTS)
-                  (SETQ DRAFTS NIL))
+                  (SETQ DRFTS NIL))
          (CL:WHEN (MEMB (U-CASE RB)
                         '(DRAFT DRAFTS))
              (SETQ RB NIL)
              (SETQ DR T))
-         (CL:WHEN (OR RB (GIT-PICK-BRANCH (GIT-PRC-MENU DR PROJECT)
-                                "Pull requests"))
-             (GIT-COMPARE-BRANCHES RB (GIT-MAINBRANCH PROJECT)
+         (CL:WHEN (OR RB (SETQ RB (GIT-PICK-BRANCH (GIT-PRC-MENU DR PROJECT)
+                                         "Pull requests")))
+             (GIT-BRANCHES-COMPARE-DIRECTORIES RB (GIT-MAINBRANCH PROJECT)
                     NIL PROJECT))))
 
-(DEFCOMMAND cob (BRANCH TITLESTRING PROJECT)
+(DEFCOMMAND cob (BRANCH NEXTTITLESTRING PROJECT)
 
-   (* ;; "Switches to BRANCH. T means my current branch, NEW/NEXT means my next branch (under wherever we are now), and STRING if given will be attached to the branch-name.  Default is to bring up a menu of locally available branches.")
+   (* ;; "Switches to BRANCH. T means my current branch, NEW/NEXT means my next branch (under wherever we are now), and NEXTTITLESTRING if given will be attached to the branch-name.  Default is to bring up a menu of locally available branches.")
 
-    (CL:UNLESS (STRINGP TITLESTRING)
-           (SETQ PROJECT TITLESTRING))
+    (CL:UNLESS (STRINGP NEXTTITLESTRING)
+           (SETQ PROJECT NEXTTITLESTRING))
    (CL:UNLESS PROJECT
        (CL:WHEN (GIT-GET-PROJECT BRANCH T)
            (SETQ PROJECT BRANCH)
@@ -437,12 +450,14 @@
        (T (GIT-CHECKOUT (GIT-MY-CURRENT-BRANCH PROJECT)
                  PROJECT))
        ((NEW NEXT) 
-            (GIT-MAKE-BRANCH NIL TITLESTRING PROJECT))
-       (GIT-CHECKOUT (OR BRANCH (GIT-PICK-BRANCH (GIT-BRANCHES 'LOCAL PROJECT T)
-                                       (CONCAT (L-CASE (FETCH PROJECTNAME OF PROJECT)
-                                                      T)
-                                              " branches")))
-              PROJECT)))
+            (GIT-MAKE-BRANCH NIL NEXTTITLESTRING PROJECT))
+       (CL:WHEN [SETQ BRANCH (IF BRANCH
+                                 THEN (GIT-LONG-NAME BRANCH NIL PROJECT)
+                               ELSE (GIT-PICK-BRANCH (GIT-BRANCHES 'LOCAL PROJECT T)
+                                           (CONCAT (L-CASE (FETCH PROJECTNAME OF PROJECT)
+                                                          T)
+                                                  " branches"]
+              (GIT-CHECKOUT BRANCH PROJECT))))
 
 (DEFCOMMAND b? (PROJECT) (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
    (CONCAT (L-CASE (FETCH PROJECTNAME OF PROJECT)
@@ -767,6 +782,8 @@
 (GIT-GET-FILE
   [LAMBDA (BRANCH GITFILE LOCALFILE NOERROR PROJECT)
 
+    (* ;; "Edited 22-May-2022 17:34 by rmk")
+
     (* ;; "Edited  8-May-2022 16:54 by rmk: the stream, not the name because of the NODIRCORE case.")
 
     (* ;; "Edited  6-Mar-2022 17:45 by rmk: the stream, not the name because of the NODIRCORE case.")
@@ -870,6 +887,8 @@
 (GIT-BRANCH-DIFF
   [LAMBDA (BRANCH1 BRANCH2 PROJECT)
 
+    (* ;; "Edited  4-Jun-2022 20:43 by rmk")
+
     (* ;; "Edited  9-May-2022 16:21 by rmk: returns an ALIST that classifies how the files in BRANCH1 and BRANCH2 differ (changed, renamed, added, deleted, copied).")
 
     (* ;; "Edited  6-May-2022 14:04 by rmk: returns an ALIST that classifies how the files in BRANCH1 and BRANCH2 differ (changed, renamed, added, deleted, copied).")
@@ -893,7 +912,7 @@
                                                  POS NIL T)
                                           THEN BRANCH1
                                         ELSE BRANCH2)))
-         (SORT [FOR L IN LINES
+         (SORT (FOR L IN LINES
                   COLLECT (SELCHARQ (CHCON1 L)
                                (A (CL:IF (EQ (CHARCODE TAB)
                                              (NTHCHARCODE L 2))
@@ -927,7 +946,7 @@
                                                                           " Ignore remaining files? "
                                                                             )))
                                          (ERROR!)))
-                               (HELP "Unrecognized git-diff code" (NTHCHAR L 1]
+                               (HELP "Unrecognized git-diff code %"" L "%"")))
                T])
 
 (GIT-COMMIT-DIFFS
@@ -940,65 +959,61 @@
            NIL NIL PROJECT])
 
 (GIT-BRANCH-RELATIONS
-  [LAMBDA (BRANCHES BRANCH2 STRIPWHERE PROJECT)              (* ; "Edited  9-May-2022 16:12 by rmk")
+  [LAMBDA (BRANCHES BRANCH2 STRIPWHERE PROJECT)              (* ; "Edited 29-May-2022 21:59 by rmk")
+                                                             (* ; "Edited  9-May-2022 16:12 by rmk")
+    (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
 
     (* ;; "Returns a pair (SUPERSETS EQUALS), where each item in SUPERSETS is a list of the form (B0 B1 B2...) where each Bi is a superset of Bj for i < j and EQUALS is a list of branch equivalence classes. ")
 
-    (CL:WHEN BRANCH2
-        (SETQ BRANCHES (LIST BRANCHES BRANCH2)))
-    (FOR DTAIL D1 MORE1 MORE2 SUPERSETS EQUALS ON (FOR B IN BRANCHES
-                                                     COLLECT (CONS B (GIT-COMMIT-DIFFS B (
-                                                                                       GIT-MAINBRANCH
-                                                                                          PROJECT)
-                                                                            PROJECT)))
-       DO 
-          (* ;; "For each branch we now have the list of commit identifiers (hexstrings) that they do not share with the main branch.")
+    (LET
+     ((MAIN (GIT-MAINBRANCH PROJECT)))
+     (FOR DTAIL D1 MORE1 MORE2 SUPERSETS EQUALS
+        ON (FOR B IN BRANCHES COLLECT (CONS B (GIT-COMMIT-DIFFS B MAIN PROJECT)))
+        DO 
+           (* ;; "For each branch we now have the list of commit identifiers (hexstrings) that they do not share with the main branch.")
 
-          (SETQ D1 (CAR DTAIL))
-          [FOR D2 IN (CDR DTAIL)
-             DO (CL:WHEN (EQUAL (CDR D1)
-                                (CDR D2))                    (* ; "Unlikely")
-                    (PUSH [CDR (OR (ASSOC (CAR D1)
-                                          EQUALS)
-                                   (CAR (PUSH EQUALS (CONS (CAR D1]
-                          (CAR D2))
-                    (GO $$ITERATE))
-                (SETQ MORE2 (MEMBER (CADR D1)
-                                   (CDR D2)))                (* ; 
+           (SETQ D1 (CAR DTAIL))
+           [FOR D2 IN (CDR DTAIL)
+              DO (CL:WHEN (EQUAL (CDR D1)
+                                 (CDR D2))                   (* ; "Unlikely")
+                     (PUSH [CDR (OR (ASSOC (CAR D1)
+                                           EQUALS)
+                                    (CAR (PUSH EQUALS (CONS (CAR D1]
+                           (CAR D2))
+                     (GO $$ITERATE))
+                 (SETQ MORE2 (MEMBER (CADR D1)
+                                    (CDR D2)))               (* ; 
                                                              "The most recent commit of D1 is in D2")
-                (SETQ MORE1 (MEMBER (CADR D2)
-                                   (CDR D1)))
-                (IF MORE2
-                    THEN (CL:UNLESS MORE1
-                             (PUSH [CDR (OR (ASSOC (CAR D2)
-                                                   SUPERSETS)
-                                            (CAR (PUSH SUPERSETS (CONS (CAR D2]
-                                   (CAR D1)))
-                  ELSEIF MORE1
-                    THEN (PUSH [CDR (OR (ASSOC (CAR D1)
-                                               SUPERSETS)
-                                        (CAR (PUSH SUPERSETS (CONS (CAR D1]
-                               (CAR D2]
-       FINALLY 
+                 (SETQ MORE1 (MEMBER (CADR D2)
+                                    (CDR D1)))
+                 (IF MORE2
+                     THEN (CL:UNLESS MORE1
+                              (PUSH [CDR (OR (ASSOC (CAR D2)
+                                                    SUPERSETS)
+                                             (CAR (PUSH SUPERSETS (CONS (CAR D2]
+                                    (CAR D1)))
+                   ELSEIF MORE1
+                     THEN (PUSH [CDR (OR (ASSOC (CAR D1)
+                                                SUPERSETS)
+                                         (CAR (PUSH SUPERSETS (CONS (CAR D1]
+                                (CAR D2]
+        FINALLY 
 
-             (* ;; "Sort the supersets so that the larger ones come before the smaller ones")
+              (* ;; "Sort the supersets so that the larger ones come before the smaller ones")
 
-             (CL:WHEN STRIPWHERE
-                 [SETQ SUPERSETS (FOR S IN SUPERSETS COLLECT (FOR SS IN S COLLECT (STRIPWHERE SS]
-                 [SETQ EQUALS (FOR S IN EQUALS COLLECT (FOR SS IN S COLLECT (STRIPWHERE SS])
-             [FOR S IN SUPERSETS
-                DO (CHANGE (CDR S)
-                          (SORT DATUM (FUNCTION (LAMBDA (B1 B2)
-                                                  (OR (MEMB B2 (CDR (ASSOC B1 SUPERSETS)))
-                                                      (NOT (MEMB B1 (CDR (ASSOC B2 SUPERSETS]
-             [FOR E IN EQUALS DO (CHANGE (CDR E)
-                                        (IF (MEMB (GIT-MAINBRANCH PROJECT)
-                                                  (CDR E))
-                                            THEN (CONS (GIT-MAINBRANCH PROJECT)
-                                                       (DREMOVE (GIT-MAINBRANCH PROJECT)
-                                                              (SORT DATUM)))
-                                          ELSE (SORT DATUM]
-             (RETURN (LIST SUPERSETS EQUALS])
+              (CL:WHEN STRIPWHERE
+                  [SETQ SUPERSETS (FOR S IN SUPERSETS COLLECT (FOR SS IN S COLLECT (STRIPWHERE SS]
+                  [SETQ EQUALS (FOR S IN EQUALS COLLECT (FOR SS IN S COLLECT (STRIPWHERE SS])
+              [FOR S IN SUPERSETS
+                 DO (CHANGE (CDR S)
+                           (SORT DATUM (FUNCTION (LAMBDA (B1 B2)
+                                                   (OR (MEMB B2 (CDR (ASSOC B1 SUPERSETS)))
+                                                       (NOT (MEMB B1 (CDR (ASSOC B2 SUPERSETS]
+              [FOR E IN EQUALS DO (CHANGE (CDR E)
+                                         (IF (MEMB MAIN (CDR E))
+                                             THEN (CONS MAIN (DREMOVE MAIN (SORT DATUM)))
+                                           ELSE (SORT DATUM]
+              (RETURN (LIST SUPERSETS EQUALS])
 )
 
 
@@ -1075,7 +1090,8 @@
            ELSE (HELP "Unexpected git result" RESULT])
 
 (GIT-BRANCHES
-  [LAMBDA (WHERE PROJECT EXCLUDEMERGED)                      (* ; "Edited 19-May-2022 10:06 by rmk")
+  [LAMBDA (WHERE PROJECT EXCLUDEMERGED)                      (* ; "Edited 23-May-2022 14:25 by rmk")
+                                                             (* ; "Edited 19-May-2022 10:06 by rmk")
                                                              (* ; "Edited  9-May-2022 14:10 by rmk")
                                                              (* ; "Edited  7-May-2022 23:29 by rmk")
     (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
@@ -1093,8 +1109,8 @@
           BRANCHES)
          (SETQ BRANCHES (APPEND LOCAL REMOTE))
          (CL:WHEN EXCLUDEMERGED
-             (SETQ BRANCHES (FOR B (MAINBRANCH _ (GIT-MAINBRANCH PROJECT LOCAL)) IN BRANCHES
-                               UNLESS (GIT-COMMIT-DIFFS B MAINBRANCH PROJECT) COLLECT B)))
+             (SETQ BRANCHES (FOR B (MAINBRANCH _ (GIT-MAINBRANCH PROJECT 'LOCAL)) IN BRANCHES
+                               UNLESS (GIT-COMMIT-DIFFS MAINBRANCH B PROJECT) COLLECT B)))
          (SORT BRANCHES])
 
 (GIT-BRANCH-EXISTS?
@@ -1162,6 +1178,21 @@
                           ,(SUBATOM LINE (ADD1 TAB3]
                  ELSE (SUBATOM LINE (ADD1 TAB2)
                              (SUB1 TAB3])
+
+(GIT-SHORT-BRANCH-NAME
+  [LAMBDA (BRANCH)                                           (* ; "Edited 22-May-2022 22:36 by rmk")
+
+    (* ;; "Reduces rmk29--xxxxx to rmk29 for display")
+
+    (SUBSTRING BRANCH 1 (SUB1 (OR (STRPOS "--" BRANCH 1)
+                                  0])
+
+(GIT-LONG-NAME
+  [LAMBDA (BRANCH WHERE PROJECT EXCLUDEMERGED)               (* ; "Edited 24-May-2022 17:49 by rmk")
+
+    (* ;; "Allows short-hand reference to branch:  rmk40 will return rmk40--xyz")
+
+    (FIND B IN (GIT-BRANCHES WHERE PROJECT EXCLUDEMERGED) SUCHTHAT (STRPOS BRANCH B])
 )
 
 
@@ -1320,10 +1351,13 @@
   [LAMBDA (BRANCH1 BRANCH2 DIR1 DIR2 PROJECT)
     (DECLARE (USEDFREE FROMGITN))
 
+    (* ;; "Edited 21-May-2022 23:38 by rmk")
+
     (* ;; "Edited  9-May-2022 14:17 by rmk: Ask git for the files that differ between the branches, copy those files down to local DIR1 and DIR2, return the directories and a list of (dir1-file1 file2) mappings for renamed and copied files.")
 
     (* ;; "Edited  6-May-2022 08:26 by rmk: Ask git for the files that differ between the branches, copy those files down to local DIR1 and DIR2, return the directories and a list of (dir1-file1 file2) mappings for renamed and copied files.")
 
+    (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
     (SETQ BRANCH1 (GIT-BRANCH-EXISTS? BRANCH1 NIL PROJECT))
     (SETQ BRANCH2 (GIT-BRANCH-EXISTS? BRANCH2 NIL PROJECT))
     (LET
@@ -1409,19 +1443,19 @@
                    (HELP "UNKNOWN GIT-DIFF TAG" D)))
          (LIST DIR1 DIR2 MAPPINGS))])
 
-(GIT-COMPARE-BRANCHES
-  [LAMBDA (BRANCH1 BRANCH2 LOCAL PROJECT)                    (* ; "Edited  9-May-2022 15:14 by rmk")
+(GIT-BRANCHES-COMPARE-DIRECTORIES
+  [LAMBDA (BRANCH1 BRANCH2 LOCAL PROJECT)                    (* ; "Edited 22-May-2022 22:47 by rmk")
+                                                             (* ; "Edited  9-May-2022 15:14 by rmk")
                                                              (* ; "Edited  3-May-2022 23:04 by rmk")
     (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
     (SETQ BRANCH1 (IF BRANCH1
                       THEN (GITORIGIN BRANCH1 LOCAL)
                     ELSE (GIT-WHICH-BRANCH PROJECT)))
-    (SETQ BRANCH2 (GITORIGIN (OR BRANCH2 (GIT-MAINBRANCH PROJECT))
-                         LOCAL))
-    (PRINTOUT T "Comparing all " (L-CASE (FETCH PROJECTNAME OF PROJECT)
-                                        T)
-           " subdirectories of " BRANCH1 " and " BRANCH2 T)
-    (LET (CDVALUE DIRS NENTRIES MAPPINGS)
+    (LET (CDVALUE DIRS NENTRIES MAPPINGS (SHORT1 (GIT-SHORT-BRANCH-NAME BRANCH1))
+                (SHORT2 (GIT-SHORT-BRANCH-NAME BRANCH2)))
+         (PRINTOUT T "Comparing all " (L-CASE (FETCH PROJECTNAME OF PROJECT)
+                                             T)
+                " subdirectories of " SHORT1 " and " SHORT2 T)
          (PRINTOUT T "Fetching differences" T)
          (SETQ DIRS (GIT-GET-DIFFERENT-FILES BRANCH1 BRANCH2 NIL NIL PROJECT))
          (SETQ MAPPINGS (CADDR DIRS))
@@ -1479,10 +1513,10 @@
                            (CDBROWSER CDVALUE (CONCAT "Comparing " (L-CASE (FETCH PROJECTNAME
                                                                               OF PROJECT)
                                                                           T)
-                                                     " " BRANCH1 " and " BRANCH2 "      "
+                                                     " " SHORT1 " and " SHORT2 "      "
                                                      (LENGTH (FETCH (CDVALUE CDENTRIES) OF CDVALUE))
                                                      " files")
-                                  (LIST BRANCH1 BRANCH2)
+                                  (LIST SHORT1 SHORT2)
                                   `(LABELFN GIT-CD-LABELFN BRANCH1 ,BRANCH1 BRANCH2 ,BRANCH2 PROJECT
                                           ,PROJECT)
                                   NIL
@@ -1494,7 +1528,7 @@
                     ELSE '(0 differences))
            ELSE '(0 differences])
 
-(GIT-COMPARE-WITH-WORKINGMEDLEY
+(GIT-WORKING-COMPARE-DIRECTORIES
   [LAMBDA (SUBDIRS SELECT EXCLUDEDFILES FIXDIRECTORYDATES UPDATE PROJECT)
 
     (* ;; "Edited 17-May-2022 17:39 by rmk")
@@ -1731,7 +1765,8 @@
                (OR LABEL2 FILE2])
 
 (GIT-CD-MENUFN
-  [LAMBDA (TBITEM MENUITEM CDBROWSER KEY)                    (* ; "Edited  8-May-2022 09:26 by rmk")
+  [LAMBDA (TBITEM MENUITEM CDBROWSER KEY)                    (* ; "Edited 22-May-2022 19:13 by rmk")
+                                                             (* ; "Edited  8-May-2022 09:26 by rmk")
                                                              (* ; "Edited 10-Dec-2021 08:52 by rmk")
 
     (* ;; "MENUITEM is of the form (display-atom <this function> . extrainfo).  The selector for the selectq is either the CAR of the extrainfo or the display atom")
@@ -1740,24 +1775,20 @@
     (SELECTQ (OR (CADDR MENUITEM)
                  (CAR MENUITEM))
         (Delete% -> (FLASHWINDOW PWINDOW)
-                    (IF FILE1
-                        THEN (PRIN3 "Use 'Delete BOTH' instead")
-                      ELSE (GIVE.TTY.PROCESS PWINDOW)
-                           (CL:WHEN [OR (EQ KEY 'MIDDLE)
-                                        (EQ 'Y (ASKUSER NIL 'N (CONCAT "Delete " LABEL2 " ? "]
-                               (GIT-DELETE-FILE FILE2 (LISTGET USERDATA 'PROJECT))
-                               (TB.DELETE.ITEM CDBROWSER TBITEM))))
+                    (GIVE.TTY.PROCESS PWINDOW)
+                    (CL:WHEN [OR (EQ KEY 'MIDDLE)
+                                 (EQ 'Y (ASKUSER NIL 'N (CONCAT "Delete " LABEL2 " ? "]
+                        (GIT-DELETE-FILE FILE2 (LISTGET USERDATA 'PROJECT))
+                        (TB.DELETE.ITEM CDBROWSER TBITEM)))
         (|Delete ALL <-| 
              (FLASHWINDOW PWINDOW)
-             (IF FILE2
-                 THEN (PRIN3 "Use 'Delete BOTH' instead")
-               ELSE (GIVE.TTY.PROCESS PWINDOW)
-                    (CL:WHEN [OR (EQ KEY 'MIDDLE)
-                                 (EQ 'Y (ASKUSER NIL 'N (CONCAT "Delete ALL versions of "
-                                                               (NAMEFIELD LABEL1 T)
-                                                               " ? "]
-                        (MYMEDLEY-DELETE-FILES FILE1 (LISTGET USERDATA 'PROJECT))
-                        (TB.DELETE.ITEM CDBROWSER TBITEM))))
+             (GIVE.TTY.PROCESS PWINDOW)
+             (CL:WHEN [OR (EQ KEY 'MIDDLE)
+                          (EQ 'Y (ASKUSER NIL 'N (CONCAT "Delete ALL versions of " (NAMEFIELD LABEL1
+                                                                                          T)
+                                                        " ? "]
+                 (MYMEDLEY-DELETE-FILES FILE1 (LISTGET USERDATA 'PROJECT))
+                 (TB.DELETE.ITEM CDBROWSER TBITEM)))
         (Delete% BOTH (FLASHWINDOW PWINDOW)
                       (GIVE.TTY.PROCESS PWINDOW)
                       (CL:WHEN (EQ 'Y (ASKUSER NIL 'N (CONCAT 
@@ -1768,6 +1799,38 @@
                           (MYMEDLEY-DELETE-FILES FILE1 (LISTGET USERDATA 'PROJECT))
                           (TB.DELETE.ITEM CDBROWSER TBITEM)))
         (SHOULDNT])
+
+(GIT-WORKING-COMPARE-FILES
+  [LAMBDA (FILE PROJECT)                                     (* ; "Edited 22-May-2022 14:45 by rmk")
+    (LET ((FILE1 (UNSLASHIT (PACKFILENAME 'HOST (GIT-GET-PROJECT PROJECT NIL 'WHOST)
+                                   'BODY FILE)
+                        T))
+          (FILE2 (SLASHIT (PACKFILENAME 'HOST (GIT-GET-PROJECT PROJECT NIL 'GITHOST)
+                                 'BODY FILE)
+                        T)))
+         (CD-COMPARE-FILES FILE1 FILE2 FILE1 FILE2])
+
+(GIT-BRANCHES-COMPARE-FILES
+  [LAMBDA (FILE BRANCH1 BRANCH2 PROJECT LOCAL)               (* ; "Edited 22-May-2022 22:50 by rmk")
+    (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
+    (SETQ BRANCH1 (SELECTQ (U-CASE BRANCH1)
+                      ((NIL T) 
+                           (GIT-MY-CURRENT-BRANCH PROJECT))
+                      ((LOCAL REMOTE ORIGIN) 
+                           (GIT-PICK-BRANCH (GIT-BRANCHES BRANCH1 PROJECT T)))
+                      BRANCH1))
+    (SETQ BRANCH2 (SELECTQ (U-CASE BRANCH2)
+                      ((NIL T) 
+                           (GIT-MAINBRANCH PROJECT LOCAL))
+                      ((LOCAL REMOTE ORIGIN) 
+                           (GIT-PICK-BRANCH (GIT-BRANCHES BRANCH2 PROJECT T)))
+                      BRANCH2))
+    (LET ((FILE1 (GIT-GET-FILE BRANCH1 FILE NIL NIL PROJECT))
+          (FILE2 (GIT-GET-FILE BRANCH2 FILE NIL NIL PROJECT)))
+         (CD-COMPARE-FILES FILE1 FILE2 (CONCAT (GIT-SHORT-BRANCH-NAME BRANCH1)
+                                              " " FILE)
+                (CONCAT (GIT-SHORT-BRANCH-NAME BRANCH2)
+                       " " FILE])
 )
 
 (RPAQ? FROMGITN 0)
@@ -1848,27 +1911,28 @@
 
 (PUTPROPS GITFNS FILETYPE :TCOMPL)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3441 17288 (GIT-CLONEP 3451 . 4714) (GIT-MAKE-PROJECT 4716 . 12828) (GIT-GET-PROJECT 
-12830 . 14167) (GIT-PROJECT-PATH 14169 . 15213) (FIND-ANCESTOR-DIRECTORY 15215 . 15564) (
-GIT-FIND-CLONE 15566 . 16647) (GIT-MAINBRANCH 16649 . 16933) (GIT-MAINBRANCH? 16935 . 17286)) (22251 
-25039 (ALLSUBDIRS 22261 . 23547) (MEDLEYSUBDIRS 23549 . 24242) (GITSUBDIRS 24244 . 25037)) (25040 
-29830 (TOGIT 25050 . 26456) (FROMGIT 26458 . 27439) (GIT-DELETE-FILE 27441 . 28287) (
-MYMEDLEY-DELETE-FILES 28289 . 29828)) (29831 32363 (MYMEDLEYSUBDIR 29841 . 30297) (GITSUBDIR 30299 . 
-30742) (STRIPDIR 30744 . 31115) (STRIPHOST 31117 . 31357) (STRIPNAME 31359 . 32112) (STRIPWHERE 32114
- . 32361)) (32364 34266 (GFILE4MFILE 32374 . 32737) (MFILE4GFILE 32739 . 33308) (GIT-REPO-FILENAME 
-33310 . 34264)) (34315 42066 (GIT-COMMIT 34325 . 35151) (GIT-PUSH 35153 . 35797) (GIT-PULL 35799 . 
-36411) (GIT-APPROVAL 36413 . 36762) (GIT-GET-FILE 36764 . 39233) (GIT-FILE-EXISTS? 39235 . 40179) (
-GIT-REMOTE-UPDATE 40181 . 40905) (GIT-REMOTE-ADD 40907 . 41214) (GIT-FILE-DATE 41216 . 42064)) (42096 
-51024 (GIT-BRANCH-DIFF 42106 . 46809) (GIT-COMMIT-DIFFS 46811 . 47255) (GIT-BRANCH-RELATIONS 47257 . 
-51022)) (51069 59282 (GIT-BRANCH-NUM 51079 . 51652) (GIT-CHECKOUT 51654 . 52166) (GIT-WHICH-BRANCH 
-52168 . 52466) (GIT-MAKE-BRANCH 52468 . 54212) (GIT-BRANCHES 54214 . 55595) (GIT-BRANCH-EXISTS? 55597
- . 56301) (GIT-PICK-BRANCH 56303 . 56631) (GIT-PRC-MENU 56633 . 58261) (GIT-PULL-REQUESTS 58263 . 
-59280)) (59312 62647 (GIT-MY-CURRENT-BRANCH 59322 . 59692) (GIT-MY-BRANCHP 59694 . 60199) (
-GIT-MY-NEXT-BRANCH 60201 . 60695) (GIT-MY-BRANCHES 60697 . 62645)) (62693 66645 (GIT-ADD-WORKTREE 
-62703 . 64187) (GIT-REMOVE-WORKTREE 64189 . 65119) (GIT-LIST-WORKTREES 65121 . 65925) (WORKTREEDIR 
-65927 . 66643)) (66693 94417 (GIT-GET-DIFFERENT-FILES 66703 . 72429) (GIT-COMPARE-BRANCHES 72431 . 
-78145) (GIT-COMPARE-WITH-WORKINGMEDLEY 78147 . 82612) (GIT-COMPARE-WORKTREE 82614 . 86487) (
-GITCDOBJBUTTONFN 86489 . 90979) (GIT-CD-LABELFN 90981 . 92063) (GIT-CD-MENUFN 92065 . 94415)) (94487 
-97470 (CDGITDIR 94497 . 94875) (GIT-COMMAND 94877 . 96463) (GITORIGIN 96465 . 97162) (GIT-INITIALS 
-97164 . 97468)))))
+  (FILEMAP (NIL (3384 17231 (GIT-CLONEP 3394 . 4657) (GIT-MAKE-PROJECT 4659 . 12771) (GIT-GET-PROJECT 
+12773 . 14110) (GIT-PROJECT-PATH 14112 . 15156) (FIND-ANCESTOR-DIRECTORY 15158 . 15507) (
+GIT-FIND-CLONE 15509 . 16590) (GIT-MAINBRANCH 16592 . 16876) (GIT-MAINBRANCH? 16878 . 17229)) (23164 
+25952 (ALLSUBDIRS 23174 . 24460) (MEDLEYSUBDIRS 24462 . 25155) (GITSUBDIRS 25157 . 25950)) (25953 
+30743 (TOGIT 25963 . 27369) (FROMGIT 27371 . 28352) (GIT-DELETE-FILE 28354 . 29200) (
+MYMEDLEY-DELETE-FILES 29202 . 30741)) (30744 33276 (MYMEDLEYSUBDIR 30754 . 31210) (GITSUBDIR 31212 . 
+31655) (STRIPDIR 31657 . 32028) (STRIPHOST 32030 . 32270) (STRIPNAME 32272 . 33025) (STRIPWHERE 33027
+ . 33274)) (33277 35179 (GFILE4MFILE 33287 . 33650) (MFILE4GFILE 33652 . 34221) (GIT-REPO-FILENAME 
+34223 . 35177)) (35228 43029 (GIT-COMMIT 35238 . 36064) (GIT-PUSH 36066 . 36710) (GIT-PULL 36712 . 
+37324) (GIT-APPROVAL 37326 . 37675) (GIT-GET-FILE 37677 . 40196) (GIT-FILE-EXISTS? 40198 . 41142) (
+GIT-REMOTE-UPDATE 41144 . 41868) (GIT-REMOTE-ADD 41870 . 42177) (GIT-FILE-DATE 42179 . 43027)) (43059 
+51650 (GIT-BRANCH-DIFF 43069 . 47821) (GIT-COMMIT-DIFFS 47823 . 48267) (GIT-BRANCH-RELATIONS 48269 . 
+51648)) (51695 60630 (GIT-BRANCH-NUM 51705 . 52278) (GIT-CHECKOUT 52280 . 52792) (GIT-WHICH-BRANCH 
+52794 . 53092) (GIT-MAKE-BRANCH 53094 . 54838) (GIT-BRANCHES 54840 . 56331) (GIT-BRANCH-EXISTS? 56333
+ . 57037) (GIT-PICK-BRANCH 57039 . 57367) (GIT-PRC-MENU 57369 . 58997) (GIT-PULL-REQUESTS 58999 . 
+60016) (GIT-SHORT-BRANCH-NAME 60018 . 60309) (GIT-LONG-NAME 60311 . 60628)) (60660 63995 (
+GIT-MY-CURRENT-BRANCH 60670 . 61040) (GIT-MY-BRANCHP 61042 . 61547) (GIT-MY-NEXT-BRANCH 61549 . 62043)
+ (GIT-MY-BRANCHES 62045 . 63993)) (64041 67993 (GIT-ADD-WORKTREE 64051 . 65535) (GIT-REMOVE-WORKTREE 
+65537 . 66467) (GIT-LIST-WORKTREES 66469 . 67273) (WORKTREEDIR 67275 . 67991)) (68041 97537 (
+GIT-GET-DIFFERENT-FILES 68051 . 73876) (GIT-BRANCHES-COMPARE-DIRECTORIES 73878 . 79720) (
+GIT-WORKING-COMPARE-DIRECTORIES 79722 . 84188) (GIT-COMPARE-WORKTREE 84190 . 88063) (GITCDOBJBUTTONFN 
+88065 . 92555) (GIT-CD-LABELFN 92557 . 93639) (GIT-CD-MENUFN 93641 . 95848) (GIT-WORKING-COMPARE-FILES
+ 95850 . 96369) (GIT-BRANCHES-COMPARE-FILES 96371 . 97535)) (97607 100590 (CDGITDIR 97617 . 97995) (
+GIT-COMMAND 97997 . 99583) (GITORIGIN 99585 . 100282) (GIT-INITIALS 100284 . 100588)))))
 STOP

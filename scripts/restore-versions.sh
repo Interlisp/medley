@@ -108,7 +108,11 @@ do git checkout -q $commit "$file" && \
 	   n=$fcv
        fi
    fi
-   ln "$file" "$file.~"$n"~" && n=`expr $n + 1`
+   ln "$file" "$file.~"$n"~" && \
+   date=`git log $commit -1 --date=format-local:%Y%m%d%H%M.%S --pretty="format:%cd"` && \
+   echo $commit $file $n  $date && \
+   touch -t $date "$file" "$file.~"$n"~" && \
+   n=`expr $n + 1`
 done
 
 ### END SKIP

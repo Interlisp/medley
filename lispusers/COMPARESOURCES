@@ -1,13 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "25-Feb-2022 18:02:24" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>COMPARESOURCES.;121 41359  
+(FILECREATED "22-May-2022 18:46:01" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>lispusers>COMPARESOURCES.;128 39655  
 
-      :CHANGES-TO (FNS \CS.COMPARE.MASTERS \CS.COMPARE.TYPES \CS.REC.NAME \CS.ISRECFORM)
-                  (VARS COMPARESOURCETYPES COMPARESOURCESCOMS)
+      :CHANGES-TO (FNS COMPARESOURCES CSBROWSER \CS.EXAMINE)
+                  (VARS COMPARESOURCESCOMS)
 
-      :PREVIOUS-DATE "28-Jan-2022 18:22:40" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>COMPARESOURCES.;118)
+      :PREVIOUS-DATE "12-May-2022 10:17:13" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>lispusers>COMPARESOURCES.;123)
 
 
 (* ; "
@@ -30,7 +30,6 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
                                                         'CSOBJ.COPYBUTTONEVENTINFN]
         (VARS COMPARESOURCETYPES DEFAULT.DECLARE.TAGS)
         (COMS (FNS CSBROWSER)
-              (INITVARS (COMPARESOURCES-BROWSER-TYPE 'OBJECTWINDOW))
               (FILES (SYSLOAD)
                      OBJECTWINDOW EXAMINEDEFS REGIONMANAGER))
         (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS CSTYPE)
@@ -38,18 +37,15 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
 (DEFINEQ
 
 (COMPARESOURCES
-  [LAMBDA (FILEX FILEY EXAMINE DW? LISTSTREAM)               (* ; "Edited 28-Jan-2022 17:10 by rmk")
-                                                             (* ; "Edited 26-Dec-2021 21:32 by rmk")
-                                                            (* ; "Edited 19-Apr-2018 10:49 by rmk:")
+  [LAMBDA (FILEX FILEY EXAMINE DW? LISTSTREAM IGNORECOMMENTS LABELX LABELY)
+                                                             (* ; "Edited 22-May-2022 18:45 by rmk")
 
-(* ;;; "Compare two lisp source files, reporting differences.  LISTSTREAM if given is an open stream")
+(* ;;; "Compare two lisp source files, reporting differences.  LISTSTREAM if given is an open stream, or an object window")
 
     (DECLARE (SPECVARS FILEX FILEY EXAMINE DIFFERENCES))
-    (PROG (DIFFERENCES BODYX BODYY ENVX ENVY DECLAREX DECLAREY DATECOL
-                 [INSERTOBJECTS (AND EXAMINE (IF (TEXTSTREAMP LISTSTREAM)
-                                                 THEN 'TEDIT
-                                               ELSEIF (OBJWINDOWP LISTSTREAM)
-                                                 THEN 'OBJECTWINDOW]
+    (PROG (DIFFERENCES BODYX BODYY ENVX ENVY DECLAREX DECLAREY DATECOL (INSERTOBJECTS
+                                                                        (AND EXAMINE (OBJWINDOWP
+                                                                                      LISTSTREAM)))
                  (COMPARESTREAM LISTSTREAM)
                  (CONTEXTSTREAM LISTSTREAM)
                  OBJECTS)
@@ -59,10 +55,12 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
               (SETQ CONTEXTSTREAM (CL:MAKE-STRING-OUTPUT-STREAM))
               (LINELENGTH 65535 COMPARESTREAM)               (* ; "Let the receiver do the wrapping")
               (LINELENGTH 65535 CONTEXTSTREAM))
-          (OR (INFILEP FILEX)
+          (OR (STREAMP FILEX)
+              (INFILEP FILEX)
               (SETQ FILEX (FINDFILE FILEX T))
               (RETURN (printout CONTEXTSTREAM FILEX " not found" T)))
-          (OR (INFILEP FILEY)
+          (OR (STREAMP FILEY)
+              (INFILEP FILEY)
               (SETQ FILEY (FINDFILE FILEY T))
               (RETURN (printout CONTEXTSTREAM FILEY " not found" T)))
 
@@ -74,15 +72,23 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
           (CL:MULTIPLE-VALUE-SETQ (BODYY ENVY)
                  (READFILE FILEY))
           (SETQ BODYY (\CS.FILTER.GARBAGE BODYY))
+          (CL:WHEN IGNORECOMMENTS
+              (LET ((*REMOVE-INTERLISP-COMMENTS* T))
+                   (DECLARE (SPECVARS *REMOVE-INTERLISP-COMMENTS*))
+                   (SETQ BODYX (REMOVE-COMMENTS BODYX))
+                   (SETQ BODYY (REMOVE-COMMENTS BODYY))))
+          (CL:UNLESS LABELX (SETQ LABELX FILEX))
+          (CL:UNLESS LABELY (SETQ LABELY FILEY))
           [SETQ DATECOL (PLUS 2 (CONSTANT (NCHARS "Comparing"))
-                              (IMAX (NCHARS FILEX)
-                                    (NCHARS FILEY]
-          (printout CONTEXTSTREAM "Comparing " FILEX .TAB0 DATECOL "dated " (GETFILEINFO FILEX
-                                                                                   'CREATIONDATE)
+                              (IMAX (NCHARS LABELX)
+                                    (NCHARS LABELY]
+          (printout CONTEXTSTREAM "Comparing " LABELX .TAB0 DATECOL "dated " (GETFILEINFO
+                                                                              FILEX
+                                                                              'CREATIONDATE)
                  .TAB
                  [SUB1 (CONSTANT (IDIFFERENCE (NCHARS "Comparing ")
                                         (NCHARS "and "]
-                 " and " FILEY .TAB0 DATECOL "dated " (GETFILEINFO FILEY 'CREATIONDATE)
+                 " and " LABELY .TAB0 DATECOL "dated " (GETFILEINFO FILEY 'CREATIONDATE)
                  T T)
           [SETQ DECLAREX (for EXPR in BODYX collect EXPR when (EQ (CAR EXPR)
                                                                   'DECLARE%:]
@@ -126,15 +132,11 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
                                (REVERSE Y)
                                DW?]
               (TERPRI CONTEXTSTREAM))
-          (SELECTQ INSERTOBJECTS
-              (OBJECTWINDOW (CL:UNLESS (EQ 0 (GETFILEPTR CONTEXTSTREAM))
-                                (PUSH OBJECTS (CSOBJ.CREATE (CL:GET-OUTPUT-STREAM-STRING 
-                                                                   CONTEXTSTREAM))))
-                            (SETQ OBJECTS (DREVERSE OBJECTS))
-                            (OBJ.ADDMANYTOW LISTSTREAM OBJECTS))
-              (TEDIT (HELP "Don't know about TEDIT"))
-              (NIL)
-              (HELP))
+          (CL:WHEN INSERTOBJECTS
+              (CL:UNLESS (EQ 0 (GETFILEPTR CONTEXTSTREAM))
+                  (PUSH OBJECTS (CSOBJ.CREATE (CL:GET-OUTPUT-STREAM-STRING CONTEXTSTREAM))))
+              (SETQ OBJECTS (DREVERSE OBJECTS))
+              (OBJ.ADDMANYTOW LISTSTREAM OBJECTS))
           (RETURN (OR (REVERSE DIFFERENCES)
                       'SAME])
 
@@ -299,13 +301,8 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
              RESULT)])
 
 (\CS.EXAMINE
-  [LAMBDA (X Y ONLYONE NAME TYPE)                            (* ; "Edited 24-Dec-2021 22:48 by rmk")
-                                                             (* ; "Edited 19-Dec-2021 22:46 by rmk")
-                                                             (* ; "Edited  9-Dec-2021 23:23 by rmk")
-                                                             (* ; "Edited  4-Dec-2021 16:43 by rmk")
-                                                             (* ; "Edited  2-Dec-2021 15:23 by rmk:")
-                                                             (* ; "Edited 29-Nov-2021 20:37 by rmk:")
-                                                             (* ; "Edited 27-Nov-2021 11:21 by rmk:")
+  [LAMBDA (X Y ONLYONE NAME TYPE)                            (* ; "Edited 22-May-2022 16:28 by rmk")
+                                                            (* ; "Edited 27-Nov-2021 11:21 by rmk:")
     (DECLARE (USEDFREE EXAMINE INSERTOBJECTS COMPARESTREAM CONTEXTSTREAM OBJECTS))
 
     (* ;; "ONLYONE as a flag, because we don't want to test X or Y for NIL, that could be the contrasting value.")
@@ -319,34 +316,30 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
     (* ;; "Context gets printed to the CONTEXTSTREAM, diffs go to the COMPARESTREAM. If we aren't doing objects, those are the same streams, and the output gets printed in the right order.  Nothing to do here.")
 
     (IF INSERTOBJECTS
-        THEN (SELECTQ INSERTOBJECTS
-                 (OBJECTWINDOW [LET (STRING)
+        THEN [LET (STRING)
 
-                                    (* ;; "Take out last EOL, let SEPDIST space things out.")
+                  (* ;; "Take out last EOL, let SEPDIST space things out.")
 
-                                    (CL:UNLESS (EQ 0 (GETFILEPTR CONTEXTSTREAM))
-                                        (SETQ STRING (CL:GET-OUTPUT-STREAM-STRING CONTEXTSTREAM))
-                                        (CL:WHEN (EQ (CHARCODE EOL)
-                                                     (NTHCHARCODE STRING -1))
-                                            (SETQ STRING (OR (SUBSTRING STRING 1 -2)
-                                                             "")))
-                                        (PUSH OBJECTS (CSOBJ.CREATE STRING)))
-                                    (CL:UNLESS (EQ 0 (GETFILEPTR COMPARESTREAM))
-                                        (SETQ STRING (CL:GET-OUTPUT-STREAM-STRING COMPARESTREAM))
+                  (CL:UNLESS (EQ 0 (GETFILEPTR CONTEXTSTREAM))
+                      (SETQ STRING (CL:GET-OUTPUT-STREAM-STRING CONTEXTSTREAM))
+                      (CL:WHEN (EQ (CHARCODE EOL)
+                                   (NTHCHARCODE STRING -1))
+                          (SETQ STRING (OR (SUBSTRING STRING 1 -2)
+                                           "")))
+                      (PUSH OBJECTS (CSOBJ.CREATE STRING)))
+                  (CL:UNLESS (EQ 0 (GETFILEPTR COMPARESTREAM))
+                      (SETQ STRING (CL:GET-OUTPUT-STREAM-STRING COMPARESTREAM))
 
-                                 (* ;; "Don't know why, but SEPTDIST doesn't work if there if there isn't at least one EOL. Magically, this gets the right appearance and behavior.")
+                      (* ;; "Don't know why, but SEPTDIST doesn't work if there if there isn't at least one EOL. Magically, this gets the right appearance and behavior.")
 
-                                        (CL:WHEN (AND (EQ (CHARCODE EOL)
-                                                          (NTHCHARCODE STRING -1))
-                                                      (EQ (CHARCODE EOL)
-                                                          (NTHCHARCODE STRING -2)))
-                                            (SETQ STRING (OR (SUBSTRING STRING 1 -2)
-                                                             "")))
-                                        (PUSH OBJECTS (CSOBJ.CREATE STRING
-                                                             (LIST NAME TYPE X Y LABEL1 LABEL2)
-                                                             ONLYONE)))])
-                 (TEDIT (HELP "TEDIT NOT IMPLEMENTED"))
-                 NIL)
+                      (CL:WHEN (AND (EQ (CHARCODE EOL)
+                                        (NTHCHARCODE STRING -1))
+                                    (EQ (CHARCODE EOL)
+                                        (NTHCHARCODE STRING -2)))
+                          (SETQ STRING (OR (SUBSTRING STRING 1 -2)
+                                           "")))
+                      (PUSH OBJECTS (CSOBJ.CREATE STRING (LIST NAME TYPE X Y LABEL1 LABEL2)
+                                           ONLYONE)))]
       ELSEIF (OR (LISTP X)
                  (LISTP Y))
         THEN                                                 (* ; 
@@ -629,7 +622,11 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
 (DEFINEQ
 
 (CSBROWSER
-  [LAMBDA (FILEX FILEY DW? LABEL1 LABEL2 REGION)
+  [LAMBDA (FILEX FILEY DW? LABEL1 LABEL2 REGION IGNORECOMMENTS TITLE)
+
+    (* ;; "Edited 22-May-2022 18:42 by rmk")
+
+    (* ;; "Edited 12-May-2022 10:16 by rmk")
 
     (* ;; "Edited 24-Jan-2022 23:11 by rmk: EXAMINE is non-NIL, we run the compare twice.  Once to get the TEDIT up as a kind of table of contents, and the second time to run through all of the SEDIT windows.")
 
@@ -640,43 +637,32 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
     (* ;; "Don't use the INFILEP value, because that might screw with capitalization that the caller prefers.  If the file can be found that way, then lower functions will find it.")
 
     (DECLARE (SPECVARS LABEL1 LABEL2))
-    (OR (INFILEP FILEX)
-        (SETQ FILEX (FINDFILE FILEX NIL DIRECTORIES))
-        (ERROR "FILE NOT FOUND" FILEX))
-    (OR (INFILEP FILEY)
-        (SETQ FILEY (FINDFILE FILEY NIL DIRECTORIES))
-        (ERROR "FILE NOT FOUND" FILEY))
+    (SETQ FILEX (OR (STREAMP FILEX)
+                    (INFILEP FILEX)
+                    (FINDFILE FILEX NIL DIRECTORIES)
+                    (ERROR "FILE NOT FOUND" FILEX)))
+    (SETQ FILEY (OR (STREAMP FILEY)
+                    (INFILEP FILEY)
+                    (FINDFILE FILEY NIL DIRECTORIES)
+                    (ERROR "FILE NOT FOUND" FILEY)))
     (CL:UNLESS (LISPSOURCEFILEP FILEX)
            (ERROR FILEX " is not a Medley source file"))
     (CL:UNLESS (LISPSOURCEFILEP FILEY)
            (ERROR FILEX " is not a Medley source file"))
-    (LET [(TITLE (CONCAT "COMPARESOURCES of " (OR LABEL1 (PACKFILENAME 'HOST NIL 'DIRECTORY NIL
-                                                                'BODY FILEX))
-                        " and "
-                        (OR LABEL2 (PACKFILENAME 'HOST NIL 'DIRECTORY NIL 'BODY FILEY]
-         (SELECTQ COMPARESOURCES-BROWSER-TYPE
-             (OBJECTWINDOW (LET [(WINDOW (OBJ.CREATEW 'VERTICAL REGION TITLE NIL T
-                                                (FONTPROP DEFAULTFONT 'HEIGHT]
-                                (WINDOWPROP WINDOW 'UNDERSCONTRUCTION T)
-                                (GETPROMPTWINDOW WINDOW T)
-                                (WINDOWPROP WINDOW 'UNDERSCONTRUCTION NIL)
-                                (COMPARESOURCES FILEX FILEY '(T 2WINDOWS)
-                                       DW? WINDOW)
-                                (OPENW WINDOW)
-                                WINDOW))
-             (TEDIT (LET ((TSTREAM (OPENTEXTSTREAM)))
-                         (DSPFONT DEFAULTFONT TSTREAM)
-                         (COMPARESOURCES FILEX FILEY EXAMINE DW? TSTREAM)
-                         [TEDIT TSTREAM REGION NIL `(READONLY T WINDOWTYPE COMPARESOURCES-TEDIT TITLE
-                                                           ,TITLE]
-                         (CL:WHEN NIL
-                             EXAMINE
-                             (COMPARESOURCES FILEX FILEY EXAMINE DW? (OPENSTREAM '{NULL} 'OUTPUT)))
-                         (WFROMDS TSTREAM)))
-             (HELP])
+    (CL:UNLESS TITLE
+        [SETQ TITLE (CONCAT "COMPARESOURCES of " (OR LABEL1 (PACKFILENAME 'HOST NIL 'DIRECTORY NIL
+                                                                   'BODY FILEX))
+                           " and "
+                           (OR LABEL2 (PACKFILENAME 'HOST NIL 'DIRECTORY NIL 'BODY FILEY])
+    (LET [(WINDOW (OBJ.CREATEW 'VERTICAL REGION TITLE NIL T (FONTPROP DEFAULTFONT 'HEIGHT]
+         (WINDOWPROP WINDOW 'UNDERSCONTRUCTION T)
+         (GETPROMPTWINDOW WINDOW T)
+         (WINDOWPROP WINDOW 'UNDERSCONTRUCTION NIL)
+         (COMPARESOURCES FILEX FILEY '(T 2WINDOWS)
+                DW? WINDOW IGNORECOMMENTS LABEL1 LABEL2)
+         (OPENW WINDOW)
+         WINDOW])
 )
-
-(RPAQ? COMPARESOURCES-BROWSER-TYPE 'OBJECTWINDOW)
 
 (FILESLOAD (SYSLOAD)
        OBJECTWINDOW EXAMINEDEFS REGIONMANAGER)
@@ -693,16 +679,16 @@ Copyright (c) 1985-1988, 2018, 2020-2021 by Xerox Corporation.
 )
 (PUTPROPS COMPARESOURCES COPYRIGHT ("Xerox Corporation" 1985 1986 1987 1988 2018 2020 2021))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1970 26690 (COMPARESOURCES 1980 . 8026) (\CS.COMPARE.MASTERS 8028 . 15440) (
-\CS.COMPARE.TYPES 15442 . 18708) (\CS.EXAMINE 18710 . 22937) (\CS.FIXFNS 22939 . 24441) (
-\CS.SORT.DECLARES 24443 . 24786) (\CS.SORT.DECLARE1 24788 . 26208) (\CS.FILTER.GARBAGE 26210 . 26688))
- (26691 31227 (\CS.ISFNFORM 26701 . 26969) (\CS.COMPARE.FNS 26971 . 27213) (\CS.FNSID 27215 . 27359) (
-\CS.ISVARFORM 27361 . 27466) (\CS.COMPARE.VARS 27468 . 28130) (\CS.ISMACROFORM 28132 . 28270) (
-\CS.ISRECFORM 28272 . 28600) (\CS.REC.NAME 28602 . 28921) (\CS.ISCOURIERFORM 28923 . 29023) (
-\CS.ISTEMPLATEFORM 29025 . 29123) (\CS.COMPARE.TEMPLATES 29125 . 29490) (\CS.ISPROPFORM 29492 . 29647)
- (\CS.PROP.NAME 29649 . 29794) (\CS.COMPARE.PROPS 29796 . 29953) (\CS.ISADDVARFORM 29955 . 30048) (
-\CS.COMPARE.ADDVARS 30050 . 30215) (\CS.ISFPKGCOMFORM 30217 . 30424) (\CS.COMPARE.FPKGCOMS 30426 . 
-30633) (\CS.COMPARE.DEFINE-FILE-INFO 30635 . 31225)) (31228 37292 (CSOBJ.CREATE 31238 . 31651) (
-CSOBJ.DISPLAYFN 31653 . 32406) (CSOBJ.IMAGEBOXFN 32408 . 34569) (CSOBJ.BUTTONEVENTINFN 34571 . 37042) 
-(CSOBJ.COPYBUTTONEVENTINFN 37044 . 37290)) (38173 40877 (CSBROWSER 38183 . 40875)))))
+  (FILEMAP (NIL (1864 25616 (COMPARESOURCES 1874 . 8001) (\CS.COMPARE.MASTERS 8003 . 15415) (
+\CS.COMPARE.TYPES 15417 . 18683) (\CS.EXAMINE 18685 . 21863) (\CS.FIXFNS 21865 . 23367) (
+\CS.SORT.DECLARES 23369 . 23712) (\CS.SORT.DECLARE1 23714 . 25134) (\CS.FILTER.GARBAGE 25136 . 25614))
+ (25617 30153 (\CS.ISFNFORM 25627 . 25895) (\CS.COMPARE.FNS 25897 . 26139) (\CS.FNSID 26141 . 26285) (
+\CS.ISVARFORM 26287 . 26392) (\CS.COMPARE.VARS 26394 . 27056) (\CS.ISMACROFORM 27058 . 27196) (
+\CS.ISRECFORM 27198 . 27526) (\CS.REC.NAME 27528 . 27847) (\CS.ISCOURIERFORM 27849 . 27949) (
+\CS.ISTEMPLATEFORM 27951 . 28049) (\CS.COMPARE.TEMPLATES 28051 . 28416) (\CS.ISPROPFORM 28418 . 28573)
+ (\CS.PROP.NAME 28575 . 28720) (\CS.COMPARE.PROPS 28722 . 28879) (\CS.ISADDVARFORM 28881 . 28974) (
+\CS.COMPARE.ADDVARS 28976 . 29141) (\CS.ISFPKGCOMFORM 29143 . 29350) (\CS.COMPARE.FPKGCOMS 29352 . 
+29559) (\CS.COMPARE.DEFINE-FILE-INFO 29561 . 30151)) (30154 36218 (CSOBJ.CREATE 30164 . 30577) (
+CSOBJ.DISPLAYFN 30579 . 31332) (CSOBJ.IMAGEBOXFN 31334 . 33495) (CSOBJ.BUTTONEVENTINFN 33497 . 35968) 
+(CSOBJ.COPYBUTTONEVENTINFN 35970 . 36216)) (37099 39228 (CSBROWSER 37109 . 39226)))))
 STOP

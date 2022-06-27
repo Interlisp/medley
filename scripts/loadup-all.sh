@@ -12,7 +12,10 @@ fi
     ./scripts/loadup-lisp-from-mid.sh && \
     ./scripts/loadup-full-from-lisp.sh && \
     ./scripts/loadup-aux.sh && \
+    ./scripts/copy-all.sh && \
+    ls -l loadups/*.sysout loadups/whereis.hash library/exports.all && \
     echo "**** DONE ****"
+    
 
 
 

@@ -13,7 +13,7 @@ fi
 # just copy the files that are released
 
 ./scripts/cpv tmp/full.sysout loadups
-./scripts/cpv cpv tmp/lisp.sysout loadups
+./scripts/cpv tmp/lisp.sysout loadups
 ./scripts/cpv tmp/whereis.hash loadups
 ./scripts/cpv tmp/exports.all library
 

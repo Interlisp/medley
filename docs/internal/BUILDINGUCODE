@@ -1,0 +1,151 @@
+File: [FS6:PARC:Xerox]/ISLDisplay/Display1/Software/LispOptionsHandlers.message
+Last Edited: DDavies  -   3-Nov-88 18:12:10
+
+I hyperventilated a lot trying to figure out what to do.  Here's the procedure I think should work.  CORRECTIONS APPRECIATED!!!!!!
+
+Already Nick Briggs and Karey Krauter have cleared up many points.  Without them, this would never have happened.
+
+Examples of the files used to build the color display handler can be found on [FS6:PARC:Xerox]/ISLDisplay/Display1/Software/IOP/*.
+
+---------------------------------------------------------------
+
+This is a procedure for adding an options handler to an existing LispDove.db.  It is an amalgam of the procedure in RAMMemHandlers.doc and what I've been able to figure out.  I assume the new options handler will live in Main Memory.  Its name will be "xyz."
+
+The first thing to realize about building a LispDove.db is that you have unlimited opportunities to demonstrate your toughness and resolve.  This procedure took me about a week to get through successfully the first time.  Then for about 6 months it was easy.  Then it was impossible again, so I switched from Lyric (a Lisp release) to Medley (a later release).  This document describes the process of building the Medley release since I seem to have lost the ability to build one for Lyric.
+
+This document is mostly about the process of assembling the files needed to do the final build, not about the tactics of writing a handler.  There are a few hints below, but you'll really need to read the Opie documentation and look at the existing options handlers (Bringover PPOHandlerDove.df or CDspHandlerDove.df).  Having a knowledgeable (and understanding) friend helps a great deal.  You should also read everything on [Ohio:OSBU North:Xerox]<IO Architecture>MesaDoveDoc> and <IO Architecture>Opie>.  The file called PerfectMap.mp2 is really called Perfect.mp2 and is on <IO Architecture>, not <IO Architecture>MesaDoveDoc>.
+
+We assume that you know 80186 assembly language.  We also assume knowledge of PCs, XDE and all the tools you'll use to get the job done.
+
+I'm intentionally ignoring ConfigOnly files, since there is no Lisp Configuration Tool (they use the Mesa one).
+
+I'm also ignoring the Lisp software necessary to communicate with the new Handler, since I don't know anything about it.  Maybe we'll add that later (Nick?).  I do know that Lisp doesn't have processes, just tasks that voluntarily give up control and execute in strict round-robin fashion.  There is no limit on the length of time a Lisp task may hold the processor.  Well-behaved tasks give up control occasionally.  Lisp tasks can send interrupts to the IOP.  The IOP handlers essentially cannot sent interrupts to Lisp tasks (if you ignore the timer).  Timer interrupts appear 60 times/sec, but don't seem to do much.
+
+We'll assume you're doing all your assembling, linking and locating on a real XT or AT.  The Assembler, Linker, Locator, CRLFTool and PC/XNS software are floating around. We also assume you're doing your editing in XDE.  XDE is also needed to run the BringOver/SModel, Fetch and MakeDoveMicroboot tools.  Files are transferred between your workstation and the PC using the Ethernet.  All the command files used will pull the relevant files over, do the work, and send the results back.  Since the XDE editor doesn't use linefeed characters and the PC software demands them, we'll incorporate a program on the PC to insert linefeeds (CRLFTool).  Unfortunately, the program isn't smart enough to recognize existing CRLF sequences - it turns them into CRLFLF.  That means we'll have to remove any linefeeds that exist on the XDE side.
+
+(1) First, we'll BringOver all the dreck you'll use to build your handler.  There are lots and lots and lots of versions of this stuff around.  The current Lisp system is not based on any particular DSBU release.  The only way to get an approximation to the files used by the rest of the Lisp code is to bring it all over.   First, carefully get rid of whatever .asm, .def, .lst, .obj, .lnk, .loc, .mp1 and .mp2 files you've got lying around.
+
+    BringOver "[Pogo:AISNorth:Xerox]<UCode>DF>LispDove.df"
+    BringOver exactly the version of LispDoveIOPIntegration.df now on your disk.
+    BringOver exactly the version of AllocSgs.df now on your disk.
+    BringOver exactly the version of KeyboardMouseHandlerDove.df now on your disk.
+    Go get [Wilma:OSBU North:Xerox]<Maple>Working>IOP>XtndOpie.loc (it will be used by ColorLispDove.cm)
+    
+    Now, you're close.  You've noticed by now that these DF files specify numerous versions of some files.  Here are my rules: 1) BringOver the latest version whenever there is a conflict.  This works except for the following files (as of 12-Jul-88 11:07:06 anyway):
+    
+    IOREther.obj, STKEther.obj - The version of IOREther used in LispDoveIOPIntegration uses up about 13KB of the 16KB available for IORegions.  The rest of the IORegions won't fit in the remaining space below 8000H.  Why is this important?  Well, if you plan to debug your handler IOP code using Lisp, you need to put an image of the PROM into RAM.  At SDD, they changed things so the PROM image can live at C000H.  However, Lisp hasn't changed so it's PROM image still lives at 8000H.  As of this date (12-Jul-88 11:10:26), the Lisp code doesn't take advantage of the extra ENet buffers, so you can use the IOREther.obj and STKEther.obj from the 12.3 release if you need to.  For the Medley build, I'm using the big ENet buffers and doing my handler debugging in the Mesa environment.
+
+(2) Create an IORegion segment definition both in 80186 assembly language and Lisp code.  Make sure they match.  The 80186 segment must be named "xyzIOR" and be contained in a file called "IORxyz.asm".  Your IOR segment must be declared "COMMON".  Many copies of it will appear in different files below.  The locator will combine the copies only because of the COMMON declaration.
+
+(3) Create a stack segment definition in 80186 assembly code.  The segment must be named "xyxSTK", and its standard file name is "STKxyz.asm".  Your STK segment must be declared "COMMON".  Many copies of it will appear in different files below.  The locator will combine the copies only because of the COMMON declaration.
+
+(4) Write your 80186 handler.  Remember that its name can be no longer than 8 characters (MS-DOS limitation).  This will contain all the tasks needed by your device.  A useful way of thinking about an Opie task is that for every interrupt serviced by your handler, you need one task.  An interrupt may not be serviced by two tasks and a task shouldn't try to service two interrupts.  You can have more tasks than interrupts if that is useful.  Watch out for the way Opie handles interrupts when receiving tasks aren't waiting for them.
+
+    You might also want to think about where variables are stored.  All the PROM handlers put their variables in the IORegion, since that's the only RAM they are allowed to use.  Since your handler will be in RAM, you could bury some variables in it if necessary.  Remember that the number of segment registers is limited and care should be taken when passing pointers with implied segment registers.  For example, if passing a pointer to a parameter block which might be either in the code segment or in the IORegion, the procedure receiving the pointer must have some way of figuring out what segment register to use.  One way out of this is to put all variables in the IOR.
+
+    Your handler code must contain an externally defined variable called "xyzHandlerID" declared as follows
+    
+    EXTRN	xyzHandlerID:  ABS
+
+    Note that you really must use "xyzHandlerID", not "xyzHdlrID" or "MyHandlerID" or something else.  Opie uses macros to assemble names and you must conform to the pattern.  The xyzHandlerID is passed as an argument to Opie macros like %InitializeTask or %Restart.
+
+    Your handler must also contain an initialization procedure declared as
+
+    xyxInit	PUBLIC FAR PROC
+                 .
+		 .
+		 .
+    xyxInit	ENDP
+
+    Again, only "xyzInit" will do, not "MyInit" or "xyzInitializtionProcedure" or "HereWeGo".
+
+    The code segment for your handler must be named "IOPEInRAM".
+
+(5) Look at all the .asm and .def files you have now in XDE.  Remove the line feeds from all of them.  (I tried using MakePC to do this and succeeded in removing all the CRs too!)  Some files are stored with line feeds, some without.  We'll assume no XDE files have line feeds.  The *.bat files seem to be an exception - they are often stored with line feeds.
+
+(6) Assemble and link your Handler code, IOR segment and STK segment files.  There should be one unresolved reference, xyzHandlerID.  That will be resolved in RAMHands.asm.  Make a DF file called "xyzHandlerDove.df" which covers the sources, object files and the final link file (which is an 8 character name something like xyxHndlr.lnk).
+
+(7.0) Modify AllocSegs.df (note this is called "AllocSegs" and the others are called "AllocSgs").  Add a clause of the form
+
+Imports [FS6:PARC:Xerox]<ISLDisplay>Display1>DF>xyzHandlerDove.df Of >
+    Using [IORxyz.obj, STKxyz.obj]
+
+(7.1) Modify the version of AllocSgs.bat you brought over in step 1 so that it pulls over IORxyz.obj and STKoxy.obj (e.g. XFILE RET IORxyz.obj -O).  Insert STKxyx.obj into the link command that produces STKSegs.lnk.  It must go after STKFlop.obj and before STKEnd.obj.  It's safe to put it next to STKCDsp.obj or STKPPO.obj.
+      As a general rule, don't specify directories or particular machines in the command files.  That way they can be used by anyone on any machine.
+
+(7.2) Insert IORxyz.obj into the link command that produces IORSegs.lnk.  It must go before IOREnd.obj.
+
+(7.3) In SegLoc.bat, add the size of the xyzSTK segment to the first parameter in the RS clause of the locate command.  The size will be listed in the .mp1 file for your linked handler.  For example, for the following SegLoc.bat:
+
+  SS(IORegion(+1C4H)) &
+  PC(PURGE) &
+  RS(13B1H TO 3FFFH) &
+  AD(SM(IOPEINRAM(10000H)))
+
+the parameter to change is "13B1H" in the RS clause "RS(13B1H TO 3FFFH)".  The "+1C4H" allows the IOR to grow from its size in local RAM during booting time to its bigger size in main memory after booting.  It won't change.  Address 4000H (3FFFH+1) is the start of Main Memory.  The 10000H is a screwball way of getting around a bug in the loader that causes it to get upset when it sees 0000.  It interpretes 10000H as 00000H (?).
+
+(8) Edit the RAMHands.asm now on your disk.  Add an entry of the form:
+
+%Handler(xyz,n,PROC,MEMORY)
+
+where "n" equals the desired number of your HandlerID.  Options handler ID's begin at 97.  They must be less than 128.  So far as I know, the PPO/PSO combination used up 97 and 98.  The CDsp color display used 99.  Use whatever number is next at the time you add your handler.  Remember the number, you'll need to put n-96 into the EEProm later (by hand using the System Configuration Tool).
+
+At this time, you might want to comment out the PPO handler entries (put a "'" immediately after the "%").  This depends on whether you're going to include the PPOHndlr.lnk file in MEMCode.loc.  If not, comment it out in RAMHands (see "To toss a handler" below).
+
+(9) Run AllocSgs.bat on the PC.  It should pull over all the files, do the assembles, links and locs, producing AllocSgs.loc.  If your PC stops with "TOO MANY FILES OPEN", add an entry like "FILES=20" to your Config.sys.
+
+    I spent a day finding out that PC-DOS stupidly truncates command lines that are too long.  My AllocSgs.bat was producing IORSegs.ln instead of IORSegs.lnk.  Watch the lengths of your command lines in ALL the .bat files.
+
+    The Medley version of the DF's do a funny thing.  They use the released version of AllocSgs, but make three new batch files, AllocIOR.bat, AllocSegs.bat and AllocSTK.bat.  AllocSegs.bat uses the other two as line continuation files.  AllocSegs.bat binds up all the IOR and STK segments as AllocSgs.bat, except it puts in IORPSO and STKPSO and takes out IORPPO and STKPPO.  Since we must modify RAMHands (=> must run AllocSgs.bat anyway), I just changes AllocSgs.bat so it conformed with AllocSegs.bat.  That is, I uncommented the lines that bring over IORPSO.obj and STKPSO.obj; commented the lines that bring over IORPPO.obj and STKPPO.obj and replaced IORPPO.obj and STKPPO.obj with IORPSO.obj and IORPSO.obj respectively in the IORSegs and STKSegs link commands.
+
+    In this step and the steps below, you can pretty safely ignore warnings from the Linker about POSSIBLE OVERLAP in IOPELOCALRAM.  Other warnings and error messages should be taken seriously.
+
+(10) Here's your first looping point.  Look at AllocSgs.mp2.  Compare it with Perfect.Mp2 (see above).  The segment map should start with IOPELOCALRAM, ??SEG, OPIESTK, etc.  If it doesn't, the order of the files given to the linker in AllocSgs.bat is wrong.  The lask STK entry, ENDSTK, should end at (the address in the RS clause of SegLoc.bat - 1).  For example, for the SegLoc.bat given above, the STOP address of ENDSTK should be 013B0H.  If the real end address is wrong, adjust the number in SegLoc.bat and loop back to step 9.
+     Next, look at the START address of IOREGION.  It should be 04000H.  This is really a double check on the number in SegLoc.bat.  If IOREGION doesn't start at 4000H, the reserve clause is either too low (STK entries overflowing above 04000H) or too high (IOR entries falling below the reserved space).  In either case, fix it and run it again.
+     Finally, look at the STOP address of ENDIOR.  This is a bit tricky.  In the beginning of Daybreak development, the IORegion was divided in half.  The part between 4000H and 8000H was used for handler IOR's.  The part from 8000H to C000H was used to hold the image of the code that normally sits in PROM when debugging.  This worked fine until the IOR's grew out of the bottom half.  DSBU fixed this sometime around the 12.5 release.  As of today (12-Jul-88 13:14:44), the AIS folks have sort of half-way changed.  Their code assumes the space above 8000H isn't sacred, but they haven't bothered to make room for the PROM image at C000H either.  If you have some other way of debugging your handler (like using the released SDD Mesa environment), you can use the standard AIS release.  That's what I'm doing for the Medley release.  Your Lisp system will not be debuggable if the STOP address of ENDIOR is greater than or equal to 08000H.  If you never plan to debug your handler in Lisp, fine.  Otherwise, you must start throwing out handlers to make things fit.  I tossed the PCE, Parity, TTY, RS232C, PSO and PPO handlers.  If AIS has gone to the expanded IOR by the time you're working on this, ENDIOR must STOP at 0C000H.
+    2-Sep-87 17:57:52: Well, there's a bit more to this story.  First, as stated in the documentation, RAMCode must fit roughly between 1400H and 4000H.  I say roughly because booting tosses some other stuff in there too.  Second, MEMCode must fit between ENDIOR and 8000H (current AIS systems that you want to debug) or C000 (current Mesa systems or current AIS systems that you can't debug).  Just because ENDIOR is below 8000H, doesn't mean you're done.  There's no way to check this here, check it in step 14 below.  If things don't fit, you either get to reduce the size of the IORegion (by tossing handlers or using the small version of IOREther.obj) or reduce the size of MEMCode.
+     
+     To toss a handler:
+       * Comment out its entry in RAMHands.asm (use the "%'Handler(..." trick).
+       * Remove its STK entry from the list of things linked to form STKSegs.lnk in AllocSgs.bat
+       * Remove its IOR entry from the list of things linked to form IORSegs.lnk in AllocSgs.bat
+       * If the code for the handler lives in IOP local RAM (a "RAM handler"), remove its .lnk file from the list of things linked to produce RAMCode.lnk in RAMCode.bat.
+       * If the code for the handler lives in Main Memory (a "Memory handler"), remove its .lnk file from the list of things linked to produce MEMCode.lnk in MEMCode.bat.
+
+     While we're at it, correlate the entries in RAMHands with those in RAMCode.bat and MEMCode.bat.  If a handler is a memory handler (it's linked into MEMCode.lnk), the corresponding entry in RAMHands.asm must end in ",MEMORY)".  If the handler is linked into RAMCode.lnk, the entry in RAMHands must end in ",)".  This bit me a couple of times.  This entry tells the code whether the handler is to be found in main memory or IOP Local RAM.  The various PCE code modules are spread between local RAM and Main Memory so unless you really know what you're doing, leave them alone.
+     
+     Remember, you must run AllocSgs.bat every time you change RAMHands.asm.
+ 
+(11) Since KyMoInit.asm imports the RAMHands.asm you just changed, run KyMoInit.bat on the PC.
+
+(12) The original RAMMemHandlers.doc said to run RAMOpie.bat at this point.  So far as anyone can tell, we haven't changed any of the RAMOpie components, so never mind.  However, my version of RAMOpie was built with an old version of STKOpie.obj (see step 1 above) so I had to rebuild it just to get that right.  If you have to rebuilt RAMOpie, modify RAMOpie.bat to insert the XFILE and CRLFTool commands as necessary and run it on the PC.
+
+(13.1) Run RAMCode.bat (modifying it to pull over all the files to the PC and send RAMCode.loc back if necessary).  This produces RAMCode.loc.  Watch out! The comments in RAMCode.bat had gotten out of touch with the files in RAMCodeI.bat, but you couldn't tell just by looking at RAMCode.bat.  If you touch the list of files being linked, remember to retain the order.  The order of the linking for RAMcode must be: STKSegs.lnk,IORSegs.lnk,RAMHInit.obj,RAMOpie.lnk,{all the ram handlers in any order}.
+(13.2) Look at RAMCode.mp2.  The same conditions stated in step 10 should apply here (STK segments first, followed by IOREGION at 04000H, ENDIOR not exceeding 08000H or 0C000H depending on what Lisp you're building).  RAMCode must fit between ENDSTK and 4000H.  That's really not the test since booting is likely to offset the start of RAMCode from ENDSTK, but that's the best you can do for now.  In one version of life, the offset was 1450H-13B1H = 9FH.
+
+       My original version of RAMCode.bat had some stuff about Ethernet tasks.  That task is in PROM in our machines.  The commands were commented out.  I deleted them. 
+
+(14.1) Modify MemCodeI.bat, inserting xyxHndlr.lnk in the list somewhere before "TO".  Alternately, merge MEMCode.bat and MEMCodeI.bat and do the same thing.  Again, be careful of the order of the files being linked.  The order of linking for MemCode must be: IOPLRAM.obj,STKSegs.lnk,IORSegs.lnk,MemHInit.obj,GermInit.obj(or lisp equiv), {all the mem handlers in any order}.  Add all the XFILE and CRLFTool commands if necessary (see RAMCode.bat on FS6:).
+(14.2) Run MemCode.bat.  This produces MEMCode.loc.  Inspect the segment map in MEMCode.mp2, watching the same ENDSTK/IOREGION and ENDIOR boundries.  Note that booting will actually put the code for MEMCode (the stuff listed in IOPEInRAM) immediately after ENDIOR.  If you're using the old debug setup, MEMCode must fit between ENDIOR and 8000H.  If you're using the new setup, MEMCode must fit between ENDIOR and C000H.
+
+     My MEMCode.bat had some stuff about a new KeyHndlr.lnk (as opposed to a KyMoInit.loc thinger, which is different), also commented out.  The Keyboard handler code is also in PROM, so I deleted this too. 
+
+(15) Back in XDE (which is where your .bat files have been putting the results of all of your work), run the command file LispDove.cm.  This produces LispDove.db.  If you get an error message like
+
+Reading... MEMCode.loc Illegal start address as a switch on .loc file.
+
+get a newer version of MakeDoveMicroboot.bcd. 
+
+(16) Save the results of your work!!  If you're adventurous, ask your favorite Lisp wizard to install the new LispDove.db as Pilot microcode on an 1186 (6085) and go for it!  Of course, you can only debug this by watching what happens and staring at your source code.  If you want to set breakpoints and stuff, keep reading.  Installing your LispDove.db and trying it without your option enabled in the EEPROM (see next step) is certainly a good idea just to see if it is built correctly.
+
+(17) Modify the EEProm using the System Configuration Tool.  You should insert the Handler ID you chose minus 96 into one of the three Universal Options entries, along with whatever options specific data and interrupt vectors you like.  Without this, Opie will not start your options code.  Zero is not a valid options number.  It is useful if you want to run your new Pilot Microcode with the new handler turned off, just to see if you've broken anything.
+
+(18) Have a good time debugging!  I haven't tried this much yet.  You'll probably need the image of Opie that's normally in PROM.  If you're using the old debugging setup (ROM Image at 8000H), it's on [Huey:OSBU North:Xerox]<APilot>12.0>DoveMicrocode>Private>B2>RAMSysB2.loc.  If you're usign the new setup, It's on [Dino:OSBU North:Xerox]<APilot>14.0>DoveMicrocode>Private>B2>RAMSysB2.loc.  There's a Bermuda command file called [FS6:PARC:Xerox]<ISLDisplay>Display1>Software>IOP>IOPDebug.bermuda.  Besides loading the pieces of your LispDove.db (not the LispDove.db itself, just the individual pieces) and RAMSysB2.loc into memory, they do lots of interesting stuff.
+
+This is what seems to work for me.  Before actually running IOPDebug, manually load all the symbols shown in the commented-out statements.  That's because they only need to be loaded once.  The first time you do this, you won't have RAMDebug.loc and MEMDebug.loc, but never fear.  IOPDebug.bermuda boots the IOP, loads the code for RAMSysB2, turns on main memory and (that's the WriteIO[80,8000];).  The write to E01F just fusses with a map register.  It doesn't seem to harm anything.  Now, the way the initialization code decides whether or not to use the expanded IOR (see step 10 above), is it looks in word 053C.  My version of IOPDebug.bermuda writes a 0000H there, telling it not to use fatIOR.  If you want fat IOR (the new stuff), write a 4000.  Make sure you have the new RAMSysB2.loc if you're using a fat IOR (and not if not).
+  The command file then fusses with starting the initialization code.  For this to get any farther, you must already have your LispDove.db and SYSOUT installed on your disk.  Note the commented-out breakpoint at DisplayInit+C.  The machine blew up when I did this and worked fine when I didn't, so I got rid if it.  I'm told this is a sign of having a version of RAMSysB2.loc that doesn't really match the PROMs in the machine.  Well, commenting it out seemed to work, I commented it out.  The breakpoint IOPE@Restart is in the DiskInitialDove.db code (whose symbols you must already have fetched.  DiskBoot.loc can be found from LispDoveIOPIntegration.df).  IOPDebug.bermuda sets a breakpoint in DiskInitialDove at location StartRAM after RAMSysB2.loc has pulled DiskInitialDove into memory.  StartRAM is where DiskInitialDove is about to jump off into the RAMCode.loc file.  Great, right?  Well, not exactly.  The DiskInitialDove loader ignores all the location information in the RAMCode.loc file so you don't know where RAMCode is yet.  DiskInitialDove just loads RAMCode.loc where it fits.  Don't ask me how the segment registers get fixed up.  Anyway, when we get to the StartRAM breakpoint, the RAMSysB2 file smashes the Cmos display handler (apparently the normal display handler works well enough and the CMOS one tries to use funny address arithmetic that doesn't work since the PROM image isn't where the PROM is), and stops.  Without this smash, the booting process gets stuck around 1191 or 1192.  If you stop the IOP, CS=0800 and IP = 97xx.  That's your clue that the wrong display handler is running.  Your task is to single step over the StartRAM instruction.  You get to the first instruction in the RAMCode, which is at a label called RAMInitialization.  You read the CS register, AND ONLY THE CS REGISTER!  That tells you where the IOPEInRAM segment of RAMCode really starts!  For example, if your CS register has 0140 in it, IOPEInRAM starts at 1400H.  Swell!  Now, you go back and use .bat files (thought you were done, huh?) like [BamBam:OSBU North:Xerox]<WMicro>Dove>RAMDebug.bat, RAMDbLc.bat and MEMDbLc.bat to build RAMDebug.loc and MEMDebug.loc.  You put the number from CS into the AD(SM(IOPEINRAM(1400H))) line of RAMDbLc.bat.  You put the address of ENDIOR (from MEMCode.mp2) into the corresponding line of MemDbLoc.bat.  You'll only use the the symbols for these files!  Load the symbols, set your breakpoints and go to town.
+
+
+  Good Luck!!
+
+----------------------------------------------------------------

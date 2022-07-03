@@ -1,0 +1,116 @@
+
+There are a few additional arithmetic functions:
+
+(MASK.1'S <position> <size>)  returns a number equivalent to 
+      (llsh (sub1 (expt 2 size)) position), but faster, and without consing.
+      Currently, the sume of  <position> and <size> cannot exceed 32.
+(MASK.0'S <position> <size>) is basically (logxor -1 (mask.1's position size))
+
+These two functions use a diagonal array of pre-computed masks, which 
+is accessed by \getbaseptr's over a 32-cell index array (this is to substitute
+for "fast" elt, since ELT isn't yet in microcode).  Macro definitions for both
+funs cause all calls to MASK.1'S to turn into these "fast" elts.
+
+(POWEROFTWOP <x>) where <x> is an integer, quickly returns its result.
+
+(INTEGERLENGTH <x>) is basically log2 of n; that is how long the integer
+    representation of <x> is when expressed in base 2.    For example,
+    (haulong 13) = 4; <x> must be an integer, and for negative arguments, 
+    the result is the same as that of the absolute value.
+
+(HAIPART <x> <n>) gets the high-order <n> bits of the two's complement
+      representation of the integer <x>; for negative <n>, it gets the low-order
+      <-n> bits.  Note that "high-order" is not dependent on word size, but
+      is derived from (HAULONG <x>).
+
+(IMOD <x> <modulus>)  returns <a> where <a> is in the closed interval 
+    [0, 1, ... < modulus-1>]  and <x> = m*<modulus>+<a>.   NoteWell: 
+    this is *not* the same as the REMAINDER function, since <a> is always 
+    non-negative.    The argument <modulus>  may  also be CELL or WORD,
+    in which case the appropriate size is substituted to truncate to a cell-sized 
+    or word-sized integer.   A macro definition for mod optimizes the case for 
+    compilation where <n> is constant and is a power of two.
+
+(EVENP <x> <n>) is true iff <x> is 0 mod <n>;  <n> defaults to two if not 
+      supplied.  Currently both arguments must be integers.  A macro
+      definition also does some compile-time optimization, particularly
+      for the case where <n> is a power of two.
+
+(ODDP <x>  <n>) is just (not (evenp <x> <n>));  has both expr and macro
+      definition.
+
+(IMODLESSP <x> <y> <modulus> <equal?>)  This function is inspired by
+      the need to use "wrap-around" counters.  It is not possible to define a
+      "perfect" ordering function on the integers [0, 1, ... <modulus-1>], but
+      this function takes the view that it is better to limit the "diameter"
+      of the applicable domain, than to "bump" into the singularity at the
+      endpoints of the interval.  So MODLESSP will return "true" iff
+      <y>-<x> mod <modulus> is less than 1/2*<modulus>.  The optional
+      argument <equal?>, if non-null, says to do a "less than or equal"
+      test rather than a "lessp" test.  Generally the <modulus> should be
+      a power of two (for faster running speed), but this isn't necessary.
+      Two exceptional arguments are also admitted -- if <modulus> is 
+      'WORD, then the appropriate value is taken for word-sized arithmetic;
+      if it is 'CELL, then the appropriate value is taken for double-word,
+      or cell, sized arithmetic.  In Interlisp-D, WORD sized is 16-bit, and
+      CELL-sized is 32-bit.
+
+(TIMEREXPIRED? <x> <y>)   Basically, this function just calls MODLESSP with
+    <x> and <y> and a modulus argument derived from the size of the clock
+    behind the CLOCK function; however, if <y> is omitted (or is NIL), it
+    defaults to the value of (CLOCK 0), but without doing any consing.
+    Typical usage is in implementing an "alarmclock".    One will set some
+    variable, say TIMEOUT, to (MODPLUS (CLOCK 0) <duration>), and
+    then frequently test (TIMELESSP TIMEOUT); when this test first
+    becomes false, the timer,  or "alarmclock",  has expired.
+
+(IMODPLUS <x> <y> <modulus>)
+(IMODDIFFERENCE <x> <y> <modulus>)
+    These two functions are essentially (MOD (<operation> <x> <y>) <modulus>),
+    except no overflow is permitted to occur during the intermediate <operation>.
+    A macro produces some slightly-optimized code for the case where <modulus>
+    is CELL.   A current limitation  is that an arithmetic overflow occurring when
+    <modulus> is not a power of two (or CELL or WORD) causes an error.
+
+(BITTEST <n> <mask>)  is the CommonLisp function defined as
+    (NEQ 0 (LOGAND <n> <mask>)).
+
+(ROT <x> <n> <wordsize>)  is a slight extension of the CommonLisp ROT
+    function;  it performs a bitwise-rotation of the integer <x>, by <n> places,  
+    within a field of <wordsize> bits wide.   The optional argument <wordsize> 
+    defaults to CELL, and must either be an  integer in the range 1 to 
+    <bitspercell>, or else be one of the litatoms CELL or WORD; in the latter 
+    two cases the quantities <bitspercell> and <bitsperword> are respectively
+    substituted.  A macro optimizes the case where <wordsize> is WORD and <n> 
+    is 1; this is to help with the 16-bit rotate found in checksumming algorithms.
+
+
+***** The remaining documentation is about \-named functions ******
+
+The following two functions are essentially the CommonLisp functions
+LOAD-BYTE and DEPOSIT-BYTE, but without any error or consistency
+checking.  There are versions with the checking, under similar, non-\ 
+names, in another file (to be released at a later date).
+
+(\XLOADBYTE <x> <position> <size>) is derived from the PDP-10 LDB
+      instruction;  it takes a byte of length <size> out of the integer <x> 
+      which byte has <position> bits to the right of it when <x> is viewed
+      in binary notation.
+(\XDEPOSITBYTE <x> <position> <size> <newval>) is derived from the PDP-10 
+      DPB instruction; it does not "modify memory" however, but returns
+      an integer obtained by replaceing the byte of <x> as specified under
+      LOADBYTE with the low-order <size> bits of <newval>.
+
+The following four functions implement a feature that Ron asked for a long
+time ago, and probably should not be documented for random users, unless
+all the \-functions will be so documented:
+
+(\GETBASEBITS <addr> <bit-offset> <n>) returns a integer obtained by
+      starting at the word address <addr>, skipping over <bit-offset> bits,
+      and getting the next <n> bits from memory.   In this scenario, bits
+      are numbered with 0 being the high-order position in the word, and
+      with incresing bit-addresses leading to increasing word address.  Thus
+      bit address 15 is the low-order bit of some  word, and bit address 16 is
+      the high-order bit of the next word.   The low-order bit of the result
+      is obtained from the bit found at <bit-offset>+<n>-1 bits after bit 0 of
+      the word at <addr>.  This ordering of bits and bytes within a memor

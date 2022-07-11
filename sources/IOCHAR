@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 1-Jul-2022 11:55:50" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>sources>IOCHAR.;36 98796  
+(FILECREATED "10-Jul-2022 16:52:14" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>sources>IOCHAR.;39 99224  
 
-      :CHANGES-TO (FNS FILEPOS FFILEPOS \SLOWFILEPOS)
+      :CHANGES-TO (FNS FILEPOS \SLOWFILEPOS FFILEPOS)
 
-      :PREVIOUS-DATE " 1-Jul-2022 10:33:52" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>sources>IOCHAR.;32)
+      :PREVIOUS-DATE " 1-Jul-2022 11:55:50" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>sources>IOCHAR.;36)
 
 
 (* ; "
@@ -257,6 +257,8 @@ DONTCOPY
 (FILEPOS
   [LAMBDA (PATTERN FILE START END SKIP TAIL CASEARRAY)
 
+    (* ;; "Edited 10-Jul-2022 16:51 by rmk")
+
     (* ;; "Edited  1-Jul-2022 11:55 by rmk")
 
     (* ;; "Edited 25-Jun-2022 22:51 by rmk: The original version was a byte-level searcher, this upgrades to character searching as determined by the external format of the stream. (It is also a bit faster than the original).")
@@ -266,6 +268,11 @@ DONTCOPY
     (* ;; "Otherwise, there may be some bad matches and some missing matches.  The slow case will be accurate in those cases (and a NIL return for the format's \FORMATBYTESTRING function will kick it into the slow case (about 10 times slower).  This always defers to the slow case if SKIP or CASEARRAY are non-NIL.")
 
     (* ;; "(Original algorithm advanced the pattern (and the stream starting position) over leading skips, presumably to speed up the search.  A foolish (and complex) optimization, since it would just mean that you would cover the intervening characters in a different way.)")
+
+    (* ;; 
+    "New interface features:  TAIL=BOTH means return a dotted pair of the (start . end) of the match")
+
+    (* ;; "CASEARRAY=T forces the slow case, as if CASEARRAY=(CASEARRAU) - transparent.")
 
     (PROG ((STREAM (\GETSTREAM FILE 'INPUT))
            STREAMLEN ORGFILEPTR PATSTR PATLEN PATBASE PATLEN FIRSTINDEX LASTINDEX PATFIRSTBYTE 
@@ -404,6 +411,8 @@ DONTCOPY
 (FFILEPOS
   [LAMBDA (PATTERN FILE START END SKIP TAIL CASEARRAY)
 
+    (* ;; "Edited 10-Jul-2022 10:17 by rmk")
+
     (* ;; "Edited  1-Jul-2022 11:55 by rmk")
 
     (* ;; "Edited 23-Jun-2022 08:50 by rmk: CASEARRAY is now also a slow (FFILEPOS) case.  Fast case now works for arbitrary external formats")
@@ -413,19 +422,19 @@ DONTCOPY
     (* ;; "RMK:  Added coercion from internal XCCS string to UTF8 if searching a UTF8 file")
                                                              (* Pavel "12-Oct-86 15:20")
     (PROG ((STREAM (\GETSTREAM FILE 'INPUT))
-           PATBASE PATOFFSET PATLEN ORGFILEPTR STARTBYTEPOS ENDBYTEPOS BIGENDOFFSET STARTSEG ENDSEG 
-           EOF)
+           BYTEPATTERN BPATBASE BPATOFFSET BPATLEN ORGFILEPTR STARTBYTEPOS ENDBYTEPOS BIGENDOFFSET 
+           STARTSEG ENDSEG EOF)
           (CL:WHEN [OR SKIP CASEARRAY (NOT (fetch PAGEMAPPED of (fetch (STREAM DEVICE) of STREAM)))
-                       (NULL (SETQ PATTERN (\FORMATBYTESTRING STREAM PATTERN]
+                       (NULL (SETQ BYTEPATTERN (\FORMATBYTESTRING STREAM PATTERN]
                                                              (* ; "Slow case--use FILEPOS")
               (GO TRYFILEPOS))                               (* ; 
                                                              "calculate start addr and set file ptr.")
-          (SETQ PATBASE (fetch (STRINGP BASE) of PATTERN))
-          (SETQ PATOFFSET (fetch (STRINGP OFFST) of PATTERN))
-          (SETQ PATLEN (fetch (STRINGP LENGTH) of PATTERN))
+          (SETQ BPATBASE (fetch (STRINGP BASE) of BYTEPATTERN))
+          (SETQ BPATOFFSET (fetch (STRINGP OFFST) of BYTEPATTERN))
+          (SETQ BPATLEN (fetch (STRINGP LENGTH) of BYTEPATTERN))
           (COND
-             ((OR (IGREATERP PATLEN \MAX.PATTERN.SIZE)
-                  (ILESSP PATLEN \MIN.PATTERN.SIZE))
+             ((OR (IGREATERP BPATLEN \MAX.PATTERN.SIZE)
+                  (ILESSP BPATLEN \MIN.PATTERN.SIZE))
               (GO TRYFILEPOS)))
           (SETQ ORGFILEPTR (\GETFILEPTR STREAM))
           (SETQ STARTBYTEPOS (IPLUS (COND
@@ -435,7 +444,7 @@ DONTCOPY
                                                   (LISPERROR "ILLEGAL ARG" START)))
                                               START)
                                        (T ORGFILEPTR))
-                                    (SUB1 PATLEN)))          (* ; 
+                                    (SUB1 BPATLEN)))         (* ; 
        "STARTBYTEPOS is the address of the character corresponding to the last character of PATTERN.")
           (SETQ EOF (\GETEOFPTR STREAM))                     (* ; 
                     "calculate the character address of the character after the last possible match.")
@@ -446,7 +455,7 @@ DONTCOPY
                                                  ((ILESSP END 0)
                                                   (IPLUS EOF END 1))
                                                  (T END))
-                                              PATLEN)
+                                              BPATLEN)
                                        EOF]
 
      (* ;; "use STARTBYTEPOS and ENDBYTEPOS instead of START and END because vm functions shouldn't change their arguments.")
@@ -463,12 +472,12 @@ DONTCOPY
                          (PROG ((DELTA1 (fetch (ARRAYP BASE) of \FFDELTA1))
                                 (DELTA2 (fetch (ARRAYP BASE) of \FFDELTA2))
                                 (PATCHAR (fetch (ARRAYP BASE) of \FFPATCHAR))
-                                (MAXPATINDEX (SUB1 PATLEN))
+                                (MAXPATINDEX (SUB1 BPATLEN))
                                 CHAR CURPATINDEX LASTCHAR INC)
 
                           (* ;; "Use Boyer-Moore string search algorithm.  Use two auxiliary tables, DELTA1 and DELTA2, to tell how far ahead to move in the file when a partial match fails.  DELTA1 contains, for each character code, the distance of that character from the right end of the pattern, or PATLEN if the character does not occur in the pattern.  DELTA2 contains, for each character position in the pattern, how far ahead to move such that the partial substring discovered to the right of the position now matches some other substring (to the left) in the pattern.  PATCHAR is just PATTERN translated thru CASEARRAY")
 
-                               (\SETUP.FFILEPOS PATBASE PATOFFSET PATLEN PATCHAR DELTA1 DELTA2)
+                               (\SETUP.FFILEPOS BPATBASE BPATOFFSET BPATLEN PATCHAR DELTA1 DELTA2)
                                [COND
                                   ((SMALLP ENDBYTEPOS)
                                    (SETQ STARTSEG (SETQ ENDSEG 0)))
@@ -546,10 +555,10 @@ DONTCOPY
                                                                                  of STREAM))
                                                     (freplace (STREAM CHARSET) of STREAM
                                                        with (\CHARSET (NTHCHARCODE PATTERN -1))))
-                                                (\INCFILEPTR STREAM (SUB1 PATLEN))
+                                                (\INCFILEPTR STREAM (SUB1 BPATLEN))
                                                 (SETQ ENDBYTEPOS (\GETFILEPTR STREAM))
                                                 (CL:IF (EQ TAIL 'BOTH)
-                                                    (CONS (IDIFFERENCE ENDBYTEPOS PATLEN)
+                                                    (CONS (IDIFFERENCE ENDBYTEPOS BPATLEN)
                                                           ENDBYTEPOS)
                                                     ENDBYTEPOS)
                                          ELSE 
@@ -622,7 +631,9 @@ DONTCOPY
                                      (IDIFFERENCE MAXPATINDEX P])
 
 (\SLOWFILEPOS
-  [LAMBDA (PATSTR STREAM STARTBYTEPOS ENDBYTEPOS SKIP TAIL CASEARRAY)
+  [LAMBDA (PATTERN STREAM STARTBYTEPOS ENDBYTEPOS SKIP TAIL CASEARRAY)
+
+    (* ;; "Edited 10-Jul-2022 16:50 by rmk")
 
     (* ;; "Edited  1-Jul-2022 10:51 by rmk")
 
@@ -634,34 +645,34 @@ DONTCOPY
            PATBASE PATLEN PATFATP FIRSTINDEX LASTINDEX SKIPCODE PATFIRSTCODE NFIRSTCODEBYTES NPBYTES
            CABASE CASIZE CAFAT STARTCHARSET (ORGCHARSET (ffetch (STREAM CHARSET) of STREAM)))
           (DECLARE (SPECVARS NFIRSTCODEBYTES NPBYTES))
-          (CL:WHEN CASEARRAY
+          (CL:WHEN (AND CASEARRAY (NEQ T CASEARRAY))
               (CL:UNLESS [AND (ARRAYP CASEARRAY)
                               (OR (EQ \ST.BYTE (ffetch (ARRAYP TYP) of CASEARRAY))
                                   (SETQ CAFAT (EQ \ST.POS16 (ffetch (ARRAYP TYP) of CASEARRAY]
                      (LISPERROR "ILLEGAL ARG" CASEARRAY))
               (SETQ CABASE (FETCH (ARRAYP BASE) OF CASEARRAY))
               (SETQ CASIZE (FETCH (ARRAYP LENGTH) OF CASEARRAY))
-              (SETQ PATSTR (CONCAT PATSTR))                  (* ; 
+              (SETQ PATTERN (CONCAT PATTERN))                (* ; 
                                                          "Map all STR characters thru the case array")
-              (FOR C INSTRING PATSTR AS I FROM 1 DO (RPLCHARCODE PATSTR I (\CATRANSLATE CABASE CASIZE
-                                                                                 CAFAT C))))
+              (FOR C INSTRING PATTERN AS I FROM 1 DO (RPLCHARCODE PATTERN I
+                                                            (\CATRANSLATE CABASE CASIZE CAFAT C))))
 
      (* ;; "")
 
      (* ;; "PATSTR now has case-mapped characters")
 
           [COND
-             ((LITATOM PATSTR)
-              (SETQ PATBASE (ffetch (LITATOM PNAMEBASE) of PATSTR))
-              (SETQ PATLEN (ffetch (LITATOM PNAMELENGTH) of PATSTR))
+             ((LITATOM PATTERN)
+              (SETQ PATBASE (ffetch (LITATOM PNAMEBASE) of PATTERN))
+              (SETQ PATLEN (ffetch (LITATOM PNAMELENGTH) of PATTERN))
               (SETQ FIRSTINDEX 1)
-              (SETQ PATFATP (ffetch (LITATOM FATPNAMEP) of PATSTR)))
-             (T (CL:UNLESS (STRINGP PATSTR)
-                    (SETQ PATSTR (MKSTRING PATSTR)))
-                (SETQ PATBASE (ffetch (STRINGP BASE) of PATSTR))
-                (SETQ PATLEN (ffetch (STRINGP LENGTH) of PATSTR))
-                (SETQ FIRSTINDEX (ffetch (STRINGP OFFST) of PATSTR))
-                (SETQ PATFATP (ffetch (STRINGP FATSTRINGP) of PATSTR]
+              (SETQ PATFATP (ffetch (LITATOM FATPNAMEP) of PATTERN)))
+             (T (CL:UNLESS (STRINGP PATTERN)
+                    (SETQ PATTERN (MKSTRING PATTERN)))
+                (SETQ PATBASE (ffetch (STRINGP BASE) of PATTERN))
+                (SETQ PATLEN (ffetch (STRINGP LENGTH) of PATTERN))
+                (SETQ FIRSTINDEX (ffetch (STRINGP OFFST) of PATTERN))
+                (SETQ PATFATP (ffetch (STRINGP FATSTRINGP) of PATTERN]
           (SETQ LASTINDEX (IPLUS FIRSTINDEX (SUB1 PATLEN)))
           (SETQ PATFIRSTCODE (\GETBASECHAR PATFATP PATBASE FIRSTINDEX))
           (ADD FIRSTINDEX 1)                                 (* ; 
@@ -1548,10 +1559,10 @@ DONTCOPY
 CONCATCODES 9879 . 10065) (PACKC 10067 . 12670) (PACK 12672 . 13251) (PACK* 13253 . 14975) (\PACK.ITEM
  14977 . 15432) (STRPOS 15434 . 18832)) (18836 19125 (XCL:PACK 18836 . 19125)) (19127 19377 (XCL:PACK*
  19127 . 19377)) (20015 22406 (STRPOSL 20025 . 21651) (MAKEBITTABLE 21653 . 22404)) (22568 23045 (
-CASEARRAY 22578 . 22768) (UPPERCASEARRAY 22770 . 23043)) (23367 55414 (FILEPOS 23377 . 32350) (
-FFILEPOS 32352 . 44480) (\SETUP.FFILEPOS 44482 . 48265) (\SLOWFILEPOS 48267 . 55412)) (56202 97449 (
-DATE 56212 . 56298) (DATEFORMAT 56300 . 56392) (GDATE 56394 . 56505) (IDATE 56507 . 68178) (
-\IDATESCANTOKEN 68180 . 69459) (\IDATE-PARSE-MONTH 69461 . 73157) (\OUTDATE 73159 . 85907) (
-\OUTDATE-STRING 85909 . 86524) (\RPLRIGHT 86526 . 86764) (\UNPACKDATE 86766 . 92557) (\PACKDATE 92559
- . 95879) (\DTSCAN 95881 . 96023) (\ISDST? 96025 . 96532) (\CHECKDSTCHANGE 96534 . 97447)))))
+CASEARRAY 22578 . 22768) (UPPERCASEARRAY 22770 . 23043)) (23367 55842 (FILEPOS 23377 . 32618) (
+FFILEPOS 32620 . 44841) (\SETUP.FFILEPOS 44843 . 48626) (\SLOWFILEPOS 48628 . 55840)) (56630 97877 (
+DATE 56640 . 56726) (DATEFORMAT 56728 . 56820) (GDATE 56822 . 56933) (IDATE 56935 . 68606) (
+\IDATESCANTOKEN 68608 . 69887) (\IDATE-PARSE-MONTH 69889 . 73585) (\OUTDATE 73587 . 86335) (
+\OUTDATE-STRING 86337 . 86952) (\RPLRIGHT 86954 . 87192) (\UNPACKDATE 87194 . 92985) (\PACKDATE 92987
+ . 96307) (\DTSCAN 96309 . 96451) (\ISDST? 96453 . 96960) (\CHECKDSTCHANGE 96962 . 97875)))))
 STOP

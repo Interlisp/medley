@@ -9,11 +9,6 @@ fi
 
 scr="-sc 1024x768 -g 1042x790"
 
-# Keep (GREET) from finding an init file
-mkdir -p $MEDLEYDIR/tmp/logindir
-export HOME=$MEDLEYDIR/tmp/logindir
-export LOGINDIR=$MEDLEYDIR/tmp/logindir
-
 touch tmp/loadup.timestamp
 
 ./run-medley $scr -loadup "$MEDLEYDIR"/sources/LOADUP-INIT.LISP loadups/starter.sysout

@@ -14,7 +14,7 @@ fi
     ./scripts/loadup-aux.sh
 
 echo "loadups are in $MEDLEYDIR/tmp"
-edho use
+echo use
 echo "   ./scripts/copy-all.sh   "
 echo "to copy to loadups library"
 echo "**** DONE ****"

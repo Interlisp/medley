@@ -7,6 +7,7 @@ if [ ! -f run-medley ] ; then
     exit 1
 fi
 
+mkdir -p tmp
 touch tmp/loadup.timestamp
 
 scr="-sc 1024x768 -g 1042x790"

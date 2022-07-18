@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 9-Jul-2022 19:01:45" 
-{DSK}<Users>kaplan>Local>medley3.5>working-medley>lispusers>GITFNS.;397 109555 
+(FILECREATED "17-Jul-2022 11:13:13" 
+{DSK}<Users>kaplan>Local>medley3.5>working-medley>lispusers>GITFNS.;418 112329 
 
-      :CHANGES-TO (FNS GIT-PRC-MENU GIT-COMMAND-TO-FILE)
-                  (COMMANDS prc)
+      :CHANGES-TO (FNS GIT-PULL-REQUESTS GIT-BRANCH-DIFF PROCESS-COMMAND)
 
-      :PREVIOUS-DATE " 8-Jul-2022 10:37:36" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>lispusers>GITFNS.;390)
+      :PREVIOUS-DATE "16-Jul-2022 22:22:54" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>lispusers>GITFNS.;414)
 
 
 (PRETTYCOMPRINT GITFNSCOMS)
@@ -102,7 +101,8 @@
         
         (* ;; "Utilities")
 
-        (FNS CDGITDIR GIT-COMMAND GITORIGIN GIT-INITIALS GIT-COMMAND-TO-FILE)
+        (FNS CDGITDIR GIT-COMMAND GITORIGIN GIT-INITIALS GIT-COMMAND-TO-FILE PROCESS-COMMAND 
+             GIT-RESULT-TO-LINES)
         (PROPS (GITFNS FILETYPE))))
 
 
@@ -147,6 +147,7 @@
 
 (GIT-MAKE-PROJECT
   [LAMBDA (PROJECTNAME PROJECTPATH WORKINGPATH EXCLUSIONS DEFAULTSUBDIRS)
+                                                             (* ; "Edited 13-Jul-2022 13:47 by rmk")
                                                              (* ; "Edited  6-Jul-2022 19:34 by rmk")
                                                              (* ; "Edited 17-May-2022 17:08 by rmk")
                                                              (* ; "Edited 13-May-2022 10:40 by rmk")
@@ -169,7 +170,7 @@
 
     (* ;; "WORKINGPATH T or NIL means try to find a parallel to the projectpath, T means don't cause an error if not found. ")
 
-    (SETQ PROJECTNAME (U-CASE PROJECTNAME))
+    (SETQ PROJECTNAME (U-CASE (MKATOM PROJECTNAME)))
     (CL:WHEN (MEMB PROJECTPATH '(NIL T))
         [SETQ PROJECTPATH (OR (GIT-CLONEP (UNIX-GETENV PROJECTNAME)
                                      T)
@@ -956,6 +957,8 @@
 (GIT-BRANCH-DIFF
   [LAMBDA (BRANCH1 BRANCH2 PROJECT)
 
+    (* ;; "Edited 17-Jul-2022 09:36 by rmk")
+
     (* ;; "Edited  4-Jun-2022 20:43 by rmk")
 
     (* ;; "Edited  9-May-2022 16:21 by rmk: returns an ALIST that classifies how the files in BRANCH1 and BRANCH2 differ (changed, renamed, added, deleted, copied).")
@@ -972,51 +975,79 @@
                                                              (GIT-COMMAND (CONCAT 
                                                      "git diff-tree --no-commit-id --name-STATUS -r "
     COMMIT) NIL NIL PROJECT))
-    (LET (POS (LINES (GIT-COMMAND (CONCAT "git diff --name-status -C --find-copies-harder " BRANCH1 
-                                         " " BRANCH2)
-                            NIL NIL PROJECT)))
-         (CL:WHEN (SETQ POS (STRPOS "fatal: ambiguous argument '" (CAR LINES)
-                                   1 NIL T T))
-             (ERROR "Unknown branch " (IF (STRPOS BRANCH1 (CAR LINES)
-                                                 POS NIL T)
-                                          THEN BRANCH1
-                                        ELSE BRANCH2)))
-         (SORT (FOR L IN LINES
-                  COLLECT (SELCHARQ (CHCON1 L)
-                               (A (CL:IF (EQ (CHARCODE TAB)
-                                             (NTHCHARCODE L 2))
-                                      (LIST 'ADDED (SUBSTRING L 3))
-                                      (ERROR "ADDED NOT RECOGNIZED" L)))
-                               (D (CL:IF (EQ (CHARCODE TAB)
-                                             (NTHCHARCODE L 2))
-                                      (LIST 'DELETED (SUBSTRING L 3))
-                                      (ERROR "DELETED NOT RECOGNIZED" L)))
-                               (M (CL:IF (SETQ POS (STRPOS "	" L))
-                                      (LIST 'CHANGED (SUBSTRING L (ADD1 POS)))
-                                      (ERROR "CHANGED NOT RECOGNIZED" L)))
-                               (C (IF (AND (EQ (CHARCODE TAB)
-                                               (NTHCHARCODE L 5))
-                                           (SETQ POS (STRPOS "	" L 7)))
-                                      THEN (LIST 'COPIED (SUBSTRING L 6 (SUB1 POS))
-                                                 (OR (FIXP (SUBATOM L 2 4))
-                                                     (HELP "C without a number" L)))
-                                    ELSE (HELP "COPY NOT RECOGNIZED" L)))
-                               (R (IF (AND (EQ (CHARCODE TAB)
-                                               (NTHCHARCODE L 5))
-                                           (SETQ POS (STRPOS "	" L 7)))
-                                      THEN (LIST 'RENAMED (SUBSTRING L 6 (SUB1 POS))
-                                                 (SUBSTRING L (ADD1 POS))
-                                                 (OR (FIXP (SUBATOM L 2 4))
-                                                     (HELP "R without a number" L)))
-                                    ELSE (HELP "RENAME NOT RECOGNIZED" L)))
-                               (w (CL:UNLESS (STRPOS "warning: " L 1)
-                                         (HELP "UNRECOGNZED GIT LINE" L))
-                                  (CL:UNLESS (EQ 'Y (ASKUSER NIL NIL (CONCAT L 
+
+    (* ;; "We don't use GIT-COMMAND because we want to deal with the warning messages here, to give the option of increasing the rename limit..")
+
+    (PROG (POS LIMIT ERRORFILE RLINES ELINES RESULTFILE)
+      RETRY
+          (SETQ RESULTFILE (GIT-COMMAND-TO-FILE (CONCAT 
+                                                    "git diff --name-status -C --find-copies-harder "
+                                                       BRANCH1 " " BRANCH2)
+                                  PROJECT))
+          (SETQ ELINES NIL)
+          (SETQ RLINES NIL)
+          (CL:WHEN (LISTP RESULTFILE)
+              (SETQ ERRORFILE (CADR RESULTFILE))
+              (SETQ ELINES (GIT-RESULT-TO-LINES ERRORFILE))
+              (DELFILE ERRORFILE)
+              (SETQ RESULTFILE (CAR RESULTFILE)))
+          (SETQ RLINES (GIT-RESULT-TO-LINES RESULTFILE))
+          (DELFILE RESULTFILE)
+          (CL:WHEN ELINES
+              (IF [AND (STRPOS "warning: inexact rename detection was skipped due to too many files."
+                              (CAR ELINES)
+                              1)
+                       (SETQ LIMIT (FIXP (SUBATOM (CADR ELINES)
+                                                (STRPOS " at least " (CADR ELINES)
+                                                       1 NIL NIL T)
+                                                (SUB1 (STRPOS " and retry " (CADR ELINES]
+                  THEN (PRINTOUT T 3 "** For accurate branch differences, " 
+                              "diff.renameLimit must be increased")
+                       (SELECTQ (AND LIMIT (ASKUSER NIL 'N (CONCAT 
+                                                       "      Should I increase the global limit to "
+                                                                  (ADD LIMIT 1)
+                                                                  " and try again? ")))
+                           (Y (GIT-COMMAND (CONCAT "git config --global diff.renameLimit " LIMIT)
+                                     NIL NIL PROJECT)
+                              (GO RETRY))
+                           (ERROR "Incomplete branch differences" (LIST BRANCH1 BRANCH2)))
+                ELSE (FOR L IN ELINES DO (PRINTOUT T L T))))
+          (RETURN (SORT (FOR L IN RLINES
+                           COLLECT (SELCHARQ (CHCON1 L)
+                                        (A (CL:IF (EQ (CHARCODE TAB)
+                                                      (NTHCHARCODE L 2))
+                                               (LIST 'ADDED (SUBSTRING L 3))
+                                               (ERROR "ADDED NOT RECOGNIZED" L)))
+                                        (D (CL:IF (EQ (CHARCODE TAB)
+                                                      (NTHCHARCODE L 2))
+                                               (LIST 'DELETED (SUBSTRING L 3))
+                                               (ERROR "DELETED NOT RECOGNIZED" L)))
+                                        (M (CL:IF (SETQ POS (STRPOS "	" L))
+                                               (LIST 'CHANGED (SUBSTRING L (ADD1 POS)))
+                                               (ERROR "CHANGED NOT RECOGNIZED" L)))
+                                        (C (IF (AND (EQ (CHARCODE TAB)
+                                                        (NTHCHARCODE L 5))
+                                                    (SETQ POS (STRPOS "	" L 7)))
+                                               THEN (LIST 'COPIED (SUBSTRING L 6 (SUB1 POS))
+                                                          (OR (FIXP (SUBATOM L 2 4))
+                                                              (HELP "C without a number" L)))
+                                             ELSE (HELP "COPY NOT RECOGNIZED" L)))
+                                        (R (IF (AND (EQ (CHARCODE TAB)
+                                                        (NTHCHARCODE L 5))
+                                                    (SETQ POS (STRPOS "	" L 7)))
+                                               THEN (LIST 'RENAMED (SUBSTRING L 6 (SUB1 POS))
+                                                          (SUBSTRING L (ADD1 POS))
+                                                          (OR (FIXP (SUBATOM L 2 4))
+                                                              (HELP "R without a number" L)))
+                                             ELSE (HELP "RENAME NOT RECOGNIZED" L)))
+                                        (w (CL:UNLESS (STRPOS "warning: " L 1)
+                                                  (HELP "UNRECOGNZED GIT LINE" L))
+                                           (CL:UNLESS (EQ 'Y (ASKUSER NIL NIL (CONCAT L 
                                                                           " Ignore remaining files? "
-                                                                            )))
-                                         (ERROR!)))
-                               (HELP "Unrecognized git-diff code %"" L "%"")))
-               T])
+                                                                                     )))
+                                                  (ERROR!)))
+                                        (HELP "Unrecognized git-diff code " L)))
+                        T])
 
 (GIT-COMMIT-DIFFS
   [LAMBDA (BRANCH1 BUTNOTBRANCH2 PROJECT)                    (* ; "Edited 26-Jun-2022 13:32 by rmk")
@@ -1244,8 +1275,11 @@
                    T)))])
 
 (GIT-PULL-REQUESTS
-  [LAMBDA (ALLINFO INCLUDEDRAFTS PROJECT)                    (* ; "Edited  9-May-2022 16:54 by rmk")
+  [LAMBDA (ALLINFO INCLUDEDRAFTS PROJECT)                    (* ; "Edited 17-Jul-2022 11:12 by rmk")
+                                                             (* ; "Edited  9-May-2022 16:54 by rmk")
                                                              (* ; "Edited 25-Feb-2022 09:26 by rmk")
+    (CL:UNLESS (EQ 0 (PROCESS-COMMAND "command -v gh"))
+           (ERROR "gh must be installed in order to enumerate pull requests:"))
     (FOR LINE TAB1 TAB2 TAB3 VAL IN (GIT-COMMAND "gh pr list" T NIL PROJECT)
        WHEN [AND (SETQ TAB1 (STRPOS "	" LINE))
                  (SETQ TAB2 (STRPOS "	" LINE (ADD1 TAB1)))
@@ -1945,7 +1979,8 @@
            " && "])
 
 (GIT-COMMAND
-  [LAMBDA (CMD ALL NOERROR PROJECT)                          (* ; "Edited  8-Jul-2022 10:20 by rmk")
+  [LAMBDA (CMD ALL NOERROR PROJECT)                          (* ; "Edited 16-Jul-2022 13:06 by rmk")
+                                                             (* ; "Edited  8-Jul-2022 10:20 by rmk")
                                                              (* ; "Edited  7-May-2022 22:40 by rmk")
                                                             (* ; "Edited  7-Oct-2021 11:15 by rmk:")
 
@@ -1966,13 +2001,7 @@
              (DELFILE (CADR RESULTFILE))
              (SETQ RESULTFILE (CAR RESULTFILE)))
          (CL:WHEN RESULTFILE
-             (SETQ LINES (CL:WITH-OPEN-FILE (STREAM RESULTFILE :DIRECTION :INPUT :EXTERNAL-FORMAT
-                                                   (SYSTEM-EXTERNALFORMAT))
-                                (BIND LINE UNTIL (EOFP STREAM)
-                                   WHEN [PROGN (SETQ LINE (CL:READ-LINE STREAM :EOF-ERROR-P NIL 
-                                                                 :EOF-VALUE NIL))
-                                               (OR ALL (NOT (STRPOS ".git" LINE 1 NIL T] COLLECT
-                                                                                         LINE)))
+             (SETQ LINES (GIT-RESULT-TO-LINES RESULTFILE ALL))
              (DELFILE RESULTFILE)                            (* ; "On tmp/, OK if we miss")
              LINES)])
 
@@ -2001,92 +2030,109 @@
         (ERROR "INITIALS is not set"])
 
 (GIT-COMMAND-TO-FILE
-  [LAMBDA (CMD PROJECT NOERROR)                              (* ; "Edited  9-Jul-2022 18:55 by rmk")
+  [LAMBDA (CMD PROJECT NOERROR)                              (* ; "Edited 16-Jul-2022 10:09 by rmk")
+                                                             (* ; "Edited  9-Jul-2022 18:55 by rmk")
                                                              (* ; "Edited  8-Jul-2022 08:51 by rmk")
 
     (* ;; "Try to make the temporary name unique.  Maybe Unix mktemp, except that we need to know the name that was used.  So we calculate it, provide it, and assume that it worked.  Caller an decide to delete it after examination.  (Or, left to be reaped from /tmp/)")
 
     (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
 
-    (* ;; 
-    "Filename of  the form /tmp/medley-gitresult-{IDATE}-{rand} -- Avoid creating new unix directory")
+    (* ;; "Filename of  the form /tmp/medley-gitresult-{IDATE}-{rand} ")
 
     (LET* ([PROJECTNAME (L-CASE (GIT-GET-PROJECT PROJECT 'PROJECTNAME]
            (DATE (IDATE))
            (RAND (RAND))
            (RESULTFILE (CONCAT "{UNIX}/tmp/" PROJECTNAME "-" DATE "-" RAND "-result"))
            (ERRORFILE (CONCAT "{UNIX}/tmp/" PROJECTNAME "-" DATE "-" RAND "-error"))
-           COMPLETED)
-          [CL:WITH-OPEN-STREAM (PS (CREATE-PROCESS-STREAM (CONCAT (CDGITDIR PROJECT)
-                                                                 CMD " > " (STRIPHOST RESULTFILE)
-                                                                 " 2> "
-                                                                 (STRIPHOST ERRORFILE)
-                                                                 " && echo COMPLETED ")))
-                 (CLOSEF? ERRORFILE)
-
-                 (* ;; 
-               "Avoid reading the process stream if there is another error signal.  It ends to hang.")
-
-                 (SETQ COMPLETED (IF (AND (INFILEP ERRORFILE)
-                                          (IGREATERP (GETFILEINFO ERRORFILE 'LENGTH)
-                                                 0))
-                                     THEN [CL:WITH-OPEN-FILE (ESTREAM ERRORFILE :DIRECTION :INPUT 
-                                                                    :EXTERNAL-FORMAT (
-                                                                                SYSTEM-EXTERNALFORMAT
-                                                                                      ))
-                                                 (OR (NEQ 0 (OR (FILEPOS "fatal: " ESTREAM 0 1)
-                                                                (FILEPOS "gh: Command not found" 
-                                                                       ESTREAM 0 1)
-                                                                (FILEPOS "unknown command %"" ESTREAM
-                                                                       0 1)))
-                                                     (FILEPOS "' is not a git command." ESTREAM
-                                                            (NCHARS CMD]
-                                   ELSE (SETFILEINFO PS 'ENDOFSTREAMOP (FUNCTION NILL))
-                                        (STREQUAL "COMPLETED" (RSTRING PS]
+           COMPLETIONCODE)
+          [SETQ COMPLETIONCODE (PROCESS-COMMAND (CONCAT (CDGITDIR PROJECT)
+                                                       CMD " > " (STRIPHOST RESULTFILE)
+                                                       " 2> "
+                                                       (STRIPHOST ERRORFILE]
+          (CLOSEF? ERRORFILE)
           (CLOSEF? RESULTFILE)
-          (IF COMPLETED
-              THEN (IF (IEQP 0 (GETFILEINFO ERRORFILE 'LENGTH))
-                       THEN (DELFILE ERRORFILE)
-                            (SETQ ERRORFILE NIL)
-                     ELSEIF (IEQP 0 (GETFILEINFO RESULTFILE 'LENGTH))
-                       THEN (SETQ RESULTFILE ERRORFILE)
-                            (SETQ ERRORFILE NIL))
-                   (IF ERRORFILE
+          (CL:WHEN [AND (INFILEP ERRORFILE)
+                        (IEQP 0 (GETFILEINFO ERRORFILE 'LENGTH]
+              (DELFILE ERRORFILE)
+              (SETQ ERRORFILE NIL))
+          (CL:WHEN (AND (INFILEP RESULTFILE)
+                        (IEQP 0 (GETFILEINFO RESULTFILE 'LENGTH))
+                        ERRORFILE)
+              (DELFILE RESULTFILE)                           (* ; 
+                                                       "Don't delete if the error file is also empty")
+              (SETQ RESULTFILE NIL))
+          (CL:WHEN (AND (EQ COMPLETIONCODE 0)
+                        ERRORFILE)                           (* ; 
+                                                             "Check the error file, just in case")
+              (CL:WITH-OPEN-FILE (ESTREAM ERRORFILE :DIRECTION :INPUT :EXTERNAL-FORMAT (
+                                                                                SYSTEM-EXTERNALFORMAT
+                                                                                        ))
+                     (CL:WHEN (OR (EQ 0 (OR (FILEPOS "fatal: " ESTREAM 0 1)
+                                            (FILEPOS "gh: Command not found" ESTREAM 0 1)
+                                            (FILEPOS "unknown command %"" ESTREAM 0 1)))
+                                  (FILEPOS "' is not a git command." ESTREAM (NCHARS CMD)))
+                            (SETQ COMPLETIONCODE 1))))
+          (IF (EQ 0 COMPLETIONCODE)
+              THEN (IF (AND RESULTFILE ERRORFILE)
                        THEN (LIST RESULTFILE ERRORFILE)
-                     ELSE RESULTFILE)
+                     ELSEIF RESULTFILE
+                     ELSE ERRORFILE)
             ELSE (DELFILE RESULTFILE)
                  (DELFILE ERRORFILE)
-                 (IF NOERROR
-                     THEN NIL
-                   ELSE (ERROR (CONCAT "Command failed: " CMD])
+                 (CL:UNLESS NOERROR
+                     (ERROR (CONCAT "Command failed: " CMD)))
+                 NIL])
+
+(PROCESS-COMMAND
+  [LAMBDA (CMD)                                              (* ; "Edited 17-Jul-2022 08:17 by rmk")
+
+    (* ;; "This sets up an asynchronous process and waits until it returns with an exit code.  Typically 0 means success.")
+
+    (CL:WITH-OPEN-STREAM (PS (CREATE-PROCESS-STREAM CMD))
+           (BIND CODE WHILE (EQ T (SETQ CODE (OR (SUBRCALL UNIX-HANDLECOMM 7 (fetch (STREAM F1)
+                                                                                of PS))
+                                                 0))) DO (BLOCK) FINALLY (RETURN CODE])
+
+(GIT-RESULT-TO-LINES
+  [LAMBDA (FILE ALL)                                         (* ; "Edited 16-Jul-2022 22:21 by rmk")
+
+    (* ;; "Suppress .git lines unless ALL")
+
+    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :INPUT :EXTERNAL-FORMAT (SYSTEM-EXTERNALFORMAT))
+           (BIND LINE UNTIL (EOFP STREAM) WHEN [PROGN (SETQ LINE (CL:READ-LINE STREAM :EOF-ERROR-P 
+                                                                        NIL :EOF-VALUE NIL))
+                                                      (OR ALL (NOT (STRPOS ".git" LINE 1]
+              COLLECT LINE])
 )
 
 (PUTPROPS GITFNS FILETYPE :TCOMPL)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3592 18006 (GIT-CLONEP 3602 . 4865) (GIT-MAKE-PROJECT 4867 . 12847) (GIT-GET-PROJECT 
-12849 . 14774) (GIT-PROJECT-PATH 14776 . 15820) (FIND-ANCESTOR-DIRECTORY 15822 . 16171) (
-GIT-FIND-CLONE 16173 . 17254) (GIT-MAINBRANCH 17256 . 17651) (GIT-MAINBRANCH? 17653 . 18004)) (24323 
-27111 (ALLSUBDIRS 24333 . 25619) (MEDLEYSUBDIRS 25621 . 26314) (GITSUBDIRS 26316 . 27109)) (27112 
-31902 (TOGIT 27122 . 28528) (FROMGIT 28530 . 29511) (GIT-DELETE-FILE 29513 . 30359) (
-MYMEDLEY-DELETE-FILES 30361 . 31900)) (31903 34435 (MYMEDLEYSUBDIR 31913 . 32369) (GITSUBDIR 32371 . 
-32814) (STRIPDIR 32816 . 33187) (STRIPHOST 33189 . 33429) (STRIPNAME 33431 . 34184) (STRIPWHERE 34186
- . 34433)) (34436 36338 (GFILE4MFILE 34446 . 34809) (MFILE4GFILE 34811 . 35380) (GIT-REPO-FILENAME 
-35382 . 36336)) (36387 46175 (GIT-COMMIT 36397 . 37223) (GIT-PUSH 37225 . 37869) (GIT-PULL 37871 . 
-38483) (GIT-APPROVAL 38485 . 38834) (GIT-GET-FILE 38836 . 40767) (GIT-FILE-EXISTS? 40769 . 41043) (
-GIT-REMOTE-UPDATE 41045 . 41769) (GIT-REMOTE-ADD 41771 . 42078) (GIT-FILE-DATE 42080 . 43011) (
-GIT-FILE-HISTORY 43013 . 44947) (GIT-PRINT-FILE-HISTORY 44949 . 45999) (GIT-FETCH 46001 . 46173)) (
-46205 54905 (GIT-BRANCH-DIFF 46215 . 50967) (GIT-COMMIT-DIFFS 50969 . 51522) (GIT-BRANCH-RELATIONS 
-51524 . 54903)) (54950 64659 (GIT-BRANCH-NUM 54960 . 55533) (GIT-CHECKOUT 55535 . 56594) (
-GIT-WHICH-BRANCH 56596 . 56894) (GIT-MAKE-BRANCH 56896 . 58640) (GIT-BRANCHES 58642 . 60240) (
-GIT-BRANCH-EXISTS? 60242 . 60946) (GIT-PICK-BRANCH 60948 . 61276) (GIT-PRC-MENU 61278 . 63026) (
-GIT-PULL-REQUESTS 63028 . 64045) (GIT-SHORT-BRANCH-NAME 64047 . 64338) (GIT-LONG-NAME 64340 . 64657)) 
-(64689 68024 (GIT-MY-CURRENT-BRANCH 64699 . 65069) (GIT-MY-BRANCHP 65071 . 65576) (GIT-MY-NEXT-BRANCH 
-65578 . 66072) (GIT-MY-BRANCHES 66074 . 68022)) (68070 72022 (GIT-ADD-WORKTREE 68080 . 69564) (
-GIT-REMOVE-WORKTREE 69566 . 70496) (GIT-LIST-WORKTREES 70498 . 71302) (WORKTREEDIR 71304 . 72020)) (
-72070 102052 (GIT-GET-DIFFERENT-FILES 72080 . 77905) (GIT-BRANCHES-COMPARE-DIRECTORIES 77907 . 83749) 
-(GIT-WORKING-COMPARE-DIRECTORIES 83751 . 88497) (GIT-COMPARE-WORKTREE 88499 . 92477) (GITCDOBJBUTTONFN
- 92479 . 96969) (GIT-CD-LABELFN 96971 . 98053) (GIT-CD-MENUFN 98055 . 100262) (
-GIT-WORKING-COMPARE-FILES 100264 . 100884) (GIT-BRANCHES-COMPARE-FILES 100886 . 102050)) (102122 
-109488 (CDGITDIR 102132 . 102692) (GIT-COMMAND 102694 . 104702) (GITORIGIN 104704 . 105401) (
-GIT-INITIALS 105403 . 105707) (GIT-COMMAND-TO-FILE 105709 . 109486)))))
+  (FILEMAP (NIL (3626 18158 (GIT-CLONEP 3636 . 4899) (GIT-MAKE-PROJECT 4901 . 12999) (GIT-GET-PROJECT 
+13001 . 14926) (GIT-PROJECT-PATH 14928 . 15972) (FIND-ANCESTOR-DIRECTORY 15974 . 16323) (
+GIT-FIND-CLONE 16325 . 17406) (GIT-MAINBRANCH 17408 . 17803) (GIT-MAINBRANCH? 17805 . 18156)) (24475 
+27263 (ALLSUBDIRS 24485 . 25771) (MEDLEYSUBDIRS 25773 . 26466) (GITSUBDIRS 26468 . 27261)) (27264 
+32054 (TOGIT 27274 . 28680) (FROMGIT 28682 . 29663) (GIT-DELETE-FILE 29665 . 30511) (
+MYMEDLEY-DELETE-FILES 30513 . 32052)) (32055 34587 (MYMEDLEYSUBDIR 32065 . 32521) (GITSUBDIR 32523 . 
+32966) (STRIPDIR 32968 . 33339) (STRIPHOST 33341 . 33581) (STRIPNAME 33583 . 34336) (STRIPWHERE 34338
+ . 34585)) (34588 36490 (GFILE4MFILE 34598 . 34961) (MFILE4GFILE 34963 . 35532) (GIT-REPO-FILENAME 
+35534 . 36488)) (36539 46327 (GIT-COMMIT 36549 . 37375) (GIT-PUSH 37377 . 38021) (GIT-PULL 38023 . 
+38635) (GIT-APPROVAL 38637 . 38986) (GIT-GET-FILE 38988 . 40919) (GIT-FILE-EXISTS? 40921 . 41195) (
+GIT-REMOTE-UPDATE 41197 . 41921) (GIT-REMOTE-ADD 41923 . 42230) (GIT-FILE-DATE 42232 . 43163) (
+GIT-FILE-HISTORY 43165 . 45099) (GIT-PRINT-FILE-HISTORY 45101 . 46151) (GIT-FETCH 46153 . 46325)) (
+46357 57089 (GIT-BRANCH-DIFF 46367 . 53151) (GIT-COMMIT-DIFFS 53153 . 53706) (GIT-BRANCH-RELATIONS 
+53708 . 57087)) (57134 67092 (GIT-BRANCH-NUM 57144 . 57717) (GIT-CHECKOUT 57719 . 58778) (
+GIT-WHICH-BRANCH 58780 . 59078) (GIT-MAKE-BRANCH 59080 . 60824) (GIT-BRANCHES 60826 . 62424) (
+GIT-BRANCH-EXISTS? 62426 . 63130) (GIT-PICK-BRANCH 63132 . 63460) (GIT-PRC-MENU 63462 . 65210) (
+GIT-PULL-REQUESTS 65212 . 66478) (GIT-SHORT-BRANCH-NAME 66480 . 66771) (GIT-LONG-NAME 66773 . 67090)) 
+(67122 70457 (GIT-MY-CURRENT-BRANCH 67132 . 67502) (GIT-MY-BRANCHP 67504 . 68009) (GIT-MY-NEXT-BRANCH 
+68011 . 68505) (GIT-MY-BRANCHES 68507 . 70455)) (70503 74455 (GIT-ADD-WORKTREE 70513 . 71997) (
+GIT-REMOVE-WORKTREE 71999 . 72929) (GIT-LIST-WORKTREES 72931 . 73735) (WORKTREEDIR 73737 . 74453)) (
+74503 104485 (GIT-GET-DIFFERENT-FILES 74513 . 80338) (GIT-BRANCHES-COMPARE-DIRECTORIES 80340 . 86182) 
+(GIT-WORKING-COMPARE-DIRECTORIES 86184 . 90930) (GIT-COMPARE-WORKTREE 90932 . 94910) (GITCDOBJBUTTONFN
+ 94912 . 99402) (GIT-CD-LABELFN 99404 . 100486) (GIT-CD-MENUFN 100488 . 102695) (
+GIT-WORKING-COMPARE-FILES 102697 . 103317) (GIT-BRANCHES-COMPARE-FILES 103319 . 104483)) (104555 
+112262 (CDGITDIR 104565 . 105125) (GIT-COMMAND 105127 . 106685) (GITORIGIN 106687 . 107384) (
+GIT-INITIALS 107386 . 107690) (GIT-COMMAND-TO-FILE 107692 . 111036) (PROCESS-COMMAND 111038 . 111651) 
+(GIT-RESULT-TO-LINES 111653 . 112260)))))
 STOP

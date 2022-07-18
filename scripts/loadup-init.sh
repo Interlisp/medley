@@ -9,6 +9,7 @@ fi
 
 scr="-sc 1024x768 -g 1042x790"
 
+mkdir -p tmp
 touch tmp/loadup.timestamp
 
 ./run-medley $scr -loadup "$MEDLEYDIR"/sources/LOADUP-INIT.LISP loadups/starter.sysout

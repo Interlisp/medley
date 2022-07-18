@@ -1,10 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "14-Jul-2022 16:55:44" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-FILE.;1 235680 
+(FILECREATED "14-Jul-2022 21:52:00" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-FILE.;2 232517 
 
-      :PREVIOUS-DATE "14-Jul-2022 13:18:18" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-FILE.;2)
+      :CHANGES-TO (FNS TEDIT.BUILD.PCTB)
+                  (VARS TEDIT-FILECOMS)
+
+      :PREVIOUS-DATE "14-Jul-2022 16:55:44" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-FILE.;1)
 
 
 (PRETTYCOMPRINT TEDIT-FILECOMS)
@@ -19,7 +22,9 @@
 
               (FNS TEDIT.BUILD.PCTB \TEDIT.CONVERT.FOREIGN.FORMAT TEDIT.FORMATTEDFILEP TEDIT.GET 
                    TEDIT.PARSE.PAGEFRAMES1 \ARBIN \ATMIN \DWIN \STRINGIN \TEDIT.FORMATTEDP1 
-                   \TEDIT.SET.WINDOW TEDIT.GET.PASSWORD))
+                   \TEDIT.SET.WINDOW TEDIT.GET.PASSWORD)
+              (FNS \TEDIT.READ.FORMATTED.FILE \TEDIT.READ.OLDFORMATTED.FILE 
+                   \TEDIT.READ.UNFORMATTED.FILE \TEDIT.CACHEFILE \TEDIT.UNIQUIFY.ALL))
         (COMS 
               (* ;; "INCLUDEing a file")
 
@@ -79,128 +84,66 @@
 (DEFINEQ
 
 (TEDIT.BUILD.PCTB
-  [LAMBDA (TEXT TEXTOBJ START END DEFAULTLOOKS DEFAULTPARALOOKS CLEARGET?)
+  [LAMBDA (TEXT TEXTOBJ START END DEFAULTLOOKS DEFAULTPARALOOKS UNFORMATTED?)
+                                                             (* ; "Edited 14-Jul-2022 10:01 by rmk")
                                                             (* ; "Edited 29-Apr-2021 22:52 by rmk:")
                                                              (* ; "Edited 11-Jun-99 14:37 by rmk:")
                                                              (* ; "Edited 19-Apr-93 13:46 by jds")
                                                              (* ; 
                                                 "START = 1st char of file to read from, if specified")
-                                                             (* ; 
-                          "END = use this as eofptr of file.  For use in reading files within files.")
-    (PROG (SEL LINES PCTB PC OLDPC PCCOUNT TYPECODE PCLEN CHLOOKSSEEN NEWPC PARALOOKSSEEN 
-               PIECEINFOCH# CACHE CACHE? TTEXTOBJ USER.CMFILE TSTREAM USERFILEFORMAT USERTEMP 
-               EXISTINGCHARLOOKS EXLOOK EXISTINGFMTSPECS (*READTABLE* *TEDIT-FILE-READTABLE*)
-               (*PRINT-BASE* 10)
-               (CURFILECH# (OR START 0))
-               (CURCH# 1)
-               (TEXTSTREAM (AND TEXTOBJ (fetch (TEXTOBJ STREAMHINT) of TEXTOBJ)))
-               LOOKSHASH PARAHASH)
-          [SETQ DEFAULTPARALOOKS (OR DEFAULTPARALOOKS (COND
-                                                         (TEXTOBJ (fetch (TEXTOBJ FMTSPEC)
-                                                                     of TEXTOBJ))
-                                                         (T (create FMTSPEC using 
-                                                                                TEDIT.DEFAULT.FMTSPEC
-                                                                   ]
-                                                             (* ; 
-                        "Set the default paragraph formatting for filling in piece PPARALOOKS fields")
-          (COND
-             (TEXTOBJ                                        (* ; 
-               "If there's a TEXTOBJ behind this, set its TXTFILE field to point to the right place.")
-                    (replace (TEXTOBJ TXTFILE) of TEXTOBJ with TEXT)))
-          (SETQ DEFAULTLOOKS (OR DEFAULTLOOKS (CHARLOOKS.FROM.FONT DEFAULTFONT)))
-                                                             (* ; 
+
+    (* ;; "Set the default paragraph formatting for filling in piece PPARALOOKS fields")
+
+    (CL:UNLESS DEFAULTPARALOOKS
+        [SETQ DEFAULTPARALOOKS (COND
+                                  (TEXTOBJ (fetch (TEXTOBJ FMTSPEC) of TEXTOBJ))
+                                  (T (create FMTSPEC using TEDIT.DEFAULT.FMTSPEC])
+    (CL:UNLESS DEFAULTLOOKS                                  (* ; 
                                     "Set the default CHARLOOKS, for filling in pieces' PLOOKS fields")
-          (SETQ TEXT (\CREATEPIECEORSTREAM TEXT DEFAULTLOOKS DEFAULTPARALOOKS START END))
+        (SETQ DEFAULTLOOKS (CHARLOOKS.FROM.FONT DEFAULTFONT)))
+    (CL:WHEN TEXTOBJ                                         (* ; "If there's a TEXTOBJ behind this, set its TXTFILE field to point to the right place, and assume no page formatting")
+        (replace (TEXTOBJ TXTFILE) of TEXTOBJ with TEXT)
+        (replace (TEXTOBJ TXTPAGEFRAMES) of TEXTOBJ with NIL))
+    (CL:UNLESS START (SETQ START 0))                         (* ; 
+                          "END = use this as eofptr of file.  For use in reading files within files.")
+    (LET (PCTB PCCOUNT CACHE (*READTABLE* *TEDIT-FILE-READTABLE*)
+               (*PRINT-BASE* 10))
+         (SETQ TEXT (\CREATEPIECEORSTREAM TEXT DEFAULTLOOKS DEFAULTPARALOOKS START END))
                                                              (* ; 
                    "Grab the file, or a single piece (if the text is a string, or such simple cases)")
-          (AND TEXTOBJ (replace (TEXTOBJ TXTPAGEFRAMES) of TEXTOBJ with NIL))
                                                              (* ; 
                                                              "Start by assuming no page formatting")
-          (COND
-             ((STREAMP TEXT)                                 (* ; 
+         (CL:WHEN (STREAMP TEXT)                             (* ; 
                 "OK, it wasn't a string, so check for cases where we have to cache the file locally.")
-              (AND TEXTOBJ (replace (TEXTOBJ TXTFILE) of TEXTOBJ with TEXT))
-              (COND
-                 ((OR [AND TEXTOBJ (SETQ CACHE? (TEXTPROP TEXTOBJ 'CACHE]
-                      (NOT (RANDACCESSP TEXT)))              (* ; 
-                                    "If the file device isn't rancom access, cache the file locally.")
+             (CL:WHEN TEXTOBJ                                (* ; 
+                                               "Didn't we just do this?  Did the STREAM text change?")
+                 (replace (TEXTOBJ TXTFILE) of TEXTOBJ with TEXT))
+             (CL:WHEN (OR (AND TEXTOBJ (TEXTPROP TEXTOBJ 'CACHE))
+                          (NOT (RANDACCESSP TEXT)))          (* ; 
+                                    "If the file device isn't random access, cache the file locally.")
                                                              (* ; 
                                                          "Also do this if he asks for a local cache.")
-                  [SETQ CACHE (OPENSTREAM '{NODIRCORE} 'BOTH 'NEW '((TYPE TEXT]
-                                                             (* ; "The cache file")
-                  (COND
-                     ((OR START END)
-                      (COPYBYTES TEXT CACHE (OR START 0)
-                             (OR END -1)))
-                     (T (COPYBYTES TEXT CACHE)))             (* ; "Copy the text there")
-                  (SETQ CACHE? T)                            (* ; "Remember that we cached it!")
+                 (SETQ TEXT (\TEDIT.CACHEFILE TEXT TEXTOBJ START END))
 
-                  (* ;; "COPYBYTES can only have start/end args of NIL if the file is not random access.  So it's impossible to grab out of the middle of a file on an NS server.  Sorry.")
+                 (* ;; 
+ "Since we only copied the relevant part of the file into the cache, the whole file is now relevant.")
 
-                  (COND
-                     (CACHE? 
+                 (SETQ START 0)
+                 (SETQ END (GETEOFPTR TEXT)))
 
-                            (* ;; "for the folx who don't trust the connections, since all their pcs will point to core, we can close the txtfile connection")
+             (* ;; 
+  "Check to see if this is a formatted file, and find out how many pieces we should allocate for it.")
 
-                            (CLOSEF TEXT)))
-                  (replace (STREAM EOLCONVENTION) of CACHE with (fetch (STREAM EOLCONVENTION)
-                                                                   of TEXT))
-                                                             (* ; 
-      "Remember the EOL convention from the original file, so that we can do a copychars if need be.")
-                  (SETQ TEXT CACHE)                          (* ; 
-                                                "And pretend the cache IS the real file from here on")
-                  (SETQ START (SETQ END NIL))
-
-                  (* ;; "Since we only copied the relevant part of the file into the cache, we don't need to remember the limits of interest.")
-
-                  ))
-              (SETQ PCCOUNT (\TEDIT.FORMATTEDP1 TEXT END))
-
-              (* ;; "RMK:  Domestic EOL is now LF, so changed from CR")
-
-              (COND
-                 ((AND (NOT PCCOUNT)
-                       (NEQ (fetch (STREAM EOLCONVENTION) of TEXT)
-                            LF.EOLC))
-
-                  (* ;; "This is an UNFORMATTED file, and it has a foreign EOL convention.  Convert it, and save the converted copy locally.")
-
-                  [SETQ CACHE (OPENSTREAM '{NODIRCORE} 'BOTH 'NEW '((TYPE TEXT]
-                                                             (* ; "Build a cache file")
-                  (COND
-                     ((OR START END)
-                      (COPYCHARS TEXT CACHE (OR START 0)
-                             (OR END -1))
-
-                      (* ;; "mcf: just like before, we have all the relevant portion")
-
-                      (SETQ START (SETQ END NIL)))
-                     (T (COPYCHARS TEXT CACHE)))             (* ; 
-                  "Copy the text, converting from the foreign EOL convention into CR as end of line.")
-                  (SETQ TEXT CACHE)
-
-                  (* ;; "And think of THIS as the cache.  At this point, we may have cached twice in succession--no need to clip off START and END.")
-
-                  (SETQ CACHE? T)                            (* ; "Remember that we cached the file!")
-                  ))                                         (* ; 
-   "Check to see if this is a formatted file, and find out how may pieces we should allocate for it.")
-              ))
-          (AND TEXTOBJ (TEXTPROP TEXTOBJ 'CACHE CACHE?))     (* ; 
-                 "REMEMBER THAT THIS TEXT WAS CACHED, SO THAT LATER PUTS DON'T INVALIDATE THE CACHE.")
-          [COND
-             [(type? PIECE TEXT)                             (* ; 
-                         "If this isn't a text stream, build a piece table with the one piece in it.")
-              (COND
+             (SETQ PCCOUNT (\TEDIT.FORMATTEDP1 TEXT END)))
+         [SETQ PCTB
+          (COND
+             ((type? PIECE TEXT)                             (* ; 
+                              "If this isn't a stream, build a piece table with the one piece in it.")
+              [COND
                  ((EQ (fetch (PIECE PLEN) of TEXT)
-                      0)                                     (* ; 
-                                                             "I hate piece whose length is zero.")
-                  (SETQ PCTB (\MAKEPCTB (SETQ TEXT NIL)))    (* INSERT-BRT (CREATEPCNODE 1
-                                                             (QUOTE LASTPIECE)) PCTB)
-                  )
-                 (T (SETQ PCTB (\MAKEPCTB TEXT))             (* INSERT-BRT (CREATEPCNODE
-                                                             (ADD1 (fetch (PIECE PLEN) of TEXT))
-                                                             (QUOTE LASTPIECE)) PCTB)
-                    (replace (PIECE PLOOKS) of TEXT with (\TEDIT.UNIQUIFY.CHARLOOKS
+                      0)
+                  (SETQ TEXT NIL))
+                 (T (replace (PIECE PLOOKS) of TEXT with (\TEDIT.UNIQUIFY.CHARLOOKS
                                                           (fetch (PIECE PLOOKS) of TEXT)
                                                           TEXTOBJ))
                                                              (* ; 
@@ -208,26 +151,28 @@
                     (replace (PIECE PPARALOOKS) of TEXT with (\TEDIT.UNIQUIFY.PARALOOKS
                                                               (fetch (PIECE PPARALOOKS) of TEXT)
                                                               TEXTOBJ]
-             (CLEARGET? 
+              (\MAKEPCTB TEXT))
+             (UNFORMATTED? 
 
-                    (* ;; "If the user wants an uninterpreted stream onto the file , build a piece table with the one piece in it.")
+                    (* ;; "If the user wants an uninterpreted stream onto even a formatted file , build a piece table with the one piece in it.")
 
-                    (SETQ TEXT (create PIECE
-                                      PFILE _ TEXT
-                                      PFPOS _ (COND
-                                                 (START START)
-                                                 (T 0))
-                                      PLEN _ (IDIFFERENCE (OR END (GETEOFPTR TEXT))
-                                                    (COND
-                                                       (START START)
-                                                       (T 0)))
-                                      PREVPIECE _ NIL
-                                      PLOOKS _ DEFAULTLOOKS
-                                      PPARALAST _ NIL
-                                      PPARALOOKS _ DEFAULTPARALOOKS))
+                    (SETQ TEXT
+                     (create PIECE
+                            PFILE _ TEXT
+                            PFPOS _ (COND
+                                       (START START)
+                                       (T 0))
+                            PLEN _ (IDIFFERENCE (OR END (GETEOFPTR TEXT))
+                                          (COND
+                                             (START START)
+                                             (T 0)))
+                            PREVPIECE _ NIL
+                            PLOOKS _ DEFAULTLOOKS
+                            PPARALAST _ NIL
+                            PPARALOOKS _ DEFAULTPARALOOKS
+                            PEXTERNALFORMAT _ (GETSTREAMPROP TEXT :EXTERNAL-FORMAT)))
                                                              (* ; 
                                                           "A single piece to describe the whole file")
-                    (SETQ PCTB (\MAKEPCTB TEXT))
                     (replace (PIECE PLOOKS) of TEXT with (\TEDIT.UNIQUIFY.CHARLOOKS
                                                           (fetch (PIECE PLOOKS) of TEXT)
                                                           TEXTOBJ))
@@ -236,276 +181,43 @@
                     (replace (PIECE PPARALOOKS) of TEXT with (\TEDIT.UNIQUIFY.PARALOOKS
                                                               (fetch (PIECE PPARALOOKS) of TEXT)
                                                               TEXTOBJ))
-                                                             (* INSERT-BRT (CREATEPCNODE
-                                                             (ADD1 (fetch (PIECE PLEN) of TEXT))
-                                                             (QUOTE LASTPIECE)) PCTB)
-                    )
-             [(NOT PCCOUNT)                                  (* ; "This is an unformatted file")
-              (COND
-                 [(SETQ USERFILEFORMAT (for FILETYPE in TEDIT.INPUT.FORMATS
-                                          when (SETQ USERTEMP (APPLY* (CAR FILETYPE)
-                                                                     TEXT)) do (RETURN FILETYPE)))
-                                                             (* ; 
-       "The input file is in a user-sensible format, which he is willing to convert for TEdit's use.")
-                                                             (* ; "See if there are Bravo headers")
-                  (SETQ PCTB (\TEDIT.CONVERT.FOREIGN.FORMAT (CADR USERFILEFORMAT)
-                                    TEXT USERTEMP TEXTOBJ DEFAULTLOOKS DEFAULTPARALOOKS))
-                                                             (* ; 
-                                                 "Convert the foreign format file, and grab its PCTB")
-                  (bind (PC _ (\GETBASEPTR (\FIRSTNODE PCTB)
-                                     0)) while [AND PC (NOT (EQ PC 'LASTPIECE]
-                     do                                      (* ; 
-        "Run thru the converted pieces, noting their CHARLOOKS and PARALOOKS for the get/put caches.")
-                        (replace (PIECE PLOOKS) of PC with (\TEDIT.UNIQUIFY.CHARLOOKS
-                                                            (fetch (PIECE PLOOKS) of PC)
-                                                            TEXTOBJ))
-                        (replace (PIECE PPARALOOKS) of PC with (\TEDIT.UNIQUIFY.PARALOOKS
-                                                                (fetch (PIECE PPARALOOKS)
-                                                                   of PC)
-                                                                TEXTOBJ))
-                        (SETQ PC (fetch (PIECE NEXTPIECE) of PC]
-                 (T                                          (* ; 
-                                                             "Nope--it's straight unformatted text")
-                    [SETQ PCTB (\MAKEPCTB (create PIECE
-                                                 PFILE _ TEXT
-                                                 PFPOS _ CURFILECH#
-                                                 PLEN _ (IDIFFERENCE (OR END (GETEOFPTR TEXT))
-                                                               CURFILECH#)
-                                                 PREVPIECE _ NIL
-                                                 PLOOKS _ (\TEDIT.UNIQUIFY.CHARLOOKS DEFAULTLOOKS 
-                                                                 TEXTOBJ)
-                                                 PPARALAST _ NIL
-                                                 PPARALOOKS _ (\TEDIT.UNIQUIFY.PARALOOKS 
-                                                                     DEFAULTPARALOOKS TEXTOBJ]
-                                                             (* ; 
-                                                  "So create a single piece to describe its contents")
-                                                             (* INSERT-BRT (CREATEPCNODE
-                                                             (ADD1 (IDIFFERENCE (OR END
-                                                             (GETEOFPTR TEXT)) CURFILECH#))
-                                                             (QUOTE LASTPIECE)) PCTB)
-                                                             (* ; "Insert LASTPIECE here")
-                    ]
-             [(LISTP PCCOUNT)                                (* ; 
+                    (\MAKEPCTB TEXT))
+             ((NOT PCCOUNT)                                  (* ; "This is an unformatted file")
+              (\TEDIT.READ.UNFORMATTED.FILE TEXT TEXTOBJ START END DEFAULTLOOKS DEFAULTPARALOOKS))
+             ((LISTP PCCOUNT)                                (* ; 
                                               "This is an obsolete version of the TEdit file format.")
-              (SELECTQ (CAR PCCOUNT)
-                  (0                                         (* ; "VERSION 0")
-                     (SETQ PCTB (TEDIT.BUILD.PCTB0 TEXT TEXTOBJ (CDR PCCOUNT)
-                                       START END)))
-                  (1                                         (* ; 
-                                                   "Version 1;  obsoleted at INTERMEZZO release 2/85")
-                     (SETQ PCTB (TEDIT.BUILD.PCTB1 TEXT TEXTOBJ (CDR PCCOUNT)
-                                       START END)))
-                  (2                                         (* ; "Version 2;  obsoleted 5/22/85")
-                     (SETQ PCTB (TEDIT.BUILD.PCTB2 TEXT TEXTOBJ (CDR PCCOUNT)
-                                       START END)))
-                  (SHOULDNT "File format version incompatible with this version of TEdit."))
-              (bind (PC _ (\GETBASEPTR (\FIRSTNODE PCTB)
-                                 0)) while [AND PC (NOT (EQ PC 'LASTPIECE]
-                 do                                          (* ; 
-                      "Run thru the converted pieces, noting CHARLOOKS and PARALOOKS for the caches.")
-                    (replace (PIECE PLOOKS) of PC with (\TEDIT.UNIQUIFY.CHARLOOKS (fetch (PIECE
-                                                                                          PLOOKS)
-                                                                                     of PC)
-                                                              TEXTOBJ))
-                    (replace (PIECE PPARALOOKS) of PC with (\TEDIT.UNIQUIFY.PARALOOKS
-                                                            (fetch (PIECE PPARALOOKS) of PC)
-                                                            TEXTOBJ))
-                    (SETQ PC (fetch (PIECE NEXTPIECE) of PC]
+              (\TEDIT.READ.OLDFORMATTED.FILE TEXT TEXTOBJ START END PCCOUNT DEFAULTLOOKS 
+                     DEFAULTPARALOOKS))
              (T                                              (* ; 
                                              "This IS a TEdit-format file, so read in all the parts.")
-                (SETQ PCTB (\MAKEPCTB NIL PCCOUNT))
-                (replace (TEXTOBJ PCTB) of TEXTOBJ with PCTB)
-                (SETFILEPTR TEXT (IDIFFERENCE (OR END (GETEOFPTR TEXT))
-                                        8))
-                (SETQ PIECEINFOCH# (\DWIN TEXT))
-                (SETFILEPTR TEXT PIECEINFOCH#)
-                (bind (OLDPC _ NIL)
-                      (OLDPARALOOKS _ DEFAULTPARALOOKS) for I from 1 to PCCOUNT as PCN from 1
-                   do (SETQ PC NIL)                          (* ; 
-                        "This loop may not really read a piece, so we have to distinguish that case.")
-                      (SETQ PCLEN (\DWIN TEXT))
-                      (SETQ TYPECODE (\SMALLPIN TEXT))       (* ; "What kind of piece is it?")
-                      [SELECTC TYPECODE
-                          (\PieceDescriptorPAGEFRAME         (* ; 
-                                                             "This is page layout info for the file")
-                               (AND TEXTOBJ (replace (TEXTOBJ TXTPAGEFRAMES) of TEXTOBJ
-                                               with (TEDIT.GET.PAGEFRAMES TEXT)))
-                               (add PCN -1)
-
-                               (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
-                                                             (* ; 
-                                "This didn't create a piece -- don't count it in the PCTB placement.")
-                               )
-                          (\PieceDescriptorCHARLOOKSLIST     (* ; 
-                                              "This is the list of CHARLOOKSs used in this document.")
-                               (replace (TEXTOBJ TXTCHARLOOKSLIST) of TEXTOBJ with (
-                                                                            \TEDIT.GET.CHARLOOKS.LIST
-                                                                                    TEXT))
-                                                             (* ; 
-                                                      "Read the list of looks used in this document.")
-                               [SETQ LOOKSHASH (ARRAY (FLENGTH (fetch (TEXTOBJ TXTCHARLOOKSLIST)
-                                                                  of TEXTOBJ]
-                                                             (* ; 
-                                         "Build an array of the looks, so the reader can index them.")
-                               (for I from 1 as LOOKS in (fetch (TEXTOBJ TXTCHARLOOKSLIST)
-                                                            of TEXTOBJ)
-                                  do (SETA LOOKSHASH I LOOKS))
-                               (add PCN -1)
-
-                               (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
-                                                             (* ; 
-                                "This didn't create a piece -- don't count it in the PCTB placement.")
-                               (add I -1))
-                          (\PieceDescriptorPARALOOKSLIST     (* ; 
-                                              "This is the list of PARALOOKSs used in this document.")
-                               (replace (TEXTOBJ TXTPARALOOKSLIST) of TEXTOBJ with (
-                                                                            \TEDIT.GET.PARALOOKS.LIST
-                                                                                    TEXT TEXTOBJ))
-                                                             (* ; 
-                                                      "Read the list of looks used in this document.")
-                               [SETQ PARAHASH (ARRAY (FLENGTH (fetch (TEXTOBJ TXTPARALOOKSLIST)
-                                                                 of TEXTOBJ]
-                                                             (* ; 
-                                         "Build an array of the looks, so the reader can index them.")
-                               (for I from 1 as LOOKS in (fetch (TEXTOBJ TXTPARALOOKSLIST)
-                                                            of TEXTOBJ)
-                                  do (SETA PARAHASH I LOOKS))
-                               (add PCN -1)
-
-                               (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
-                                                             (* ; 
-                                "This didn't create a piece -- don't count it in the PCTB placement.")
-                               (add I -1))
-                          (\PieceDescriptorPARA              (* ; 
-                                                             "Reading a new set of paragraph looks.")
-                               (AND OLDPC (replace (PIECE PPARALAST) of OLDPC with T))
-                                                             (* ; 
-                                                           "Mark the end of the preceding paragraph.")
-                               (SETQ OLDPARALOOKS (\TEDIT.GET.PARALOOKS TEXT PARAHASH))
-                                                             (* ; 
-                                                 "Get the new set of looks, for use by later pieces.")
-                               (AND TEXTOBJ (replace (TEXTOBJ FORMATTEDP) of TEXTOBJ with T))
-                                                             (* ; 
-                                          "Mark the document as containing paragraph formatting info")
-                               (add PCN -1)
-
-                               (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
-                                                             (* ; 
-                                "This didn't create a piece -- don't count it in the PCTB placement.")
-                               )
-                          (\PieceDescriptorLOOKS             (* ; 
-                                  "New character looks.  Build a piece to describe those characters.")
-                               (SETQ PC
-                                (create PIECE
-                                       PFILE _ TEXT
-                                       PFPOS _ CURFILECH#
-                                       PLEN _ PCLEN
-                                       PREVPIECE _ OLDPC
-                                       PPARALOOKS _ OLDPARALOOKS))
-                                                             (* ; "Build the new piece")
-                               (\TEDIT.GET.CHARLOOKS PC TEXT LOOKSHASH OLDPC)
-                                                             (* ; 
-                                                             "Read the character looks for this guy.")
-                               (COND
-                                  (OLDPC                     (* ; 
-                                              "If there's a prior piece, hook this one on the chain.")
-                                         (replace (PIECE NEXTPIECE) of OLDPC with PC)))
-                               (add CURFILECH# PCLEN)        (* ; 
-                                                             "And note the passing of characters.")
-                               )
-                          (\PieceDescriptorOBJECT            (* ; 
-   "It describes an object.  Read that, and perhaps some description of the charlooks to go with it.")
-                               (SETQ PC
-                                (create PIECE
-                                       PFILE _ TEXT
-                                       PFPOS _ CURFILECH#
-                                       PLEN _ PCLEN
-                                       PREVPIECE _ OLDPC
-                                       PPARALOOKS _ OLDPARALOOKS))
-                               (COND
-                                  (OLDPC                     (* ; 
-                                              "If there's a prior piece, hook this one on the chain.")
-                                         (replace (PIECE NEXTPIECE) of OLDPC with PC)))
-                               (TEDIT.GET.OBJECT TEXTSTREAM PC TEXT CURFILECH#)
-                               (add CURFILECH# (fetch (PIECE PLEN) of PC))
-                               [COND
-                                  ((NOT (ZEROP (\BIN TEXT))) (* ; 
-                                      "There are new character looks for this object.  Read them in.")
-                                   (replace (PIECE PLOOKS) of PC with (\TEDIT.GET.SINGLE.CHARLOOKS
-                                                                       TEXT)))
-                                  (T                         (* ; 
-                                                    "No new looks;  steal them from the prior piece.")
-                                     (replace (PIECE PLOOKS) of PC
-                                        with (OR (AND OLDPC (fetch (PIECE PLOOKS) of OLDPC))
-                                                 DEFAULTLOOKS]
-                               (replace (PIECE PLEN) of PC with 1)
-                                                             (* ; 
-                                                         "OBJECTs are officially one character long.")
-                               )
-                          (PROGN (TEDIT.PROMPTPRINT TEXTOBJ "WARNING: Unknown-type piece skipped." T)
-                                 (SETFILEPTR TEXT (IPLUS (GETFILEPTR TEXT)
-                                                         (\SMALLPIN TEXT]
-                      (COND
-                         (PC (\INSERTPIECE PC 'LASTPIECE TEXTOBJ)
-                                                             (* ; 
-                                                       "If we created a piece, save it in the table.")
-                             (add CURCH# (fetch (PIECE PLEN) of PC))
-                             (SETQ OLDPC PC))) finally 
-
-                                                     (* ;; "(\\editseta pctb pcn curch#)")
-
-                                                     (* ;; " (\\editseta pctb (add1 pcn) 'lastpiece)")
-
-                                                     (* ;; 
-                                              "(\\editseta pctb |\\PCTBLastPieceOffset| (add1 pcn)) ")
-
-                                                     (* ;; "(\\editseta pctb |\\PCTBFreePieces| 0)")
-                                                             (* INSERT-BRT (CREATEPCNODE CURCH#
-                                                             (QUOTE LASTPIECE)) PCTB)
-                                                     ]
-          (AND (fetch (TEXTOBJ DEFAULTCHARLOOKS) of TEXTOBJ)
-               (\TEDIT.UNIQUIFY.CHARLOOKS (fetch (TEXTOBJ DEFAULTCHARLOOKS) of TEXTOBJ)
-                      TEXTOBJ))                              (* ; 
-                         "And make sure that the default and caret looks are reflected in that list.")
-          (AND (fetch (TEXTOBJ CARETLOOKS) of TEXTOBJ)
-               (\TEDIT.UNIQUIFY.CHARLOOKS (fetch (TEXTOBJ CARETLOOKS) of TEXTOBJ)
-                      TEXTOBJ))
-          (AND DEFAULTLOOKS (\TEDIT.UNIQUIFY.CHARLOOKS DEFAULTLOOKS TEXTOBJ))
-                                                             (* ; 
-                                                  "And the default looks we used in this function...")
-          (\TEDIT.UNIQUIFY.PARALOOKS (fetch (TEXTOBJ FMTSPEC) of TEXTOBJ)
-                 TEXTOBJ)                                    (* ; 
-                                    "And make sure the default paralooks are reflected in that list.")
-          [AND TEXT (bind (CHARLOOKSLIST _ (fetch (TEXTOBJ TXTCHARLOOKSLIST) of TEXTOBJ))
-                          (PARALOOKSLIST _ (fetch (TEXTOBJ TXTPARALOOKSLIST) of TEXTOBJ))
-                       for (PC _ (\GETBASEPTR (\FIRSTNODE PCTB)
-                                        0)) by (fetch (PIECE NEXTPIECE) of PC)
-                       while [AND PC (NOT (EQ PC 'LASTPIECE]
-                       do                                    (* ; 
+                (\TEDIT.READ.FORMATTED.FILE TEXT TEXTOBJ START END PCCOUNT DEFAULTLOOKS 
+                       DEFAULTPARALOOKS]
+         (\TEDIT.UNIQUIFY.ALL TEXTOBJ DEFAULTLOOKS)          (* ; 
+                                                        "Make sure the default paralooks are merged.")
+         (CL:WHEN TEXT
+             [bind (CHARLOOKSLIST _ (fetch (TEXTOBJ TXTCHARLOOKSLIST) of TEXTOBJ))
+                   (PARALOOKSLIST _ (fetch (TEXTOBJ TXTPARALOOKSLIST) of TEXTOBJ))
+                for (PC _ (\GETBASEPTR (\FIRSTNODE PCTB)
+                                 0)) by (fetch (PIECE NEXTPIECE) of PC) while PC
+                until (EQ PC 'LASTPIECE) do                  (* ; 
                  "Look at every piece, and assure that its CHARLOOKS and PARALOOKS are in the cache.")
-                          [COND
-                             ((FMEMB (fetch (PIECE PLOOKS) of PC)
-                                     CHARLOOKSLIST)          (* ; 
-          "This piece's CHARLOOKS are known in the cache already.  Don't bother doing anything else.")
-                              )
-                             (T                              (* ; 
-                                                             "Nope;  add these looks to the cache")
-                                (replace (PIECE PLOOKS) of PC with (\TEDIT.UNIQUIFY.CHARLOOKS
-                                                                    (fetch (PIECE PLOOKS)
-                                                                       of PC)
-                                                                    TEXTOBJ]
-                          (COND
-                             ((FMEMB (fetch (PIECE PPARALOOKS) of PC)
-                                     PARALOOKSLIST)          (* ; 
-          "This piece's PARALOOKS are known in the cache already.  Don't bother doing anything else.")
-                              )
-                             (T                              (* ; 
-                                                             "Nope;  add these looks to the cache")
-                                (replace (PIECE PPARALOOKS) of PC with (\TEDIT.UNIQUIFY.PARALOOKS
-                                                                        (fetch (PIECE PPARALOOKS)
-                                                                           of PC)
-                                                                        TEXTOBJ]
-          (RETURN PCTB])
+                                            (CL:UNLESS (FMEMB (fetch (PIECE PLOOKS) of PC)
+                                                              CHARLOOKSLIST)
+                                                             (* ; 
+                                       "This piece's CHARLOOKS are not known in the cache already.  ")
+                                                (replace (PIECE PLOOKS) of PC
+                                                   with (\TEDIT.UNIQUIFY.CHARLOOKS
+                                                         (fetch (PIECE PLOOKS) of PC)
+                                                         TEXTOBJ)))
+                                            (CL:UNLESS (FMEMB (fetch (PIECE PPARALOOKS) of PC)
+                                                              PARALOOKSLIST)
+                                                             (* ; 
+                                      "This piece's PARALOOKS are  not known in the cache already.  ")
+                                                (replace (PIECE PPARALOOKS) of PC
+                                                   with (\TEDIT.UNIQUIFY.PARALOOKS
+                                                         (fetch (PIECE PPARALOOKS) of PC)
+                                                         TEXTOBJ)))])
+         PCTB])
 
 (\TEDIT.CONVERT.FOREIGN.FORMAT
   [LAMBDA (CONVERSIONFN FILE PREDICATERESULT TEXTOBJ DEFAULTLOOKS DEFAULTPARALOOKS)
@@ -837,6 +549,273 @@
                     (SETQ NPIECES (\SMALLPIN STREAM))
                     [CAR (MEMB (\SMALLPIN STREAM)
                                '(31415 31416 31417 31418 31419])])
+)
+(DEFINEQ
+
+(\TEDIT.READ.FORMATTED.FILE
+  [LAMBDA (TEXT TEXTOBJ CURFILECH# END PCCOUNT DEFAULTLOOKS DEFAULTPARALOOKS)
+                                                             (* ; "Edited 14-Jul-2022 10:04 by rmk")
+                                                             (* ; 
+                                             "This IS a TEdit-format file, so read in all the parts.")
+    (LET (PCLEN PC TYPECODE PARAHASH LOOKSHASH PIECEINFOCH# (TEXTSTREAM (AND TEXTOBJ
+                                                                             (fetch (TEXTOBJ 
+                                                                                           STREAMHINT
+                                                                                           )
+                                                                                of TEXTOBJ)))
+                (PCTB (\MAKEPCTB NIL PCCOUNT)))
+         (replace (TEXTOBJ PCTB) of TEXTOBJ with PCTB)
+         (SETFILEPTR TEXT (IDIFFERENCE (OR END (GETEOFPTR TEXT))
+                                 8))
+         (SETQ PIECEINFOCH# (\DWIN TEXT))
+         (SETFILEPTR TEXT PIECEINFOCH#)
+         [bind (OLDPC _ NIL)
+               (OLDPARALOOKS _ DEFAULTPARALOOKS) for I from 1 to PCCOUNT as PCN from 1
+            do (SETQ PC NIL)                                 (* ; 
+                        "This loop may not really read a piece, so we have to distinguish that case.")
+               (SETQ PCLEN (\DWIN TEXT))
+               (SETQ TYPECODE (\SMALLPIN TEXT))              (* ; "What kind of piece is it?")
+               [SELECTC TYPECODE
+                   (\PieceDescriptorPAGEFRAME                (* ; 
+                                                             "This is page layout info for the file")
+                        (AND TEXTOBJ (replace (TEXTOBJ TXTPAGEFRAMES) of TEXTOBJ with (
+                                                                                 TEDIT.GET.PAGEFRAMES
+                                                                                       TEXT)))
+                        (add PCN -1)
+
+                        (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
+                                                             (* ; 
+                                "This didn't create a piece -- don't count it in the PCTB placement.")
+                        )
+                   (\PieceDescriptorCHARLOOKSLIST            (* ; 
+                                              "This is the list of CHARLOOKSs used in this document.")
+                        (replace (TEXTOBJ TXTCHARLOOKSLIST) of TEXTOBJ with (
+                                                                            \TEDIT.GET.CHARLOOKS.LIST
+                                                                             TEXT))
+                                                             (* ; 
+                                                      "Read the list of looks used in this document.")
+                        [SETQ LOOKSHASH (ARRAY (FLENGTH (fetch (TEXTOBJ TXTCHARLOOKSLIST)
+                                                           of TEXTOBJ]
+                                                             (* ; 
+                                         "Build an array of the looks, so the reader can index them.")
+                        (for I from 1 as LOOKS in (fetch (TEXTOBJ TXTCHARLOOKSLIST) of TEXTOBJ)
+                           do (SETA LOOKSHASH I LOOKS))
+                        (add PCN -1)
+
+                        (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
+                                                             (* ; 
+                                "This didn't create a piece -- don't count it in the PCTB placement.")
+                        (add I -1))
+                   (\PieceDescriptorPARALOOKSLIST            (* ; 
+                                              "This is the list of PARALOOKSs used in this document.")
+                        (replace (TEXTOBJ TXTPARALOOKSLIST) of TEXTOBJ with (
+                                                                            \TEDIT.GET.PARALOOKS.LIST
+                                                                             TEXT TEXTOBJ))
+                                                             (* ; 
+                                                      "Read the list of looks used in this document.")
+                        [SETQ PARAHASH (ARRAY (FLENGTH (fetch (TEXTOBJ TXTPARALOOKSLIST) of TEXTOBJ]
+                                                             (* ; 
+                                         "Build an array of the looks, so the reader can index them.")
+                        (for I from 1 as LOOKS in (fetch (TEXTOBJ TXTPARALOOKSLIST) of TEXTOBJ)
+                           do (SETA PARAHASH I LOOKS))
+                        (add PCN -1)
+
+                        (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
+                                                             (* ; 
+                                "This didn't create a piece -- don't count it in the PCTB placement.")
+                        (add I -1))
+                   (\PieceDescriptorPARA                     (* ; 
+                                                             "Reading a new set of paragraph looks.")
+                        (AND OLDPC (replace (PIECE PPARALAST) of OLDPC with T))
+                                                             (* ; 
+                                                           "Mark the end of the preceding paragraph.")
+                        (SETQ OLDPARALOOKS (\TEDIT.GET.PARALOOKS TEXT PARAHASH))
+                                                             (* ; 
+                                                 "Get the new set of looks, for use by later pieces.")
+                        (AND TEXTOBJ (replace (TEXTOBJ FORMATTEDP) of TEXTOBJ with T))
+                                                             (* ; 
+                                          "Mark the document as containing paragraph formatting info")
+                        (add PCN -1)
+
+                        (* ;; "(|add| pcn (iminus |\\EltsPerPiece|))")
+                                                             (* ; 
+                                "This didn't create a piece -- don't count it in the PCTB placement.")
+                        )
+                   (\PieceDescriptorLOOKS                    (* ; 
+                                  "New character looks.  Build a piece to describe those characters.")
+                        (SETQ PC
+                         (create PIECE
+                                PFILE _ TEXT
+                                PFPOS _ CURFILECH#
+                                PLEN _ PCLEN
+                                PREVPIECE _ OLDPC
+                                PPARALOOKS _ OLDPARALOOKS))  (* ; "Build the new piece")
+                        (\TEDIT.GET.CHARLOOKS PC TEXT LOOKSHASH OLDPC)
+                                                             (* ; 
+                                                             "Read the character looks for this guy.")
+                        (COND
+                           (OLDPC                            (* ; 
+                                              "If there's a prior piece, hook this one on the chain.")
+                                  (replace (PIECE NEXTPIECE) of OLDPC with PC)))
+                        (add CURFILECH# PCLEN)               (* ; 
+                                                             "And note the passing of characters.")
+                        )
+                   (\PieceDescriptorOBJECT                   (* ; 
+   "It describes an object.  Read that, and perhaps some description of the charlooks to go with it.")
+                        (SETQ PC
+                         (create PIECE
+                                PFILE _ TEXT
+                                PFPOS _ CURFILECH#
+                                PLEN _ PCLEN
+                                PREVPIECE _ OLDPC
+                                PPARALOOKS _ OLDPARALOOKS))
+                        (COND
+                           (OLDPC                            (* ; 
+                                              "If there's a prior piece, hook this one on the chain.")
+                                  (replace (PIECE NEXTPIECE) of OLDPC with PC)))
+                        (TEDIT.GET.OBJECT TEXTSTREAM PC TEXT CURFILECH#)
+                        (add CURFILECH# (fetch (PIECE PLEN) of PC))
+                        [COND
+                           ((NOT (ZEROP (\BIN TEXT)))        (* ; 
+                                      "There are new character looks for this object.  Read them in.")
+                            (replace (PIECE PLOOKS) of PC with (\TEDIT.GET.SINGLE.CHARLOOKS TEXT)))
+                           (T                                (* ; 
+                                                    "No new looks;  steal them from the prior piece.")
+                              (replace (PIECE PLOOKS) of PC with (OR (AND OLDPC (fetch (PIECE PLOOKS)
+                                                                                   of OLDPC))
+                                                                     DEFAULTLOOKS]
+                        (replace (PIECE PLEN) of PC with 1)  (* ; 
+                                                         "OBJECTs are officially one character long.")
+                        )
+                   (PROGN (TEDIT.PROMPTPRINT TEXTOBJ "WARNING: Unknown-type piece skipped." T)
+                          (SETFILEPTR TEXT (IPLUS (GETFILEPTR TEXT)
+                                                  (\SMALLPIN TEXT]
+               (COND
+                  (PC (\INSERTPIECE PC 'LASTPIECE TEXTOBJ)   (* ; 
+                                                       "If we created a piece, save it in the table.")
+                      (SETQ OLDPC PC]
+         PCTB])
+
+(\TEDIT.READ.OLDFORMATTED.FILE
+  [LAMBDA (TEXT TEXTOBJ START END PCCOUNT DEFAULTLOOKS DEFAULTPARALOOKS)
+                                                             (* ; "Edited 13-Jul-2022 23:55 by rmk")
+    (LET (PCTB)
+         (SELECTQ (CAR PCCOUNT)
+             (0                                              (* ; "VERSION 0")
+                (SETQ PCTB (TEDIT.BUILD.PCTB0 TEXT TEXTOBJ (CDR PCCOUNT)
+                                  START END)))
+             (1                                              (* ; 
+                                                   "Version 1;  obsoleted at INTERMEZZO release 2/85")
+                (SETQ PCTB (TEDIT.BUILD.PCTB1 TEXT TEXTOBJ (CDR PCCOUNT)
+                                  START END)))
+             (2                                              (* ; "Version 2;  obsoleted 5/22/85")
+                (SETQ PCTB (TEDIT.BUILD.PCTB2 TEXT TEXTOBJ (CDR PCCOUNT)
+                                  START END)))
+             (SHOULDNT "File format version incompatible with this version of TEdit."))
+         (bind (PC _ (\GETBASEPTR (\FIRSTNODE PCTB)
+                            0)) while PC until (EQ PC 'LASTPIECE)
+            do                                               (* ; 
+                      "Run thru the converted pieces, noting CHARLOOKS and PARALOOKS for the caches.")
+               (replace (PIECE PLOOKS) of PC with (\TEDIT.UNIQUIFY.CHARLOOKS (fetch (PIECE PLOOKS)
+                                                                                of PC)
+                                                         TEXTOBJ))
+               (replace (PIECE PPARALOOKS) of PC with (\TEDIT.UNIQUIFY.PARALOOKS (fetch (PIECE 
+                                                                                           PPARALOOKS
+                                                                                               )
+                                                                                    of PC)
+                                                             TEXTOBJ))
+               (SETQ PC (fetch (PIECE NEXTPIECE) of PC)))
+         PCTB])
+
+(\TEDIT.READ.UNFORMATTED.FILE
+  [LAMBDA (TEXT TEXTOBJ START END DEFAULTLOOKS DEFAULTPARALOOKS)
+                                                             (* ; "Edited 13-Jul-2022 23:49 by rmk")
+    (LET (USERFILEFORMAT USERTEMP PCTB)
+         (COND
+            [(SETQ USERFILEFORMAT (for FILETYPE in TEDIT.INPUT.FORMATS
+                                     when (SETQ USERTEMP (APPLY* (CAR FILETYPE)
+                                                                TEXT)) do (RETURN FILETYPE)))
+                                                             (* ; 
+       "The input file is in a user-sensible format, which he is willing to convert for TEdit's use.")
+                                                             (* ; "See if there are Bravo headers")
+             (SETQ PCTB (\TEDIT.CONVERT.FOREIGN.FORMAT (CADR USERFILEFORMAT)
+                               TEXT USERTEMP TEXTOBJ DEFAULTLOOKS DEFAULTPARALOOKS))
+                                                             (* ; 
+                                                 "Convert the foreign format file, and grab its PCTB")
+             (bind (PC _ (\GETBASEPTR (\FIRSTNODE PCTB)
+                                0)) while [AND PC (NOT (EQ PC 'LASTPIECE]
+                do                                           (* ; 
+        "Run thru the converted pieces, noting their CHARLOOKS and PARALOOKS for the get/put caches.")
+                   (replace (PIECE PLOOKS) of PC with (\TEDIT.UNIQUIFY.CHARLOOKS (fetch (PIECE PLOOKS
+                                                                                               )
+                                                                                    of PC)
+                                                             TEXTOBJ))
+                   (replace (PIECE PPARALOOKS) of PC with (\TEDIT.UNIQUIFY.PARALOOKS
+                                                           (fetch (PIECE PPARALOOKS) of PC)
+                                                           TEXTOBJ))
+                   (SETQ PC (fetch (PIECE NEXTPIECE) of PC]
+            (T                                               (* ; 
+                                                             "Nope--it's straight unformatted text")
+               [SETQ PCTB (\MAKEPCTB (create PIECE
+                                            PFILE _ TEXT
+                                            PFPOS _ START
+                                            PLEN _ (IDIFFERENCE (OR END (GETEOFPTR TEXT))
+                                                          START)
+                                            PREVPIECE _ NIL
+                                            PLOOKS _ (\TEDIT.UNIQUIFY.CHARLOOKS DEFAULTLOOKS TEXTOBJ)
+                                            PPARALAST _ NIL
+                                            PPARALOOKS _ (\TEDIT.UNIQUIFY.PARALOOKS DEFAULTPARALOOKS
+                                                                TEXTOBJ]
+                                                             (* ; 
+                                                  "So create a single piece to describe its contents")
+                                                             (* INSERT-BRT (CREATEPCNODE
+                                                             (ADD1 (IDIFFERENCE (OR END
+                                                             (GETEOFPTR TEXT)) START))
+                                                             (QUOTE LASTPIECE)) PCTB)
+                                                             (* ; "Insert LASTPIECE here")
+               ))
+         PCTB])
+
+(\TEDIT.CACHEFILE
+  [LAMBDA (TEXT TEXTOBJ START END)                           (* ; "Edited 14-Jul-2022 08:44 by rmk")
+    (LET (CACHE)
+
+         (* ;; "Sets the external format and its EOL.")
+
+         [SETQ CACHE (OPENSTREAM '{NODIRCORE} 'BOTH 'NEW `((TYPE TEXT)
+                                                           (:EXTERNAL-FORMAT ,(GETSTREAMPROP TEXT 
+                                                                                     :EXTERNAL-FORMAT
+                                                                                     ]
+         (COND
+            ((OR START END)
+             (COPYBYTES TEXT CACHE (OR START 0)
+                    (OR END -1)))
+            (T (COPYBYTES TEXT CACHE)))                      (* ; "Copy the text there")
+
+         (* ;; "COPYBYTES can only have start/end args of NIL if the file is not random access.  So it's impossible to grab out of the middle of a file on an NS server.  Sorry.")
+
+         (CLOSEF TEXT)
+         (CL:WHEN TEXTOBJ
+
+             (* ;; 
+             "REMEMBER THAT THIS TEXT WAS CACHED, SO THAT LATER PUTS DON'T INVALIDATE THE CACHE.")
+
+             (TEXTPROP TEXTOBJ 'CACHE T))
+         CACHE])
+
+(\TEDIT.UNIQUIFY.ALL
+  [LAMBDA (TEXTOBJ DEFAULTLOOKS)                             (* ; "Edited 13-Jul-2022 22:56 by rmk")
+    (AND (fetch (TEXTOBJ DEFAULTCHARLOOKS) of TEXTOBJ)
+         (\TEDIT.UNIQUIFY.CHARLOOKS (fetch (TEXTOBJ DEFAULTCHARLOOKS) of TEXTOBJ)
+                TEXTOBJ))                                    (* ; 
+                         "And make sure that the default and caret looks are reflected in that list.")
+    (AND (fetch (TEXTOBJ CARETLOOKS) of TEXTOBJ)
+         (\TEDIT.UNIQUIFY.CHARLOOKS (fetch (TEXTOBJ CARETLOOKS) of TEXTOBJ)
+                TEXTOBJ))
+    (AND DEFAULTLOOKS (\TEDIT.UNIQUIFY.CHARLOOKS DEFAULTLOOKS TEXTOBJ))
+                                                             (* ; 
+                                                  "And the default looks we used in this function...")
+    (\TEDIT.UNIQUIFY.PARALOOKS (fetch (TEXTOBJ FMTSPEC) of TEXTOBJ)
+           TEXTOBJ])
 )
 
 
@@ -3481,25 +3460,27 @@
               (RPLACD TABSPEC TABS])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (2979 55273 (TEDIT.BUILD.PCTB 2989 . 34712) (\TEDIT.CONVERT.FOREIGN.FORMAT 34714 . 36294
-) (TEDIT.FORMATTEDFILEP 36296 . 39508) (TEDIT.GET 39510 . 47992) (TEDIT.PARSE.PAGEFRAMES1 47994 . 
-49700) (\ARBIN 49702 . 50318) (\ATMIN 50320 . 50645) (\DWIN 50647 . 50921) (\STRINGIN 50923 . 51527) (
-\TEDIT.FORMATTEDP1 51529 . 53786) (\TEDIT.SET.WINDOW 53788 . 54299) (TEDIT.GET.PASSWORD 54301 . 55271)
-) (55309 74867 (TEDIT.INCLUDE 55319 . 66091) (TEDIT.RAW.INCLUDE 66093 . 74865)) (74901 116749 (
-TEDIT.PUT 74911 . 84872) (TEDIT.PUT.PCTB 84874 . 110430) (\TEDIT.PUTRESET 110432 . 110674) (
-TEDIT.PUT.PIECE.DESCRIPTOR 110676 . 113320) (\ARBOUT 113322 . 114473) (\ATMOUT 114475 . 114986) (
-\DWOUT 114988 . 115267) (\STRINGOUT 115269 . 115705) (\TEDIT-OPEN-FONT-FILE 115707 . 116747)) (116750 
-128178 (\TEDIT.GET.CHARLOOKS.LIST 116760 . 117161) (\TEDIT.GET.SINGLE.CHARLOOKS 117163 . 120962) (
-\TEDIT.PUT.CHARLOOKS.LIST 120964 . 122901) (\TEDIT.PUT.SINGLE.CHARLOOKS 122903 . 128176)) (128179 
-142455 (\TEDIT.GET.PARALOOKS.LIST 128189 . 128598) (\TEDIT.GET.SINGLE.PARALOOKS 128600 . 135237) (
-\TEDIT.PUT.PARALOOKS.LIST 135239 . 136246) (\TEDIT.PUT.SINGLE.PARALOOKS 136248 . 142453)) (142763 
-200061 (TEDIT.BUILD.PCTB2 142773 . 155573) (\TEDIT.GET.CHARLOOKS.LIST2 155575 . 155978) (
-\TEDIT.GET.SINGLE.CHARLOOKS2 155980 . 159457) (\TEDIT.PUT.SINGLE.PARALOOKS2 159459 . 163958) (
-\TEDIT.PUT.SINGLE.CHARLOOKS2 163960 . 168476) (\TEDIT.GET.PARALOOKS.LIST2 168478 . 168881) (
-\TEDIT.GET.SINGLE.PARALOOKS2 168883 . 173506) (TEDIT.PUT.PCTB2 173508 . 197122) (
-\TEDIT.PUT.CHARLOOKS.LIST2 197124 . 199063) (\TEDIT.PUT.PARALOOKS.LIST2 199065 . 200059)) (200138 
-221240 (TEDIT.BUILD.PCTB1 200148 . 210066) (TEDIT.GET.PAGEFRAMES1 210068 . 210424) (
-\TEDIT.GET.CHARLOOKS1 210426 . 214588) (\TEDIT.GET.PARALOOKS1 214590 . 219206) (TEDIT.GET.OBJECT1 
-219208 . 221238)) (221300 235657 (TEDIT.BUILD.PCTB0 221310 . 225660) (TEDIT.GET.CHARLOOKS0 225662 . 
-230090) (TEDIT.GET.OBJECT0 230092 . 232122) (TEDIT.GET.PARALOOKS0 232124 . 235655)))))
+  (FILEMAP (NIL (3224 33441 (TEDIT.BUILD.PCTB 3234 . 12880) (\TEDIT.CONVERT.FOREIGN.FORMAT 12882 . 14462
+) (TEDIT.FORMATTEDFILEP 14464 . 17676) (TEDIT.GET 17678 . 26160) (TEDIT.PARSE.PAGEFRAMES1 26162 . 
+27868) (\ARBIN 27870 . 28486) (\ATMIN 28488 . 28813) (\DWIN 28815 . 29089) (\STRINGIN 29091 . 29695) (
+\TEDIT.FORMATTEDP1 29697 . 31954) (\TEDIT.SET.WINDOW 31956 . 32467) (TEDIT.GET.PASSWORD 32469 . 33439)
+) (33442 52110 (\TEDIT.READ.FORMATTED.FILE 33452 . 43928) (\TEDIT.READ.OLDFORMATTED.FILE 43930 . 46162
+) (\TEDIT.READ.UNFORMATTED.FILE 46164 . 49918) (\TEDIT.CACHEFILE 49920 . 51128) (\TEDIT.UNIQUIFY.ALL 
+51130 . 52108)) (52146 71704 (TEDIT.INCLUDE 52156 . 62928) (TEDIT.RAW.INCLUDE 62930 . 71702)) (71738 
+113586 (TEDIT.PUT 71748 . 81709) (TEDIT.PUT.PCTB 81711 . 107267) (\TEDIT.PUTRESET 107269 . 107511) (
+TEDIT.PUT.PIECE.DESCRIPTOR 107513 . 110157) (\ARBOUT 110159 . 111310) (\ATMOUT 111312 . 111823) (
+\DWOUT 111825 . 112104) (\STRINGOUT 112106 . 112542) (\TEDIT-OPEN-FONT-FILE 112544 . 113584)) (113587 
+125015 (\TEDIT.GET.CHARLOOKS.LIST 113597 . 113998) (\TEDIT.GET.SINGLE.CHARLOOKS 114000 . 117799) (
+\TEDIT.PUT.CHARLOOKS.LIST 117801 . 119738) (\TEDIT.PUT.SINGLE.CHARLOOKS 119740 . 125013)) (125016 
+139292 (\TEDIT.GET.PARALOOKS.LIST 125026 . 125435) (\TEDIT.GET.SINGLE.PARALOOKS 125437 . 132074) (
+\TEDIT.PUT.PARALOOKS.LIST 132076 . 133083) (\TEDIT.PUT.SINGLE.PARALOOKS 133085 . 139290)) (139600 
+196898 (TEDIT.BUILD.PCTB2 139610 . 152410) (\TEDIT.GET.CHARLOOKS.LIST2 152412 . 152815) (
+\TEDIT.GET.SINGLE.CHARLOOKS2 152817 . 156294) (\TEDIT.PUT.SINGLE.PARALOOKS2 156296 . 160795) (
+\TEDIT.PUT.SINGLE.CHARLOOKS2 160797 . 165313) (\TEDIT.GET.PARALOOKS.LIST2 165315 . 165718) (
+\TEDIT.GET.SINGLE.PARALOOKS2 165720 . 170343) (TEDIT.PUT.PCTB2 170345 . 193959) (
+\TEDIT.PUT.CHARLOOKS.LIST2 193961 . 195900) (\TEDIT.PUT.PARALOOKS.LIST2 195902 . 196896)) (196975 
+218077 (TEDIT.BUILD.PCTB1 196985 . 206903) (TEDIT.GET.PAGEFRAMES1 206905 . 207261) (
+\TEDIT.GET.CHARLOOKS1 207263 . 211425) (\TEDIT.GET.PARALOOKS1 211427 . 216043) (TEDIT.GET.OBJECT1 
+216045 . 218075)) (218137 232494 (TEDIT.BUILD.PCTB0 218147 . 222497) (TEDIT.GET.CHARLOOKS0 222499 . 
+226927) (TEDIT.GET.OBJECT0 226929 . 228959) (TEDIT.GET.PARALOOKS0 228961 . 232492)))))
 STOP

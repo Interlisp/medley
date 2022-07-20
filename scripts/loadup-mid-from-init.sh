@@ -12,7 +12,7 @@ touch tmp/loadup.timestamp
 
 scr="-sc 1024x768 -g 1042x790"
 
-./run-medley -prog ldeinit -loadup $MEDLEYDIR/sources/XREM.CM $scr -vmem tmp/init-mid.sysout tmp/init.dlinit
+./run-medley -prog "ldeinit" -NF -loadup $MEDLEYDIR/sources/XREM.CM $scr -vmem tmp/init-mid.sysout tmp/init.dlinit
 
 
 echo 

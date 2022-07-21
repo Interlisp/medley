@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "10-Jul-2022 16:44:11" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;58 36624  
+(FILECREATED "20-Jul-2022 13:05:12" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;67 36927  
 
-      :CHANGES-TO (FNS \FORMATBYTESTRING)
+      :CHANGES-TO (FNS \BACKCCODE.EOLC)
 
-      :PREVIOUS-DATE " 7-Jul-2022 10:42:34" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;57)
+      :PREVIOUS-DATE "19-Jul-2022 23:52:46" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;66)
 
 
 (PRETTYCOMPRINT EXTERNALFORMATCOMS)
@@ -29,7 +29,7 @@
         (COMS 
               (* ;; "Generic functions not compiled open (originally on LLREAD)")
 
-              (FNS \OUTCHAR \INCCODE \BACKCCODE \BACKCCODE.EOLC \PEEKCCODE \PEEKCCODE.NOEOLC 
+              (FNS \OUTCHAR \INCCODE \BACKCCODE \BACKCCODE.EOLC \PEEKCCODE \PEEKCCODE.EOLC 
                    \INCCODE.EOLC \FORMATBYTESTREAM \FORMATBYTESTRING \CHECKEOLC.CRLF)
               (DECLARE%: DOEVAL@COMPILE DONTCOPY (EXPORT (MACROS \CHECKEOLC))
                      (RESOURCES \FORMATBYTESTRING.STREAM))
@@ -355,77 +355,81 @@
                   STREAM])
 
 (\BACKCCODE
-  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)                 (* ; "Edited 30-Jun-2022 10:00 by rmk")
+  [LAMBDA (STREAM BYTECOUNTVAR BYTECOUNTVAL)                 (* ; "Edited 19-Jul-2022 15:55 by rmk")
+                                                             (* ; "Edited 30-Jun-2022 10:00 by rmk")
                                                             (* ; "Edited 14-Aug-2021 00:26 by rmk:")
 
-    (* ;; 
-  "Format function returns T if the backup succeed, NIL otherwise (e.g at the beginning of the file)")
+    (* ;; "Format function returns the backed-over character code if the backup succeed, NIL otherwise (e.g at the beginning of the file). FIXP test and PEEKCCODE here  for implementations that don't want to bother computing the code from the bytes.")
 
-    (IF BYTECOUNTVAR
-        THEN [LET ((*BYTECOUNTER* 0))
-                  (DECLARE (SPECVARS *BYTECOUNTER*))
-                  (PROG1 (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
-                                STREAM T)
-                      (SET BYTECOUNTVAR (IPLUS (OR BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR))
-                                               *BYTECOUNTER*)))]
-      ELSE (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
-                  STREAM])
+    (LET (CODE)
+         (IF BYTECOUNTVAR
+             THEN [LET ((*BYTECOUNTER* 0))
+                       (DECLARE (SPECVARS *BYTECOUNTER*))
+                       (SETQ CODE (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
+                                         STREAM T))
+                       (SET BYTECOUNTVAR (IPLUS (OR BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR))
+                                                *BYTECOUNTER*))
+                       (CL:WHEN CODE
+                           (OR (FIXP CODE)
+                               (CLFUNCALL (ffetch (STREAM PEEKCCODEFN) of STREAM)
+                                      STREAM)))]
+           ELSEIF (SETQ CODE (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
+                                    STREAM))
+             THEN (OR (FIXP CODE)
+                      (CL:FUNCALL (ffetch (STREAM PEEKCCODEFN) of STREAM)
+                             STREAM])
 
 (\BACKCCODE.EOLC
-  [LAMBDA (STREAM EOLC BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 30-Jun-2022 10:02 by rmk")
+  [LAMBDA (STREAM EOLC BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 20-Jul-2022 13:05 by rmk")
+                                                             (* ; "Edited 30-Jun-2022 10:02 by rmk")
                                                              (* ; "Edited 18-Jun-2022 18:45 by rmk")
                                                             (* ; "Edited 14-Aug-2021 00:27 by rmk:")
 
     (* ;; "If the EOLCONVENTION is CRLF, and the first backup is over an LF encoding, this looks to see whether the preceding bytes encode a CR and if so, backs up over those.")
 
-    (* ;; "Within this we operate at the external-format implementation level.")
-
-    (* ;; "Counting is unusual in general (mostly just COPYCHARS and PFCOPYBYTES) , and counting while backing up is even rarer.  So for simplicity here we just count by looking at the byte pointer.")
-
-    (LET [(STARTPOS (CL:WHEN BYTECOUNTVAR (\GETFILEPTR STREAM]
+    (CL:UNLESS EOLC
+        (SETQ EOLC (ffetch (STREAM EOLCONVENTION) OF STREAM)))
+    (LET (CODE (*BYTECOUNTER* 0))
+         (DECLARE (SPECVARS *BYTECOUNTER*))
 
          (* ;; "In almost all cases, we just execute the first backup")
 
-         (PROG1 (CL:WHEN (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
-                                STREAM)
-                    (SELECTC (OR EOLC (ffetch (STREAM EOLCONVENTION) OF STREAM))
-                        ((LIST CRLF.EOLC ANY.EOLC 'CRLF 'ANY) 
-                             (CL:WHEN (EQ (CHARCODE LF)
-                                          (CL:FUNCALL (ffetch (STREAM PEEKCCODEFN) of STREAM)
-                                                 STREAM))
+         (SELCHARQ (SETQ CODE (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
+                                     STREAM BYTECOUNTVAR))
+              (LF (SELECTC EOLC
+                      ((LIST LF.EOLC 'LF) 
+                           (SETQ CODE (CHARCODE EOL)))
+                      ((LIST CRLF.EOLC ANY.EOLC 'CRLF 'ANY) 
+                           (SETQ CODE (CHARCODE EOL))        (* ; 
+                                                          "Also an EOL, but back over a preceding CR")
+                           (CL:UNLESS (EQ (CHARCODE CR)
+                                          (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
+                                                 STREAM BYTECOUNTVAR))
 
-                                 (* ;; 
-              "We just backed over an LF with EOLC= CRLF or ANY.  If we go one more, do we get a CR?")
+                               (* ;; "Not a preceding CR, reread it.")
 
-                                 (CL:WHEN (CL:FUNCALL (ffetch (STREAM BACKCCODEFN) of STREAM)
-                                                 STREAM)
-                                     (CL:UNLESS (EQ (CHARCODE CR)
-                                                    (CL:FUNCALL (ffetch (STREAM PEEKCCODEFN)
-                                                                   of STREAM)
-                                                           STREAM))
-
-                                         (* ;; "Not a preceding CR, reread it.")
-
-                                         (CL:FUNCALL (ffetch (STREAM INCCODEFN) of STREAM)
-                                                STREAM)))))
-                        NIL)
-                    T)
-             (CL:WHEN BYTECOUNTVAR
-                 [SET BYTECOUNTVAR (IPLUS (OR BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR))
-                                          (IDIFFERENCE STARTPOS (\GETFILEPTR STREAM]))])
+                               (CL:FUNCALL (ffetch (STREAM INCCODEFN) of STREAM)
+                                      STREAM BYTECOUNTVAR)))
+                      NIL))
+              (CR (CL:WHEN [MEMB EOLC (CONSTANT (LIST CR.EOLC ANY.EOLC 'CR 'ANY]
+                      (SETQ CODE (CHARCODE EOL))))
+              NIL)
+         (CL:WHEN BYTECOUNTVAR
+             [SET BYTECOUNTVAR (IDIFFERENCE (OR BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR *BYTECOUNTER*])
+         CODE])
 
 (\PEEKCCODE
+  [LAMBDA (STREAM NOERROR)                                   (* ; "Edited 30-Jun-2022 10:03 by rmk")
+                                                            (* ; "Edited 27-Jun-2021 23:26 by rmk:")
+    (CL:FUNCALL (ffetch (STREAM PEEKCCODEFN) of STREAM)
+           STREAM NOERROR])
+
+(\PEEKCCODE.EOLC
   [LAMBDA (STREAM NOERROR EOL)                               (* ; "Edited 30-Jun-2022 10:03 by rmk")
                                                             (* ; "Edited 14-Jun-2021 12:40 by rmk:")
     (\CHECKEOLC (CL:FUNCALL (ffetch (STREAM PEEKCCODEFN) of STREAM)
                        STREAM NOERROR)
            EOL STREAM T])
-
-(\PEEKCCODE.NOEOLC
-  [LAMBDA (STREAM NOERROR)                                   (* ; "Edited 30-Jun-2022 10:03 by rmk")
-                                                            (* ; "Edited 27-Jun-2021 23:26 by rmk:")
-    (CL:FUNCALL (ffetch (STREAM PEEKCCODEFN) of STREAM)
-           STREAM NOERROR])
 
 (\INCCODE.EOLC
   [LAMBDA (STREAM EOLC BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 30-Jun-2022 10:12 by rmk")
@@ -701,13 +705,13 @@
 (\CREATE.THROUGH.EXTERNALFORMAT)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (6575 13210 (\EXTERNALFORMAT 6585 . 10363) (MAKE-EXTERNALFORMAT 10365 . 12737) (
-\EXTERNALFORMAT.DEFPRINT 12739 . 13208)) (13211 16252 (\INSTALL.EXTERNALFORMAT 13221 . 14670) (
-\REMOVE.EXTERNALFORMAT 14672 . 15503) (FIND-FORMAT 15505 . 16250)) (16253 16466 (SYSTEM-EXTERNALFORMAT
- 16263 . 16464)) (16815 30707 (\OUTCHAR 16825 . 18042) (\INCCODE 18044 . 19197) (\BACKCCODE 19199 . 
-20062) (\BACKCCODE.EOLC 20064 . 22651) (\PEEKCCODE 22653 . 23027) (\PEEKCCODE.NOEOLC 23029 . 23361) (
-\INCCODE.EOLC 23363 . 25043) (\FORMATBYTESTREAM 25045 . 26678) (\FORMATBYTESTRING 26680 . 28139) (
-\CHECKEOLC.CRLF 28141 . 30705)) (32309 34545 (\NULLDEVICE 32319 . 34221) (\NULL.OPENFILE 34223 . 34543
-)) (34685 36528 (\CREATE.THROUGH.EXTERNALFORMAT 34695 . 35497) (\THROUGHIN 35499 . 35919) (
-\THROUGHBACKCCODE 35921 . 36188) (\THROUGHOUTCHARFN 36190 . 36526)))))
+  (FILEMAP (NIL (6571 13206 (\EXTERNALFORMAT 6581 . 10359) (MAKE-EXTERNALFORMAT 10361 . 12733) (
+\EXTERNALFORMAT.DEFPRINT 12735 . 13204)) (13207 16248 (\INSTALL.EXTERNALFORMAT 13217 . 14666) (
+\REMOVE.EXTERNALFORMAT 14668 . 15499) (FIND-FORMAT 15501 . 16246)) (16249 16462 (SYSTEM-EXTERNALFORMAT
+ 16259 . 16460)) (16811 31010 (\OUTCHAR 16821 . 18038) (\INCCODE 18040 . 19193) (\BACKCCODE 19195 . 
+20764) (\BACKCCODE.EOLC 20766 . 22956) (\PEEKCCODE 22958 . 23283) (\PEEKCCODE.EOLC 23285 . 23664) (
+\INCCODE.EOLC 23666 . 25346) (\FORMATBYTESTREAM 25348 . 26981) (\FORMATBYTESTRING 26983 . 28442) (
+\CHECKEOLC.CRLF 28444 . 31008)) (32612 34848 (\NULLDEVICE 32622 . 34524) (\NULL.OPENFILE 34526 . 34846
+)) (34988 36831 (\CREATE.THROUGH.EXTERNALFORMAT 34998 . 35800) (\THROUGHIN 35802 . 36222) (
+\THROUGHBACKCCODE 36224 . 36491) (\THROUGHOUTCHARFN 36493 . 36829)))))
 STOP

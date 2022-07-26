@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "20-Jul-2022 13:05:12" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;67 36927  
+(FILECREATED "24-Jul-2022 14:56:07" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;75 37244  
 
-      :CHANGES-TO (FNS \BACKCCODE.EOLC)
+      :CHANGES-TO (MACROS \CHECKEOLC)
+                  (FNS \INCCODE.EOLC)
 
-      :PREVIOUS-DATE "19-Jul-2022 23:52:46" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;66)
+      :PREVIOUS-DATE "24-Jul-2022 08:30:32" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>sources>EXTERNALFORMAT.;72)
 
 
 (PRETTYCOMPRINT EXTERNALFORMATCOMS)
@@ -432,45 +433,42 @@
            EOL STREAM T])
 
 (\INCCODE.EOLC
-  [LAMBDA (STREAM EOLC BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 30-Jun-2022 10:12 by rmk")
+  [LAMBDA (STREAM EOLC BYTECOUNTVAR BYTECOUNTVAL)            (* ; "Edited 24-Jul-2022 13:15 by rmk")
+                                                             (* ; "Edited 30-Jun-2022 10:12 by rmk")
                                                             (* ; "Edited  8-Aug-2021 14:52 by rmk:")
 
     (* ;; "EOL conversion around essentially a copy of \INCCODE but avoids the extra function call.")
 
-    (* ;; " EOLC of ANY means all patterns go to EOL")
+    (* ;; "EOLC of ANY means all patterns go to EOL")
+
+    (* ;; "For simplicity of the raft of implementation functions, they only need to set the constant *BYTECOUNTER* to the number of bytes moved forward (if COUNTP is T).  We take responsibility for translating the forward bytes to the countdown value of the particular BYTECOUNTVAR.  The goal is simplicity on both sides of the interface. ")
+
+    (CL:UNLESS EOLC
+        (SETQ EOLC (FFETCH (STREAM EOLCONVENTION) OF STREAM)))
+
+    (* ;; "The implementation functions could do a multiple value return, but that seems to be slower and buggy in current implementation, compared to free-variable setting.")
 
     (IF BYTECOUNTVAR
-        THEN [LET (*BYTECOUNTER* CODE)
+        THEN (LET (*BYTECOUNTER* CODE)
                   (DECLARE (SPECVARS *BYTECOUNTER*))
-
-                  (* ;; "The INCCODEFN first sets *BYTECOUNTER*")
-
-                  (CL:UNLESS BYTECOUNTVAL
-                      (SETQ BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR)))
-                  (SETQ CODE (CL:FUNCALL (ffetch (STREAM INCCODEFN) of STREAM)
-                                    STREAM T))
-
-                  (* ;; "Update according to the number of first-char (CR or LF) bytes")
-
-                  (SETQ BYTECOUNTVAL (IDIFFERENCE BYTECOUNTVAL *BYTECOUNTER*))
-                  (SETQ *BYTECOUNTER* 0)
-
-                  (* ;; "*BYTECOUNTER* will now be reset to the number of LF-after-CR bytes, if any")
-
-                  (PROG1 (\CHECKEOLC CODE (OR EOLC (FFETCH (STREAM EOLCONVENTION) OF STREAM))
-                                STREAM NIL T)
-
-                      (* ;; "Post the results")
-
-                      (SET BYTECOUNTVAR (IDIFFERENCE BYTECOUNTVAL *BYTECOUNTER*)))]
+                  (SETQ CODE (\CHECKEOLC (CL:FUNCALL (ffetch (STREAM INCCODEFN) of STREAM)
+                                                STREAM T)
+                                    EOLC STREAM NIL T))
+                  (SET BYTECOUNTVAR (IDIFFERENCE (OR BYTECOUNTVAL (\EVALV1 BYTECOUNTVAR))
+                                           *BYTECOUNTER*))
+                  CODE)
       ELSE (\CHECKEOLC (CL:FUNCALL (ffetch (STREAM INCCODEFN) of STREAM)
                               STREAM)
-                  (OR EOLC (FFETCH (STREAM EOLCONVENTION) OF STREAM))
-                  STREAM])
+                  EOLC STREAM])
 
 (\FORMATBYTESTREAM
-  [LAMBDA (STREAM BYTESTREAM)                                (* ; "Edited 22-Jun-2022 11:09 by rmk")
-                                                            (* ; "Edited 24-Jun-2021 17:26 by rmk:")
+  [LAMBDA (STREAM BYTESTREAM)
+
+    (* ;; "Edited 24-Jul-2022 08:30 by rmk: STREAM can be the external format to be used for BYTESTREAM, not just a carrier of that format")
+
+    (* ;; "Edited 22-Jun-2022 11:09 by rmk")
+
+    (* ;; "Edited 24-Jun-2021 17:26 by rmk:")
 
     (* ;; "Create or modify a stream that will simulate the current character input/output byte sequences of  STREAM.  The set up here does what is common to all formats:  an IO stream starting with STREAM external format and EOL.")
 
@@ -479,17 +477,25 @@
     (CL:UNLESS (AND (STREAMP BYTESTREAM)
                     (\IOMODEP BYTESTREAM 'BOTH))
         (SETQ BYTESTREAM (OPENSTREAM '{NODIRCORE} 'BOTH)))
-    (LET ((FORMAT (FETCH (STREAM EXTERNALFORMAT) OF STREAM))
-          (EOLC (FETCH (STREAM EOLCONVENTION) OF STREAM)))
+    (LET (FORMAT EOLC)
+         (IF (TYPE? STREAM STREAM)
+             THEN (SETQ FORMAT (FFETCH (STREAM EXTERNALFORMAT) OF STREAM))
+                  (SETQ EOLC (FFETCH (STREAM EOLCONVENTION) OF STREAM))
+                  (CL:WHEN (EQ EOLC ANY.EOLC)
+                      (SETQ EOLC (OR (FFETCH (EXTERNALFORMAT EOL) OF FORMAT)
+                                     LF.EOLC)))
+           ELSEIF (TYPE? EXTERNALFORMAT STREAM)
+             THEN (SETQ FORMAT STREAM)
+                  (SETQ EOLC (FFETCH (EXTERNALFORMAT EOL) OF FORMAT)))
          (\EXTERNALFORMAT BYTESTREAM FORMAT)
-         (CL:WHEN (EQ EOLC ANY.EOLC)
-             (SETQ EOLC (OR (FETCH (EXTERNALFORMAT EOL) OF FORMAT)
-                            LF.EOLC)))
          (REPLACE (STREAM EOLCONVENTION) OF BYTESTREAM WITH EOLC)
          (\SETFILEPTR BYTESTREAM 0)
          (freplace (STREAM ENDOFSTREAMOP) of BYTESTREAM with (FUNCTION NILL))
-         (CL:WHEN (FETCH (EXTERNALFORMAT FORMATBYTESTREAMFN) OF FORMAT)
-             (APPLY* (FETCH (EXTERNALFORMAT FORMATBYTESTREAMFN) OF FORMAT)
+
+         (* ;; "Presumably any format-specific cleanup function will know what to do if it receives a format instead of a stream.")
+
+         (CL:WHEN (FFETCH (EXTERNALFORMAT FORMATBYTESTREAMFN) OF FORMAT)
+             (APPLY* (FFETCH (EXTERNALFORMAT FORMATBYTESTREAMFN) OF FORMAT)
                     STREAM BYTESTREAM))
          BYTESTREAM])
 
@@ -568,24 +574,19 @@
 (DECLARE%: DOEVAL@COMPILE DONTCOPY 
 (* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE 
 
-(PUTPROPS \CHECKEOLC MACRO [OPENLAMBDA (CH EOLC STRM PEEKBINFLG COUNTP)
-                             (COND
-                                ((EQ EOLC 'NOEOLC)
-                                 CH)
-                                (T (SELCHARQ CH
-                                        (LF (SELECTC (OR EOLC (FFETCH (STREAM EOLCONVENTION)
-                                                                 OF STRM))
-                                                ((LIST LF.EOLC ANY.EOLC 'LF 'ANY) 
-                                                     (CHARCODE EOL))
-                                                (CHARCODE LF)))
-                                        (CR (SELECTC (OR EOLC (FFETCH (STREAM EOLCONVENTION)
-                                                                 OF STRM))
-                                                ((LIST CR.EOLC 'ANY) 
-                                                     (CHARCODE EOL))
-                                                ((LIST ANY.EOLC CRLF.EOLC 'CRLF 'ANY) 
-                                                     (\CHECKEOLC.CRLF STRM PEEKBINFLG COUNTP))
-                                                (CHARCODE CR)))
-                                        CH])
+(PUTPROPS \CHECKEOLC MACRO (OPENLAMBDA (CH EOLC STRM PEEKBINFLG COUNTP)
+                             (SELCHARQ CH
+                                  (LF (SELECTC (OR EOLC (FFETCH (STREAM EOLCONVENTION) OF STRM))
+                                          ((LIST LF.EOLC ANY.EOLC 'LF 'ANY) 
+                                               (CHARCODE EOL))
+                                          (CHARCODE LF)))
+                                  (CR (SELECTC (OR EOLC (FFETCH (STREAM EOLCONVENTION) OF STRM))
+                                          ((LIST CR.EOLC 'ANY) 
+                                               (CHARCODE EOL))
+                                          ((LIST ANY.EOLC CRLF.EOLC 'CRLF 'ANY) 
+                                               (\CHECKEOLC.CRLF STRM PEEKBINFLG COUNTP))
+                                          (CHARCODE CR)))
+                                  CH)))
 )
 
 (* "END EXPORTED DEFINITIONS")
@@ -659,17 +660,23 @@
 (DEFINEQ
 
 (\CREATE.THROUGH.EXTERNALFORMAT
-  [LAMBDA NIL                                           (* ; "Edited 23-Jun-2021 13:34 by rmk:")
+  [LAMBDA NIL                                                (* ; "Edited 24-Jul-2022 08:08 by rmk")
+                                                            (* ; "Edited 23-Jun-2021 13:34 by rmk:")
 
-(* ;;; "Create an instance of EXTERNALFORMAT datatype and install it with :THROUGH as its name.  EOL is adjusted to CR so as not to do any eol conversion on this stream.")
+(* ;;; "Create the :THROUGH external format.  EOL is adjusted so that the .EOLC callers will not do any conversion.")
 
-    (\INSTALL.EXTERNALFORMAT (create EXTERNALFORMAT
-                                        NAME _ :THROUGH
-                                        INCCODEFN _ (FUNCTION \THROUGHIN)
-                                        PEEKCCODEFN _ (FUNCTION \PEEKBIN)
-                                        BACKCCODEFN _ (FUNCTION \THROUGHBACKCCODE)
-                                        OUTCHARFN _ (FUNCTION \THROUGHOUTCHARFN)
-                                        EOL _ CR.EOLC])
+    (MAKE-EXTERNALFORMAT :THROUGH (FUNCTION \THROUGHIN)
+           (FUNCTION \PEEKBIN)
+           (FUNCTION \THROUGHBACKCCODE)
+           (FUNCTION \THROUGHOUTCHARFN)
+           NIL
+           (CL:IF (EQ (CHARCODE CR)
+                      (CHARCODE EOL))
+               CR.EOLC
+               LF.EOLC)
+           NIL
+           (FUNCTION (LAMBDA (STREAM STRING)
+                       (MKSTRING STRING])
 
 (\THROUGHIN
   [LAMBDA (STREAM COUNTP)                               (* ; "Edited  6-Aug-2021 16:13 by rmk:")
@@ -705,13 +712,13 @@
 (\CREATE.THROUGH.EXTERNALFORMAT)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (6571 13206 (\EXTERNALFORMAT 6581 . 10359) (MAKE-EXTERNALFORMAT 10361 . 12733) (
-\EXTERNALFORMAT.DEFPRINT 12735 . 13204)) (13207 16248 (\INSTALL.EXTERNALFORMAT 13217 . 14666) (
-\REMOVE.EXTERNALFORMAT 14668 . 15499) (FIND-FORMAT 15501 . 16246)) (16249 16462 (SYSTEM-EXTERNALFORMAT
- 16259 . 16460)) (16811 31010 (\OUTCHAR 16821 . 18038) (\INCCODE 18040 . 19193) (\BACKCCODE 19195 . 
-20764) (\BACKCCODE.EOLC 20766 . 22956) (\PEEKCCODE 22958 . 23283) (\PEEKCCODE.EOLC 23285 . 23664) (
-\INCCODE.EOLC 23666 . 25346) (\FORMATBYTESTREAM 25348 . 26981) (\FORMATBYTESTRING 26983 . 28442) (
-\CHECKEOLC.CRLF 28444 . 31008)) (32612 34848 (\NULLDEVICE 32622 . 34524) (\NULL.OPENFILE 34526 . 34846
-)) (34988 36831 (\CREATE.THROUGH.EXTERNALFORMAT 34998 . 35800) (\THROUGHIN 35802 . 36222) (
-\THROUGHBACKCCODE 36224 . 36491) (\THROUGHOUTCHARFN 36493 . 36829)))))
+  (FILEMAP (NIL (6607 13242 (\EXTERNALFORMAT 6617 . 10395) (MAKE-EXTERNALFORMAT 10397 . 12769) (
+\EXTERNALFORMAT.DEFPRINT 12771 . 13240)) (13243 16284 (\INSTALL.EXTERNALFORMAT 13253 . 14702) (
+\REMOVE.EXTERNALFORMAT 14704 . 15535) (FIND-FORMAT 15537 . 16282)) (16285 16498 (SYSTEM-EXTERNALFORMAT
+ 16295 . 16496)) (16847 31667 (\OUTCHAR 16857 . 18074) (\INCCODE 18076 . 19229) (\BACKCCODE 19231 . 
+20800) (\BACKCCODE.EOLC 20802 . 22992) (\PEEKCCODE 22994 . 23319) (\PEEKCCODE.EOLC 23321 . 23700) (
+\INCCODE.EOLC 23702 . 25501) (\FORMATBYTESTREAM 25503 . 27638) (\FORMATBYTESTRING 27640 . 29099) (
+\CHECKEOLC.CRLF 29101 . 31665)) (32945 35181 (\NULLDEVICE 32955 . 34857) (\NULL.OPENFILE 34859 . 35179
+)) (35321 37148 (\CREATE.THROUGH.EXTERNALFORMAT 35331 . 36117) (\THROUGHIN 36119 . 36539) (
+\THROUGHBACKCCODE 36541 . 36808) (\THROUGHOUTCHARFN 36810 . 37146)))))
 STOP

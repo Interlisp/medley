@@ -41,9 +41,9 @@ ADD ./*.tgz ${INSTALL_LOCATION}
 
 # Create a run_medley script in /usr/local/bin
 RUN mkdir -p /usr/local/bin                                     && \
-    echo "#!/bin/bash"              > /usr/local/bin/run-medley && \
-    echo "cd ${INSTALL_LOCATION}"  >> /usr/local/bin/run-medley && \
-    echo './run-medley "$@"'       >> /usr/local/bin/run-medley && \
+    echo "#!/bin/bash"                    > /usr/local/bin/run-medley && \
+    echo "cd ${INSTALL_LOCATION}/medley"  >> /usr/local/bin/run-medley && \
+    echo './run-medley "$@"'              >> /usr/local/bin/run-medley && \
     chmod ugo+x /usr/local/bin/run-medley
     
 # "Finalize" image

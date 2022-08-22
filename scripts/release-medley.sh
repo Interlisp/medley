@@ -28,7 +28,6 @@ tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
     --exclude exports.all                                 \
     medley/docs/dinfo                                     \
-    medley/doctools                                       \
     medley/greetfiles                                     \
     medley/rooms                                          \
     medley/run-medley                                     \

@@ -1,15 +1,19 @@
 (DEFINE-FILE-INFO PACKAGE (DEFPACKAGE "DEBUGGER" (PREFIX-NAME "DBG") (NICKNAMES "DBG")) READTABLE 
 "XCL" BASE 10)
 
-(IL:FILECREATED "11-Sep-2022 14:56:05" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;7| 84368  
+(IL:FILECREATED "18-Sep-2022 10:49:58" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;4| 84396  
 
-      :CHANGES-TO (IL:FUNCTIONS XCL:ENTER-DEBUGGER-P XCL::INTERESTING-FRAME-P)
-                  (IL:FNS IL:BAKTRACE1)
+      :CHANGES-TO (IL:FNS IL:BAKTRACE1 IL:WBREAK IL:BAKTRACE IL:FIND-STACK-FRAME)
+                  (IL:FUNCTIONS XCL:ENTER-DEBUGGER-P XCL::INTERESTING-FRAME-P IL:INTERESTING-FRAME-P
+                         IL:EXTERNAL-SYMBOL-P)
+                  (IL:COMMANDS "BT")
+                  (IL:VARS IL:DEBUGGERCOMS)
+                  (IL:VARIABLES IL:*SHORT-BACKTRACE-FILTER*)
 
-      :PREVIOUS-DATE "12-Sep-2021 15:59:37" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;1|)
+      :PREVIOUS-DATE "11-Sep-2022 14:56:05" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;1|)
 
 
-; Copyright (c) 1986-1988, 1990-1991, 2021 by Venue & Xerox Corporation.
+; Copyright (c) 1986-1988, 1990-1991, 2021-2022 by Venue & Xerox Corporation.
 
 (IL:PRETTYCOMPRINT IL:DEBUGGERCOMS)
 
@@ -20,9 +24,9 @@
            (IL:COMS (IL:VARIABLES XCL:*DEBUGGER-PROMPT* *IN-THE-DEBUGGER* XCL:*DEBUGGER-ENTRY-POINTS*
                            )
                   (IL:VARIABLES IL:BRKEXP IL:BRKTYPE IL:BRKCOND IL:BRKPOS)
-                  (IL:FUNCTIONS XCL:ENTER-DEBUGGER-P)
+                  (IL:FUNCTIONS XCL:ENTER-DEBUGGER-P IL:EXTERNAL-SYMBOL-P IL:INTERESTING-FRAME-P)
                   (IL:FUNCTIONS XCL:DEBUGGER EMERGENCY-PANIC-LOOP IL:FIND-DEBUGGER-ENTRY-FRAME 
-                         PRINT-ENTRY-MESSAGE SIMPLE-REPORT-CONDITION XCL::INTERESTING-FRAME-P))
+                         PRINT-ENTRY-MESSAGE SIMPLE-REPORT-CONDITION))
            (IL:COMS (IL:INITVARS (IL:WBREAK))
                   (IL:VARIABLES XCL:*DEBUGGER-MENU-ITEMS* *DEBUGGER-TERMINAL-TABLE* 
                          IL:BREAKREGIONSPEC)
@@ -92,6 +96,7 @@
 
 (DEFUN XCL:ENTER-DEBUGGER-P (IL:N IL:POS XCL:CONDITION)
    (DECLARE (SPECIAL IL:PRINTMSG IL:ERRORPOS IL:HELPFLAG IL:NLSETQGAG IL:HELPTIME))
+                                                    (IL:* IL:\; "Edited 18-Sep-2022 10:37 by larry")
                                                       (IL:* IL:\; "Edited 11-Sep-2022 14:53 by lmm")
    (IL:SETQ IL:PRINTMSG T)                                   (IL:* IL:\; " the default")
    (COND
@@ -106,7 +111,7 @@
            ((NULL IL:POS)
             (IL:RELSTK IL:POS)                               (IL:* IL:\; "done walking")
             )                                                (IL:* IL:\; "too many frames")
-         (AND IL:N (XCL::INTERESTING-FRAME-P IL:POS NIL)
+         (AND IL:N (IL:INTERESTING-FRAME-P IL:POS NIL)
               (DECF IL:N))
          (WHEN (EQ (IL:STKNAME IL:POS)
                    'IL:ERRORSET)
@@ -133,6 +138,50 @@
                         IL:HELPTIME)))
        T)
       (T NIL)))
+
+(DEFUN IL:EXTERNAL-SYMBOL-P (IL:FN)                 (IL:* IL:\; "Edited 18-Sep-2022 10:11 by larry")
+   (EQL :EXTERNAL (CADR (MULTIPLE-VALUE-LIST (FIND-SYMBOL (SYMBOL-NAME IL:FN)
+                                                    (SYMBOL-PACKAGE IL:FN))))))
+
+(DEFUN IL:INTERESTING-FRAME-P (&OPTIONAL IL:POS IL:INTERPFLG)
+                                                    (IL:* IL:\; "Edited 18-Sep-2022 10:23 by larry")
+                                                      (IL:* IL:\; "Edited 11-Sep-2022 12:47 by lmm")
+
+   (IL:* IL:|;;| "Value is T if frame should be visible for backtrace, and error retry")
+
+   (IL:* IL:|;;| "user did write a call to the function at POS, and either INTERPFLG is T, or else the functio call would also exist if compiled")
+
+   (LET ((IL:NAME (IF (IL:STACKP IL:POS)
+                      (IL:STKNAME IL:POS)
+                      IL:POS)))
+        (AND (SYMBOLP IL:NAME)
+             (CASE IL:NAME
+                 (IL:*ENV*                                   (IL:* IL:\; 
+                                                             "*ENV* is used by ENVEVAL etc.")
+                    NIL)
+                 (IL:ERRORSET (OR (<= (IL:STKNARGS IL:POS)
+                                      1)
+                                  (IL:NEQ (IL:STKARG 2 IL:POS NIL)
+                                         'IL:INTERNAL)))
+                 (IL:EVAL (OR (<= (IL:STKNARGS IL:POS)
+                                  1)
+                              (IL:NEQ (IL:STKARG 2 IL:POS NIL)
+                                     'IL:INTERNAL)))
+                 (IL:APPLY (OR (<= (IL:STKNARGS IL:POS)
+                                   2)
+                               (NOT (IL:STKARG 3 IL:POS NIL))))
+                 (OTHERWISE (OR (NOT (SYMBOLP IL:NAME))
+                                (COND
+                                   ((IL:FMEMB IL:NAME IL:OPENFNS)
+                                    IL:INTERPFLG)
+                                   ((IL:STRPOS "A0$$$" IL:NAME -5 'IL:$)
+                                                             (IL:* IL:\; "gensym'd subfunction")
+                                    NIL)
+                                   ((NOT (IL:EXTERNAL-SYMBOL-P IL:NAME))
+                                    NIL)
+                                   (T (OR (IL:NEQ (IL:CHCON1 IL:NAME)
+                                                 (IL:CHARCODE IL:\\))
+                                          (IL:EXPRP IL:NAME))))))))))
 
 (DEFUN XCL:DEBUGGER (&KEY ((:FORM IL:BRKEXP))                (IL:* IL:\; "form to evaluate at EVAL")
                           ((:ENVIRONMENT IL:BRKENV)
@@ -322,43 +371,6 @@
               (T (TYPE-OF XCL:CONDITION)))
           STREAM))
 
-(DEFUN XCL::INTERESTING-FRAME-P (&OPTIONAL XCL::POS XCL::INTERPFLG)
-                                                      (IL:* IL:\; "Edited 11-Sep-2022 12:47 by lmm")
-
-   (IL:* IL:|;;| "Value is T if frame should be visible for backtrace, and error retry")
-
-   (IL:* IL:|;;| "user did write a call to the function at POS, and either INTERPFLG is T, or else the functio call would also exist if compiled")
-
-   (LET ((XCL::NAME (IF (IL:STACKP XCL::POS)
-                        (IL:STKNAME XCL::POS)
-                        XCL::POS)))
-        (AND (SYMBOLP XCL::NAME)
-             (CASE XCL::NAME
-                 (IL:*ENV*                                   (IL:* IL:\; 
-                                                             "*ENV* is used by ENVEVAL etc.")
-                    NIL)
-                 (IL:ERRORSET (OR (<= (IL:STKNARGS XCL::POS)
-                                      1)
-                                  (IL:NEQ (IL:STKARG 2 XCL::POS NIL)
-                                         'IL:INTERNAL)))
-                 (IL:EVAL (OR (<= (IL:STKNARGS XCL::POS)
-                                  1)
-                              (IL:NEQ (IL:STKARG 2 XCL::POS NIL)
-                                     'XCL::INTERNAL)))
-                 (IL:APPLY (OR (<= (IL:STKNARGS XCL::POS)
-                                   2)
-                               (NOT (IL:STKARG 3 XCL::POS NIL))))
-                 (OTHERWISE (OR (NOT (SYMBOLP XCL::NAME))
-                                (COND
-                                   ((IL:FMEMB XCL::NAME IL:OPENFNS)
-                                    XCL::INTERPFLG)
-                                   ((IL:STRPOS "A0$$$" XCL::NAME -5 'XCL::$)
-                                                             (IL:* IL:\; "gensym'd subfunction")
-                                    NIL)
-                                   (T (OR (IL:NEQ (IL:CHCON1 XCL::NAME)
-                                                 (IL:CHARCODE IL:\\))
-                                          (IL:EXPRP XCL::NAME))))))))))
-
 (IL:RPAQ? IL:WBREAK )
 
 (DEFPARAMETER XCL:*DEBUGGER-MENU-ITEMS* '("EVAL" "EDIT" "REVERT" "^" "PROCEED" "OK" "BT" "BT!" "?=")
@@ -375,11 +387,11 @@
           IL:HEIGHT IL:_ 120))
 (IL:DEFINEQ
 
-(il:wbreak
-  (lambda (&optional (il:on t il:onp))                       (il:* il:\; 
-                                                           "start and stop creating window debugging")
-
-         (prog1 il:wbreak (and il:onp (il:setq il:wbreak il:on)))))
+(IL:WBREAK
+  (LAMBDA (&OPTIONAL (IL:ON T IL:ONP))                       (IL:* IL:\; 
+                                                           "start and stop creating window debugging")
+         (PROG1 IL:WBREAK
+             (AND IL:ONP (IL:SETQ IL:WBREAK IL:ON)))))
 )
 
 (IL:ADDTOVAR IL:WINDOWUSERFORMS (IL:WBREAK T))
@@ -789,59 +801,58 @@
 (DEFPARAMETER IL:|MaxBkMenuWidth| 125)
 (IL:DEFINEQ
 
-(il:baktrace
-  (il:lambda (il:ipos il:epos il:skipfns il:flags il:file)
-                                                        (il:* il:\; "Edited  2-Jun-87 18:26 by amd")
-          
-          (il:* il:|;;| "FLAGS is a bit mask telling BACKTRACE what is to be printed.  1 is variables, 2 is eval blips, 4 is everything, 8 suppresses function name and 'UNTRACE:' , and 16 uses access links.")
+(IL:BAKTRACE
+  (IL:LAMBDA (IL:IPOS IL:EPOS IL:SKIPFNS IL:FLAGS IL:FILE)
+                                                        (IL:* IL:\; "Edited  2-Jun-87 18:26 by amd")
 
-    (prog ((*print-level* 2)
-               (*print-length* 10)
-               (il:pos (il:stknth 0 il:ipos))
-               (il:n 0)
-               il:fn il:x il:y il:z (il:plvlfileflg t))
-              (or il:file (il:setq il:file t))
-              (and (il:neq il:clearstklst t)
-                     (il:setq il:clearstklst (cons il:pos il:clearstklst)))
-          
-          (il:* il:|;;| "POS is used as a scratch-position.  N is an offset from FROM.  whenever baktrace needs to look at a stkname or stack position, it (re) uses POS and computes (STKNTH N IPOS POS).")
+    (IL:* IL:|;;| "FLAGS is a bit mask telling BACKTRACE what is to be printed.  1 is variables, 2 is eval blips, 4 is everything, 8 suppresses function name and 'UNTRACE:' , and 16 uses access links.")
 
-          il:lp
-              (il:setq il:fn (il:stkname il:pos))
-          il:lp1
-              (cond
-                 ((and il:skipfns (some #'(lambda (il:skipfn)
-                                                         (funcall il:skipfn il:fn)) il:skipfns)))
-                 (t (cond
-                       ((il:neq il:flags 0)
-                        (il:backtrace (il:setq il:pos (il:stknth il:n il:ipos il:pos))
-                               il:pos
-                               (il:logor il:flags 8)
-                               il:file
-                               'il:showprint)                (il:* il:\; 
-                                      "Tells BACKTRACE not to print 'UNTRACE:' or the function name.")
-                                                             (il:* il:\; 
-                                                         "The SETQ would be unnecessary in spaghetti")
+    (PROG ((*PRINT-LEVEL* 2)
+           (*PRINT-LENGTH* 10)
+           (IL:POS (IL:STKNTH 0 IL:IPOS))
+           (IL:N 0)
+           IL:FN IL:X IL:Y IL:Z (IL:PLVLFILEFLG T))
+          (OR IL:FILE (IL:SETQ IL:FILE T))
+          (AND (IL:NEQ IL:CLEARSTKLST T)
+               (IL:SETQ IL:CLEARSTKLST (CONS IL:POS IL:CLEARSTKLST)))
 
-                        ))
-                    (il:prin2 (il:|if| (eq il:fn 'eval)
-                                         il:|then|
-                                         (il:stkarg 1 il:pos)
-                                         il:|else| il:fn)
-                           il:file t)                        (il:* il:\; "Prints function name.")
+     (IL:* IL:|;;| "POS is used as a scratch-position.  N is an offset from FROM.  whenever baktrace needs to look at a stkname or stack position, it (re) uses POS and computes (STKNTH N IPOS POS).")
 
-                    (il:prin1 il:breakdelimiter il:file)))
-              (cond
-                 ((and (il:setq il:pos (il:stknth (il:setq il:n (il:sub1 il:n))
-                                                      il:ipos il:pos))
-                         (not (il:eqp il:pos il:epos)))
-                  (go il:lp)))
-              (il:relstk il:pos)
-              (il:terpri il:file)
-              (return))))
+      IL:LP
+          (IL:SETQ IL:FN (IL:STKNAME IL:POS))
+      IL:LP1
+          (COND
+             ((AND IL:SKIPFNS (SOME #'(LAMBDA (IL:SKIPFN)
+                                             (FUNCALL IL:SKIPFN IL:FN))
+                                    IL:SKIPFNS)))
+             (T (COND
+                   ((IL:NEQ IL:FLAGS 0)
+                    (IL:BACKTRACE (IL:SETQ IL:POS (IL:STKNTH IL:N IL:IPOS IL:POS))
+                           IL:POS
+                           (IL:LOGOR IL:FLAGS 8)
+                           IL:FILE
+                           'IL:SHOWPRINT)                    (IL:* IL:\; 
+                                      "Tells BACKTRACE not to print 'UNTRACE:' or the function name.")
+                                                             (IL:* IL:\; 
+                                                         "The SETQ would be unnecessary in spaghetti")
+                    ))
+                (IL:PRIN2 (IL:|if| (EQ IL:FN 'EVAL)
+                              IL:|then| (IL:STKARG 1 IL:POS)
+                            IL:|else| IL:FN)
+                       IL:FILE T)                            (IL:* IL:\; "Prints function name.")
+                (IL:PRIN1 IL:BREAKDELIMITER IL:FILE)))
+          (COND
+             ((AND (IL:SETQ IL:POS (IL:STKNTH (IL:SETQ IL:N (IL:SUB1 IL:N))
+                                          IL:IPOS IL:POS))
+                   (NOT (IL:EQP IL:POS IL:EPOS)))
+              (GO IL:LP)))
+          (IL:RELSTK IL:POS)
+          (IL:TERPRI IL:FILE)
+          (RETURN))))
 
 (IL:BAKTRACE1
-  (IL:LAMBDA (IL:LST IL:N IL:IPOS IL:POS)             (IL:* IL:\; "Edited 11-Sep-2022 09:15 by lmm")
+  (IL:LAMBDA (IL:LST IL:N IL:IPOS IL:POS)             (IL:* IL:\; "Edited 18-Sep-2022 10:42 by lmm")
+                                                      (IL:* IL:\; "Edited 11-Sep-2022 09:15 by lmm")
                                                         (IL:* IL:\; "Edited  2-Jun-87 18:28 by amd")
 
     (IL:* IL:|;;| "'MATCHES' LST against stack starting at POS.  Returns NIL or offset corresponding to last functionthat matches")
@@ -860,11 +871,9 @@
               (IL:* IL:|;;| "make this check first if user WANTS to put the name of a dummy frame in baktracelst, he can.  e.g.  this is necessary in order to have the sequence *PROG*LAM EVALA *ENV* disappear")
 
               (IL:SETQ IL:N (IL:SUB1 IL:N)))
-             (NIL                                            (IL:* IL:\; 
-                                                        "Comment out for now -- what is DUMMYFRAMEP?")
-                  (IL:DUMMYFRAMEP IL:POS)
-                  (IL:SETQ IL:N (IL:SUB1 IL:N))
-                  (GO IL:LP))
+             ((NOT (IL:INTERESTING-FRAME-P IL:POS))
+              (IL:SETQ IL:N (IL:SUB1 IL:N))
+              (GO IL:LP))
              ((EQ IL:TEM 'IL:&)
               (IL:SETQ IL:N (IL:SUB1 IL:N)))
              ((IL:NLISTP IL:TEM)
@@ -1489,34 +1498,28 @@
                            (IL:RELSTK IL:POS)))))
 (IL:DEFINEQ
 
-(il:find-stack-frame
-  (il:lambda (il:frame-spec)                                 (il:* il:|lmm| " 7-Nov-86 03:39")
-          
-          (il:* il:|;;| "handle debugger commands like @ which take a frame description. Smash LASTPOS to point at new position. ")
+(IL:FIND-STACK-FRAME
+  (IL:LAMBDA (IL:FRAME-SPEC)                                 (IL:* IL:|lmm| " 7-Nov-86 03:39")
 
-    (let ((il:pos (il:find-debugger-entry-frame t))
-              il:token)
-           (il:while il:frame-spec il:do (il:setq il:pos
-                                          (il:case-equalp (il:setq il:token (il:pop il:framespec)
-                                                           )
-                                                 ("@"        (il:* il:\; "leave LASTPOS alone")
+    (IL:* IL:|;;| "handle debugger commands like @ which take a frame description. Smash LASTPOS to point at new position. ")
 
-                                                      (il:stknth 0 il:lastpos il:pos))
-                                                 ("="        (il:* il:\; "eval ")
-
-                                                      (il:stknth 0 (eval (il:pop il:framespec
-                                                                                        ))))
-                                                 (t (cond
-                                                       ((il:numberp il:token)
-                                                        (il:stknth il:token il:pos il:pos))
-                                                       (t (or (il:stkpos il:token nil
-                                                                         (il:stknth -1 il:pos 
-                                                                                il:pos)
-                                                                         il:pos)
-                                                                 (il:error il:token '"not found" 
-                                                                        t))))))))
-           (prog1 (il:setq il:lastpos (il:stknth 0 il:pos il:lastpos))
-                  (il:relstk il:pos)))))
+    (LET ((IL:POS (IL:FIND-DEBUGGER-ENTRY-FRAME T))
+          IL:TOKEN)
+         (IL:WHILE IL:FRAME-SPEC
+            IL:DO (IL:SETQ IL:POS (IL:CASE-EQUALP (IL:SETQ IL:TOKEN (IL:POP IL:FRAMESPEC))
+                                         ("@"                (IL:* IL:\; "leave LASTPOS alone")
+                                              (IL:STKNTH 0 IL:LASTPOS IL:POS))
+                                         ("="                (IL:* IL:\; "eval ")
+                                              (IL:STKNTH 0 (EVAL (IL:POP IL:FRAMESPEC))))
+                                         (T (COND
+                                               ((IL:NUMBERP IL:TOKEN)
+                                                (IL:STKNTH IL:TOKEN IL:POS IL:POS))
+                                               (T (OR (IL:STKPOS IL:TOKEN NIL (IL:STKNTH -1 IL:POS 
+                                                                                     IL:POS)
+                                                             IL:POS)
+                                                      (IL:ERROR IL:TOKEN '"not found" T))))))))
+         (PROG1 (IL:SETQ IL:LASTPOS (IL:STKNTH 0 IL:POS IL:LASTPOS))
+                (IL:RELSTK IL:POS)))))
 )
 
 (IL:PUTPROPS XCL:DEBUGGER IL:MAKEFILE-ENVIRONMENT (:READTABLE "XCL" :PACKAGE (XCL:DEFPACKAGE
@@ -1533,29 +1536,30 @@
 
 (IL:ADDTOVAR IL:LAMA IL:WBREAK)
 )
-(IL:PUTPROPS XCL:DEBUGGER IL:COPYRIGHT ("Venue & Xerox Corporation" 1986 1987 1988 1990 1991 2021))
+(IL:PUTPROPS XCL:DEBUGGER IL:COPYRIGHT ("Venue & Xerox Corporation" 1986 1987 1988 1990 1991 2021 2022
+))
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (4689 6840 (XCL:ENTER-DEBUGGER-P 4689 . 6840)) (6842 13876 (XCL:DEBUGGER 6842 . 13876
-)) (13878 14192 (EMERGENCY-PANIC-LOOP 13878 . 14192)) (14194 15465 (IL:FIND-DEBUGGER-ENTRY-FRAME 14194
- . 15465)) (15467 16158 (PRINT-ENTRY-MESSAGE 15467 . 16158)) (16160 16461 (SIMPLE-REPORT-CONDITION 
-16160 . 16461)) (16463 18533 (XCL::INTERESTING-FRAME-P 16463 . 18533)) (19057 19344 (IL:WBREAK 19070
- . 19342)) (19457 20566 (REUSE-CURRENT-WINDOW 19457 . 20566)) (20568 21752 (CREATE-DEBUGGER-WINDOW 
-20568 . 21752)) (21754 22708 (SET-UP-DEBUGGER-WINDOW 21754 . 22708)) (22710 23727 (
-CLOSE-DEBUGGER-WINDOW 22710 . 23727)) (23729 24215 (RELEASE-DEBUGGER-WINDOW 23729 . 24215)) (24217 
-25071 (NEAR-BY-REGION 24217 . 25071)) (25073 26096 (DEBUGGER-BUTTON-EVENT 25073 . 26096)) (26098 27017
- (DEBUGGER-MENU-HELP 26098 . 27017)) (32123 33943 (DEBUGGER-EVAL 32123 . 33943)) (33945 37963 (
-FIND-DEBUGGER-STACK-FRAME 33945 . 37963)) (37965 38704 (FIND-NAMED-STACK-POSITION 37965 . 38704)) (
-38706 39338 (FIND-ORIGINAL-NAME-AND-DEFINITION 38706 . 39338)) (39340 39474 (STKPTR-CCODE 39340 . 
-39474)) (42065 46904 (IL:BAKTRACE 42078 . 44862) (IL:BAKTRACE1 44864 . 46902)) (47704 54624 (
-ATTACH-BACKTRACE-MENU 47704 . 54624)) (54626 57837 (REGION-NEXT-TO 54626 . 57837)) (57839 59278 (
-BACKTRACE-MENU-BUTTONEVENTFN 57839 . 59278)) (59280 63408 (BACKTRACE-ITEM-SELECTED 59280 . 63408)) (
-63410 67534 (STACK-FRAME-PROPERTIES 63410 . 67534)) (67536 68548 (STACK-FRAME-FETCHFN 67536 . 68548)) 
-(68550 69739 (STACK-FRAME-STOREFN 68550 . 69739)) (69741 70316 (STACK-FRAME-VALUE-COMMAND 69741 . 
-70316)) (70318 70728 (STACK-FRAME-PROPERTY 70318 . 70728)) (70730 72994 (MAKE-FRAME-INSPECT-WINDOW 
-70730 . 72994)) (72996 73193 (%RELEASE-STACK-DATUM 72996 . 73193)) (73195 73877 (PRINT-BACKTRACE 73195
- . 73877)) (76983 77077 (EXIT-DEBUGGER 76983 . 77077)) (77079 77398 (INVOKE-ESCAPE-FROM-MENU 77079 . 
-77398)) (77400 78823 (ESCAPE-FROM-DEBUGGER 77400 . 78823)) (78825 79203 (MENU-FROM-ESCAPE-LIST 78825
- . 79203)) (79205 80264 (KEYLIST-FROM-ESCAPE-LIST 79205 . 80264)) (80266 81274 (COLLECT-ACTIVE-ESCAPES
- 80266 . 81274)) (81276 81645 (IL:FIND-LEXICAL-ENVIRONMENT 81276 . 81645)) (81646 83612 (
-IL:FIND-STACK-FRAME 81659 . 83610)))))
+  (IL:FILEMAP (NIL (4966 7224 (XCL:ENTER-DEBUGGER-P 4966 . 7224)) (7226 7496 (IL:EXTERNAL-SYMBOL-P 7226
+ . 7496)) (7498 9745 (IL:INTERESTING-FRAME-P 7498 . 9745)) (9747 16781 (XCL:DEBUGGER 9747 . 16781)) (
+16783 17097 (EMERGENCY-PANIC-LOOP 16783 . 17097)) (17099 18370 (IL:FIND-DEBUGGER-ENTRY-FRAME 17099 . 
+18370)) (18372 19063 (PRINT-ENTRY-MESSAGE 18372 . 19063)) (19065 19366 (SIMPLE-REPORT-CONDITION 19065
+ . 19366)) (19890 20189 (IL:WBREAK 19903 . 20187)) (20302 21411 (REUSE-CURRENT-WINDOW 20302 . 21411)) 
+(21413 22597 (CREATE-DEBUGGER-WINDOW 21413 . 22597)) (22599 23553 (SET-UP-DEBUGGER-WINDOW 22599 . 
+23553)) (23555 24572 (CLOSE-DEBUGGER-WINDOW 23555 . 24572)) (24574 25060 (RELEASE-DEBUGGER-WINDOW 
+24574 . 25060)) (25062 25916 (NEAR-BY-REGION 25062 . 25916)) (25918 26941 (DEBUGGER-BUTTON-EVENT 25918
+ . 26941)) (26943 27862 (DEBUGGER-MENU-HELP 26943 . 27862)) (32968 34788 (DEBUGGER-EVAL 32968 . 34788)
+) (34790 38808 (FIND-DEBUGGER-STACK-FRAME 34790 . 38808)) (38810 39549 (FIND-NAMED-STACK-POSITION 
+38810 . 39549)) (39551 40183 (FIND-ORIGINAL-NAME-AND-DEFINITION 39551 . 40183)) (40185 40319 (
+STKPTR-CCODE 40185 . 40319)) (42910 47381 (IL:BAKTRACE 42923 . 45409) (IL:BAKTRACE1 45411 . 47379)) (
+48181 55101 (ATTACH-BACKTRACE-MENU 48181 . 55101)) (55103 58314 (REGION-NEXT-TO 55103 . 58314)) (58316
+ 59755 (BACKTRACE-MENU-BUTTONEVENTFN 58316 . 59755)) (59757 63885 (BACKTRACE-ITEM-SELECTED 59757 . 
+63885)) (63887 68011 (STACK-FRAME-PROPERTIES 63887 . 68011)) (68013 69025 (STACK-FRAME-FETCHFN 68013
+ . 69025)) (69027 70216 (STACK-FRAME-STOREFN 69027 . 70216)) (70218 70793 (STACK-FRAME-VALUE-COMMAND 
+70218 . 70793)) (70795 71205 (STACK-FRAME-PROPERTY 70795 . 71205)) (71207 73471 (
+MAKE-FRAME-INSPECT-WINDOW 71207 . 73471)) (73473 73670 (%RELEASE-STACK-DATUM 73473 . 73670)) (73672 
+74354 (PRINT-BACKTRACE 73672 . 74354)) (77460 77554 (EXIT-DEBUGGER 77460 . 77554)) (77556 77875 (
+INVOKE-ESCAPE-FROM-MENU 77556 . 77875)) (77877 79300 (ESCAPE-FROM-DEBUGGER 77877 . 79300)) (79302 
+79680 (MENU-FROM-ESCAPE-LIST 79302 . 79680)) (79682 80741 (KEYLIST-FROM-ESCAPE-LIST 79682 . 80741)) (
+80743 81751 (COLLECT-ACTIVE-ESCAPES 80743 . 81751)) (81753 82122 (IL:FIND-LEXICAL-ENVIRONMENT 81753 . 
+82122)) (82123 83634 (IL:FIND-STACK-FRAME 82136 . 83632)))))
 IL:STOP

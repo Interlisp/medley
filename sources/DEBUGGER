@@ -1,14 +1,16 @@
 (DEFINE-FILE-INFO PACKAGE (DEFPACKAGE "DEBUGGER" (PREFIX-NAME "DBG") (NICKNAMES "DBG")) READTABLE 
 "XCL" BASE 10)
-(IL:FILECREATED "12-Sep-2021 15:59:37" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;2| 84797  
 
-      IL:|changes| IL:|to:|  (IL:FUNCTIONS STACK-FRAME-PROPERTIES)
+(IL:FILECREATED "18-Sep-2022 11:55:31" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;11| 84817  
 
-      IL:|previous| IL:|date:| "11-Sep-2021 12:57:01" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;1|
-)
+      :CHANGES-TO (IL:FUNCTIONS XCL::INTERESTING-FRAME-P XCL:ENTER-DEBUGGER-P)
+                  (IL:VARS IL:DEBUGGERCOMS)
+                  (IL:FNS IL:BAKTRACE1)
+
+      :PREVIOUS-DATE "18-Sep-2022 11:23:14" IL:|{DSK}<home>larry>medley>sources>DEBUGGER.;9|)
 
 
-; Copyright (c) 1986-1988, 1990-1991, 2021 by Venue & Xerox Corporation.
+; Copyright (c) 1986-1988, 1990-1991, 2021-2022 by Venue & Xerox Corporation.
 
 (IL:PRETTYCOMPRINT IL:DEBUGGERCOMS)
 
@@ -19,9 +21,9 @@
            (IL:COMS (IL:VARIABLES XCL:*DEBUGGER-PROMPT* *IN-THE-DEBUGGER* XCL:*DEBUGGER-ENTRY-POINTS*
                            )
                   (IL:VARIABLES IL:BRKEXP IL:BRKTYPE IL:BRKCOND IL:BRKPOS)
-                  (IL:FUNCTIONS XCL:ENTER-DEBUGGER-P)
+                  (IL:FUNCTIONS XCL:ENTER-DEBUGGER-P IL:EXTERNAL-SYMBOL-P XCL::INTERESTING-FRAME-P)
                   (IL:FUNCTIONS XCL:DEBUGGER EMERGENCY-PANIC-LOOP IL:FIND-DEBUGGER-ENTRY-FRAME 
-                         PRINT-ENTRY-MESSAGE SIMPLE-REPORT-CONDITION XCL::INTERESTING-FRAME-P))
+                         PRINT-ENTRY-MESSAGE SIMPLE-REPORT-CONDITION))
            (IL:COMS (IL:INITVARS (IL:WBREAK))
                   (IL:VARIABLES XCL:*DEBUGGER-MENU-ITEMS* *DEBUGGER-TERMINAL-TABLE* 
                          IL:BREAKREGIONSPEC)
@@ -90,66 +92,124 @@
 (DEFVAR IL:BRKPOS)
 
 (DEFUN XCL:ENTER-DEBUGGER-P (IL:N IL:POS XCL:CONDITION)
+   (DECLARE (SPECIAL IL:PRINTMSG IL:ERRORPOS IL:HELPFLAG IL:NLSETQGAG IL:HELPTIME))
+                                                    (IL:* IL:\; "Edited 18-Sep-2022 11:22 by larry")
+                                                      (IL:* IL:\; "Edited 11-Sep-2022 14:53 by lmm")
+   (IL:SETQ IL:PRINTMSG T)                                   (IL:* IL:\; " the default")
    (COND
-      ((TYPEP XCL:CONDITION 'XCL:STORAGE-CONDITION)
+      ((TYPEP XCL:CONDITION 'XCL:STORAGE-CONDITION)          (IL:* IL:\; "always break")
        T)
-      ((NULL IL:HELPFLAG)
+      ((NULL IL:HELPFLAG)                                    (IL:* IL:\; "never break")
        NIL)
-      ((EQ IL:HELPFLAG 'IL:BREAK!)
+      ((EQ IL:HELPFLAG 'IL:BREAK!)                           (IL:* IL:\; "always breeak")
        T)
-      ((DO ((IL:POS (IL:STKNTH -1 IL:POS)                    (IL:* IL:\; " start at argument")
-                   (IL:STKNTH -1 IL:POS IL:POS)))            (IL:* IL:\; 
-                                                           " and go back one at a time")
-           ((NULL IL:POS)                                    (IL:* IL:\; 
-                                                           " hit the top of the stack")
-            NIL)
-         (AND IL:N (DECF IL:N))
+      ((DO ((IL:POS (IL:STKNTH -1 IL:POS)
+                   (IL:STKNTH -1 IL:POS IL:POS)))
+           ((NULL IL:POS)
+            (IL:RELSTK IL:POS)                               (IL:* IL:\; "done walking")
+            )                                                (IL:* IL:\; "too many frames")
+         (AND IL:N (XCL::INTERESTING-FRAME-P IL:POS NIL)
+              (DECF IL:N))
          (WHEN (EQ (IL:STKNAME IL:POS)
                    'IL:ERRORSET)
              (CASE (AND (IL:IGEQ (IL:STKNARGS IL:POS)
                                2)
                         (IL:STKARG 2 IL:POS))
                  ((NIL)                                      (IL:* IL:\; " NLSETQ case")
-                    (IL:SETQ IL:PRINTMSG (NULL IL:NLSETQGAG))
                     (IL:RELSTK IL:POS)
+                    (IL:SETQ IL:PRINTMSG (NOT IL:NLSETQGAG))
                     (RETURN NIL))
                  (IL:INTERNAL                                (IL:* IL:\; "ignore this one"))
                  (IL:NOBREAK 
                     (IL:SETQ IL:PRINTMSG NIL)
                     (IL:RELSTK IL:POS)
                     (RETURN NIL))
-                 (T (IL:SETQ IL:PRINTMSG T)
-                    (IL:RELSTK IL:POS)
-                    (RETURN (AND IL:N (< IL:N 0))))))))
-      ((OR (EQ IL:HELPFLAG 'IL:BREAK!)
-           (AND (IL:FIXP IL:HELPCLOCK)
-                (IL:FIXP IL:HELPTIME)
-                (IL:IGREATERP (IL:IDIFFERENCE (IL:CLOCK 2)
-                                     IL:HELPCLOCK)
-                       IL:HELPTIME)))
+                 (T                                          (IL:* IL:\; "some other ERRORSET")
+                    NIL)))))
+      ((AND IL:N (< IL:N 0))
+       T)
+      ((AND (IL:FIXP IL:HELPCLOCK)
+            (IL:FIXP IL:HELPTIME)
+            (NOT (IL:ILESSP (IL:IDIFFERENCE (IL:CLOCK 2)
+                                   IL:HELPCLOCK)
+                        IL:HELPTIME)))
        T)
       (T NIL)))
 
-(DEFUN XCL:DEBUGGER (&KEY ((:FORM IL:BRKEXP))            (IL:* IL:\; "form to evaluate at EVAL")
-                              ((:ENVIRONMENT IL:BRKENV)
-                               (IL:FIND-LEXICAL-ENVIRONMENT (IL:STKNTH -1)))
+(DEFUN IL:EXTERNAL-SYMBOL-P (IL:FN)                 (IL:* IL:\; "Edited 18-Sep-2022 10:11 by larry")
+   (EQL :EXTERNAL (CADR (MULTIPLE-VALUE-LIST (FIND-SYMBOL (SYMBOL-NAME IL:FN)
+                                                    (SYMBOL-PACKAGE IL:FN))))))
+
+(DEFUN XCL::INTERESTING-FRAME-P (&OPTIONAL IL:POS IL:INTERPFLG)
+                                                    (IL:* IL:\; "Edited 18-Sep-2022 11:55 by larry")
+                                                      (IL:* IL:\; "Edited 11-Sep-2022 12:47 by lmm")
+
+   (IL:* IL:|;;| "Value is T if frame should be visible for backtrace, and error retry")
+
+   (IL:* IL:|;;| "user did write a call to the function at POS, and either INTERPFLG is T, or else the functio call would also exist if compiled")
+
+   (LET ((IL:NAME (IF (IL:STACKP IL:POS)
+                      (IL:STKNAME IL:POS)
+                      IL:POS)))
+        (AND (SYMBOLP IL:NAME)
+             (CASE IL:NAME
+                 (IL:*ENV*                                   (IL:* IL:\; 
+                                                             "*ENV* is used by ENVEVAL etc.")
+                    NIL)
+                 (IL:ERRORSET (OR (<= (IL:STKNARGS IL:POS)
+                                      1)
+                                  (IL:NEQ (IL:STKARG 2 IL:POS NIL)
+                                         'IL:INTERNAL)))
+                 (IL:EVAL (OR (<= (IL:STKNARGS IL:POS)
+                                  1)
+                              (IL:NEQ (IL:STKARG 2 IL:POS NIL)
+                                     'IL:INTERNAL)))
+                 (IL:APPLY (OR (<= (IL:STKNARGS IL:POS)
+                                   2)
+                               (NOT (IL:STKARG 3 IL:POS NIL))))
+                 (OTHERWISE (COND
+                               ((NOT (SYMBOLP IL:NAME))      (IL:* IL:\; "Non  aymvol ")
+                                T)
+                               ((IL:FMEMB IL:NAME IL:OPENFNS)
+                                IL:INTERPFLG)
+                               ((IL:STRPOS "A0$$$" IL:NAME -5 'IL:$)
+                                                             (IL:* IL:\; "gensym'd subfunction")
+                                NIL)
+                               ((AND (SETQ XCL::POS (SYMBOL-PACKAGE XCL::FN))
+                                     (NOT (EQ XCL::POS XCL::*INTERLISP-PACKAGE*))
+                                     (NOT (EQ XCL::POS *PACKAGE*))
+                                     (NOT (IL:EXTERNAL-SYMBOL-P IL:NAME)))
+
+                                (IL:* IL:|;;| "Interlisp: everything is external")
+
+                                (IL:* IL:|;;| 
+    "*PACKAGE* is presumably what you're working on so internal symbols are OK (I.E. not interesting")
+
+                                NIL)
+                               (T (OR (IL:NEQ (IL:CHCON1 IL:NAME)
+                                             (IL:CHARCODE IL:\\))
+                                      (IL:EXPRP IL:NAME)))))))))
+
+(DEFUN XCL:DEBUGGER (&KEY ((:FORM IL:BRKEXP))                (IL:* IL:\; "form to evaluate at EVAL")
+                          ((:ENVIRONMENT IL:BRKENV)
+                           (IL:FIND-LEXICAL-ENVIRONMENT (IL:STKNTH -1)))
                                                              (IL:* IL:\; 
-                                         "Interpreter lexical environment in which to evalate it. ")
-                              ((:CONDITION IL:BRKCOND))      (IL:* IL:\; 
-                                                       "condition which caused this debugger entry")
-                              ((:STACK-POSITION IL:BRKPOS))  (IL:* IL:\; 
-                      "location to start debugging, if not given will default. @ will always reset")
-                              ((:AT IL:BRKFN)
-                               NIL XCL::BRKFUN-PROVIDED)     (IL:* IL:\; "where's the breakpoint?")
-                              )
-   (DECLARE (SPECIAL IL:WBREAK IL:AUTOBACKTRACEFLG IL:BRKEXP IL:BRKCOND IL:BRKENV IL:BRKPOS 
-                       IL:BRKFN))
+                                           "Interpreter lexical environment in which to evalate it. ")
+                          ((:CONDITION IL:BRKCOND))          (IL:* IL:\; 
+                                                         "condition which caused this debugger entry")
+                          ((:STACK-POSITION IL:BRKPOS))      (IL:* IL:\; 
+                        "location to start debugging, if not given will default. @ will always reset")
+                          ((:AT IL:BRKFN)
+                           NIL XCL::BRKFUN-PROVIDED)         (IL:* IL:\; "where's the breakpoint?")
+                          )
+   (DECLARE (SPECIAL IL:WBREAK IL:AUTOBACKTRACEFLG IL:BRKEXP IL:BRKCOND IL:BRKENV IL:BRKPOS IL:BRKFN)
+          )
 
    (IL:* IL:|;;| "main entry to the debugger. BRKEXP, BRKFN, BRKTYPE are compatible with Interlisp's BREAK1 argument.  BRKCOND is the \"condition\" from the error system, while BRKENV is the lexical environment of the break. ")
 
    (LET ((XCL::WAS-IN-THE-DEBUGGER *IN-THE-DEBUGGER*)
          (*IN-THE-DEBUGGER* T)                               (IL:* IL:\; 
-                                                   "detect calls to debugger in critical sections.")
+                                                     "detect calls to debugger in critical sections.")
 
          (IL:* IL:|;;| " rebind variables which are possibly reset by redoing the window")
 
@@ -160,7 +220,7 @@
          (IL:\\INBQUOTE NIL)
          (IL:\\#DISPLAYLINES IL:\\#DISPLAYLINES)
          (IL:\\CURRENTDISPLAYLINE 0)                         (IL:* IL:\; 
-                                           "to get around problem that pagehiehgt isn't per-stream")
+                                             "to get around problem that pagehiehgt isn't per-stream")
          (IL:\\PRIMTERMTABLE IL:\\PRIMTERMTABLE)
          (IL:\\PRIMTERMSA IL:\\PRIMTERMSA)
          (IL:\\INTERRUPTABLE T)
@@ -168,13 +228,12 @@
          (IL:LASTPOS)
          (IL:!VALUE IL:*NOT-YET-EVALUATED*)
          IL:BRKVALUES *EVALHOOK*                             (IL:* IL:\; 
-                                           "because some of the reporting stuff can be interpreted")
+                                             "because some of the reporting stuff can be interpreted")
          *APPLYHOOK*                                         (IL:* IL:\; "likewise")
          )
-        (DECLARE (SPECIAL IL:\\#DISPLAYLINES IL:\\CURRENTDISPLAYLINE IL:\\INTERRUPTABLE 
-                            IL:\\INBQUOTE IL:LASTPOS IL:\\LINEBUF.OFD IL:\\TERM.OFD *STANDARD-INPUT*
-                            *STANDARD-OUTPUT* IL:BRKVALUES IL:!VALUE IL:\\PRIMTERMTABLE 
-                            IL:\\PRIMTERMSA))
+        (DECLARE (SPECIAL IL:\\#DISPLAYLINES IL:\\CURRENTDISPLAYLINE IL:\\INTERRUPTABLE IL:\\INBQUOTE
+                        IL:LASTPOS IL:\\LINEBUF.OFD IL:\\TERM.OFD *STANDARD-INPUT* *STANDARD-OUTPUT*
+                        IL:BRKVALUES IL:!VALUE IL:\\PRIMTERMTABLE IL:\\PRIMTERMSA))
         (WHEN (EQ XCL::WAS-IN-THE-DEBUGGER T)
               (EMERGENCY-PANIC-LOOP))
         (IL:OUTPUT T)
@@ -184,8 +243,8 @@
             (IL:|if| IL:BRKPOS
                 IL:|then| (IL:SETQ IL:LASTPOS (IL:STKNTH 0 IL:BRKPOS))
               IL:|else| (IL:SETQ IL:BRKPOS (IL:STKNTH 0 (IL:SETQ IL:LASTPOS (
-                                                                       IL:FIND-DEBUGGER-ENTRY-FRAME
-                                                                                 ))))
+                                                                         IL:FIND-DEBUGGER-ENTRY-FRAME
+                                                                             ))))
                     (IL:RESETSAVE NIL (LIST 'IL:RELSTK IL:BRKPOS)))
             (IL:RESETSAVE NIL (LIST 'IL:RELSTK IL:LASTPOS))
             (COND
@@ -227,8 +286,8 @@
                                              (IL:* IL:|;;| " only backtrace on errors")
 
                                              (TYPEP IL:BRKCOND 'ERROR)))
-                 (ATTACH-BACKTRACE-MENU NIL (NOT (IL:FMEMB IL:AUTOBACKTRACEFLG
-                                                            '(IL:BT! IL:ALWAYS!)))))
+                 (ATTACH-BACKTRACE-MENU NIL (NOT (IL:FMEMB IL:AUTOBACKTRACEFLG '(IL:BT! IL:ALWAYS!)))
+                        ))
 
             (IL:* IL:|;;| "Finally, the main debugger loop. This is simply an inferior exec with the appropriate command tables and eval function.")
 
@@ -275,29 +334,27 @@
                      T))))
 
 (DEFUN IL:FIND-DEBUGGER-ENTRY-FRAME (&OPTIONAL (IL:POS 'XCL:DEBUGGER)
-                                               IL:SKIP-FAKE?)
+                                           IL:SKIP-FAKE?)
 
    (IL:* IL:|;;| " return initial value of LASTPOS for backtrace; called when entering the debugger and by @ command. ")
 
    (IL:BIND IL:NAME IL:INBRK IL:DO (IL:SETQ IL:POS (IL:IF IL:SKIP-FAKE?
-                                                               IL:THEN (IL:REALSTKNTH -1 IL:POS 
-                                                                                  NIL IL:POS) 
+                                                       IL:THEN (IL:REALSTKNTH -1 IL:POS NIL IL:POS) 
                                                              (IL:* IL:\; 
-                                                 "this will ignore the ones that aren't REALFRAMEP")
-                                                             IL:ELSE (IL:STKNTH -1 IL:POS IL:POS)
-                                                                  ))
+                                                   "this will ignore the ones that aren't REALFRAMEP")
+                                                     IL:ELSE (IL:STKNTH -1 IL:POS IL:POS)))
       IL:REPEATWHILE (OR (IL:FMEMB (IL:SETQ IL:NAME (IL:STKNAME IL:POS))
-                                    XCL:*DEBUGGER-ENTRY-POINTS*)
-                             (IL:GENSYM? IL:NAME)
-                             (AND IL:INBRK (IL:FMEMB IL:NAME '(EVAL IL:EVAL-PROGN)))
-                             (IL:SETQ IL:INBRK (EQ IL:NAME (SPECIAL-FORM-P 'IL:BREAK1)))) 
+                                XCL:*DEBUGGER-ENTRY-POINTS*)
+                         (IL:GENSYM? IL:NAME)
+                         (AND IL:INBRK (IL:FMEMB IL:NAME '(EVAL IL:EVAL-PROGN)))
+                         (IL:SETQ IL:INBRK (EQ IL:NAME (SPECIAL-FORM-P 'IL:BREAK1)))) 
 
             (IL:* IL:|;;| "this will ignore the things that are generated subfunctions or internal debugger functions, e.g. ERRORX or CL:ERROR etc.")
  IL:|finally| (RETURN IL:POS)))
 
 (DEFUN PRINT-ENTRY-MESSAGE ()
    (OR (IL:NLSETQ (PRINC IL:BRKCOND))                        (IL:* IL:\; 
-                                          "should this go to *ERROR-OUTPUT* or *DEBUG-IO* instead?")
+                                            "should this go to *ERROR-OUTPUT* or *DEBUG-IO* instead?")
 
        (IL:* IL:|;;| "Do something simple if printing the condition breaks...")
 
@@ -321,47 +378,13 @@
               (T (TYPE-OF XCL:CONDITION)))
           STREAM))
 
-(DEFUN XCL::INTERESTING-FRAME-P (&OPTIONAL XCL::POS XCL::INTERPFLG)
-
-   (IL:* IL:|;;| "Value is T if frame should be visible for backtrace, and error retry")
-
-   (IL:* IL:|;;| "user did write a call to the function at POS, and either INTERPFLG is T, or else the functio call would also exist if compiled")
-
-   (LET ((XCL::NAME (IF (IL:STACKP XCL::POS)
-                        (IL:STKNAME XCL::POS)
-                        XCL::POS)))
-        (AND (SYMBOLP XCL::NAME)
-             (CASE XCL::NAME
-                 (IL:*ENV*                                   (IL:* IL:\; 
-                                                           "*ENV* is used by ENVEVAL etc.")
-                    NIL)
-                 (IL:ERRORSET (OR (<= (IL:STKNARGS XCL::POS)
-                                      1)
-                                  (IL:NEQ (IL:STKARG 2 XCL::POS NIL)
-                                         'IL:INTERNAL)))
-                 (IL:EVAL (OR (<= (IL:STKNARGS XCL::POS)
-                                  1)
-                              (IL:NEQ (IL:STKARG 2 XCL::POS NIL)
-                                     'XCL::INTERNAL)))
-                 (IL:APPLY (OR (<= (IL:STKNARGS XCL::POS)
-                                   2)
-                               (NOT (IL:STKARG 3 XCL::POS NIL))))
-                 (OTHERWISE (OR (NOT (SYMBOLP XCL::NAME))
-                                (COND
-                                   ((IL:FMEMB XCL::NAME IL:OPENFNS)
-                                    XCL::INTERPFLG)
-                                   (T (OR (IL:NEQ (IL:CHCON1 XCL::NAME)
-                                                 (IL:CHARCODE IL:\\))
-                                          (IL:EXPRP XCL::NAME))))))))))
-
 (IL:RPAQ? IL:WBREAK )
 
-(DEFPARAMETER XCL:*DEBUGGER-MENU-ITEMS* '("EVAL" "EDIT" "REVERT" "^" "PROCEED" "OK" "BT" "BT!" 
-                                                    "?=")
-                                            "Elements of debugger menu")
+(DEFPARAMETER XCL:*DEBUGGER-MENU-ITEMS* '("EVAL" "EDIT" "REVERT" "^" "PROCEED" "OK" "BT" "BT!" "?=")
+                                        "Elements of debugger menu")
 
 (DEFVAR *DEBUGGER-TERMINAL-TABLE* (IL:COPYTERMTABLE NIL)
-                                      "Terminal table for use in debugger")
+                                  "Terminal table for use in debugger")
 
 (XCL:DEFGLOBALVAR IL:BREAKREGIONSPEC
    (IL:|create| IL:REGION
@@ -371,11 +394,11 @@
           IL:HEIGHT IL:_ 120))
 (IL:DEFINEQ
 
-(il:wbreak
-  (lambda (&optional (il:on t il:onp))                       (il:* il:\; 
-                                                           "start and stop creating window debugging")
-
-         (prog1 il:wbreak (and il:onp (il:setq il:wbreak il:on)))))
+(IL:WBREAK
+  (LAMBDA (&OPTIONAL (IL:ON T IL:ONP))                       (IL:* IL:\; 
+                                                           "start and stop creating window debugging")
+         (PROG1 IL:WBREAK
+             (AND IL:ONP (IL:SETQ IL:WBREAK IL:ON)))))
 )
 
 (IL:ADDTOVAR IL:WINDOWUSERFORMS (IL:WBREAK T))
@@ -406,20 +429,19 @@
    (DECLARE (SPECIAL IL:\\TERM.OFD IL:DEFAULTTTYREGION))
    (IL:CREATEW (IF (IL:HASTTYWINDOWP)
                    (NEAR-BY-REGION (IL:WINDOWPROP
-                                        (IL:WFROMDS (LET ((IL:POS (IL:STKPOS 'XCL:EXEC NIL
-                                                                         'XCL:DEBUGGER)))
-                                                         (IL:IF IL:POS
-                                                             IL:THEN (PROG1 (IL:EVALV
-                                                                                 'IL:\\TERM.OFD 
-                                                                                 IL:POS)
-                                                                                (IL:RELSTK IL:POS))
-                                                           IL:ELSE IL:\\TERM.OFD)))
-                                        'IL:REGION)
+                                    (IL:WFROMDS (LET ((IL:POS (IL:STKPOS 'XCL:EXEC NIL 'XCL:DEBUGGER)
+                                                             ))
+                                                     (IL:IF IL:POS
+                                                         IL:THEN (PROG1 (IL:EVALV 'IL:\\TERM.OFD 
+                                                                               IL:POS)
+                                                                        (IL:RELSTK IL:POS))
+                                                       IL:ELSE IL:\\TERM.OFD)))
+                                    'IL:REGION)
                           (OR (IL:REGIONP IL:BREAKREGIONSPEC)
                               (IL:CREATEREGION 17 -120 400 120)))
 
                    (IL:* IL:|;;| 
-              "\"in the case of break in a process that doesn't have a real tty yet.  create one\"")
+                "\"in the case of break in a process that doesn't have a real tty yet.  create one\"")
 
                    IL:DEFAULTTTYREGION)
           "Debugger Window"))
@@ -428,7 +450,7 @@
    (IL:WINDOWPROP W 'STACK-POSITION IL:BRKPOS)
    (IL:WINDOWPROP W 'LASTPOS IL:LASTPOS)
    (IL:WINDOWPROP W 'IL:TITLE                                (IL:* IL:\; 
-                                                 " this is the wrong title, it doesn't show enough")
+                                                   " this is the wrong title, it doesn't show enough")
           (XCL:CONDITION-CASE (WITH-OUTPUT-TO-STRING (S)
                                      (SIMPLE-REPORT-CONDITION IL:BRKCOND S))
 
@@ -453,7 +475,7 @@
                  (EQ W (IL:WFROMDS (IL:PROCESS.TTY PROCESS))))
             (COND
                ((EQ PROCESS (IL:THIS.PROCESS))               (IL:* IL:\; 
-                                   "if this is the process, just make sure that the caret is down ")
+                                     "if this is the process, just make sure that the caret is down ")
                 (IL:WINDOWPROP W 'IL:PROCESS NIL)
                 (EXIT-DEBUGGER))
                ((IL:PROCESS.EVALV PROCESS '*IN-THE-DEBUGGER*)(IL:* IL:\; "if the process associated with this window has its tty as this window and is tty waiting, flush it.")
@@ -483,50 +505,49 @@
                                     (IL:|fetch| (IL:REGION IL:LEFT) IL:|of| REGIONTEMPLATE))
                                  (- IL:\\CURSORDESTWIDTH WIDTH))
                IL:BOTTOM IL:_ (MOD (+ (IL:|fetch| (IL:REGION IL:BOTTOM) IL:|of| REGION)
-                                      (IL:|fetch| (IL:REGION IL:BOTTOM) IL:|of| 
-                                                                                  REGIONTEMPLATE))
+                                      (IL:|fetch| (IL:REGION IL:BOTTOM) IL:|of| REGIONTEMPLATE))
                                    (- IL:\\CURSORDESTHEIGHT HEIGHT))
                IL:WIDTH IL:_ WIDTH
                IL:HEIGHT IL:_ HEIGHT)))
 
-(DEFUN DEBUGGER-BUTTON-EVENT (W &REST IGNORE &AUX SELECTION)
-                                                             (IL:* IL:\; 
-                                                      " button event function for debugger windows")
+(DEFUN DEBUGGER-BUTTON-EVENT (W &REST IGNORE &AUX SELECTION) (IL:* IL:\; 
+                                                        " button event function for debugger windows")
    (OR IL:*DEBUGGER-MENU*                                    (IL:* IL:\; "create on demand")
        (SETF IL:*DEBUGGER-MENU* (IL:|create| IL:MENU
                                        IL:ITEMS IL:_ XCL:*DEBUGGER-MENU-ITEMS*
                                        IL:WHENHELDFN IL:_ 'DEBUGGER-MENU-HELP)))
    (IL:|if| (IL:LASTMOUSESTATE IL:MIDDLE)
        IL:|then| (IL:CASE-EQUALP (IL:SETQ SELECTION (IL:MENU IL:*DEBUGGER-MENU*))
-                            (NIL)
-                            ("PROCEED" (INVOKE-ESCAPE-FROM-MENU))
-                            ("BT" (ATTACH-BACKTRACE-MENU W T))
-                            ("BT!" (ATTACH-BACKTRACE-MENU W NIL))
-                            (T (IL:CLEARBUF T)
-                               (IL:BKSYSBUF SELECTION)
-                               (IL:BKSYSCHARCODE (IL:CHARCODE IL:CR))))))
+                        (NIL)
+                        ("PROCEED" (INVOKE-ESCAPE-FROM-MENU))
+                        ("BT" (ATTACH-BACKTRACE-MENU W T))
+                        ("BT!" (ATTACH-BACKTRACE-MENU W NIL))
+                        (T (IL:CLEARBUF T)
+                           (IL:BKSYSBUF SELECTION)
+                           (IL:BKSYSCHARCODE (IL:CHARCODE IL:CR))))))
 
-(DEFUN DEBUGGER-MENU-HELP (COMMAND &REST IGNORE)         (IL:* IL:\; 
-                           "whenheld function for debugger menu. Get doc from documentation system")
+(DEFUN DEBUGGER-MENU-HELP (COMMAND &REST IGNORE)             (IL:* IL:\; 
+                             "whenheld function for debugger menu. Get doc from documentation system")
    (IL:PRINTOUT IL:PROMPTWINDOW T (IL:IF (IL:LISTP COMMAND)
                                       IL:THEN (OR (THIRD COMMAND)
-                                                      (DOCUMENTATION (FIRST COMMAND)
-                                                             'IL:COMMANDS)
-                                                      (FOURTH (IL:GETHASH (FIRST COMMAND)
-                                                                     IL:*DEBUGGER-COMMAND-TABLE*)))
+                                                  (DOCUMENTATION (FIRST COMMAND)
+                                                         'IL:COMMANDS)
+                                                  (FOURTH (IL:GETHASH (FIRST COMMAND)
+                                                                 IL:*DEBUGGER-COMMAND-TABLE*)))
                                     IL:ELSE (OR (DOCUMENTATION COMMAND 'IL:COMMANDS)
-                                                    (FOURTH (IL:GETHASH COMMAND 
-                                                                   IL:*DEBUGGER-COMMAND-TABLE*))))))
+                                                (FOURTH (IL:GETHASH COMMAND 
+                                                               IL:*DEBUGGER-COMMAND-TABLE*))))))
 
 (DEFVAR IL:LASTPOS)
 
-(XCL:DEFCOMMAND ("@" :DEBUGGER) (&REST IL:PLACE &ENVIRONMENT IL:ENV)
+(XCL:DEFCOMMAND ("@" :DEBUGGER) (&REST IL:PLACE &ENVIRONMENT IL:ENV) 
    "Set debugger stack pointer to location specified by PLACE (or default)"
    (FORMAT T "@ = ~S~%" (IL:STKNAME (FIND-DEBUGGER-STACK-FRAME IL:PLACE IL:ENV)))
    (VALUES))
 
-(XCL:DEFCOMMAND ("REVERT" :DEBUGGER) (&REST IL:PLACE &ENVIRONMENT IL:ENV)
-   (DECLARE (SPECIAL IL:BRKVALUES))
+(XCL:DEFCOMMAND ("REVERT" :DEBUGGER) (&REST IL:PLACE &ENVIRONMENT IL:ENV) (DECLARE (SPECIAL 
+                                                                                         IL:BRKVALUES
+                                                                                          ))
    "Unwind to specified frame (or LASTPOS) and enter breakpoint"
 
    (IL:* IL:|;;| "Find the stack frame that the user asked to unwind to , if any:")
@@ -551,8 +572,8 @@
       `(IL:LAMBDA IL:NOBIND
          (LET ((IL:POS ',(IL:STKNTH 0 IL:LASTPOS)))
               (FUNCALL #'(LAMBDA NIL (UNWIND-PROTECT
-                                         (XCL:DEBUGGER :FORM
-                                                '(APPLY ',IL:FN (IL:STKARGS ',IL:FN))
+                                         (XCL:DEBUGGER :FORM '(APPLY ',IL:FN
+                                                                     (IL:STKARGS ',IL:FN))
                                                 :CONDITION
                                                 (XCL:MAKE-CONDITION 'SI::REVERT :FUNCTION
                                                        ',IL:FN)
@@ -560,8 +581,7 @@
                                          (IL:RELSTK IL:POS))))))))
     (THROW 'DEBUGGER-EXIT NIL)))
 
-(XCL:DEFCOMMAND ("?=" :DEBUGGER) ()
-   "Show arguments"
+(XCL:DEFCOMMAND ("?=" :DEBUGGER) NIL "Show arguments"
    (MULTIPLE-VALUE-BIND (IL:NAME IL:DEFN)
           (FIND-ORIGINAL-NAME-AND-DEFINITION IL:LASTPOS)
           (MULTIPLE-VALUE-BIND (IL:LAMBDA-CAR IL:ARGLIST)
@@ -572,16 +592,16 @@
                       (ECASE IL:LAMBDA-CAR
                           ((IL:LAMBDA IL:NLAMBDA) (COND
                                                      ((LISTP IL:ARGLIST)
-                                                      (IL:FOR IL:NAME IL:IN IL:ARGLIST
-                                                         IL:AS IL:VALUE IL:IN IL:ARGUMENTS
+                                                      (IL:FOR IL:NAME IL:IN IL:ARGLIST IL:AS IL:VALUE
+                                                         IL:IN IL:ARGUMENTS
                                                          IL:DO (FORMAT T "  ~a = ~s~%" IL:NAME 
-                                                                          IL:VALUE)))
+                                                                      IL:VALUE)))
                                                      ((OR (EQ IL:LAMBDA-CAR 'IL:LAMBDA)
                                                           (LISTP IL:ARGUMENTS))
                                                       (IL:FOR IL:VALUE IL:IN IL:ARGUMENTS
                                                          IL:AS IL:ARGNUM IL:FROM 0
-                                                         IL:DO (FORMAT T "  Arg ~d = ~s~%" 
-                                                                          IL:ARGNUM IL:VALUE)))
+                                                         IL:DO (FORMAT T "  Arg ~d = ~s~%" IL:ARGNUM
+                                                                      IL:VALUE)))
                                                      (T (FORMAT T "  ~a = ~s~%" IL:ARGLIST 
                                                                IL:ARGUMENTS))))
                           ((LAMBDA) (MULTIPLE-VALUE-CALL 'SI::PRINT-TRACED-CL-ARGLIST IL:ARGUMENTS
@@ -589,26 +609,25 @@
                                            0 T))))))
    (VALUES))
 
-(XCL:DEFCOMMAND ("EVAL" :DEBUGGER) (&OPTIONAL (IL:EXPRESSION NIL IL:EXPRESSION-PROVIDED?))
+(XCL:DEFCOMMAND ("EVAL" :DEBUGGER) (&OPTIONAL (IL:EXPRESSION NIL IL:EXPRESSION-PROVIDED?)) 
    (DECLARE (SPECIAL IL:BRKENV IL:BRKVALUES))
    "Evaluate expression in debugged context"
    (XCL:CONDITION-CASE (IF IL:EXPRESSION-PROVIDED?
                            (DEBUGGER-EVAL IL:EXPRESSION IL:BRKENV)
                            (VALUES-LIST (CDR (SETF IL:BRKVALUES (CONS T (MULTIPLE-VALUE-LIST
-                                                                         (DEBUGGER-EVAL IL:BRKEXP
+                                                                         (DEBUGGER-EVAL IL:BRKEXP 
                                                                                 IL:BRKENV)))))))
           (SI::DEBUGGER-EVAL-ABORTED (IL:C)
                  (VALUES :ABORTED (SI::DEBUGGER-EVAL-ABORTED-CONDITION IL:C)))))
 
-(XCL:DEFCOMMAND ("VALUE" :DEBUGGER :QUIET) ()
+(XCL:DEFCOMMAND ("VALUE" :DEBUGGER :QUIET) NIL 
    "Show value from previous evaluation of debug expression"
    (IF IL:BRKVALUES
        (VALUES-LIST (CDR IL:BRKVALUES))
        (PROGN (FORMAT T "Not yet evaluated~&")
               (VALUES))))
 
-(XCL:DEFCOMMAND ("UB" :DEBUGGER) (&OPTIONAL (IL:FN IL:BRKFN))
-   "Unbreak function with breakpoint"
+(XCL:DEFCOMMAND ("UB" :DEBUGGER) (&OPTIONAL (IL:FN IL:BRKFN)) "Unbreak function with breakpoint"
    (DECLARE (SPECIAL IL:BRKFN))
    (IL:EVAL (LIST 'XCL:UNBREAK IL:FN)))
 
@@ -630,7 +649,7 @@
                                                                            (VALUES NIL CONDITION))))
                                               (LIST (COND
                                                        (ENV  (IL:* IL:\; 
-                 "If there's a lexical environment around, we need to use CL:eval to watch for it.")
+                   "If there's a lexical environment around, we need to use CL:eval to watch for it.")
                                                             'EVAL)
                                                        (T XCL:*EVAL-FUNCTION*))
                                                     EXP ENV)
@@ -649,59 +668,58 @@
    (DECLARE (SPECIAL IL:LASTPOS))
    (IL:|bind| (LSTPOS IL:_ (IL:FIND-DEBUGGER-ENTRY-FRAME)) IL:|while| PLACE
       IL:|do| (IL:CASE-EQUALP (FIRST PLACE)
-                         (IL:@                               (IL:* IL:\; 
-                                                           "@ @ foo means leave LASTPOS alone")
-                               (SETF LSTPOS (IL:STKNTH 0 IL:LASTPOS LSTPOS))
-                               (POP PLACE))
-                         (=                                  (IL:* IL:\; 
-                                                           "@ = FOO means to evaluate FOO")
-                            (SETF LSTPOS (IL:STKNTH 0 (EVAL (SECOND PLACE)
-                                                            ENV))
-                                  PLACE
-                                  (CDDR PLACE)))
-                         (T (IL:IF (INTEGERP (FIRST PLACE))
-                                IL:THEN (IF (MINUSP (FIRST PLACE))
-                                                (SETF LSTPOS (IL:STKNTH (FIRST PLACE)
-                                                                    LSTPOS LSTPOS))
-                                                (PROG ((N (FIRST PLACE))
-                                                       (POS1 (IL:STKNTH -1 'XCL:DEBUGGER)))
+                     (IL:@                                   (IL:* IL:\; 
+                                                             "@ @ foo means leave LASTPOS alone")
+                           (SETF LSTPOS (IL:STKNTH 0 IL:LASTPOS LSTPOS))
+                           (POP PLACE))
+                     (=                                      (IL:* IL:\; 
+                                                             "@ = FOO means to evaluate FOO")
+                        (SETF LSTPOS (IL:STKNTH 0 (EVAL (SECOND PLACE)
+                                                        ENV))
+                              PLACE
+                              (CDDR PLACE)))
+                     (T (IL:IF (INTEGERP (FIRST PLACE))
+                            IL:THEN (IF (MINUSP (FIRST PLACE))
+                                        (SETF LSTPOS (IL:STKNTH (FIRST PLACE)
+                                                            LSTPOS LSTPOS))
+                                        (PROG ((N (FIRST PLACE))
+                                               (POS1 (IL:STKNTH -1 'XCL:DEBUGGER)))
 
                                  (IL:* IL:|;;| "Returns the stack position N below LSTPOS by starting at current position and backing up the control links until it reaches a point N frames before POS.")
 
-                                                  LP  (COND
-                                                         ((IL:EQP POS1 LSTPOS)
-                                                          (IL:RELSTK POS1)
-                                                          (RETURN NIL))
-                                                         ((> N 0)
-                                                          (DECF N)
-                                                          (SETF POS1 (IL:STKNTH -1 POS1 POS1))
-                                                          (GO LP)))
-                                                      (SETF LSTPOS (IL:STKNTH -1 'IL:DEBUGGER-LOOP))
-                                                  LP1        (IL:* IL:\; 
-              "POS1 stays N ahead of POS2.  When POS1 reaches END, LSTPOS is the desired position.")
-                                                      (COND
-                                                         ((NULL POS1)
-                                                          (IL:RELSTK LSTPOS)
-                                                          (RETURN NIL))
-                                                         ((IL:EQP POS1 LSTPOS)
-                                                          (IL:RELSTK POS1)
-                                                          (RETURN LSTPOS)))
-                                                      (SETF POS1 (IL:STKNTH -1 POS1 POS1)
-                                                            LSTPOS
-                                                            (IL:STKNTH -1 LSTPOS LSTPOS))
-                                                      (GO LP1)))
-                                      (POP PLACE)
-                              IL:ELSE (SETF LSTPOS (FIND-NAMED-STACK-POSITION (FIRST PLACE)
-                                                              NIL
-                                                              (IL:STKNTH -1 LSTPOS LSTPOS)))
-                                    (POP PLACE)))) IL:|finally| (OR LSTPOS (IL:ERROR "not found")
-                                                                        )
-                                                         (IL:STKNTH 0 LSTPOS IL:LASTPOS) 
+                                          LP  (COND
+                                                 ((IL:EQP POS1 LSTPOS)
+                                                  (IL:RELSTK POS1)
+                                                  (RETURN NIL))
+                                                 ((> N 0)
+                                                  (DECF N)
+                                                  (SETF POS1 (IL:STKNTH -1 POS1 POS1))
+                                                  (GO LP)))
+                                              (SETF LSTPOS (IL:STKNTH -1 'IL:DEBUGGER-LOOP))
+                                          LP1                (IL:* IL:\; 
+                "POS1 stays N ahead of POS2.  When POS1 reaches END, LSTPOS is the desired position.")
+                                              (COND
+                                                 ((NULL POS1)
+                                                  (IL:RELSTK LSTPOS)
+                                                  (RETURN NIL))
+                                                 ((IL:EQP POS1 LSTPOS)
+                                                  (IL:RELSTK POS1)
+                                                  (RETURN LSTPOS)))
+                                              (SETF POS1 (IL:STKNTH -1 POS1 POS1)
+                                                    LSTPOS
+                                                    (IL:STKNTH -1 LSTPOS LSTPOS))
+                                              (GO LP1)))
+                                  (POP PLACE)
+                          IL:ELSE (SETF LSTPOS (FIND-NAMED-STACK-POSITION (FIRST PLACE)
+                                                      NIL
+                                                      (IL:STKNTH -1 LSTPOS LSTPOS)))
+                                (POP PLACE)))) IL:|finally| (OR LSTPOS (IL:ERROR "not found"))
+                                                     (IL:STKNTH 0 LSTPOS IL:LASTPOS) 
 
                                                (IL:* IL:|;;| "smashes LSTPOS into the LASTPOS stack pointer, cannot just reset lastpos to lstpos because of RELSTK etc")
 
-                                                         (IL:RELSTK LSTPOS)
-                                                         (RETURN IL:LASTPOS)))
+                                                     (IL:RELSTK LSTPOS)
+                                                     (RETURN IL:LASTPOS)))
 
 (DEFUN FIND-NAMED-STACK-POSITION (FN N LSTPOS &AUX TEM)
    (COND
@@ -790,125 +808,118 @@
 (DEFPARAMETER IL:|MaxBkMenuWidth| 125)
 (IL:DEFINEQ
 
-(il:baktrace
-  (il:lambda (il:ipos il:epos il:skipfns il:flags il:file)
-                                                        (il:* il:\; "Edited  2-Jun-87 18:26 by amd")
-          
-          (il:* il:|;;| "FLAGS is a bit mask telling BACKTRACE what is to be printed.  1 is variables, 2 is eval blips, 4 is everything, 8 suppresses function name and 'UNTRACE:' , and 16 uses access links.")
+(IL:BAKTRACE
+  (IL:LAMBDA (IL:IPOS IL:EPOS IL:SKIPFNS IL:FLAGS IL:FILE)
+                                                        (IL:* IL:\; "Edited  2-Jun-87 18:26 by amd")
 
-    (prog ((*print-level* 2)
-               (*print-length* 10)
-               (il:pos (il:stknth 0 il:ipos))
-               (il:n 0)
-               il:fn il:x il:y il:z (il:plvlfileflg t))
-              (or il:file (il:setq il:file t))
-              (and (il:neq il:clearstklst t)
-                     (il:setq il:clearstklst (cons il:pos il:clearstklst)))
-          
-          (il:* il:|;;| "POS is used as a scratch-position.  N is an offset from FROM.  whenever baktrace needs to look at a stkname or stack position, it (re) uses POS and computes (STKNTH N IPOS POS).")
+    (IL:* IL:|;;| "FLAGS is a bit mask telling BACKTRACE what is to be printed.  1 is variables, 2 is eval blips, 4 is everything, 8 suppresses function name and 'UNTRACE:' , and 16 uses access links.")
 
-          il:lp
-              (il:setq il:fn (il:stkname il:pos))
-          il:lp1
-              (cond
-                 ((and il:skipfns (some #'(lambda (il:skipfn)
-                                                         (funcall il:skipfn il:fn)) il:skipfns)))
-                 (t (cond
-                       ((il:neq il:flags 0)
-                        (il:backtrace (il:setq il:pos (il:stknth il:n il:ipos il:pos))
-                               il:pos
-                               (il:logor il:flags 8)
-                               il:file
-                               'il:showprint)                (il:* il:\; 
-                                      "Tells BACKTRACE not to print 'UNTRACE:' or the function name.")
-                                                             (il:* il:\; 
-                                                         "The SETQ would be unnecessary in spaghetti")
+    (PROG ((*PRINT-LEVEL* 2)
+           (*PRINT-LENGTH* 10)
+           (IL:POS (IL:STKNTH 0 IL:IPOS))
+           (IL:N 0)
+           IL:FN IL:X IL:Y IL:Z (IL:PLVLFILEFLG T))
+          (OR IL:FILE (IL:SETQ IL:FILE T))
+          (AND (IL:NEQ IL:CLEARSTKLST T)
+               (IL:SETQ IL:CLEARSTKLST (CONS IL:POS IL:CLEARSTKLST)))
 
-                        ))
-                    (il:prin2 (il:|if| (eq il:fn 'eval)
-                                         il:|then|
-                                         (il:stkarg 1 il:pos)
-                                         il:|else| il:fn)
-                           il:file t)                        (il:* il:\; "Prints function name.")
+     (IL:* IL:|;;| "POS is used as a scratch-position.  N is an offset from FROM.  whenever baktrace needs to look at a stkname or stack position, it (re) uses POS and computes (STKNTH N IPOS POS).")
 
-                    (il:prin1 il:breakdelimiter il:file)))
-              (cond
-                 ((and (il:setq il:pos (il:stknth (il:setq il:n (il:sub1 il:n))
-                                                      il:ipos il:pos))
-                         (not (il:eqp il:pos il:epos)))
-                  (go il:lp)))
-              (il:relstk il:pos)
-              (il:terpri il:file)
-              (return))))
+      IL:LP
+          (IL:SETQ IL:FN (IL:STKNAME IL:POS))
+      IL:LP1
+          (COND
+             ((AND IL:SKIPFNS (SOME #'(LAMBDA (IL:SKIPFN)
+                                             (FUNCALL IL:SKIPFN IL:FN))
+                                    IL:SKIPFNS)))
+             (T (COND
+                   ((IL:NEQ IL:FLAGS 0)
+                    (IL:BACKTRACE (IL:SETQ IL:POS (IL:STKNTH IL:N IL:IPOS IL:POS))
+                           IL:POS
+                           (IL:LOGOR IL:FLAGS 8)
+                           IL:FILE
+                           'IL:SHOWPRINT)                    (IL:* IL:\; 
+                                      "Tells BACKTRACE not to print 'UNTRACE:' or the function name.")
+                                                             (IL:* IL:\; 
+                                                         "The SETQ would be unnecessary in spaghetti")
+                    ))
+                (IL:PRIN2 (IL:|if| (EQ IL:FN 'EVAL)
+                              IL:|then| (IL:STKARG 1 IL:POS)
+                            IL:|else| IL:FN)
+                       IL:FILE T)                            (IL:* IL:\; "Prints function name.")
+                (IL:PRIN1 IL:BREAKDELIMITER IL:FILE)))
+          (COND
+             ((AND (IL:SETQ IL:POS (IL:STKNTH (IL:SETQ IL:N (IL:SUB1 IL:N))
+                                          IL:IPOS IL:POS))
+                   (NOT (IL:EQP IL:POS IL:EPOS)))
+              (GO IL:LP)))
+          (IL:RELSTK IL:POS)
+          (IL:TERPRI IL:FILE)
+          (RETURN))))
 
-(il:baktrace1
-  (il:lambda (il:lst il:n il:ipos il:pos)               (il:* il:\; "Edited  2-Jun-87 18:28 by amd")
-          
-          (il:* il:|;;| "'MATCHES' LST against stack starting at POS.  Returns NIL or offset corresponding to last functionthat matches")
+(IL:BAKTRACE1
+  (IL:LAMBDA (IL:LST IL:N IL:IPOS IL:POS)           (IL:* IL:\; "Edited 18-Sep-2022 11:22 by larry")
+                                                      (IL:* IL:\; "Edited 18-Sep-2022 10:42 by lmm")
+                                                      (IL:* IL:\; "Edited 11-Sep-2022 09:15 by lmm")
+                                                        (IL:* IL:\; "Edited  2-Jun-87 18:28 by amd")
 
-    (prog (il:tem)
-          il:lp
-              (cond
-                 ((null il:lst)
-                  (return il:n))
-                 ((null (il:setq il:pos (il:stknth (il:sub1 il:n)
-                                                       il:ipos il:pos)))
-                  (go il:out))
-                 ((eq (il:setq il:tem (car il:lst))
-                         (il:stkname il:pos))
-          
-          (il:* il:|;;| "make this check first if user WANTS to put the name of a dummy frame in baktracelst, he can.  e.g.  this is necessary in order to have the sequence *PROG*LAM EVALA *ENV* disappear")
+    (IL:* IL:|;;| "'MATCHES' LST against stack starting at POS.  Returns NIL or offset corresponding to last functionthat matches")
+                                                             (IL:* IL:P)
+    (PROG (IL:TEM)
+      IL:LP
+          (COND
+             ((NULL IL:LST)
+              (RETURN IL:N))
+             ((NULL (IL:SETQ IL:POS (IL:STKNTH (IL:SUB1 IL:N)
+                                           IL:IPOS IL:POS)))
+              (GO IL:OUT))
+             ((EQ (IL:SETQ IL:TEM (CAR IL:LST))
+                  (IL:STKNAME IL:POS))
 
-                  (il:setq il:n (il:sub1 il:n)))
-                 ((il:dummyframep il:pos)
-                  (il:setq il:n (il:sub1 il:n))
-                  (go il:lp))
-                 ((eq il:tem 'il:&)
-                  (il:setq il:n (il:sub1 il:n)))
-                 ((il:nlistp il:tem)
-                  (go il:out))
-                 ((null (some #'(lambda (il:x)
-                                               (cond
-                                                  ((eq il:x '-)
-                                                             (il:* il:\; "Optional match")
+              (IL:* IL:|;;| "make this check first if user WANTS to put the name of a dummy frame in baktracelst, he can.  e.g.  this is necessary in order to have the sequence *PROG*LAM EVALA *ENV* disappear")
 
-                                                   t)
-                                                  ((il:setq il:x (il:baktrace1 il:x il:n 
-                                                                            il:ipos il:pos))
-                                                   (il:setq il:n il:x)))) il:tem))
-                  (go il:out)))
-              (il:setq il:lst (cdr il:lst))
-              (go il:lp)
-          il:out
-              (return nil))))
+              (IL:SETQ IL:N (IL:SUB1 IL:N)))
+             ((NOT (XCL::INTERESTING-FRAME-P IL:POS))
+              (IL:SETQ IL:N (IL:SUB1 IL:N))
+              (GO IL:LP))
+             ((EQ IL:TEM 'IL:&)
+              (IL:SETQ IL:N (IL:SUB1 IL:N)))
+             ((IL:NLISTP IL:TEM)
+              (GO IL:OUT))
+             ((NULL (SOME #'(LAMBDA (IL:X)
+                                   (COND
+                                      ((EQ IL:X '-)          (IL:* IL:\; "Optional match")
+                                       T)
+                                      ((IL:SETQ IL:X (IL:BAKTRACE1 IL:X IL:N IL:IPOS IL:POS))
+                                       (IL:SETQ IL:N IL:X))))
+                          IL:TEM))
+              (GO IL:OUT)))
+          (IL:SETQ IL:LST (CDR IL:LST))
+          (GO IL:LP)
+      IL:OUT
+          (RETURN NIL))))
 )
 
-(XCL:DEFCOMMAND ("BT" :DEBUGGER) ()
-   "Print backtrace of external frames"
+(XCL:DEFCOMMAND ("BT" :DEBUGGER) NIL "Print backtrace of external frames"
    (PRINT-BACKTRACE :FROM IL:LASTPOS :TEST 'XCL::INTERESTING-FRAME-P)
    (VALUES))
 
-(XCL:DEFCOMMAND ("BT!" :DEBUGGER) ()
-   "Print backtrace of all frames"
+(XCL:DEFCOMMAND ("BT!" :DEBUGGER) NIL "Print backtrace of all frames"
    (PRINT-BACKTRACE :FROM IL:LASTPOS :TEST NIL)
    (VALUES))
 
-(XCL:DEFCOMMAND ("BTV" :DEBUGGER) ()
-   "Print backtrace of frames and special bindings"
+(XCL:DEFCOMMAND ("BTV" :DEBUGGER) NIL "Print backtrace of frames and special bindings"
    (PRINT-BACKTRACE :FROM IL:LASTPOS :PRINT-VARIABLES T)
    (VALUES))
 
-(XCL:DEFCOMMAND ("BTV!" :DEBUGGER) ()
-   "Print backtrace of all frame information"
+(XCL:DEFCOMMAND ("BTV!" :DEBUGGER) NIL "Print backtrace of all frame information"
    (PRINT-BACKTRACE :FROM IL:LASTPOS :PRINT-VARIABLES T :PRINT-JUNK T)
    (VALUES))
 
-(XCL:DEFCOMMAND ("DBT" :DEBUGGER) ()
-   (ATTACH-BACKTRACE-MENU NIL T)
+(XCL:DEFCOMMAND ("DBT" :DEBUGGER) NIL (ATTACH-BACKTRACE-MENU NIL T)
    (VALUES))
 
-(XCL:DEFCOMMAND ("DBT!" :DEBUGGER) ()
-   (ATTACH-BACKTRACE-MENU)
+(XCL:DEFCOMMAND ("DBT!" :DEBUGGER) NIL (ATTACH-BACKTRACE-MENU)
    (VALUES))
 
 (DEFUN ATTACH-BACKTRACE-MENU (&OPTIONAL IL:TTYWINDOW IL:SKIP)
@@ -925,60 +936,59 @@
           (*PRINT-ARRAY* NIL)
           (IL:*PRINT-STRUCTURE* NIL)
           (IL:TTYREGION (IL:WINDOWPROP IL:TTYWINDOW 'IL:REGION)))
-         (IL:SETQ IL:BKMENU (IL:|create|
-                             IL:MENU
-                             IL:ITEMS IL:_
-                             (IL:|for| IL:N IL:|from| 0 IL:|bind| IL:NAME
-                                IL:|repeatwhile| (IL:SETQ IL:POS (IL:STKNTH -1 IL:POS IL:POS))
-                                IL:|eachtime| (IL:SETQ IL:NAME (IL:STKNAME IL:POS))
-                                IL:|when| (OR (NULL IL:SKIP)
-                                                  (FUNCALL (COND
-                                                              ((EQ IL:SKIP T)
-                                                               IL:*SHORT-BACKTRACE-FILTER*)
-                                                              (T IL:SKIP))
-                                                         IL:POS))
-                                IL:|collect| (IL:|create|
-                                                  IL:BKMENUITEM
-                                                  IL:LABEL IL:_
-                                                  (PRIN1-TO-STRING (IL:|if| (EQ IL:NAME
-                                                                                    'EVAL)
-                                                                       IL:|then| (IL:STKARG
-                                                                                      1 IL:POS 
-                                                                                      IL:NAME)
-                                                                     IL:|else| IL:NAME))
-                                                  IL:BKMENUINFO IL:_ IL:N))
-                             IL:WHENSELECTEDFN IL:_ 'BACKTRACE-ITEM-SELECTED
-                             IL:MENUOUTLINESIZE IL:_ 0
-                             IL:MENUFONT IL:_ IL:BACKTRACEFONT
-                             IL:MENUCOLUMNS IL:_ 1))
+         (IL:SETQ IL:BKMENU (IL:|create| IL:MENU
+                                   IL:ITEMS IL:_
+                                   (IL:|for| IL:N IL:|from| 0 IL:|bind| IL:NAME
+                                      IL:|repeatwhile| (IL:SETQ IL:POS (IL:STKNTH -1 IL:POS IL:POS))
+                                      IL:|eachtime| (IL:SETQ IL:NAME (IL:STKNAME IL:POS))
+                                      IL:|when| (OR (NULL IL:SKIP)
+                                                    (FUNCALL (COND
+                                                                ((EQ IL:SKIP T)
+                                                                 IL:*SHORT-BACKTRACE-FILTER*)
+                                                                (T IL:SKIP))
+                                                           IL:POS))
+                                      IL:|collect| (IL:|create|
+                                                    IL:BKMENUITEM
+                                                    IL:LABEL IL:_
+                                                    (PRIN1-TO-STRING (IL:|if| (EQ IL:NAME
+                                                                                  'EVAL)
+                                                                         IL:|then| (IL:STKARG 1 
+                                                                                          IL:POS 
+                                                                                          IL:NAME)
+                                                                       IL:|else| IL:NAME))
+                                                    IL:BKMENUINFO IL:_ IL:N))
+                                   IL:WHENSELECTEDFN IL:_ 'BACKTRACE-ITEM-SELECTED
+                                   IL:MENUOUTLINESIZE IL:_ 0
+                                   IL:MENUFONT IL:_ IL:BACKTRACEFONT
+                                   IL:MENUCOLUMNS IL:_ 1))
          (COND
             ((IL:SETQ IL:BTW (IL:|for| IL:ATW IL:|in| (IL:ATTACHEDWINDOWS IL:TTYWINDOW)
                                 IL:|when| (AND (IL:SETQ IL:BTW (IL:WINDOWPROP IL:ATW 'IL:MENU))
-                                                   (EQ (IL:|fetch| (IL:MENU IL:WHENSELECTEDFN)
-                                                          IL:|of| (CAR IL:BTW))
-                                                       'BACKTRACE-ITEM-SELECTED))
-                                IL:|do|                  (IL:* IL:\; 
-                                     "test for an attached window that has a backtrace menu in it.")
+                                               (EQ (IL:|fetch| (IL:MENU IL:WHENSELECTEDFN)
+                                                      IL:|of| (CAR IL:BTW))
+                                                   'BACKTRACE-ITEM-SELECTED))
+                                IL:|do|                      (IL:* IL:\; 
+                                       "test for an attached window that has a backtrace menu in it.")
                                       (RETURN IL:ATW)))      (IL:* IL:\; 
-                             "if there is already a backtrace window, delete the old menu from it.")
+                               "if there is already a backtrace window, delete the old menu from it.")
              (IL:DELETEMENU (CAR (IL:WINDOWPROP IL:BTW 'IL:MENU))
                     NIL IL:BTW)
              (IL:WINDOWPROP IL:BTW 'IL:EXTENT NIL)
              (IL:CLEARW IL:BTW))
             ((IL:SETQ IL:BTW (IL:CREATEW (REGION-NEXT-TO (IL:WINDOWPROP IL:TTYWINDOW 'IL:REGION)
-                                                (IL:WIDTHIFWINDOW (IL:IMIN (IL:|fetch|
-                                                                            (IL:MENU IL:IMAGEWIDTH)
+                                                (IL:WIDTHIFWINDOW (IL:IMIN (IL:|fetch| (IL:MENU
+                                                                                        IL:IMAGEWIDTH
+                                                                                        )
                                                                               IL:|of| IL:BKMENU)
                                                                          IL:|MaxBkMenuWidth|))
-                                                (IL:|fetch| (IL:REGION IL:HEIGHT) IL:|of|
-                                                                                      IL:TTYREGION)
+                                                (IL:|fetch| (IL:REGION IL:HEIGHT) IL:|of| 
+                                                                                        IL:TTYREGION)
                                                 :LEFT)))     (IL:* IL:\; 
-                          "put bt window at left of TTY window unless ttywindow is near left edge.")
-             (IL:ATTACHWINDOW IL:BTW IL:TTYWINDOW (IF (IL:IGREATERP (IL:|fetch| (IL:REGION 
-                                                                                           IL:LEFT)
-                                                                       IL:|of|
-                                                                       (IL:WINDOWPROP IL:BTW
-                                                                              'IL:REGION))
+                            "put bt window at left of TTY window unless ttywindow is near left edge.")
+             (IL:ATTACHWINDOW IL:BTW IL:TTYWINDOW (IF (IL:IGREATERP (IL:|fetch| (IL:REGION IL:LEFT)
+                                                                       IL:|of| (IL:WINDOWPROP
+                                                                                IL:BTW
+                                                                                'IL:REGION))
                                                              (IL:|fetch| (IL:REGION IL:LEFT)
                                                                 IL:|of| IL:TTYREGION))
                                                       'IL:RIGHT
@@ -987,7 +997,7 @@
                     'IL:LOCALCLOSE)
              (IL:WINDOWPROP IL:BTW 'IL:PROCESS (IL:WINDOWPROP IL:TTYWINDOW 'IL:PROCESS))
                                                              (IL:* IL:\; 
-                                                           " so that button clicks will switch TTY")
+                                                             " so that button clicks will switch TTY")
              ))
          (IL:ADDMENU IL:BKMENU IL:BTW (IL:|create| IL:POSITION
                                              IL:XCOORD IL:_ 0
@@ -995,8 +1005,7 @@
                                                                              IL:BTW
                                                                              'IL:HEIGHT)
                                                                    (IL:|fetch| (IL:MENU 
-                                                                                       IL:IMAGEHEIGHT
-                                                                                          )
+                                                                                      IL:IMAGEHEIGHT)
                                                                       IL:|of| IL:BKMENU))))
 
     (IL:* IL:|;;| "IL:ADDMENU sets up buttoneventfn for window that we don't want.  We want to catch middle button events before the menu handler, so that we can pop up edit/inspect menu for the frame currently selected.  So replace the buttoneventfn, and can nuke the cursorin and cursormoved guys, cause don't need them.")
@@ -1077,7 +1086,7 @@
          (RETURN (IL:CREATEREGION IL:NLFT IL:NBTM IL:WIDTH IL:HEIGHT))))
 
 (DEFUN BACKTRACE-MENU-BUTTONEVENTFN (WINDOW &AUX (MENU (CAR (IL:LISTP (IL:WINDOWPROP WINDOW
-                                                                                 'IL:MENU)))))
+                                                                             'IL:MENU)))))
    (UNLESS (OR (IL:LASTMOUSESTATE IL:UP)
                (NULL MENU))
        (IL:TOTOPW WINDOW)
@@ -1104,12 +1113,12 @@
 (DEFUN BACKTRACE-ITEM-SELECTED (ITEM MENU BUTTON)
 
    (IL:* IL:|;;| 
- "When a frame name is selected in the backtrace menu, this is the function that gets called.")
+   "When a frame name is selected in the backtrace menu, this is the function that gets called.")
 
    (DECLARE (SPECIAL IL:BRKENV))
    (LET* ((FRAMESPECFN (IL:|fetch| (IL:BKMENUITEM IL:BKMENUINFO) IL:|of| ITEM))
                                                              (IL:* IL:\; 
-                                               "number offset from the break position of the frame")
+                                                 "number offset from the break position of the frame")
           (TTYWINDOW (IL:WINDOWPROP (IL:WFROMMENU MENU)
                             'IL:MAINWINDOW))
           (BKPOS (IL:WINDOWPROP TTYWINDOW 'STACK-POSITION))
@@ -1124,8 +1133,7 @@
               (WHEN OLDITEM (IL:MENUDESELECT OLDITEM MENU))
               (IL:MENUSELECT ITEM MENU))
 
-         (IL:* IL:|;;| 
-       "Change the lexical environment so it is the one in effect as of this frame.")
+         (IL:* IL:|;;| "Change the lexical environment so it is the one in effect as of this frame.")
 
          (IL:PROCESS.EVAL (IL:WINDOWPROP TTYWINDOW 'PROCESS)
                 `(SETQ IL:BRKENV ',(IL:FIND-LEXICAL-ENVIRONMENT POS))
@@ -1140,8 +1148,7 @@
                                                      (XCL:SAVE-PROFILE PROFILE))
                                                T)
                                    (IL:INSPECTW.CREATE POS #'(LAMBDA (POS)
-                                                                    (STACK-FRAME-PROPERTIES
-                                                                     POS T))
+                                                                    (STACK-FRAME-PROPERTIES POS T))
                                           'STACK-FRAME-FETCHFN
                                           'STACK-FRAME-STOREFN NIL 'STACK-FRAME-VALUE-COMMAND NIL
                                           (FORMAT NIL "~S  Frame" (IL:STKNAME POS))
@@ -1149,17 +1156,16 @@
                                           (MAKE-FRAME-INSPECT-WINDOW TTYWINDOW)
                                           'STACK-FRAME-PROPERTY))))
               (WHEN (NOT (IL:WINDOWPROP FRAMEWINDOW 'IL:MAINWINDOW))
-                  (IL:ATTACHWINDOW FRAMEWINDOW TTYWINDOW (IF (IL:IGREATERP (IL:|fetch|
-                                                                            (IL:REGION IL:BOTTOM)
+                  (IL:ATTACHWINDOW FRAMEWINDOW TTYWINDOW (IF (IL:IGREATERP (IL:|fetch| (IL:REGION
+                                                                                        IL:BOTTOM)
                                                                               IL:|of|
                                                                               (IL:WINDOWPROP
                                                                                FRAMEWINDOW
                                                                                'IL:REGION))
-                                                                    (IL:|fetch| (IL:REGION 
-                                                                                           IL:BOTTOM)
-                                                                       IL:|of|
-                                                                       (IL:WINDOWPROP TTYWINDOW
-                                                                              'IL:REGION)))
+                                                                    (IL:|fetch| (IL:REGION IL:BOTTOM)
+                                                                       IL:|of| (IL:WINDOWPROP
+                                                                                TTYWINDOW
+                                                                                'IL:REGION)))
                                                              'IL:TOP
                                                              'IL:BOTTOM)
                          NIL
@@ -1171,15 +1177,15 @@
     ((TOTAL-SLOTS (IL:STKNARGS POS T)                        (IL:* IL:\; "STKNARGS takes an extra arg which means to include internally bound names as well as those in the basic frame")
             )
      (NUM-ARGS (IL:STKNARGS POS))                            (IL:* IL:\; 
-                                                           "number of argument variables")
+                                                             "number of argument variables")
      (FNNAME (IL:STKNAME POS))                               (IL:* IL:\; 
-                                                           "(novalue \"no such value\")")
+                                                             "(novalue \"no such value\")")
      (ARGLIST (AND (SYMBOLP FNNAME)
                    (IL:GETD FNNAME)
                    (IL:LISTP (IL:SMARTARGLIST FNNAME T)))))
     `((,FNNAME)
       ,@(IF (EQ FNNAME 'EVAL)                                (IL:* IL:\; 
-                                                           "then open the lexical environment")
+                                                             "then open the lexical environment")
             (LIST*
              '("EXPRESSION" 1)
              (LET
@@ -1202,33 +1208,32 @@
                                  IL:ENVIRONMENT-TAGBODIES)))))
             (IL:BIND MODE ARGNAME IL:|for| I IL:|from| 1 IL:|to| NUM-ARGS
                IL:COLLECT (PROGN (IL:|while| (IL:FMEMB (SETF ARGNAME (POP ARGLIST))
-                                                            LAMBDA-LIST-KEYWORDS)
-                                        IL:|do| (SETF MODE ARGNAME))
+                                                    LAMBDA-LIST-KEYWORDS)
+                                    IL:|do| (SETF MODE ARGNAME))
 
-                                     (IL:* IL:|;;| " STKARGNAME returns symbol if bound special")
+                                 (IL:* IL:|;;| " STKARGNAME returns symbol if bound special")
 
-                                     (LIST (OR (IL:STKARGNAME I POS)
-                                               (COND
-                                                  ((CHARACTERP ARGNAME)
+                                 (LIST (OR (IL:STKARGNAME I POS)
+                                           (COND
+                                              ((CHARACTERP ARGNAME)
 
-                                                   (IL:* IL:|;;| 
-                                                 "for special forms might start with #\\( or #\\{")
+                                               (IL:* IL:|;;| 
+                                               "for special forms might start with #\\( or #\\{")
 
-                                                   (SETQ ARGLIST NIL)
-                                                   (FORMAT NIL "arg ~D" (- I 1)))
-                                                  ((CASE MODE
-                                                       ((NIL &OPTIONAL) ARGNAME)
-                                                       (T NIL))
-                                                   (STRING ARGNAME))
-                                                  (T (FORMAT NIL "arg ~D" (- I 1)))))
-                                           I))))
-      ,@(LET ((SLOTS (IL:BIND ARGNAME (NOVALUE IL:_ "no such value") IL:FOR PVAR IL:FROM
-                                                                                         0
+                                               (SETQ ARGLIST NIL)
+                                               (FORMAT NIL "arg ~D" (- I 1)))
+                                              ((CASE MODE
+                                                   ((NIL &OPTIONAL) ARGNAME)
+                                                   (T NIL))
+                                               (STRING ARGNAME))
+                                              (T (FORMAT NIL "arg ~D" (- I 1)))))
+                                       I))))
+      ,@(LET ((SLOTS (IL:BIND ARGNAME (NOVALUE IL:_ "no such value") IL:FOR PVAR IL:FROM 0
                         IL:AS I IL:|from| (1+ NUM-ARGS) IL:|to| TOTAL-SLOTS
                         IL:|when| (AND (IL:NEQ NOVALUE (IL:STKARG I POS NOVALUE))
-                                           (OR (SETF ARGNAME (IL:STKARGNAME I POS T))
-                                               (AND LOTS? (SETQ ARGNAME (FORMAT NIL "local ~D" PVAR))
-                                                    ))) IL:|collect| (LIST ARGNAME I))))
+                                       (OR (SETF ARGNAME (IL:STKARGNAME I POS T))
+                                           (AND LOTS? (SETQ ARGNAME (FORMAT NIL "local ~D" PVAR)))))
+                        IL:|collect| (LIST ARGNAME I))))
              (AND SLOTS (CONS '("locals")
                               SLOTS))))))
 
@@ -1247,7 +1252,7 @@
                                    (TAGBODIES . IL:ENVIRONMENT-TAGBODIES))
                                  :TEST
                                  'EQ)))                      (IL:* IL:\; 
-                                                           "eval frame with lexical environment")
+                                                             "eval frame with lexical environment")
             (GETF (FUNCALL FN (IL:STKARG 2 FRAMESPEC))
                   (CAR WHICHSPEC)))
            (T 
@@ -1268,7 +1273,7 @@
                                    (TAGBODIES . IL:ENVIRONMENT-TAGBODIES))
                                  :TEST
                                  'EQ)))                      (IL:* IL:\; 
-                                                           "eval frame with lexical environment")
+                                                             "eval frame with lexical environment")
             (LET ((PLIST (FUNCALL FN (IL:STKARG 2 FRAMESPEC))))
                                                              (IL:* IL:\; "don't want to depend on setf knowing how to do this; we can side effect since fields are always present.")
                  (SETF (GETF PLIST (CAR WHICHSPEC))
@@ -1307,13 +1312,15 @@
    (LET (TTYREGION BTWINDOW)
         (COND
            ((SETF BTWINDOW (IL:|for| ATW IL:|in| (IL:ATTACHEDWINDOWS TTYWINDOW)
-                              IL:|when| (IL:WINDOWPROP ATW 'FRAME-INSPECT)
-                              IL:|do|                    (IL:* IL:\; 
-                                            "test for an attached window that is the frame window.")
-                                    (%RELEASE-STACK-DATUM ATW)
-                                    (RETURN ATW))))
+                              IL:|when| (IL:WINDOWPROP ATW 'FRAME-INSPECT) IL:|do| 
+                                                             (IL:* IL:\; 
+                                              "test for an attached window that is the frame window.")
+                                                                                 (
+                                                                                 %RELEASE-STACK-DATUM
+                                                                                  ATW)
+                                                                                 (RETURN ATW))))
            (T (SETF TTYREGION (IL:WINDOWREGION TTYWINDOW))   (IL:* IL:\; 
-                                                "create frame window and set its fixed properties.")
+                                                  "create frame window and set its fixed properties.")
               (SETF BTWINDOW (IL:CREATEW (REGION-NEXT-TO TTYREGION NIL 150 :TOP)
                                     "Back Trace Frame Window"))
 
@@ -1322,13 +1329,13 @@
               (IL:WINDOWPROP BTWINDOW 'FRAME-INSPECT T)
               (IL:WINDOWPROP BTWINDOW 'IL:MAXSIZE '(300 . 150))
                                                              (IL:* IL:\; 
-                                                           "save backtrace window with window.")
+                                                             "save backtrace window with window.")
               (IL:WINDOWPROP BTWINDOW 'IL:PROCESS (IL:WINDOWPROP TTYWINDOW 'IL:PROCESS))
               (IL:WINDOWADDPROP BTWINDOW 'IL:CLOSEFN #'(LAMBDA (W)
                                                               (%RELEASE-STACK-DATUM W)
 
                                                               (IL:* IL:|;;| 
-                                         "clear storage -- if/why this is necessary is now unclear")
+                                           "clear storage -- if/why this is necessary is now unclear")
 
                                                               (IL:WINDOWPROP W 'IL:SELECTABLEITEMS 
                                                                      NIL))
@@ -1343,13 +1350,13 @@
                 (MAPC 'IL:RELSTK ST)))))
 
 (DEFUN PRINT-BACKTRACE (&KEY (FROM 'XCL:PRINT-BACKTRACE)
-                                 TO TEST PRINT-VARIABLES PRINT-JUNK OUTPUT (LINK :ALINK)
-                                 &AUX
-                                 (*PRINT-LEVEL* 2)
-                                 (*PRINT-LENGTH* 10))
+                             TO TEST PRINT-VARIABLES PRINT-JUNK OUTPUT (LINK :ALINK)
+                             &AUX
+                             (*PRINT-LEVEL* 2)
+                             (*PRINT-LENGTH* 10))
    (IL:BAKTRACE FROM TO (IF TEST
-                                (LIST #'(LAMBDA (X)
-                                               (NOT (FUNCALL TEST X)))))
+                            (LIST #'(LAMBDA (X)
+                                           (NOT (FUNCALL TEST X)))))
           (+ (IF PRINT-VARIABLES
                  1
                  0)
@@ -1362,21 +1369,17 @@
                  (T 0)))
           OUTPUT))
 
-(XCL:DEFCOMMAND ("STOP" :DEBUGGER :QUIET) ()
-   "Exit this debugger level"
+(XCL:DEFCOMMAND ("STOP" :DEBUGGER :QUIET) NIL "Exit this debugger level"
    (IL:SETQ IL:BRKVALUES '(IL:ERROR!))
    (THROW 'DEBUGGER-EXIT NIL))
 
-(XCL:DEFCOMMAND ("^" :DEBUGGER :QUIET) ()
-   "Abort out of debugger"
+(XCL:DEFCOMMAND ("^" :DEBUGGER :QUIET) NIL "Abort out of debugger"
    (IL:SETQ IL:BRKVALUES '(IL:ERROR!))
    (THROW 'DEBUGGER-EXIT NIL))
 
-(XCL:DEFCOMMAND ("RETURN" :DEBUGGER) (&OPTIONAL (IL:EXPRESSION NIL)
-                                                &ENVIRONMENT IL:ENV)
-   "Return value from debugger"
-   (XCL:CONDITION-CASE (PROGN (IL:SETQ IL:BRKVALUES (LIST 'RETURN (MULTIPLE-VALUE-LIST (
-                                                                                      DEBUGGER-EVAL
+(XCL:DEFCOMMAND ("RETURN" :DEBUGGER) (&OPTIONAL (IL:EXPRESSION NIL)
+                                            &ENVIRONMENT IL:ENV) "Return value from debugger"
+   (XCL:CONDITION-CASE (PROGN (IL:SETQ IL:BRKVALUES (LIST 'RETURN (MULTIPLE-VALUE-LIST (DEBUGGER-EVAL
                                                                                         IL:EXPRESSION
                                                                                         IL:ENV))
                                                           (IL:STKNTH 0 IL:BRKPOS)))
@@ -1384,41 +1387,38 @@
           (SI::DEBUGGER-EVAL-ABORTED (IL:C)
                  (VALUES :ABORTED (SI::DEBUGGER-EVAL-ABORTED-CONDITION IL:C)))))
 
-(XCL:DEFCOMMAND ("PR" :DEBUGGER) (&OPTIONAL IL:NAME-OR-NUMBER)
-   "Select and invoke a proceed case."
+(XCL:DEFCOMMAND ("PR" :DEBUGGER) (&OPTIONAL IL:NAME-OR-NUMBER) "Select and invoke a proceed case."
    (ESCAPE-FROM-DEBUGGER T IL:NAME-OR-NUMBER)
    (VALUES))
 
-(XCL:DEFCOMMAND ("PR!" :DEBUGGER) (&OPTIONAL IL:NAME-OR-NUMBER)
-   "Select and invoke a proceed case."
+(XCL:DEFCOMMAND ("PR!" :DEBUGGER) (&OPTIONAL IL:NAME-OR-NUMBER) "Select and invoke a proceed case."
    (ESCAPE-FROM-DEBUGGER NIL IL:NAME-OR-NUMBER)
    (VALUES))
 
-(XCL:DEFCOMMAND ("PROCEED" :DEBUGGER) (&OPTIONAL IL:NAME-OR-NUMBER)
+(XCL:DEFCOMMAND ("PROCEED" :DEBUGGER) (&OPTIONAL IL:NAME-OR-NUMBER) 
    "Select and invoke a proceed case."
    (ESCAPE-FROM-DEBUGGER T IL:NAME-OR-NUMBER)
    (VALUES))
 
-(XCL:DEFCOMMAND ("OK" :DEBUGGER :QUIET) ()
-   (DECLARE (SPECIAL IL:BRKENV))
+(XCL:DEFCOMMAND ("OK" :DEBUGGER :QUIET) NIL (DECLARE (SPECIAL IL:BRKENV))
    "Exit/proceed from debugger"
    (XCL:CONDITION-CASE (PROGN (WHEN (TYPEP IL:BRKCOND 'SI::BREAKPOINT)
 
                                   (IL:* IL:|;;| 
-                    " if at a breakpoint, OK means to eval the expression if necessary  and return")
+                      " if at a breakpoint, OK means to eval the expression if necessary  and return")
 
                                   (UNLESS IL:BRKVALUES       (IL:* IL:\; 
-                                                           "EQ only if already evaluated")
+                                                             "EQ only if already evaluated")
                                       (IL:SETQ IL:BRKVALUES (CONS T (MULTIPLE-VALUE-LIST (
-                                                                                      DEBUGGER-EVAL
+                                                                                        DEBUGGER-EVAL
                                                                                           IL:BRKEXP 
                                                                                           IL:BRKENV))
                                                                   )))
                                   (THROW 'DEBUGGER-EXIT NIL))
                               (CONDITIONS:CONTINUE)          (IL:* IL:\; 
-                                           "will escape if a proceed case named PROCEED is enabled")
-                              (ESCAPE-FROM-DEBUGGER)     (IL:* IL:\; 
-                                                    "If all else fails, ask the user what to do...")
+                                             "will escape if a proceed case named PROCEED is enabled")
+                              (ESCAPE-FROM-DEBUGGER)         (IL:* IL:\; 
+                                                      "If all else fails, ask the user what to do...")
                               )
           (SI::DEBUGGER-EVAL-ABORTED (IL:C)
                  (VALUES :ABORTED (SI::DEBUGGER-EVAL-ABORTED-CONDITION IL:C)))))
@@ -1467,16 +1467,15 @@
 
 (DEFUN KEYLIST-FROM-ESCAPE-LIST (ESCAPES)
    (WHEN ESCAPES
-       (LET ((KEYLIST (IL:|for| ESC IL:|in| ESCAPES IL:|as| I IL:|from| 1
-                         IL:|bind| MESSAGE IL:|eachtime| (SETF MESSAGE (PRINC-TO-STRING
-                                                                                ESC))
+       (LET ((KEYLIST (IL:|for| ESC IL:|in| ESCAPES IL:|as| I IL:|from| 1 IL:|bind| MESSAGE
+                         IL:|eachtime| (SETF MESSAGE (PRINC-TO-STRING ESC))
                          IL:|collect| `(,I ,MESSAGE IL:NOECHOFLG T IL:EXPLAINSTRING
-                                               ,(FORMAT NIL "~D~:[~; (~:*~S)~] - ~A" I (
+                                           ,(FORMAT NIL "~D~:[~; (~:*~S)~] - ~A" I (
                                                                               CONDITIONS:RESTART-NAME
-                                                                                        ESC)
-                                                       MESSAGE)
-                                               IL:CONFIRMFLG T RETURN (PROGN (IL:TERPRI T)
-                                                                             ',ESC)))))
+                                                                                    ESC)
+                                                   MESSAGE)
+                                           IL:CONFIRMFLG T RETURN (PROGN (IL:TERPRI T)
+                                                                         ',ESC)))))
             (SETF (CDR (LAST KEYLIST))
                   '(("N" "No - don't proceed " IL:NOECHOFLG T IL:CONFIRMFLG T IL:AUTOCONFIRMFLG T 
                          RETURN (IL:TERPRI T))))
@@ -1507,40 +1506,34 @@
                            (IL:RELSTK IL:POS)))))
 (IL:DEFINEQ
 
-(il:find-stack-frame
-  (il:lambda (il:frame-spec)                                 (il:* il:|lmm| " 7-Nov-86 03:39")
-          
-          (il:* il:|;;| "handle debugger commands like @ which take a frame description. Smash LASTPOS to point at new position. ")
+(IL:FIND-STACK-FRAME
+  (IL:LAMBDA (IL:FRAME-SPEC)                                 (IL:* IL:|lmm| " 7-Nov-86 03:39")
 
-    (let ((il:pos (il:find-debugger-entry-frame t))
-              il:token)
-           (il:while il:frame-spec il:do (il:setq il:pos
-                                          (il:case-equalp (il:setq il:token (il:pop il:framespec)
-                                                           )
-                                                 ("@"        (il:* il:\; "leave LASTPOS alone")
+    (IL:* IL:|;;| "handle debugger commands like @ which take a frame description. Smash LASTPOS to point at new position. ")
 
-                                                      (il:stknth 0 il:lastpos il:pos))
-                                                 ("="        (il:* il:\; "eval ")
-
-                                                      (il:stknth 0 (eval (il:pop il:framespec
-                                                                                        ))))
-                                                 (t (cond
-                                                       ((il:numberp il:token)
-                                                        (il:stknth il:token il:pos il:pos))
-                                                       (t (or (il:stkpos il:token nil
-                                                                         (il:stknth -1 il:pos 
-                                                                                il:pos)
-                                                                         il:pos)
-                                                                 (il:error il:token '"not found" 
-                                                                        t))))))))
-           (prog1 (il:setq il:lastpos (il:stknth 0 il:pos il:lastpos))
-                  (il:relstk il:pos)))))
+    (LET ((IL:POS (IL:FIND-DEBUGGER-ENTRY-FRAME T))
+          IL:TOKEN)
+         (IL:WHILE IL:FRAME-SPEC
+            IL:DO (IL:SETQ IL:POS (IL:CASE-EQUALP (IL:SETQ IL:TOKEN (IL:POP IL:FRAMESPEC))
+                                         ("@"                (IL:* IL:\; "leave LASTPOS alone")
+                                              (IL:STKNTH 0 IL:LASTPOS IL:POS))
+                                         ("="                (IL:* IL:\; "eval ")
+                                              (IL:STKNTH 0 (EVAL (IL:POP IL:FRAMESPEC))))
+                                         (T (COND
+                                               ((IL:NUMBERP IL:TOKEN)
+                                                (IL:STKNTH IL:TOKEN IL:POS IL:POS))
+                                               (T (OR (IL:STKPOS IL:TOKEN NIL (IL:STKNTH -1 IL:POS 
+                                                                                     IL:POS)
+                                                             IL:POS)
+                                                      (IL:ERROR IL:TOKEN '"not found" T))))))))
+         (PROG1 (IL:SETQ IL:LASTPOS (IL:STKNTH 0 IL:POS IL:LASTPOS))
+                (IL:RELSTK IL:POS)))))
 )
 
-(IL:PUTPROPS XCL:DEBUGGER IL:MAKEFILE-ENVIRONMENT (:READTABLE "XCL" :PACKAGE
-                                                                 (XCL:DEFPACKAGE "DEBUGGER"
-                                                                        (:PREFIX-NAME "DBG")
-                                                                        (:NICKNAMES "DBG"))))
+(IL:PUTPROPS XCL:DEBUGGER IL:MAKEFILE-ENVIRONMENT (:READTABLE "XCL" :PACKAGE (XCL:DEFPACKAGE
+                                                                              "DEBUGGER"
+                                                                              (:PREFIX-NAME "DBG")
+                                                                              (:NICKNAMES "DBG"))))
 
 (IL:PUTPROPS XCL:DEBUGGER IL:FILETYPE :COMPILE-FILE)
 (IL:DECLARE\: IL:DONTEVAL@LOAD IL:DOEVAL@COMPILE IL:DONTCOPY IL:COMPILERVARS 
@@ -1551,29 +1544,30 @@
 
 (IL:ADDTOVAR IL:LAMA IL:WBREAK)
 )
-(IL:PUTPROPS XCL:DEBUGGER IL:COPYRIGHT ("Venue & Xerox Corporation" 1986 1987 1988 1990 1991 2021))
+(IL:PUTPROPS XCL:DEBUGGER IL:COPYRIGHT ("Venue & Xerox Corporation" 1986 1987 1988 1990 1991 2021 2022
+))
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (4647 6458 (XCL:ENTER-DEBUGGER-P 4647 . 6458)) (6460 13582 (XCL:DEBUGGER 6460 . 13582
-)) (13584 13898 (EMERGENCY-PANIC-LOOP 13584 . 13898)) (13900 15355 (IL:FIND-DEBUGGER-ENTRY-FRAME 13900
- . 15355)) (15357 16046 (PRINT-ENTRY-MESSAGE 15357 . 16046)) (16048 16349 (SIMPLE-REPORT-CONDITION 
-16048 . 16349)) (16351 18091 (XCL::INTERESTING-FRAME-P 16351 . 18091)) (18676 18963 (IL:WBREAK 18689
- . 18961)) (19076 20185 (REUSE-CURRENT-WINDOW 19076 . 20185)) (20187 21491 (CREATE-DEBUGGER-WINDOW 
-20187 . 21491)) (21493 22445 (SET-UP-DEBUGGER-WINDOW 21493 . 22445)) (22447 23462 (
-CLOSE-DEBUGGER-WINDOW 22447 . 23462)) (23464 23950 (RELEASE-DEBUGGER-WINDOW 23464 . 23950)) (23952 
-24889 (NEAR-BY-REGION 23952 . 24889)) (24891 26001 (DEBUGGER-BUTTON-EVENT 24891 . 26001)) (26003 26940
- (DEBUGGER-MENU-HELP 26003 . 26940)) (31880 33698 (DEBUGGER-EVAL 31880 . 33698)) (33700 38049 (
-FIND-DEBUGGER-STACK-FRAME 33700 . 38049)) (38051 38790 (FIND-NAMED-STACK-POSITION 38051 . 38790)) (
-38792 39424 (FIND-ORIGINAL-NAME-AND-DEFINITION 38792 . 39424)) (39426 39560 (STKPTR-CCODE 39426 . 
-39560)) (42151 47013 (IL:BAKTRACE 42164 . 44948) (IL:BAKTRACE1 44950 . 47011)) (47849 54778 (
-ATTACH-BACKTRACE-MENU 47849 . 54778)) (54780 57991 (REGION-NEXT-TO 54780 . 57991)) (57993 59436 (
-BACKTRACE-MENU-BUTTONEVENTFN 57993 . 59436)) (59438 63712 (BACKTRACE-ITEM-SELECTED 59438 . 63712)) (
-63714 68024 (STACK-FRAME-PROPERTIES 63714 . 68024)) (68026 69036 (STACK-FRAME-FETCHFN 68026 . 69036)) 
-(69038 70225 (STACK-FRAME-STOREFN 69038 . 70225)) (70227 70802 (STACK-FRAME-VALUE-COMMAND 70227 . 
-70802)) (70804 71214 (STACK-FRAME-PROPERTY 70804 . 71214)) (71216 73201 (MAKE-FRAME-INSPECT-WINDOW 
-71216 . 73201)) (73203 73400 (%RELEASE-STACK-DATUM 73203 . 73400)) (73402 74108 (PRINT-BACKTRACE 73402
- . 74108)) (77337 77431 (EXIT-DEBUGGER 77337 . 77431)) (77433 77752 (INVOKE-ESCAPE-FROM-MENU 77433 . 
-77752)) (77754 79177 (ESCAPE-FROM-DEBUGGER 77754 . 79177)) (79179 79557 (MENU-FROM-ESCAPE-LIST 79179
- . 79557)) (79559 80718 (KEYLIST-FROM-ESCAPE-LIST 79559 . 80718)) (80720 81728 (COLLECT-ACTIVE-ESCAPES
- 80720 . 81728)) (81730 82099 (IL:FIND-LEXICAL-ENVIRONMENT 81730 . 82099)) (82100 84066 (
-IL:FIND-STACK-FRAME 82113 . 84064)))))
+  (IL:FILEMAP (NIL (4760 7020 (XCL:ENTER-DEBUGGER-P 4760 . 7020)) (7022 7292 (IL:EXTERNAL-SYMBOL-P 7022
+ . 7292)) (7294 10055 (XCL::INTERESTING-FRAME-P 7294 . 10055)) (10057 17091 (XCL:DEBUGGER 10057 . 
+17091)) (17093 17407 (EMERGENCY-PANIC-LOOP 17093 . 17407)) (17409 18680 (IL:FIND-DEBUGGER-ENTRY-FRAME 
+17409 . 18680)) (18682 19373 (PRINT-ENTRY-MESSAGE 18682 . 19373)) (19375 19676 (
+SIMPLE-REPORT-CONDITION 19375 . 19676)) (20200 20499 (IL:WBREAK 20213 . 20497)) (20612 21721 (
+REUSE-CURRENT-WINDOW 20612 . 21721)) (21723 22907 (CREATE-DEBUGGER-WINDOW 21723 . 22907)) (22909 23863
+ (SET-UP-DEBUGGER-WINDOW 22909 . 23863)) (23865 24882 (CLOSE-DEBUGGER-WINDOW 23865 . 24882)) (24884 
+25370 (RELEASE-DEBUGGER-WINDOW 24884 . 25370)) (25372 26226 (NEAR-BY-REGION 25372 . 26226)) (26228 
+27251 (DEBUGGER-BUTTON-EVENT 26228 . 27251)) (27253 28172 (DEBUGGER-MENU-HELP 27253 . 28172)) (33278 
+35098 (DEBUGGER-EVAL 33278 . 35098)) (35100 39118 (FIND-DEBUGGER-STACK-FRAME 35100 . 39118)) (39120 
+39859 (FIND-NAMED-STACK-POSITION 39120 . 39859)) (39861 40493 (FIND-ORIGINAL-NAME-AND-DEFINITION 39861
+ . 40493)) (40495 40629 (STKPTR-CCODE 40495 . 40629)) (43220 47802 (IL:BAKTRACE 43233 . 45719) (
+IL:BAKTRACE1 45721 . 47800)) (48602 55522 (ATTACH-BACKTRACE-MENU 48602 . 55522)) (55524 58735 (
+REGION-NEXT-TO 55524 . 58735)) (58737 60176 (BACKTRACE-MENU-BUTTONEVENTFN 58737 . 60176)) (60178 64306
+ (BACKTRACE-ITEM-SELECTED 60178 . 64306)) (64308 68432 (STACK-FRAME-PROPERTIES 64308 . 68432)) (68434 
+69446 (STACK-FRAME-FETCHFN 68434 . 69446)) (69448 70637 (STACK-FRAME-STOREFN 69448 . 70637)) (70639 
+71214 (STACK-FRAME-VALUE-COMMAND 70639 . 71214)) (71216 71626 (STACK-FRAME-PROPERTY 71216 . 71626)) (
+71628 73892 (MAKE-FRAME-INSPECT-WINDOW 71628 . 73892)) (73894 74091 (%RELEASE-STACK-DATUM 73894 . 
+74091)) (74093 74775 (PRINT-BACKTRACE 74093 . 74775)) (77881 77975 (EXIT-DEBUGGER 77881 . 77975)) (
+77977 78296 (INVOKE-ESCAPE-FROM-MENU 77977 . 78296)) (78298 79721 (ESCAPE-FROM-DEBUGGER 78298 . 79721)
+) (79723 80101 (MENU-FROM-ESCAPE-LIST 79723 . 80101)) (80103 81162 (KEYLIST-FROM-ESCAPE-LIST 80103 . 
+81162)) (81164 82172 (COLLECT-ACTIVE-ESCAPES 81164 . 82172)) (82174 82543 (IL:FIND-LEXICAL-ENVIRONMENT
+ 82174 . 82543)) (82544 84055 (IL:FIND-STACK-FRAME 82557 . 84053)))))
 IL:STOP

@@ -8,5 +8,6 @@ if [ ! -x run-medley ] ; then
 fi
 
 ./scripts/loadup-all.sh  &&  \
+./scripts/copy-all   .sh &&  \
 ./scripts/release-medley.sh
 

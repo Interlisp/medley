@@ -1,19 +1,18 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "14-Jul-2022 16:55:48" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-HISTORY.;1 36011  
+(FILECREATED "22-Oct-2022 16:02:10" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-HISTORY.;23 36474  
 
-      :PREVIOUS-DATE "14-Jul-2022 11:08:01" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>newtedit>TEDIT-HISTORY.;2)
+      :CHANGES-TO (FNS TEDIT.UNDO.INSERTION TEDIT.REDO.REPLACE TEDIT.UNDO.MOVE)
+
+      :PREVIOUS-DATE " 6-Oct-2022 10:29:21" 
+{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-HISTORY.;20)
 
 
 (PRETTYCOMPRINT TEDIT-HISTORYCOMS)
 
 (RPAQQ TEDIT-HISTORYCOMS
-       ((FILES TEDIT-DCL)
-        (DECLARE%: EVAL@COMPILE DONTCOPY (CONSTANTS (\SCRATCHLEN 64))
-               (FILES (LOADCOMP)
-                      TEDIT-DCL))
+       ((DECLARE%: EVAL@COMPILE DONTCOPY (EXPORT (RECORDS TEDITHISTORYEVENT)))
         (GLOBALVARS TEDIT.HISTORY.TYPELST TEDIT.HISTORYLST)
         (INITVARS (TEDIT.HISTORY.TYPELST NIL)
                (TEDIT.HISTORYLST NIL))
@@ -27,20 +26,32 @@
               (FNS TEDIT.UNDO TEDIT.UNDO.INSERTION TEDIT.UNDO.DELETION TEDIT.REDO 
                    TEDIT.REDO.INSERTION TEDIT.UNDO.MOVE TEDIT.UNDO.REPLACE TEDIT.REDO.REPLACE 
                    TEDIT.REDO.MOVE))))
-
-(FILESLOAD TEDIT-DCL)
 (DECLARE%: EVAL@COMPILE DONTCOPY 
-(DECLARE%: EVAL@COMPILE 
+(* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE
 
-(RPAQQ \SCRATCHLEN 64)
+(RECORD TEDITHISTORYEVENT (
+                           (* ;; "Describes one event on the TEdit edit history list.")
 
+                           THACTION                          (* ; 
+                                                           "A LITATOM, specifying what the event was")
+                           THPOINT                           (* ; 
+                                                            "Was the selection to the left or right?")
+                           THLEN                             (* ; "The # of chars involved")
+                           THCH#                             (* ; "The starting ch#")
+                           THFIRSTPIECE                      (* ; "First piece involved")
+                           THOLDINFO                         (* ; "Old info, for undo")
+                           THAUXINFO                         (* ; 
+                                                 "Auxiliary info about the event, primarily for redo")
+                           THTEXTOBJ
 
-(CONSTANTS (\SCRATCHLEN 64))
+                           (* ;; "Place to remember a second textobj, for those like MOVE who need to remember both a source and a destination.")
+
+                           )
+                          THPOINT _ 'LEFT)
 )
 
+(* "END EXPORTED DEFINITIONS")
 
-(FILESLOAD (LOADCOMP)
-       TEDIT-DCL)
 )
 (DECLARE%: DOEVAL@COMPILE DONTCOPY
 
@@ -114,159 +125,152 @@
 (DEFINEQ
 
 (TEDIT.UNDO
-  [LAMBDA (TEXTOBJ)                                         (* ; "Edited 12-Jun-90 18:41 by mitani")
+  [LAMBDA (TEXTOBJ)                                          (* ; "Edited  7-Sep-2022 18:45 by rmk")
+                                                             (* ; "Edited  5-Sep-2022 15:30 by rmk")
+                                                            (* ; "Edited 12-Jun-90 18:41 by mitani")
 
     (* ;; "Undo the last thing this guy did.")
 
-    (COND
-       ((NOT (FETCH (TEXTOBJ TXTREADONLY) OF TEXTOBJ))
+    (CL:UNLESS (FETCH (TEXTOBJ TXTREADONLY) OF TEXTOBJ)
 
         (* ;; "Only undo things if the document is allowed to change.")
 
         (PROG ((SEL (fetch (TEXTOBJ SEL) of TEXTOBJ))
                EVENT CH# LEN FIRSTPIECE)
-              (COND
-                 ((SETQ EVENT (fetch (TEXTOBJ TXTHISTORY) of TEXTOBJ))
-                                                             (* ; 
-                                         "There really is something to UNDO.  Decide what, & fix it.")
-                  (SETQ LEN (fetch THLEN of EVENT))          (* ; 
+              (CL:UNLESS (SETQ EVENT (fetch (TEXTOBJ TXTHISTORY) of TEXTOBJ))
+                  (TEDIT.PROMPTPRINT TEXTOBJ "Nothing to UNDO." T)
+                  (RETURN))
+
+         (* ;; "There really is something to UNDO.  Decide what, & fix it.")
+
+              (SETQ LEN (fetch THLEN of EVENT))              (* ; 
                                                "Length of the text that was inserted/deleted/changed")
-                  (SETQ CH# (fetch THCH# of EVENT))          (* ; "Starting CH# of the change")
-                  (SETQ FIRSTPIECE (fetch THFIRSTPIECE of EVENT))
-                                                             (* ; 
+              (SETQ CH# (fetch THCH# of EVENT))              (* ; "Starting CH# of the change")
+              (SETQ FIRSTPIECE (fetch THFIRSTPIECE of EVENT))(* ; 
                                                              "First piece affected by the change")
-                  (RESETLST
-                      (RESETSAVE (CURSOR WAITINGCURSOR))
-                      (\SHOWSEL SEL NIL NIL)
-                      [SELECTQ (fetch THACTION of EVENT)
-                          ((Insert Copy Include)             (* ; "It was an insertion")
-                               (TEDIT.UNDO.INSERTION TEXTOBJ EVENT LEN CH# FIRSTPIECE))
-                          (Delete                            (* ; "It was a deletion")
-                                  (TEDIT.UNDO.DELETION TEXTOBJ EVENT LEN CH# FIRSTPIECE))
-                          (Looks                             (* ; "It was a character-looks change")
-                                 (TEDIT.UNDO.LOOKS TEXTOBJ EVENT LEN CH# FIRSTPIECE))
-                          (ParaLooks                         (* ; "It was a PARA looks change")
-                                     (TEDIT.UNDO.PARALOOKS TEXTOBJ EVENT LEN CH# FIRSTPIECE))
-                          (Move (TEDIT.UNDO.MOVE TEXTOBJ EVENT LEN CH# FIRSTPIECE)
+              (RESETLST
+                  (RESETSAVE (CURSOR WAITINGCURSOR))
+                  (\SHOWSEL SEL NIL NIL)
+                  [SELECTQ (fetch THACTION of EVENT)
+                      ((Insert Copy Include)                 (* ; "It was an insertion")
+                           (TEDIT.UNDO.INSERTION TEXTOBJ EVENT LEN CH#))
+                      (Delete                                (* ; "It was a deletion")
+                              (TEDIT.UNDO.DELETION TEXTOBJ EVENT LEN CH# FIRSTPIECE))
+                      (Looks                                 (* ; "It was a character-looks change")
+                             (TEDIT.UNDO.LOOKS TEXTOBJ EVENT LEN CH#))
+                      (ParaLooks                             (* ; "It was a PARA looks change")
+                                 (TEDIT.UNDO.PARALOOKS TEXTOBJ EVENT LEN CH# FIRSTPIECE))
+                      (Move (TEDIT.UNDO.MOVE TEXTOBJ EVENT LEN CH# FIRSTPIECE)
                                                              (* ; "He moved some text")
-                                )
-                          ((Replace LowerCase UpperCase) 
+                            )
+                      ((Replace LowerCase UpperCase) 
 
                                                  (* ;; "He replaced one piece of text with another ; Lower-casing and upper-casing have the same undo event.")
 
-                               (TEDIT.UNDO.REPLACE TEXTOBJ EVENT LEN CH# FIRSTPIECE))
-                          (Get                               (* ; "He did a GET -- not undoable.")
-                               (TEDIT.PROMPTPRINT TEXTOBJ "You can't UNDO a GET." T))
-                          (Put                               (* ; "He did a PUT -- not undoable.")
-                               (TEDIT.PROMPTPRINT TEXTOBJ "You can't UNDO a Put." T))
-                          (COND
-                             ((AND (SETQ UNDOFN (ASSOC (fetch THACTION of EVENT)
-                                                       TEDIT.HISTORY.TYPELST))
-                                   (SETQ UNDOFN (CADDR UNDOFN)))
-                                                             (* ; 
+                           (TEDIT.UNDO.REPLACE TEXTOBJ EVENT LEN CH# FIRSTPIECE))
+                      (Get                                   (* ; "He did a GET -- not undoable.")
+                           (TEDIT.PROMPTPRINT TEXTOBJ "You can't UNDO a GET." T))
+                      (Put                                   (* ; "He did a PUT -- not undoable.")
+                           (TEDIT.PROMPTPRINT TEXTOBJ "You can't UNDO a Put." T))
+                      (COND
+                         ((AND (SETQ UNDOFN (ASSOC (fetch THACTION of EVENT)
+                                                   TEDIT.HISTORY.TYPELST))
+                               (SETQ UNDOFN (CADDR UNDOFN))) (* ; 
                                       "TEDIT.HISTORY.TYPELST is an ALST of form (type redofn undofn)")
-                              (APPLY* UNDOFN TEXTOBJ EVENT LEN CH# FIRSTPIECE))
-                             (T (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "UNDO not implemented for "
-                                                                  (fetch THACTION of EVENT))
-                                       T]
-                      (\SHOWSEL SEL NIL T)))
-                 (T (TEDIT.PROMPTPRINT TEXTOBJ "Nothing to UNDO." T])
+                          (APPLY* UNDOFN TEXTOBJ EVENT LEN CH# FIRSTPIECE))
+                         (T (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "UNDO not implemented for "
+                                                              (fetch THACTION of EVENT))
+                                   T]
+                  (\SHOWSEL SEL NIL T))))])
 
 (TEDIT.UNDO.INSERTION
-  [LAMBDA (TEXTOBJ EVENT LEN CH# FIRSTPIECE)                 (* ; "Edited 21-Apr-93 01:33 by jds")
+  [LAMBDA (TEXTOBJ EVENT LEN CH#)                            (* ; "Edited 22-Oct-2022 16:01 by rmk")
+                                                             (* ; "Edited  7-Sep-2022 19:01 by rmk")
+                                                             (* ; "Edited 21-Apr-93 01:33 by jds")
 
     (* ;; "UNDO a prior Insert, Copy, or Include.")
 
-    (PROG (OBJ DELETEFN)
-          (replace (TEXTOBJ \INSERTPCVALID) of TEXTOBJ with NIL)
-                                                             (* ; 
-            "Keep TEdit from reusing the current cache piece in the future -- it is probably invalid")
-          (\DELETECH CH# (IPLUS CH# LEN)
-                 LEN TEXTOBJ)
-          (\FIXDLINES (fetch (TEXTOBJ LINES) of TEXTOBJ)
-                 (fetch (TEXTOBJ SEL) of TEXTOBJ)
-                 CH#
-                 (IPLUS CH# LEN)
-                 TEXTOBJ)                                    (* ; 
+    (\DELETECH CH# (IPLUS CH# LEN)
+           TEXTOBJ)
+    (\FIXDLINES (fetch (TEXTOBJ SEL) of TEXTOBJ)
+           CH#
+           (IPLUS CH# LEN)
+           TEXTOBJ)                                          (* ; 
                                                              "Fix the line descriptors & selection")
-          (TEDIT.UPDATE.SCREEN TEXTOBJ)                      (* ; 
+    (TEDIT.UPDATE.SCREEN TEXTOBJ)                            (* ; 
                                                            "Fix up the display for all this foofaraw")
-          (replace (SELECTION POINT) of (fetch (TEXTOBJ SEL) of TEXTOBJ) with 'LEFT)
-          (\FIXSEL (fetch (TEXTOBJ SEL) of TEXTOBJ)
-                 TEXTOBJ)                                    (* ; "Really fix the selection")
-          (replace THACTION of EVENT with 'Delete)           (* ; 
-                                    "Make the UNDO be UNDOable, by changing the event to a deletion.")
-      ])
+    (replace (SELECTION POINT) of (fetch (TEXTOBJ SEL) of TEXTOBJ) with 'LEFT)
+    (\FIXSEL (fetch (TEXTOBJ SEL) of TEXTOBJ)
+           TEXTOBJ)                                          (* ; "Really fix the selection")
+
+    (* ;; "Make the UNDO be UNDOable, by changing the event to a deletion.")
+
+    (replace THACTION of EVENT with 'Delete])
 
 (TEDIT.UNDO.DELETION
-  [LAMBDA (TEXTOBJ EVENT LEN CH# FIRSTPIECE)                 (* ; "Edited 21-Apr-93 12:01 by jds")
+  [LAMBDA (TEXTOBJ EVENT LEN CH# FIRSTPIECE)                 (* ; "Edited  5-Oct-2022 23:37 by rmk")
+                                                             (* ; "Edited  7-Sep-2022 18:50 by rmk")
+                                                             (* ; "Edited 22-Aug-2022 13:10 by rmk")
+                                                             (* ; "Edited  6-Aug-2022 09:19 by rmk")
+                                                             (* ; "Edited 21-Apr-93 12:01 by jds")
 
     (* ;; "UNDO a prior Deletion of text.")
 
-    (PROG ((NPC (fetch (PIECE NEXTPIECE) of FIRSTPIECE))
-           (PCTB (fetch (TEXTOBJ PCTB) of TEXTOBJ))
-           (SEL (fetch (TEXTOBJ SEL) of TEXTOBJ))
-           (OTEXTLEN (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-           NEWPIECE INSPC OBJECT INSERTFN START-OF-PIECE)
-          (SETQ INSPC (\CHTOPC CH# PCTB T))
-          (replace (TEXTOBJ \INSERTPCVALID) of TEXTOBJ with NIL)
-                                                             (* ; 
+    (CL:UNLESS (fetch (TEXTOBJ TXTREADONLY) of TEXTOBJ)
+        (PROG ((NPC (NEXTPIECE FIRSTPIECE))
+               (SEL (fetch (TEXTOBJ SEL) of TEXTOBJ))
+               (OTEXTLEN (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
+               NEWPIECE INSPC OBJECT INSERTFN START-OF-PIECE)
+              (SETQ INSPC (\CHTOPC CH# TEXTOBJ T))
+              (replace (TEXTOBJ HINTPC) of TEXTOBJ with NIL) (* ; 
     "Keep future people from stepping on the current cache piece, which is probably no longer valid.")
-          (COND
-             ((fetch (TEXTOBJ TXTREADONLY) of TEXTOBJ)       (* ; "Don't change read-only documents.")
-              (RETURN)))
-          [COND
-             ((IGREATERP CH# START-OF-PIECE)
-              (SETQ INSPC (\SPLITPIECE INSPC (- CH# START-OF-PIECE)
-                                 TEXTOBJ INSPC#]
-          (SETQ NEWPIECE (create PIECE using FIRSTPIECE))
-          (replace THFIRSTPIECE of EVENT with NEWPIECE)
-          (bind (TL _ 0) while (ILESSP TL LEN) do (\INSERTPIECE NEWPIECE INSPC TEXTOBJ) 
+              (CL:WHEN (IGREATERP CH# START-OF-PIECE)
+                  (SETQ INSPC (\SPLITPIECE INSPC (- CH# START-OF-PIECE)
+                                     TEXTOBJ)))
+              (SETQ NEWPIECE (create PIECE using FIRSTPIECE))
+              (replace THFIRSTPIECE of EVENT with NEWPIECE)
+              (bind (TL _ 0) while (ILESSP TL LEN) do (\INSERTPIECE NEWPIECE INSPC TEXTOBJ) 
                                                              (* ; "Insert the piece back in")
-                                                  [COND
-                                                     ([AND (SETQ OBJECT (fetch (PIECE POBJ)
-                                                                           of NEWPIECE))
-                                                           (SETQ INSERTFN (IMAGEOBJPROP OBJECT
-                                                                                 'WHENINSERTEDFN]
+                                                      (CL:WHEN [AND (EQ OBJECT.PTYPE (PTYPE NEWPIECE)
+                                                                        )
+                                                                    (SETQ OBJECT (PCONTENTS NEWPIECE)
+                                                                     )
+                                                                    (SETQ INSERTFN
+                                                                     (IMAGEOBJPROP OBJECT
+                                                                            'WHENINSERTEDFN]
                                                              (* ; 
                                         "If this is an imageobject, and it has an insertfn, call it.")
-                                                      (APPLY* INSERTFN OBJECT (\TEDIT.PRIMARYW 
-                                                                                     TEXTOBJ)
-                                                             NIL
-                                                             (TEXTSTREAM TEXTOBJ]
-                                                  (SETQ TL (IPLUS TL (fetch (PIECE PLEN) of 
-                                                                                           FIRSTPIECE
-                                                                            ))) 
+                                                          (APPLY* INSERTFN OBJECT (\TEDIT.PRIMARYW
+                                                                                   TEXTOBJ)
+                                                                 NIL
+                                                                 (TEXTSTREAM TEXTOBJ)))
+                                                      (add TL (PLEN FIRSTPIECE)) 
                                                              (* ; 
                                                            "Keep track of how much we've re-inserted")
-                                                  (SETQ FIRSTPIECE NPC) 
+                                                      (SETQ FIRSTPIECE NPC) 
                                                              (* ; "Move to the next piece to insert")
-                                                  (AND NPC (SETQ NPC (fetch (PIECE NEXTPIECE)
-                                                                        of NPC)))
-                                                  (SETQ NEWPIECE (create PIECE using FIRSTPIECE)))
-                                                             (* ; 
+                                                      (AND NPC (SETQ NPC (NEXTPIECE NPC)))
+                                                      (SETQ NEWPIECE (create PIECE using FIRSTPIECE))
+                    )                                        (* ; 
                                          "Done here because \INSERTPIECE creams the NEXTPIECE field.")
-          (replace (TEXTOBJ TEXTLEN) of TEXTOBJ with (IPLUS (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ)
-                                                            LEN))
-                                                             (* ; 
-                                              "Reset the text length and EOF ptr of the text stream.")
-          (\FIXILINES TEXTOBJ SEL CH# LEN OTEXTLEN)          (* ; 
+              (\FIXILINES TEXTOBJ SEL CH# LEN OTEXTLEN)      (* ; 
                                                              "Fix the line descriptors & selection")
-          (TEDIT.UPDATE.SCREEN TEXTOBJ)                      (* ; 
+              (TEDIT.UPDATE.SCREEN TEXTOBJ)                  (* ; 
                                                            "Fix up the display for all this foofaraw")
-          (replace (SELECTION CH#) of SEL with CH#)          (* ; 
+              (replace (SELECTION CH#) of SEL with CH#)      (* ; 
                                                    "Make the selection point at the re-inserted text")
-          (replace (SELECTION CHLIM) of SEL with (IPLUS CH# LEN))
-          (replace (SELECTION DCH) of SEL with LEN)
-          (replace (SELECTION POINT) of SEL with (fetch THPOINT of EVENT))
-          (\TEDIT.SET.SEL.LOOKS SEL 'NORMAL)
-          (\FIXSEL SEL TEXTOBJ)                              (* ; "Really fix the selection")
-          (replace THACTION of EVENT with 'Insert)           (* ; 
+              (replace (SELECTION CHLIM) of SEL with (IPLUS CH# LEN))
+              (replace (SELECTION DCH) of SEL with LEN)
+              (replace (SELECTION POINT) of SEL with (fetch THPOINT of EVENT))
+              (\TEDIT.SET.SEL.LOOKS SEL 'NORMAL)
+              (\FIXSEL SEL TEXTOBJ)                          (* ; "Really fix the selection")
+              (replace THACTION of EVENT with 'Insert)       (* ; 
                                    "Make the UNDO be UNDOable, by changing the event to a insertion.")
-      ])
+          ))])
 
 (TEDIT.REDO
-  [LAMBDA (TEXTOBJ)                                          (* ; "Edited 30-May-91 21:27 by jds")
+  [LAMBDA (TEXTOBJ)                                          (* ; "Edited  9-Sep-2022 17:00 by rmk")
+                                                             (* ; "Edited 30-May-91 21:27 by jds")
 
     (* ;; "REDO the last thing this guy did.")
 
@@ -335,7 +339,7 @@
                                        (TEDIT.NORMALIZECARET TEXTOBJ)
                                        (\SHOWSEL SEL NIL T))
                                    (T (TEDIT.PROMPTPRINT TEXTOBJ "[Not found]"))))
-                            (replace (TEXTOBJ \INSERTPCVALID) of TEXTOBJ with NIL)
+                            (replace (TEXTOBJ HINTPC) of TEXTOBJ with NIL)
                                                              (* ; "Drop the cached piece.  WHY??")
                             )
                       ((Move ReplaceMove)                    (* ; "He moved some text")
@@ -357,24 +361,28 @@
              (T (TEDIT.PROMPTPRINT TEXTOBJ "Nothing to REDO." T])
 
 (TEDIT.REDO.INSERTION
-  [LAMBDA (TEXTOBJ EVENT CH#)                                (* ; "Edited 21-Apr-93 01:06 by jds")
+  [LAMBDA (TEXTOBJ EVENT CH#)                                (* ; "Edited  6-Oct-2022 10:15 by rmk")
+                                                             (* ; "Edited  9-Sep-2022 17:00 by rmk")
+                                                             (* ; "Edited  8-Sep-2022 10:53 by rmk")
+                                                             (* ; "Edited 22-Aug-2022 12:55 by rmk")
+                                                             (* ; "Edited  6-Aug-2022 10:27 by rmk")
+                                                             (* ; "Edited 21-Apr-93 01:06 by jds")
                                                              (* ; 
                                                           "REDO a prior Insert/Copy/Include of text.")
+    (BTVALIDATE 'TEDIT.REDO.INSERTION 'START TEXTOBJ)
     (PROG (INSPC INSPC# NPC (SEL (fetch (TEXTOBJ SEL) of TEXTOBJ))
-                 (PCTB (fetch (TEXTOBJ PCTB) of TEXTOBJ))
                  (LEN (fetch THLEN of EVENT))
                  (FIRSTPIECE (create PIECE using (fetch THFIRSTPIECE of EVENT)
                                                  PNEW _ T))
                  (OTEXTLEN (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                 OBJ COPYFN ORIGFIRSTPC)
+                 OBJ COPYFN ORIGFIRSTPC START-OF-PIECE)
           (SETQ ORIGFIRSTPC FIRSTPIECE)
           (replace THFIRSTPIECE of EVENT with FIRSTPIECE)    (* ; 
                                            "So we can UNDO this, and remove the right set of pieces.")
-          (replace (TEXTOBJ \INSERTPCVALID) of TEXTOBJ with NIL)
-                                                             (* ; 
+          (replace (TEXTOBJ HINTPC) of TEXTOBJ with NIL)     (* ; 
                                                    "Force any further insertions to make new pieces.")
-          (SETQ NPC (fetch (PIECE NEXTPIECE) of FIRSTPIECE))
-          (SETQ INSPC (\CHTOPC CH# PCTB T))
+          (SETQ NPC (NEXTPIECE FIRSTPIECE))
+          (SETQ INSPC (\CHTOPC CH# TEXTOBJ T))
           [SETQ INSPC (COND
                          ((IEQP CH# START-OF-PIECE)          (* ; 
                                                       "We're inserting just before an existing piece")
@@ -383,13 +391,12 @@
                                        "We must split this piece, and insert before the second part.")
                             (\SPLITPIECE INSPC (- CH# START-OF-PIECE)
                                    TEXTOBJ]
-          (bind (TL _ 0) while (ILESSP TL LEN)
+          [bind (TL _ 0) while (ILESSP TL LEN)
              do 
                 (* ;; "Loop thru the pieces of the prior insertion, inserting copies of enough of them to cover the length of the insertion.")
 
-                [COND
-                   ((SETQ OBJ (fetch (PIECE POBJ) of FIRSTPIECE))
-                                                             (* ; "This piece describes an object")
+                (CL:WHEN (EQ OBJECT.PTYPE (PTYPE FIRSTPIECE))(* ; "This piece describes an object")
+                    (SETQ OBJ (PCONTENTS FIRSTPIECE))
                     [COND
                        [(SETQ COPYFN (IMAGEOBJPROP OBJ 'COPYFN))
                         (SETQ OBJ (APPLY* COPYFN OBJ (fetch (TEXTOBJ STREAMHINT) of TEXTOBJ)
@@ -398,33 +405,25 @@
                            ((EQ OBJ 'DON'T)
                             (TEDIT.PROMPTPRINT TEXTOBJ "COPY of this object not allowed." T)
                             (RETFROM 'TEDIT.COPY))
-                           (T (replace (PIECE POBJ) of FIRSTPIECE with OBJ]
-                       (OBJ (replace (PIECE POBJ) of FIRSTPIECE with (COPY OBJ]
-                    (COND
-                       ((SETQ COPYFN (IMAGEOBJPROP OBJ 'WHENCOPIEDFN))
+                           (T (replace (PIECE PCONTENTS) of FIRSTPIECE with OBJ]
+                       (OBJ (replace (PIECE PCONTENTS) of FIRSTPIECE with (COPY OBJ]
+                    (CL:WHEN (SETQ COPYFN (IMAGEOBJPROP OBJ 'WHENCOPIEDFN))
                                                              (* ; 
                                                          "If there's an eventfn for copying, use it.")
                         (APPLY* COPYFN OBJ (WINDOWPROP (CAR (fetch (TEXTOBJ \WINDOW) of TEXTOBJ))
                                                   'DSP)
                                (fetch (TEXTOBJ STREAMHINT) of TEXTOBJ)
-                               (fetch (TEXTOBJ STREAMHINT) of TEXTOBJ]
+                               (fetch (TEXTOBJ STREAMHINT) of TEXTOBJ))))
                 (\INSERTPIECE FIRSTPIECE INSPC TEXTOBJ)      (* ; "Insert the piece back in")
-                (SETQ TL (IPLUS TL (fetch (PIECE PLEN) of FIRSTPIECE))) 
-                                                             (* ; 
+                (add TL (PLEN FIRSTPIECE))                   (* ; 
                                                            "Keep track of how much we've re-inserted")
-                (SETQ FIRSTPIECE (create PIECE using NPC PNEW _ T)) 
-                                                             (* ; "Move to the next piece to insert")
-                (AND NPC (SETQ NPC (fetch (PIECE NEXTPIECE) of NPC))) 
-                                                             (* ; 
+                (SETQ FIRSTPIECE (create PIECE using NPC PNEW _ T))
+                (CL:WHEN NPC                                 (* ; 
                                          "Done here because \INSERTPIECE creams the NEXTPIECE field.")
-                )
-          (\TEDIT.DIFFUSE.PARALOOKS (fetch (PIECE PREVPIECE) of ORIGFIRSTPC)
+                    (SETQ NPC (NEXTPIECE NPC)))]
+          (\TEDIT.DIFFUSE.PARALOOKS (PREVPIECE ORIGFIRSTPC)
                  INSPC)                                      (* ; 
                                               "propagate paragraph formatting into the new insertion")
-          (replace (TEXTOBJ TEXTLEN) of TEXTOBJ with (IPLUS (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ)
-                                                            LEN))
-                                                             (* ; 
-                                              "Reset the text length and EOF ptr of the text stream.")
           (\FIXILINES TEXTOBJ SEL CH# LEN OTEXTLEN)          (* ; 
                                                              "Fix the line descriptors & selection")
           (TEDIT.UPDATE.SCREEN TEXTOBJ)                      (* ; 
@@ -435,12 +434,16 @@
           (replace (SELECTION DCH) of SEL with LEN)
           (\TEDIT.SET.SEL.LOOKS SEL 'NORMAL)
           (\FIXSEL SEL TEXTOBJ)                              (* ; "Really fix the selection")
-          (replace THACTION of EVENT with 'Insert)           (* ; 
-                                   "Make the UNDO be UNDOable, by changing the event to a insertion.")
-      ])
+
+     (* ;; "Make the UNDO be UNDOable, by changing the event to a insertion.")
+
+          (BTVALIDATE 'TEDIT.REDO.INSERTION 'END TEXTOBJ)
+          (replace THACTION of EVENT with 'Insert])
 
 (TEDIT.UNDO.MOVE
-  [LAMBDA (TEXTOBJ EVENT LEN CH# FIRSTPIECE)                 (* ; "Edited 30-May-91 21:27 by jds")
+  [LAMBDA (TEXTOBJ EVENT LEN CH# FIRSTPIECE)                 (* ; "Edited 22-Oct-2022 14:01 by rmk")
+                                                             (* ; "Edited  6-Oct-2022 10:26 by rmk")
+                                                             (* ; "Edited 30-May-91 21:27 by jds")
                                                              (* ; "UNDO a MOVE command")
     (PROG ((TOOBJ (fetch THAUXINFO of EVENT))
            (FROMOBJ (fetch THTEXTOBJ of EVENT))
@@ -455,10 +458,7 @@
           (\DELETECH CH# (IPLUS CH# LEN)
                  LEN FROMOBJ)                                (* ; 
                                     "Delete the characters we moved, from the place we moved them to")
-          (\FIXDLINES (fetch (TEXTOBJ LINES) of FROMOBJ)
-                 (fetch (TEXTOBJ SEL) of FROMOBJ)
-                 CH#
-                 (IPLUS CH# LEN)
+          (\FIXDLINES CH# (IPLUS CH# LEN)
                  FROMOBJ)
           (replace (SELECTION CH#) of (fetch (TEXTOBJ SEL) of FROMOBJ)
              with (replace (SELECTION CHLIM) of (fetch (TEXTOBJ SEL) of FROMOBJ) with CH#))
@@ -478,9 +478,6 @@
           (\FIXILINES TOOBJ (fetch (TEXTOBJ SEL) of TOOBJ)
                  SOURCECH# LEN TOTEXTLEN)                    (* ; 
                                             "Mark lines that need updating, and fix up the selection")
-          (add (fetch (TEXTOBJ TEXTLEN) of TOOBJ)
-               LEN)                                          (* ; 
-                                                "Update the text length of the erstwhile move source")
           (TEDIT.UPDATE.SCREEN FROMOBJ)                      (* ; 
                                                         "Update the erstwhile text location's image.")
           (COND
@@ -529,7 +526,8 @@
           (\SHOWSEL SEL NIL T])
 
 (TEDIT.REDO.REPLACE
-  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 30-May-91 21:28 by jds")
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 22-Oct-2022 14:09 by rmk")
+                                                             (* ; "Edited 30-May-91 21:28 by jds")
     (PROG ((OLDEVENT (fetch THOLDINFO of EVENT))
            (CH# (fetch (SELECTION CH#) of (fetch (TEXTOBJ SEL) of TEXTOBJ)))
            (SEL (fetch (TEXTOBJ SEL) of TEXTOBJ)))
@@ -539,9 +537,7 @@
                  (IDIFFERENCE (fetch (SELECTION CHLIM) of SEL)
                         (fetch (SELECTION CH#) of SEL))
                  TEXTOBJ)
-          (\FIXDLINES (fetch (TEXTOBJ LINES) of TEXTOBJ)
-                 SEL
-                 (fetch (SELECTION CH#) of SEL)
+          (\FIXDLINES SEL (fetch (SELECTION CH#) of SEL)
                  (fetch (SELECTION CHLIM) of SEL)
                  TEXTOBJ)
           (replace (SELECTION POINT) of SEL with 'LEFT)
@@ -569,9 +565,9 @@
           (TEDIT.MOVE MOVESEL SEL])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1548 4840 (\TEDIT.HISTORYADD 1558 . 3393) (\TEDIT.CUMULATE.EVENTS 3395 . 4838)) (4893 
-35988 (TEDIT.UNDO 4903 . 8883) (TEDIT.UNDO.INSERTION 8885 . 10419) (TEDIT.UNDO.DELETION 10421 . 15423)
- (TEDIT.REDO 15425 . 22036) (TEDIT.REDO.INSERTION 22038 . 28108) (TEDIT.UNDO.MOVE 28110 . 32451) (
-TEDIT.UNDO.REPLACE 32453 . 33807) (TEDIT.REDO.REPLACE 33809 . 35165) (TEDIT.REDO.MOVE 35167 . 35986)))
-))
+  (FILEMAP (NIL (2782 6074 (\TEDIT.HISTORYADD 2792 . 4627) (\TEDIT.CUMULATE.EVENTS 4629 . 6072)) (6127 
+36451 (TEDIT.UNDO 6137 . 10005) (TEDIT.UNDO.INSERTION 10007 . 11315) (TEDIT.UNDO.DELETION 11317 . 
+16109) (TEDIT.REDO 16111 . 22823) (TEDIT.REDO.INSERTION 22825 . 28696) (TEDIT.UNDO.MOVE 28698 . 32882)
+ (TEDIT.UNDO.REPLACE 32884 . 34238) (TEDIT.REDO.REPLACE 34240 . 35628) (TEDIT.REDO.MOVE 35630 . 36449)
+))))
 STOP

@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "26-Oct-2022 22:02:06" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-SELECTION.;100 135535 
+(FILECREATED " 5-Nov-2022 11:43:29" 
+{DSK}<Users>kaplan>Local>medley3.5>working-medley>library>tedit>TEDIT-SELECTION.;107 128158 
 
-      :CHANGES-TO (FNS TEDIT.SELECT.LINE.SCANNER)
+      :CHANGES-TO (FNS \FIXSEL TEDIT.EXTEND.SEL \TEDIT.CHARX \SHOWSEL.HILIGHT)
+                  (VARS TEDIT-SELECTIONCOMS)
+                  (MACROS \FIXSEL.HCUNSCALE)
 
-      :PREVIOUS-DATE "26-Oct-2022 20:41:48" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-SELECTION.;99)
+      :PREVIOUS-DATE "26-Oct-2022 22:02:06" {WMEDLEY}<library>tedit>TEDIT-SELECTION.;100)
 
 
 (PRETTYCOMPRINT TEDIT-SELECTIONCOMS)
@@ -54,7 +55,7 @@
         (COMS                                                (* ; "Selection manipulating code")
               (FNS TEDIT.EXTEND.SEL TEDIT.SELECT TEDIT.SCAN.LINE TEDIT.SELECT.LINE.SCANNER 
                    \TEDIT.SELECT.OBJECT)
-              (FNS \FIXSEL \TEDIT.FIXDELSEL \TEDIT.FIXINSSEL \TEDIT.FIXSELS)
+              (FNS \FIXSEL \TEDIT.FIXDELSEL \TEDIT.FIXINSSEL \TEDIT.FIXSELS \TEDIT.CHARX)
               (FNS TEDIT.RESET.EXTEND.PENDING.DELETE \TEDIT.SET.SEL.LOOKS)
               (FNS \SHOWSEL \SHOWSEL.HILIGHT \TEDIT.UPDATE.SHOWSEL \TEDIT.SHOWSELS 
                    \TEDIT.REFRESH.SHOWSEL)
@@ -67,18 +68,18 @@
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (DECLARE%: EVAL@COMPILE 
 
-(PUTPROPS \FIXSEL.HCUNSCALE MACRO [(LINE FIELD)
+(PUTPROPS \FIXSEL.HCUNSCALE MACRO [(L FIELD)
 
                                    (* ;; 
                         "Scale selection X-limits down to points for lines in hardcopy-display mode.")
 
-                                   (CL:WHEN (AND LINE (fetch (FMTSPEC FMTHARDCOPY)
-                                                         of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                               of LINE)))
+                                   (CL:WHEN (fetch (FMTSPEC FMTHARDCOPY) of (fetch (LINEDESCRIPTOR
+                                                                                    LFMTSPEC)
+                                                                               of L))
                                        (change (fetch (SELECTION FIELD) of SEL)
                                               (HCUNSCALE (fetch (FMTSPEC FMTHARDCOPYSCALE)
                                                             of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                  of LINE))
+                                                                  of L))
                                                      DATUM)))])
 
 (PUTPROPS \SHOWSEL.HCUNSCALE MACRO ((LINE VAL)
@@ -477,159 +478,144 @@
 (DEFINEQ
 
 (TEDIT.EXTEND.SEL
-  [LAMBDA (X Y OSEL TEXTOBJ SELOPERATION SELWINDOW NEWSEL)   (* ; "Edited 19-Apr-93 13:49 by jds")
-                                                             (* ; 
+  [LAMBDA (X Y OSEL TEXTOBJ SELOPERATION SELWINDOW)          (* ; "Edited  5-Nov-2022 11:42 by rmk")
+                                                             (* ; "Edited 19-Apr-93 13:49 by jds")
+
+    (* ;; 
     "Gather a new selected character, and extend OSEL to include it.  Return the extended selection.")
-    (PROG ((NSEL (OR NEWSEL (TEDIT.SELECT X Y TEXTOBJ (SELECTQ (fetch (SELECTION SELKIND)
-                                                                  of OSEL)
-                                                          ((LINE PARA) 
-                                                               'LINE)
-                                                          ((WORD CHAR) 
-                                                               'TEXT)
-                                                          'TEXT)
-                                   (OR (EQ (fetch (SELECTION SELKIND) of OSEL)
-                                           'WORD)
-                                       (EQ (fetch (SELECTION SELKIND) of OSEL)
-                                           'PARA))
-                                   SELOPERATION SELWINDOW T)))
+
+    (PROG ((NEWSEL (TEDIT.SELECT X Y TEXTOBJ (SELECTQ (fetch (SELECTION SELKIND) of OSEL)
+                                                 ((LINE PARA) 
+                                                      'LINE)
+                                                 ((WORD CHAR) 
+                                                      'TEXT)
+                                                 'TEXT)
+                          (OR (EQ (fetch (SELECTION SELKIND) of OSEL)
+                                  'WORD)
+                              (EQ (fetch (SELECTION SELKIND) of OSEL)
+                                  'PARA))
+                          SELOPERATION SELWINDOW T))
            (TEXTLEN (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-           (NPOINT NIL)
-           (SETOSELFLG NIL)
-           (FIXUPNEEDED NIL))
-          (COND
-             ((ZEROP TEXTLEN)                                (* ; 
+           NPOINT SETOSELFLG FIXUPNEEDED)
+          (CL:WHEN (ZEROP TEXTLEN)                           (* ; 
                                               "No sense in extending a selection if there's no text!")
-              (RETURN NSEL)))
-          (COND
-             ((AND NSEL (fetch (SELECTION SET) of NSEL))     (* ; 
-                                                "If there's no second selection, don't bother trying")
-              (\TEDIT.SET.SEL.LOOKS NSEL SELOPERATION)
+              (RETURN NEWSEL))
+          (CL:UNLESS (fetch (SELECTION SET) of NEWSEL)       (* ; "No new selection, return OSEL")
+              (RETURN OSEL))
+          (\TEDIT.SET.SEL.LOOKS NEWSEL SELOPERATION)
 
-              (* ;; "Make the new selection be the same kind as the original, as to what it's for -- regular, copy-source, etc.")
+     (* ;; "Make the new selection be the same kind as the original, as to what it's for -- regular, copy-source, etc.")
 
-              [SETQ NPOINT (COND
-                              ((IGEQ (fetch (SELECTION CHLIM) of NSEL)
-                                     (fetch (SELECTION CHLIM) of OSEL))
+          [SETQ NPOINT (COND
+                          ((IGEQ (fetch (SELECTION CHLIM) of NEWSEL)
+                                 (fetch (SELECTION CHLIM) of OSEL))
                                                              (* ; 
                                "The new selection ends to the right of the old one.  Move this edge.")
-                               'RIGHT)
-                              ((ILEQ (fetch (SELECTION CH#) of NSEL)
-                                     (fetch (SELECTION CH#) of OSEL))
+                           'RIGHT)
+                          ((ILEQ (fetch (SELECTION CH#) of NEWSEL)
+                                 (fetch (SELECTION CH#) of OSEL))
                                                              (* ; 
                              "If the new selection starts to left of old one, caret goes at the LEFT")
-                               'LEFT)
-                              ([IGREATERP (IABS (IDIFFERENCE (fetch (SELECTION CHLIM) of NSEL)
-                                                       (fetch (SELECTION CHLIM) of OSEL)))
-                                      (IABS (IDIFFERENCE (fetch (SELECTION CH#) of NSEL)
-                                                   (fetch (SELECTION CH#) of OSEL]
-                               (SETQ SETOSELFLG T)
-                               'LEFT)
-                              (T (SETQ SETOSELFLG T)
-                                 'RIGHT]
-              [SELECTQ NPOINT
-                  (LEFT                                      (* ; 
+                           'LEFT)
+                          ([IGREATERP (IABS (IDIFFERENCE (fetch (SELECTION CHLIM) of NEWSEL)
+                                                   (fetch (SELECTION CHLIM) of OSEL)))
+                                  (IABS (IDIFFERENCE (fetch (SELECTION CH#) of NEWSEL)
+                                               (fetch (SELECTION CH#) of OSEL]
+                           (SETQ SETOSELFLG T)
+                           'LEFT)
+                          (T (SETQ SETOSELFLG T)
+                             'RIGHT]
+          [SELECTQ NPOINT
+              (LEFT                                          (* ; 
                                                       "Caret's to the left.  Keep the same right end")
-                        [replace (SELECTION CHLIM) of NSEL
-                           with (IMAX (fetch (SELECTION CHLIM) of NSEL)
-                                      (SELECTQ (fetch (SELECTION POINT) of OSEL)
-                                          (LEFT (IPLUS (fetch (SELECTION CH#) of OSEL)
-                                                       (fetch (SELECTION DCH) of OSEL)))
-                                          (RIGHT (fetch (SELECTION CHLIM) of OSEL))
-                                          (SHOULDNT]
-                        (replace (SELECTION XLIM) of NSEL with (fetch (SELECTION XLIM) of OSEL))
-                        (replace (SELECTION YLIM) of NSEL with (fetch (SELECTION YLIM) of OSEL))
-                        (replace (SELECTION LN) of NSEL with (COPY (fetch (SELECTION LN) of OSEL)))
-                        (COND
-                           ((NEQ SELOPERATION 'COPY)         (* ; 
-                       "The old sel is in a protected area.  Only let him extend to the start of it.")
-                            [replace (SELECTION CH#) of NSEL
-                               with (IMAX (fetch (SELECTION CH#) of NSEL)
-                                          (\TEDIT.FIND.PROTECTED.START TEXTOBJ
-                                                 (SUB1 (fetch (SELECTION CHLIM) of OSEL))
-                                                 (fetch (SELECTION CH#) of NSEL]
-                            (SETQ FIXUPNEEDED T)             (* ; 
-        "Note that the L1/LN may be invalid as a result of this contraction.  Force a \FIXSEL later.")
-                            )))
-                  (RIGHT                                     (* ; 
+                    [replace (SELECTION CHLIM) of NEWSEL
+                       with (IMAX (fetch (SELECTION CHLIM) of NEWSEL)
+                                  (SELECTQ (fetch (SELECTION POINT) of OSEL)
+                                      (LEFT (IPLUS (fetch (SELECTION CH#) of OSEL)
+                                                   (fetch (SELECTION DCH) of OSEL)))
+                                      (RIGHT (fetch (SELECTION CHLIM) of OSEL))
+                                      (SHOULDNT]
+                    (replace (SELECTION XLIM) of NEWSEL with (fetch (SELECTION XLIM) of OSEL))
+                    (replace (SELECTION YLIM) of NEWSEL with (fetch (SELECTION YLIM) of OSEL))
+                    (replace (SELECTION LN) of NEWSEL with (COPY (fetch (SELECTION LN) of OSEL)))
+                    (CL:UNLESS (EQ SELOPERATION 'COPY)       (* ; 
+                                  "The old sel is in a protected area, can only extend to its start ")
+                        [replace (SELECTION CH#) of NEWSEL
+                           with (IMAX (fetch (SELECTION CH#) of NEWSEL)
+                                      (\TEDIT.FIND.PROTECTED.START TEXTOBJ (SUB1 (fetch (SELECTION
+                                                                                         CHLIM)
+                                                                                    of OSEL))
+                                             (fetch (SELECTION CH#) of NEWSEL]
+
+                        (* ;; 
+                     " L1/LN may be invalid as a result of this contraction.  Force a \FIXSEL later.")
+
+                        (SETQ FIXUPNEEDED T)))
+              (RIGHT                                         (* ; 
                                                      "Point's to the right;  keep the same left end.")
-                         [replace (SELECTION CH#) of NSEL
-                            with (IMIN (fetch (SELECTION CH#) of NSEL)
-                                       (SELECTQ (fetch (SELECTION POINT) of OSEL)
-                                           (LEFT (fetch (SELECTION CH#) of OSEL))
-                                           (RIGHT (IDIFFERENCE (fetch (SELECTION CHLIM) of OSEL)
-                                                         (fetch (SELECTION DCH) of OSEL)))
-                                           (SHOULDNT]
-                         (replace (SELECTION X0) of NSEL with (fetch (SELECTION X0) of OSEL))
-                         (replace (SELECTION Y0) of NSEL with (fetch (SELECTION Y0) of OSEL))
-                         (replace (SELECTION L1) of NSEL with (COPY (fetch (SELECTION L1)
-                                                                       of OSEL)))
-                         (COND
-                            ((NEQ SELOPERATION 'COPY)        (* ; 
-                       "The old sel is in a protected area.  Only let him extend to the start of it.")
-                             [replace (SELECTION CHLIM) of NSEL
-                                with (IMIN (fetch (SELECTION CHLIM) of NSEL)
-                                           (ADD1 (\TEDIT.FIND.PROTECTED.END
-                                                  TEXTOBJ
-                                                  (fetch (SELECTION CH#) of OSEL)
-                                                  (ADD1 (\TEDIT.FIND.PROTECTED.END
-                                                         TEXTOBJ
-                                                         (fetch (SELECTION CH#) of OSEL)
-                                                         (SUB1 (fetch (SELECTION CHLIM) of NSEL]
-                             (replace (SELECTION CH#) of NSEL with (IMIN (fetch (SELECTION CHLIM)
-                                                                            of NSEL)
-                                                                         (fetch (SELECTION CH#)
-                                                                            of NSEL)))
-                             (SETQ FIXUPNEEDED T)            (* ; 
-        "Note that the L1/LN may be invalid as a result of this contraction.  Force a \FIXSEL later.")
-                             )))
-                  (PROGN (replace (SELECTION CHLIM) of NSEL with (fetch (SELECTION CHLIM)
-                                                                    of OSEL))
-                         (replace (SELECTION XLIM) of NSEL with (fetch (SELECTION XLIM) of OSEL))
-                         (replace (SELECTION YLIM) of NSEL with (fetch (SELECTION YLIM) of OSEL))
-                         (replace (SELECTION LN) of NSEL with (COPY (fetch (SELECTION LN)
-                                                                       of OSEL)))
-                         (replace (SELECTION CH#) of NSEL with (fetch (SELECTION CH#) of OSEL))
-                         (replace (SELECTION X0) of NSEL with (fetch (SELECTION X0) of OSEL))
-                         (replace (SELECTION Y0) of NSEL with (fetch (SELECTION Y0) of OSEL))
-                         (replace L1 of NSEL with (COPY (fetch L1 of OSEL)))
-                         (SETQ NPOINT (fetch POINT of OSEL]
-              (replace DCH of NSEL with (IDIFFERENCE (IMIN (ADD1 TEXTLEN)
-                                                           (fetch CHLIM of NSEL))
-                                               (fetch CH# of NSEL)))
+                     [replace (SELECTION CH#) of NEWSEL
+                        with (IMIN (fetch (SELECTION CH#) of NEWSEL)
+                                   (SELECTQ (fetch (SELECTION POINT) of OSEL)
+                                       (LEFT (fetch (SELECTION CH#) of OSEL))
+                                       (RIGHT (IDIFFERENCE (fetch (SELECTION CHLIM) of OSEL)
+                                                     (fetch (SELECTION DCH) of OSEL)))
+                                       (SHOULDNT]
+                     (replace (SELECTION X0) of NEWSEL with (fetch (SELECTION X0) of OSEL))
+                     (replace (SELECTION Y0) of NEWSEL with (fetch (SELECTION Y0) of OSEL))
+                     (replace (SELECTION L1) of NEWSEL with (COPY (fetch (SELECTION L1) of OSEL)))
+                     (CL:UNLESS (EQ SELOPERATION 'COPY)      (* ; 
+                                  "The old sel is in a protected area, can only extend to its start ")
+                         [replace (SELECTION CHLIM) of NEWSEL
+                            with (IMIN (fetch (SELECTION CHLIM) of NEWSEL)
+                                       (ADD1 (\TEDIT.FIND.PROTECTED.END
+                                              TEXTOBJ
+                                              (fetch (SELECTION CH#) of OSEL)
+                                              (ADD1 (\TEDIT.FIND.PROTECTED.END
+                                                     TEXTOBJ
+                                                     (fetch (SELECTION CH#) of OSEL)
+                                                     (SUB1 (fetch (SELECTION CHLIM) of NEWSEL]
+                         (replace (SELECTION CH#) of NEWSEL with (IMIN (fetch (SELECTION CHLIM)
+                                                                          of NEWSEL)
+                                                                       (fetch (SELECTION CH#)
+                                                                          of NEWSEL)))
+
+                         (* ;; 
+                      "L1/LN may be invalid as a result of this contraction.  Force a \FIXSEL later.")
+
+                         (SETQ FIXUPNEEDED T)))
+              (PROGN (replace (SELECTION CHLIM) of NEWSEL with (fetch (SELECTION CHLIM) of OSEL))
+                     (replace (SELECTION XLIM) of NEWSEL with (fetch (SELECTION XLIM) of OSEL))
+                     (replace (SELECTION YLIM) of NEWSEL with (fetch (SELECTION YLIM) of OSEL))
+                     (replace (SELECTION LN) of NEWSEL with (COPY (fetch (SELECTION LN) of OSEL)))
+                     (replace (SELECTION CH#) of NEWSEL with (fetch (SELECTION CH#) of OSEL))
+                     (replace (SELECTION X0) of NEWSEL with (fetch (SELECTION X0) of OSEL))
+                     (replace (SELECTION Y0) of NEWSEL with (fetch (SELECTION Y0) of OSEL))
+                     (replace L1 of NEWSEL with (COPY (fetch L1 of OSEL)))
+                     (SETQ NPOINT (fetch POINT of OSEL]
+          (replace DCH of NEWSEL with (IDIFFERENCE (IMIN (ADD1 TEXTLEN)
+                                                         (fetch CHLIM of NEWSEL))
+                                             (fetch CH# of NEWSEL)))
                                                              (* ; 
                                        "The selection's length cannot exceed that of the whole text.")
-              (replace CHLIM of NSEL with (IPLUS (fetch CH# of NSEL)
-                                                 (fetch DCH of NSEL)))
+          (replace CHLIM of NEWSEL with (IPLUS (fetch CH# of NEWSEL)
+                                               (fetch DCH of NEWSEL)))
                                                              (* ; 
                                                 "This assures that the CHLIM corresponds to the DCH.")
-              (replace POINT of NSEL with NPOINT)
-              (replace (SELECTION DX) of NSEL with (IDIFFERENCE (fetch XLIM of NSEL)
-                                                          (fetch X0 of NSEL)))
-              (COND
-                 ((NEQ (fetch SELOBJ of OSEL)
-                       (fetch SELOBJ of NSEL))
-                  (replace SELOBJ of NSEL with NIL)))
-              (COND
-                 (FIXUPNEEDED 
+          (replace POINT of NEWSEL with NPOINT)
+          (replace (SELECTION DX) of NEWSEL with (IDIFFERENCE (fetch XLIM of NEWSEL)
+                                                        (fetch X0 of NEWSEL)))
+          (CL:UNLESS (EQ (fetch SELOBJ of OSEL)
+                         (fetch SELOBJ of NEWSEL))
+                 (replace SELOBJ of NEWSEL with NIL))
+          (CL:WHEN FIXUPNEEDED
 
-                        (* ;; "We're in a menu, and this selection got contracted because of a protection violation.  Fix up everything.")
+              (* ;; "We're in a menu, and this selection got contracted because of a protection violation.  Fix up everything.")
 
-                        (\FIXSEL NSEL TEXTOBJ)))
-              (COND
-                 (SETOSELFLG                                 (* ; 
-                              "For whatever reason, it is wise to copy the new sel into the old one.")
-                        (\COPYSEL NSEL OSEL))
-                 (T                                          (* ; 
-                            "Otherwise, set the POINT of the old sel to correspond to the new sel's.")
-                                                             (* ; 
-                                                             "(replace POINT of OSEL with NPOINT)")
-                                                             (* ; 
-                 "THIS WAS REMOVED, BECAUSE EXTENDING A POINT-SELECTION WOULD DIE WHEN THIS WAS DONE")
-                    ))
-              (RETURN NSEL))
-             (T                                              (* ; 
-                                               "No new selection was made;  just return the old one.")
-                (RETURN OSEL])
+              (\FIXSEL NEWSEL TEXTOBJ))
+          (CL:WHEN SETOSELFLG                                (* ; 
+                                                   "It is wise to copy the new sel into the old one.")
+              (\COPYSEL NEWSEL OSEL))
+          (RETURN NEWSEL])
 
 (TEDIT.SELECT
   [LAMBDA (X Y TEXTOBJ REGION WORDSELFLG SELOPERATION WINDOW EXTENDING)
@@ -1169,202 +1155,106 @@
 (DEFINEQ
 
 (\FIXSEL
-  [LAMBDA (SEL TEXTOBJ THISWINDOW AVOIDINGTHISW)             (* ; "Edited  7-Oct-2022 23:22 by rmk")
-                                                             (* ; "Edited  5-Oct-2022 16:13 by rmk")
-                                                             (* ; "Edited  1-Oct-2022 15:59 by rmk")
-                                                             (* ; "Edited 25-Sep-2022 18:43 by rmk")
-                                                             (* ; "Edited 18-Sep-2022 23:42 by rmk")
+  [LAMBDA (SEL TEXTOBJ THISPANE AVOIDINGTHISP)               (* ; "Edited  5-Nov-2022 09:26 by rmk")
                                                              (* ; "Edited 31-May-91 12:26 by jds")
 
-    (* ;; "Given that the selection SEL contains the correct CH# and CHLIM, reset the Y0 X0, DX, and XLIM values.")
+    (* ;; "The CH# and CHLIM of the selection define that sequence of characters that it picks out in the text stream.  The first and last lines of that sequence defines the minimum and maximum y positions of the lines containing characters in that sequence, and the X starting X position in the first line and ending X position in the last line.  This function deermines for each pane the starting and ending lines of the selection that would be visible in that pane.")
+
+    (* ;; "TEXTOBJ has a sequence of lines for each pane, starting with the first line that is visible in that pane.  If a sequence of characters in a line shows up in 2 panes, most of the fields are shared (which characters, the X dimensions) but the lines are distinct.  The lines' YBOT is relative to the pane that it appears in.  They Y values change when the pane is scrolled or resized.")
 
     (PROG* [(CH# (fetch (SELECTION CH#) of SEL))
-            (CHLIM (fetch (SELECTION CHLIM) of SEL))
-            (THISLINE (fetch (TEXTOBJ THISLINE) of TEXTOBJ))
-            (WINDOW (fetch (TEXTOBJ \WINDOW) of TEXTOBJ))
-            (THISW (OR THISWINDOW (\TEDIT.MAINW TEXTOBJ)))
-            (WREG (AND THISW (DSPCLIPPINGREGION NIL THISW]
-           (CL:UNLESS (OR WINDOW THISW)                      (* ; "No window for this edit")
+            (CHLIM (IMIN (fetch (SELECTION CHLIM) of SEL)
+                         (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ)))
+            (PANES (fetch (TEXTOBJ \WINDOW) of TEXTOBJ))
+            (THISP (OR THISPANE (\TEDIT.MAINW TEXTOBJ]
+           (CL:UNLESS (OR PANES THISP)                       (* ; 
+                                                          "No pane for this selection, nothing to do")
                (RETURN))
-           (CL:UNLESS (AND AVOIDINGTHISW (fetch (SELECTION Y0) of SEL))
-               (replace (SELECTION Y0) of SEL with (fetch PTOP of WREG)))
-           (CL:UNLESS (AND AVOIDINGTHISW)
-               (fetch (SELECTION YLIM) of SEL)
+           (CL:UNLESS (AND AVOIDINGTHISP (fetch (SELECTION Y0) of SEL))
+               [replace (SELECTION Y0) of SEL with (fetch PTOP of (AND THISP (DSPCLIPPINGREGION
+                                                                              NIL THISP])
+           (CL:UNLESS (AND AVOIDINGTHISP (fetch (SELECTION YLIM) of SEL))
                (replace (SELECTION YLIM) of SEL with -1))
            (CL:UNLESS (fetch (SELECTION XLIM) of SEL)
                (replace (SELECTION XLIM) of SEL with -1))
-           (CL:UNLESS (fetch (SELECTION SET) of SEL)
-                  (RETURN))
+           (CL:UNLESS (fetch (SELECTION SET) of SEL)         (* ; 
+                                                             "Proceed only if a 'real' SELECTION")
+               (RETURN))
 
-     (* ;; "Selection L1 and L2 are lists of lines, one for each window that the selection appears in. The running (CAR L1) is the line for the current window")
+     (* ;; "Selection L1 and LN are lists of line-sequences, one for each pane that the selection appears in. The running (CAR L1) heads the line-sequence for the current pane.")
 
-           (for WW STARTFOUND inside WINDOW as L1 on (fetch (SELECTION L1) of SEL) as LN
-              on (fetch (SELECTION LN) of SEL) as LINES inside (fetch (TEXTOBJ LINES) of TEXTOBJ)
-              unless (AND THISWINDOW (EQ AVOIDINGTHISW (EQ THISWINDOW WW)))
-              do                                             (* ; 
-                                                             "Only if a 'real' SELECTION proceed")
-                 (RPLACA L1 NIL)
-                 (RPLACA LN NIL)
-                 [for (LINE _ (fetch (LINEDESCRIPTOR NEXTLINE) of LINES))
-                      TX by (fetch (LINEDESCRIPTOR NEXTLINE) of LINE) while LINE
-                    do (COND
-                          [(AND (IGEQ CH# (fetch (LINEDESCRIPTOR CHAR1) of LINE))
-                                (ILEQ CH# (fetch (LINEDESCRIPTOR CHARLIM) of LINE)))
-                                                             (* ; 
-                                            "The selection starts in this line.  Fix L1, X0, and Y0.")
-                           (SETQ STARTFOUND T)
-                           (replace (SELECTION Y0) of SEL with (fetch (LINEDESCRIPTOR YBOT)
+           (for PANE STARTLINE ENDLINE STARTFOUND ENDFOUND inside PANES as L1
+              on (fetch (SELECTION L1) of SEL) as LN on (fetch (SELECTION LN) of SEL) as PLINES
+              inside (fetch (TEXTOBJ LINES) of TEXTOBJ) unless (AND THISPANE (EQ AVOIDINGTHISP
+                                                                                 (EQ THISPANE PANE)))
+              when [SETQ STARTLINE (find LINE inlines (fetch (LINEDESCRIPTOR NEXTLINE) of PLINES)
+                                      first 
+                                            (* ;; 
+                                   "Turn off old selection lines in this pane, then see what happens")
+
+                                            (RPLACA L1 NIL)
+                                            (RPLACA LN NIL)
+                                      suchthat 
+
+                                            (* ;; 
+                      "This line is visible in PANE and embraces the selection's starting character.")
+
+                                            (OR (AND (IGEQ CH# (fetch (LINEDESCRIPTOR CHAR1)
                                                                   of LINE))
-                                                             (* ; 
-                                                         "Remember that this is a hardcopy-mode line")
-                           (RPLACA L1 LINE)
-                           (SETQ TX (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE))
-                                                             (* ; 
-                                 "Temp.  X value for scanning the line from left margin to the right")
-                           (replace (SELECTION X0) of SEL with (fetch (LINEDESCRIPTOR LEFTMARGIN)
-                                                                  of LINE))
-                           (CL:WHEN (IGREATERP CH# (fetch (LINEDESCRIPTOR CHAR1) of LINE))
-                                                             (* ; 
-              "Only bother formatting the line if the selection doesn't include the first character.")
-                               (CL:UNLESS (EQ (fetch DESC of THISLINE)
-                                              LINE)          (* ; 
-                                                "If this line isn't cached in THISLINE, reformat it.")
-                                   (SETQ LINE (\FORMATLINE TEXTOBJ NIL (fetch (LINEDESCRIPTOR CHAR1)
-                                                                          of LINE)
-                                                     LINE)))
-
-                               (* ;; 
-                      "Determine the CHARNO and x-location of the first selected character in LINE  ")
-
-                               [for CHARSLOT (CHNO _ (fetch (LINEDESCRIPTOR CHAR1) of LINE))
-                                  incharslots THISLINE until (IGEQ CHNO CH#)
-                                  do 
-                                     (* ;; 
-                                     "Update our running X-position in the SEL. We skip look-slots")
-
-                                     (if CHAR
-                                         then (add CHNO 1)
-                                              (add TX CHARW)
-                                              (freplace (SELECTION X0) of SEL with TX)
-                                       elseif (SMALLP CHARW)
-                                         then (add CHNO (IMINUS CHARW])]
-                          ((AND (IEQP CH# (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE)))
-                                (IGREATERP CH# (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ)))
-
-                           (* ;; 
- "The selection starts after the end of this line, but it's also the end of the text.  Select there.")
-
-                           (CL:UNLESS (EQ (fetch DESC of THISLINE)
-                                          LINE)              (* ; 
-                                                "If this line isn't cached in THISLINE, reformat it.")
-                               (\FORMATLINE TEXTOBJ NIL (fetch (LINEDESCRIPTOR CHAR1) of LINE)
-                                      LINE))
-                           (replace (SELECTION Y0) of SEL with (fetch (LINEDESCRIPTOR YBOT)
-                                                                  of LINE))
-                           (RPLACA L1 LINE)                  (* ; 
-                                                       "Make this line be the first in the selection")
-                           (replace (SELECTION X0) of SEL with (fetch (LINEDESCRIPTOR LXLIM)
+                                                     (ILEQ CH# (fetch (LINEDESCRIPTOR CHARLIM)
                                                                   of LINE)))
-                          ((AND (NOT STARTFOUND)
-                                (IGREATERP (fetch (LINEDESCRIPTOR CHAR1) of LINE)
-                                       CH#)
-                                (ILESSP (fetch (LINEDESCRIPTOR CHAR1) of LINE)
-                                       CHLIM))               (* ; 
-                                            "The selection starts before this line, so play catch-up")
-                           (replace (SELECTION Y0) of SEL with (fetch (LINEDESCRIPTOR YBOT)
-                                                                  of LINE))
-                           (RPLACA L1 LINE)                  (* ; 
-                                                "Grab this line and make it the apparent first line.")
-                           (replace (SELECTION X0) of SEL with (fetch (LINEDESCRIPTOR LEFTMARGIN)
-                                                                  of LINE))
-                           (SETQ STARTFOUND T)))
-                       (CL:WHEN [AND (ILEQ CH# (fetch (LINEDESCRIPTOR CHARLIM) of LINE))
-                                     (IGEQ CHLIM (fetch (LINEDESCRIPTOR CHAR1) of LINE))
-                                     (ILEQ CHLIM (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE]
-                                                             (* ; 
-                                          "The selection ends in this line.  Fix LN, XLIM, and YLIM.")
+                                                (AND (IEQP CH# (ADD1 (fetch (LINEDESCRIPTOR CHARLIM)
+                                                                        of LINE)))
+                                                     (IGREATERP CH# (fetch (TEXTOBJ TEXTLEN)
+                                                                       of TEXTOBJ]
+              do 
+                 (* ;; 
+      "If this selection starts AFTER the CR on a line and doesn't include it, stat at the next line")
 
-                           (* ;; "NB that it also has to START before the end of this line.  This eliminates the case of a 0-wide selection right after the last char on this line.")
+                 (CL:WHEN (AND (IEQP CHLIM (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of STARTLINE)))
+                               (EQ (fetch (SELECTION POINT) of SEL)
+                                   'RIGHT)
+                               (IEQP (fetch (SELECTION DCH) of SEL)
+                                     0)
+                               (fetch (LINEDESCRIPTOR NEXTLINE) of STARTLINE)
+                               (fetch (LINEDESCRIPTOR CR\END) of STARTLINE))
+                     (SETQ STARTLINE (fetch (LINEDESCRIPTOR NEXTLINE) of STARTLINE)))
+                 (RPLACA L1 STARTLINE)
+                 (CL:UNLESS STARTFOUND                       (* ; 
+                                                           " SEL X0, Y0 only need to be updated once")
+                     (SETQ STARTFOUND T)
+                     (replace (SELECTION X0) of SEL with (\TEDIT.CHARX TEXTOBJ STARTLINE CH#))
+                     (\FIXSEL.HCUNSCALE STARTLINE X0)
+                     (replace (SELECTION Y0) of SEL with (fetch (LINEDESCRIPTOR YBOT) of STARTLINE)))
+                 
+                 (* ;; "It is visible in this pane, where does it end?")
 
-                           (replace (SELECTION YLIM) of SEL with (fetch (LINEDESCRIPTOR YBOT)
-                                                                    of LINE))
-                                                             (* ; 
-                                                           "Set the lowest-Y value for the selection")
-                           (RPLACA LN LINE)                  (* ; "Remember the final line")
-                           (SETQ TX (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE))
-                                                             (* ; "Temp X position")
-                           (replace (SELECTION XLIM) of SEL with (fetch (LINEDESCRIPTOR LXLIM)
-                                                                    of LINE))
-                                                             (* ; 
-                           "Start by assuming that the selection extends all the way across the line")
-                           [COND
-                              [(AND (IEQP CHLIM (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE)))
-                                    (EQ (fetch (SELECTION POINT) of SEL)
-                                        'RIGHT)
-                                    (IEQP (fetch (SELECTION DCH) of SEL)
-                                          0)
-                                    (fetch (LINEDESCRIPTOR NEXTLINE) of LINE)
-                                    (fetch (LINEDESCRIPTOR CR\END) of LINE))
-                                                             (* ; 
-                              "This selection starts AFTER the CR on a line, and doesn't include it.")
-                               (RPLACA LN (fetch (LINEDESCRIPTOR NEXTLINE) of LINE))
-                                                             (* ; 
-                            "Change the selection to start on the next line, at the margin, instead.")
-                               (replace (SELECTION XLIM) of SEL with (fetch (LINEDESCRIPTOR 
-                                                                                   LEFTMARGIN)
-                                                                        of (CAR LN)))
-                               (replace (SELECTION YLIM) of SEL with (fetch (LINEDESCRIPTOR YBOT)
-                                                                        of (CAR LN]
-                              ((ILEQ CHLIM (IMIN (fetch (LINEDESCRIPTOR CHARLIM) of LINE)
-                                                 (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ)))
-                                                             (* ; 
-                  "Only bother formatting if the selection doesn't include the last char on the line")
-                               (CL:UNLESS (EQ (fetch DESC of THISLINE)
-                                              LINE)          (* ; 
-                                           "If this line isn't cached in THISLINE, then reformat it.")
-                                   (\FORMATLINE TEXTOBJ NIL (fetch (LINEDESCRIPTOR CHAR1)
-                                                               of LINE)
-                                          LINE))
-                               (for CHARSLOT (CHNO _ (fetch (LINEDESCRIPTOR CHAR1) of LINE))
-                                  incharslots THISLINE until (IGEQ CHNO CHLIM)
-                                  do (if CHAR
-                                         then                (* ; 
-                                                "Not yet;  update our running X-position in the SEL.")
-                                              (add CHNO 1)
-                                              (add TX CHARW)
-                                              (replace (SELECTION XLIM) of SEL with TX)
-                                       elseif (SMALLP CHARW)
-                                         then (add CHNO (IMINUS CHARW]
-                           (RETURN)                          (* ; 
-                                     "And stop looking for an ending line--we've obviously found it!")
-                           (CL:WHEN (AND (IEQP CHLIM (ADD1 (fetch (LINEDESCRIPTOR CHARLIM)
-                                                              of LINE)))
-                                         (ILEQ CH# (fetch (LINEDESCRIPTOR CHARLIM) of LINE)))
-                                                             (* ; 
-                                   "The selection ends either here or at the start of the next line.")
-                                                             (* ; 
-                                                    "Something else on this line is really selected.")
-                               (replace (SELECTION YLIM) of SEL with (fetch (LINEDESCRIPTOR YBOT)
-                                                                        of LINE))
-                               (RPLACA LN LINE)
-                               (replace (SELECTION XLIM) of SEL with (fetch (LINEDESCRIPTOR LXLIM)
-                                                                        of LINE))))]
-                 (\FIXSEL.HCUNSCALE (CAR L1)
-                        X0)                                  (* ; "Scale for hardcopy-display mode")
-                 (\FIXSEL.HCUNSCALE (CAR LN)
-                        XLIM)
+                 [SETQ ENDLINE (find LINE inlines STARTLINE
+                                  suchthat 
+
+                                        (* ;; "CHLIM is in LINE or")
+
+                                        (AND (IGEQ CHLIM (fetch (LINEDESCRIPTOR CHAR1) of LINE))
+                                             (ILEQ CHLIM (ADD1 (fetch (LINEDESCRIPTOR CHARLIM)
+                                                                  of LINE]
+                 (CL:WHEN ENDLINE
+                     (RPLACA LN ENDLINE)
+                     (CL:UNLESS ENDFOUND
+                         (SETQ ENDFOUND T)
+                         (replace (SELECTION XLIM) of SEL with (\TEDIT.CHARX TEXTOBJ ENDLINE CHLIM))
+                         (\FIXSEL.HCUNSCALE ENDLINE XLIM)
+                         (replace (SELECTION YLIM) of SEL with (fetch (LINEDESCRIPTOR YBOT)
+                                                                  of ENDLINE))))
                  (COND
-                    [(IEQP 0 (fetch (SELECTION DCH) of SEL)) (* ; 
-             "If this is a point selection, put it on the correct side of the character we selected.")
-                     (replace (SELECTION DX) of SEL with 0)
-                     (COND
+                    ((IEQP 0 (fetch (SELECTION DCH) of SEL)) (* ; 
+                                             "Put the caret on the proper side of a point selection.")
+                     [COND
                         ((EQ (fetch (SELECTION POINT) of SEL)
                              'LEFT)
                          (replace (SELECTION XLIM) of SEL with (fetch (SELECTION X0) of SEL)))
                         (T (replace (SELECTION X0) of SEL with (fetch (SELECTION XLIM) of SEL]
-                    (T                                       (* ; 
-                                                             "Otherwise, fix DX for the selection")
-                       (replace (SELECTION DX) of SEL with (IDIFFERENCE (fetch (SELECTION XLIM)
+                     (replace (SELECTION DX) of SEL with 0))
+                    (T (replace (SELECTION DX) of SEL with (IDIFFERENCE (fetch (SELECTION XLIM)
                                                                            of SEL)
                                                                   (fetch (SELECTION X0) of SEL])
 
@@ -1437,6 +1327,38 @@
                        (fetch (TEXTOBJ DELETESEL) of TEXTOBJ)) when (NEQ SELN EXCEPT)
        do (AND (fetch (SELECTION SET) of SELN)
                (\FIXSEL SELN TEXTOBJ])
+
+(\TEDIT.CHARX
+  [LAMBDA (TEXTOBJ LINE CH#)                                 (* ; "Edited  3-Nov-2022 15:33 by rmk")
+
+    (* ;; "Return the X position of character CH# in LINE.  May need to reformat")
+
+    (if (ILEQ CH# (fetch (LINEDESCRIPTOR CHAR1) of LINE))
+        then 
+             (* ;; "Assume left margin if CH# is CHAR1")
+
+             (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE)
+      elseif (IGEQ CH# (fetch (LINEDESCRIPTOR CHARLIM) of LINE))
+        then 
+             (* ;; "Assume line-end if CH# is at the end.")
+
+             (fetch (LINEDESCRIPTOR LXLIM) of LINE)
+      else (LET ((THISLINE (fetch (TEXTOBJ THISLINE) of TEXTOBJ)))
+                (CL:UNLESS (EQ LINE (fetch DESC of THISLINE))(* ; 
+                                                             "Reformat if not cached in THISLINE")
+                    (SETQ LINE (\FORMATLINE TEXTOBJ NIL (fetch (LINEDESCRIPTOR CHAR1) of LINE)
+                                      LINE)))
+                (for CHARSLOT (TX _ (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE))
+                     (CHNO _ (fetch (LINEDESCRIPTOR CHAR1) of LINE)) incharslots THISLINE
+                   until (IGEQ CHNO CH#) do 
+                                            (* ;; 
+                                       "Update our running X-position in the SEL. We skip look-slots")
+
+                                            (if CHAR
+                                                then (add CHNO 1)
+                                                     (add TX CHARW)
+                                              elseif (SMALLP CHARW)
+                                                then (add CHNO CHARW)) finally (RETURN TX])
 )
 (DEFINEQ
 
@@ -1574,6 +1496,7 @@
 
 (\SHOWSEL.HILIGHT
   [LAMBDA (TEXTOBJ SEL LINES L1 LN DS SHADEHEIGHT SHADE X0 XLIM)
+                                                             (* ; "Edited  4-Nov-2022 12:43 by rmk")
                                                              (* ; "Edited 11-Oct-2022 20:55 by rmk")
                                                              (* ; "Edited  5-Oct-2022 16:12 by rmk")
                                                              (* ; "Edited  4-Oct-2022 13:12 by rmk")
@@ -1582,6 +1505,10 @@
 
 (* ;;; "Do the actual highlighting and unhighlighting of a selection for \SHOWSEL")
 
+    (CL:UNLESS X0
+        (SETQ X0 (fetch (SELECTION X0) of SEL)))
+    (CL:UNLESS XLIM
+        (SETQ XLIM (fetch (SELECTION XLIM) of SEL)))
     (PROG (LL LEFT RIGHT)
           (CL:WHEN (OR L1 LN)                                (* ; 
                   "One end or the other is on-screen, so it makes sense to try displaying something.")
@@ -1590,10 +1517,8 @@
                        (IGEQ (fetch (LINEDESCRIPTOR YBOT) of L1)
                              0))                             (* ; 
                            "It's all in a single line;  just underline the right section and beat it")
-                  (BITBLT NIL 0 0 DS (OR X0 (fetch (SELECTION X0) of SEL))
-                         (fetch (LINEDESCRIPTOR YBOT) of L1)
-                         (IDIFFERENCE (OR XLIM (fetch (SELECTION XLIM) of SEL))
-                                (OR X0 (fetch (SELECTION X0) of SEL)))
+                  (BITBLT NIL 0 0 DS X0 (fetch (LINEDESCRIPTOR YBOT) of L1)
+                         (IDIFFERENCE XLIM X0)
                          (IMIN SHADEHEIGHT (fetch (LINEDESCRIPTOR LHEIGHT) of L1))
                          'TEXTURE
                          'INVERT SHADE))
@@ -1603,9 +1528,8 @@
                                      "If the first line is known, underline the right section of it.")
                         (CL:SETQ RIGHT (\SHOWSEL.HCUNSCALE L1 (fetch (LINEDESCRIPTOR LXLIM)
                                                                  of L1)))
-                        (BITBLT NIL 0 0 DS (OR X0 (fetch (SELECTION X0) of SEL))
-                               (fetch (LINEDESCRIPTOR YBOT) of L1)
-                               (IDIFFERENCE RIGHT (OR X0 (fetch (SELECTION X0) of SEL)))
+                        (BITBLT NIL 0 0 DS X0 (fetch (LINEDESCRIPTOR YBOT) of L1)
+                               (IDIFFERENCE RIGHT X0)
                                (IMIN SHADEHEIGHT (fetch (LINEDESCRIPTOR LHEIGHT) of L1))
                                'TEXTURE
                                'INVERT SHADE))
@@ -2031,20 +1955,20 @@
                  NIL ONFLG])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (11845 24751 (TEDIT.SEL.AS.STRING 11855 . 13262) (TEDIT.SELECTED.PIECES 13264 . 14233) (
-\TEDIT.FIND.FIRST.LINE 14235 . 18113) (\TEDIT.FIND.LAST.LINE 18115 . 19395) (
-\TEDIT.FIND.OVERLAPPING.LINE 19397 . 19811) (\TEDIT.FIND.PROTECTED.END 19813 . 21741) (
-\TEDIT.FIND.PROTECTED.START 21743 . 24086) (\TEDIT.WORD.BOUND 24088 . 24749)) (24795 25274 (
-\CREATE.TEDIT.SELECTION 24805 . 24875) (\CREATE.TEDIT.SHIFTEDSELECTION 24877 . 24980) (
-\CREATE.TEDIT.MOVESELECTION 24982 . 25111) (\CREATE.TEDIT.DELETESELECTION 25113 . 25272)) (26026 74644
- (TEDIT.EXTEND.SEL 26036 . 37692) (TEDIT.SELECT 37694 . 42731) (TEDIT.SCAN.LINE 42733 . 56328) (
-TEDIT.SELECT.LINE.SCANNER 56330 . 70555) (\TEDIT.SELECT.OBJECT 70557 . 74642)) (74645 95313 (\FIXSEL 
-74655 . 90275) (\TEDIT.FIXDELSEL 90277 . 93333) (\TEDIT.FIXINSSEL 93335 . 94597) (\TEDIT.FIXSELS 94599
- . 95311)) (95314 98768 (TEDIT.RESET.EXTEND.PENDING.DELETE 95324 . 95901) (\TEDIT.SET.SEL.LOOKS 95903
- . 98766)) (98769 118788 (\SHOWSEL 98779 . 103927) (\SHOWSEL.HILIGHT 103929 . 109071) (
-\TEDIT.UPDATE.SHOWSEL 109073 . 114866) (\TEDIT.SHOWSELS 114868 . 115569) (\TEDIT.REFRESH.SHOWSEL 
-115571 . 118786)) (118789 122634 (\COPYSEL 118799 . 120963) (\TEDIT.SEL.CHANGED? 120965 . 122632)) (
-122687 135512 (TEDIT.GETPOINT 122697 . 123406) (TEDIT.GETSEL 123408 . 123648) (TEDIT.MAKESEL 123650 . 
-124658) (TEDIT.SCANSEL 124660 . 125312) (TEDIT.SET.SEL.LOOKS 125314 . 128469) (TEDIT.SETSEL 128471 . 
-134804) (TEDIT.SHOWSEL 134806 . 135510)))))
+  (FILEMAP (NIL (11960 24866 (TEDIT.SEL.AS.STRING 11970 . 13377) (TEDIT.SELECTED.PIECES 13379 . 14348) (
+\TEDIT.FIND.FIRST.LINE 14350 . 18228) (\TEDIT.FIND.LAST.LINE 18230 . 19510) (
+\TEDIT.FIND.OVERLAPPING.LINE 19512 . 19926) (\TEDIT.FIND.PROTECTED.END 19928 . 21856) (
+\TEDIT.FIND.PROTECTED.START 21858 . 24201) (\TEDIT.WORD.BOUND 24203 . 24864)) (24910 25389 (
+\CREATE.TEDIT.SELECTION 24920 . 24990) (\CREATE.TEDIT.SHIFTEDSELECTION 24992 . 25095) (
+\CREATE.TEDIT.MOVESELECTION 25097 . 25226) (\CREATE.TEDIT.DELETESELECTION 25228 . 25387)) (26141 73306
+ (TEDIT.EXTEND.SEL 26151 . 36354) (TEDIT.SELECT 36356 . 41393) (TEDIT.SCAN.LINE 41395 . 54990) (
+TEDIT.SELECT.LINE.SCANNER 54992 . 69217) (\TEDIT.SELECT.OBJECT 69219 . 73304)) (73307 87976 (\FIXSEL 
+73317 . 81086) (\TEDIT.FIXDELSEL 81088 . 84144) (\TEDIT.FIXINSSEL 84146 . 85408) (\TEDIT.FIXSELS 85410
+ . 86122) (\TEDIT.CHARX 86124 . 87974)) (87977 91431 (TEDIT.RESET.EXTEND.PENDING.DELETE 87987 . 88564)
+ (\TEDIT.SET.SEL.LOOKS 88566 . 91429)) (91432 111411 (\SHOWSEL 91442 . 96590) (\SHOWSEL.HILIGHT 96592
+ . 101694) (\TEDIT.UPDATE.SHOWSEL 101696 . 107489) (\TEDIT.SHOWSELS 107491 . 108192) (
+\TEDIT.REFRESH.SHOWSEL 108194 . 111409)) (111412 115257 (\COPYSEL 111422 . 113586) (
+\TEDIT.SEL.CHANGED? 113588 . 115255)) (115310 128135 (TEDIT.GETPOINT 115320 . 116029) (TEDIT.GETSEL 
+116031 . 116271) (TEDIT.MAKESEL 116273 . 117281) (TEDIT.SCANSEL 117283 . 117935) (TEDIT.SET.SEL.LOOKS 
+117937 . 121092) (TEDIT.SETSEL 121094 . 127427) (TEDIT.SHOWSEL 127429 . 128133)))))
 STOP

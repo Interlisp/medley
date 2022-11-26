@@ -1,4 +1,4 @@
-#re*******************************************************************************
+#*******************************************************************************
 # buidLoadup.yml
 #
 # Interlisp workflow to build Medley release and push it to github. This workflow
@@ -59,8 +59,8 @@ jobs:
       - id: force
         run: >
           if [ '${{ toJSON(inputs) }}' = 'null'  ];
-          then echo ::set-output name=force::'${{ github.event.inputs.force }}'; echo "workflow_dispatch";
-          else echo ::set-output name=force::'${{ inputs.force }}'; echo "workflow_call";
+          then echo "force=${{ github.event.inputs.force }}" >> $GITHUB_OUTPUT; echo "workflow_dispatch";
+          else echo "force=${{ inputs.force }}" >> $GITHUB_OUTPUT; echo "workflow_call";
           fi
         
 
@@ -79,7 +79,7 @@ jobs:
     steps: 
       # Checkout the actions for this repo owner
       - name: Checkout Actions
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ github.repository_owner }}/.github
           path: ./Actions_${{ github.sha }}
@@ -110,7 +110,7 @@ jobs:
     steps:
       # Checkout the actions for this repo owner
       - name: Checkout Actions
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ github.repository_owner }}/.github
           path: ./Actions_${{ github.sha }}
@@ -118,7 +118,7 @@ jobs:
 
       # Checkout latest commit
       - name: Checkout Medley
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       # Setup release tag
       - name: Setup Release Tag
@@ -129,20 +129,20 @@ jobs:
       - name: Setup Environment Variables
         id: setup_env
         run: |
-          echo ::set-output name=build_time::$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
 
       # Get Maiko release information, retrieves the name of the latest
       # release.  Used to download the correct Maiko release
       - name: Get Maiko Release Information
         id: latest_version
-        uses: abatilo/release-info-action@v1.3.0
+        uses: abatilo/release-info-action@v1.3.2
         with:
           owner: ${{ github.repository_owner }}
           repo: maiko
           
       # Download Maiko Release Assets
       - name: Download Release Assets
-        uses: robinraju/release-downloader@v1.2
+        uses: robinraju/release-downloader@v1.6
         with:
           repository: ${{ github.repository_owner }}/maiko
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -165,24 +165,20 @@ jobs:
 
       - name: Build loadups release tar
         run: |
-          cp -p tmp/full.sysout tmp/lisp.sysout tmp/whereis.hash loadups/
-          cp -p tmp/exports.all library/
           cd ..
-          tar cfz medley/tmp/${release_tag}-loadups.tgz        \
+          tar cfz medley/tmp/${RELEASE_TAG}-loadups.tgz        \
             medley/loadups/lisp.sysout               \
             medley/loadups/full.sysout               \
             medley/loadups/whereis.hash              \
             medley/library/exports.all
-
-        env:
-          release_tag: ${{ steps.tag.outputs.release_tag }}
       
       - name: Build runtime release tar
         run: |
           cd ..
-          tar cfz medley/tmp/${release_tag}-runtime.tgz          \
+          tar cfz medley/tmp/${RELEASE_TAG}-runtime.tgz          \
                      --exclude "*~" --exclude "*#*"              \
                      --exclude exports.all                       \
+                     medley/clos                                 \
                      medley/docs/dinfo                           \
                      medley/doctools                             \
                      medley/greetfiles                           \
@@ -197,40 +193,25 @@ jobs:
                      medley/lispusers                            \
                      medley/sources                              \
                      medley/internal
-        env:
-          release_tag: ${{ steps.tag.outputs.release_tag }}
 
-
-      - name: "Create release"
-        uses: "actions/github-script@v5"
+      - name: Delete existing release with same tag (if any)
+        uses: cb80/delrel@latest
         with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-          script: |
-            try {
-              await github.rest.repos.createRelease({
-                draft: false,
-                generate_release_notes: true,
-                name: process.env.release_tag,
-                owner: context.repo.owner,
-                prerelease: false,
-                repo: context.repo.repo,
-                tag_name: process.env.release_tag,
-              });
-            } catch (error) {
-              core.setFailed(error.message);
-            }
-        env:
-          release_tag: ${{ steps.tag.outputs.release_tag }}
+            tag: ${{ env.RELEASE_TAG }} 
+        continue-on-error: true
 
-      - name: "Upload release assets"
-        uses: AButler/upload-release-assets@v2.0
-        with:
-          files: 'tmp/${{ env.release_tag }}-loadups.tgz;tmp/${{ env.release_tag }}-runtime.tgz'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          release-tag: ${{ env.release_tag }}
-        env:
-          release_tag: ${{ steps.tag.outputs.release_tag }}
-
+      - name: Push the release
+        uses: ncipollo/release-action@v1
+        with: 
+          allowUpdates: true
+          artifacts:
+            tmp/${{ env.RELEASE_TAG }}-loadups.tgz,
+            tmp/${{ env.RELEASE_TAG }}-runtime.tgz
+          tag: ${{ env.RELEASE_TAG }}
+          draft: false
+          prerelease: false
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
 ######################################################################################
 
@@ -249,7 +230,7 @@ jobs:
     steps: 
       # Checkout the actions for this repo owner
       - name: Checkout Actions
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ github.repository_owner }}/.github
           path: ./Actions_${{ github.sha }}
@@ -265,6 +246,6 @@ jobs:
       - name: Output
         id: output
         run: |
-          echo ::set-output name=build_successful::'true'
+          echo "build_successful='true'" >> $GITHUB_OUTPUT
           
 ######################################################################################

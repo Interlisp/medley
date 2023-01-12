@@ -147,7 +147,13 @@ jobs:
       - name: Setup Environment Variables
         id: setup_env
         run: |
-          echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> ${GITHUB_OUTPUT}
+          echo "TARBALL_DIR=installers/deb/tmp/tarballs" >>${GITHUB_ENV}
+          echo "DEBS_DIR=installers/deb/debs" >>${GITHUB_ENV}
+
+      # Setup some needed dirs in workspace
+      - name: Create work dirs
+        run: mkdir -p ${TARBALL_DIR}
 
       # Get Maiko release information, retrieves the name of the latest
       # release.  Used to download the correct Maiko release
@@ -165,16 +171,17 @@ jobs:
           repository: ${{ github.repository_owner }}/maiko
           token: ${{ secrets.GITHUB_TOKEN }}
           latest: true
-          fileName: "${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz" 
+          out-file-path: ${{ env.TARBALL_DIR }}
+          fileName: "${{ steps.latest_version.outputs.latest_tag }}-linux.*.tgz" 
 
-      - name: Untar Maiko Release
+      - name: Untar Maiko Release for use in loadup
         run: |
-          tar -xvzf "${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz"
+          tar -xzf "tmp/tarballs/${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz"
 
       - name: Install vnc
         run: sudo apt-get update && sudo apt-get install -y tightvncserver
 
-      - name: Build Loadout
+      - name: Build Loadup sysouts and databases
         run: |
           Xvnc -geometry 1280x720 :0 &
           export DISPLAY=":0"
@@ -184,7 +191,7 @@ jobs:
       - name: Build loadups release tar
         run: |
           cd ..
-          tar cfz medley/tmp/${RELEASE_TAG}-loadups.tgz        \
+          tar cfz medley/${TARBALL_DIR}/${RELEASE_TAG}-loadups.tgz        \
             medley/loadups/lisp.sysout               \
             medley/loadups/full.sysout               \
             medley/loadups/whereis.hash              \
@@ -193,7 +200,7 @@ jobs:
       - name: Build runtime release tar
         run: |
           cd ..
-          tar cfz medley/tmp/${RELEASE_TAG}-runtime.tgz          \
+          tar cfz medley/${TARBALL_DIR}/${RELEASE_TAG}-runtime.tgz          \
                      --exclude "*~" --exclude "*#*"              \
                      --exclude exports.all                       \
                      medley/clos                                 \
@@ -212,6 +219,11 @@ jobs:
                      medley/sources                              \
                      medley/internal
 
+      - name: Build .deb files for 3 architectures
+        run: |
+          cd installers/deb
+          ./build_deb
+
       - name: Delete existing release with same tag (if any)
         uses: cb80/delrel@latest
         with:
@@ -223,8 +235,9 @@ jobs:
         with: 
           allowUpdates: true
           artifacts:
-            tmp/${{ env.RELEASE_TAG }}-loadups.tgz,
-            tmp/${{ env.RELEASE_TAG }}-runtime.tgz
+            ${{ env.TARBALL_DIR }}/${{ env.RELEASE_TAG }}-loadups.tgz,
+            ${{ env.TARBALL_DIR }}/${{ env.RELEASE_TAG }}-runtime.tgz,
+            ${{ env.DEBS_DIR }}/*.deb
           tag: ${{ env.RELEASE_TAG }}
           draft: ${{ needs.inputs.outputs.draft }}
           prerelease: false

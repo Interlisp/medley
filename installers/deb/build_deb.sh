@@ -14,7 +14,7 @@
 tarball_dir=tmp/tarballs
 
 #  Make sure we are in the right directory
-if [ ! -f ./control ];
+if [ ! -f ./control-linux ];
 then
   echo "Can't find ./control file."
   echo "Incorrect cwd?"
@@ -99,7 +99,9 @@ do
     if [[ ${wslp} = wsl && ${arch} = x86_64 ]];
     then
       pushd ./tmp >/dev/null
-      wget https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
+      rm -rf vncviewer64-1.12.0.exe
+      wget -q https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
+      mkdir -p ${il_dir}/wsl
       cp -p vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
       popd >/dev/null
     fi

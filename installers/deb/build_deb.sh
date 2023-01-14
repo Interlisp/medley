@@ -24,8 +24,8 @@ then
 fi
 
 
-#  If not running as a github action, then download the tarballs
-if [ -z "${GITHUB_WORKSPACE}" ];
+#  If running as a github action or -t arg, then skip downloading the tarballs
+if ! [[ -n "${GITHUB_WORKSPACE}" || "$1" = "-t" ]];
 then
   #  First, make sure gh is available and we are logged in to github
   if [ -z "$(which gh)" ];
@@ -46,6 +46,7 @@ then
   mkdir ./tmp
   # then download the maiko and medley tarballs
   mkdir -p ${tarball_dir}
+  echo "Fetching maiko and medley release tarballs"
   gh release download --repo interlisp/maiko --dir ${tarball_dir} --pattern "*.tgz"
   gh release download --repo interlisp/medley --dir ${tarball_dir} --pattern "*.tgz"
 fi
@@ -56,35 +57,59 @@ medley_release=$(echo medley-*-loadups.tgz | sed "s/medley-\(.*\)-loadups.tgz/\1
 maiko_release=$(echo maiko-*-linux.x86_64.tgz | sed "s/maiko-\(.*\)-linux.x86_64.tgz/\1/")
 popd >/dev/null 2>/dev/null
 
-# For each arch create a deb file
-for arch_base in x86_64^amd64 armv7l^armhf aarch64^arm64
+
+# For linux and wsl create packages for each arch
+for wslp in linux wsl
 do
-  arch=${arch_base%^*}
-  debian_arch=${arch_base#*^}
-  pkg_dir=tmp/pkg/${arch}
-  #
-  # set up the pkg directories for this arch using the release tarballs
-  #
-  mkdir -p ${pkg_dir}
-  mkdir -p ${pkg_dir}/DEBIAN
-  sed \
+  # For each arch create a deb file
+  for arch_base in x86_64^amd64 armv7l^armhf aarch64^arm64
+  do
+    if [[ ${wslp} = wsl && ${arch_base} = armv7l^armhf ]];
+    then
+      continue
+    fi
+    arch=${arch_base%^*}
+    debian_arch=${arch_base#*^}
+    pkg_dir=tmp/pkg/${arch}
+    #
+    # Set up the pkg directories for this arch using the release tarballs
+    #
+    #    Copy in the right control file, modifying as needed
+    rm -rf ${pkg_dir}
+    mkdir -p ${pkg_dir}
+    mkdir -p ${pkg_dir}/DEBIAN
+    sed \
       -e "s/--ARCH--/${debian_arch}/" \
       -e "s/--RELEASE--/${medley_release}_${maiko_release}/" \
-      <control >${pkg_dir}/DEBIAN/control
-  #
-  il_dir=${pkg_dir}/usr/local/interlisp
-  mkdir -p ${il_dir}
-  tar -x -z -C ${il_dir} \
-            -f "${tarball_dir}/maiko-${maiko_release}-linux.${arch}.tgz"
-  tar -x -z -C ${il_dir} \
-            -f "${tarball_dir}/medley-${medley_release}-runtime.tgz"
-  tar -x -z -C ${il_dir} \
-            -f "${tarball_dir}/medley-${medley_release}-loadups.tgz"
-  #
-  # create the deb file for this arch
-  #
-  mkdir -p debs
-  dpkg-deb --build ${pkg_dir} debs/medley-${medley_release}_${maiko_release}-${arch}.deb
+      <control-${wslp} >${pkg_dir}/DEBIAN/control
+    #
+    il_dir=${pkg_dir}/usr/local/interlisp
+    #    Maiko and Medley files to il_dir (/usr/local/interlisp)
+    mkdir -p ${il_dir}
+    tar -x -z -C ${il_dir} \
+              -f "${tarball_dir}/maiko-${maiko_release}-linux.${arch}.tgz"
+    tar -x -z -C ${il_dir} \
+              -f "${tarball_dir}/medley-${medley_release}-runtime.tgz"
+    tar -x -z -C ${il_dir} \
+              -f "${tarball_dir}/medley-${medley_release}-loadups.tgz"
+    #     Postint script links /usr/local/bin/medley to medley.sh script
+    echo "#!/bin/bash" >>${pkg_dir}/DEBIAN/postint
+    echo "ln -s ${il_dir#${pkg_dir}}/medley/scripts/medley.sh /usr/local/bin/medley" >>${pkg_dir}/DEBIAN/postint
+    #     For wsl scripts, include the vncviewer.exe
+    if [[ ${wslp} = wsl && ${arch} = x86_64 ]];
+    then
+      pushd ./tmp >/dev/null
+      wget https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
+      cp -p vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
+      popd >/dev/null
+    fi
+    #
+    # Create the deb file for this arch
+    #
+    mkdir -p debs
+    filename=debs/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.deb
+    rm -rf ${filename}
+    dpkg-deb --build ${pkg_dir} ${filename}
+  done
 done
-
 

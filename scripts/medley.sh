@@ -63,7 +63,7 @@ done
 ps ax | grep ldex | grep --quiet "\-id ${run_id}"
 if [ $? -eq 0 ];
 then
-  echo "Another instance of Medley Interlisp is already running with the id \"${run_id}\".
+  echo "Another instance of Medley Interlisp is already running with the id \"${run_id}\"."
   echo "Only a single instance with a given id can be run at the same time."
   echo "Please retry using the \"-id <name>\" argument to give this new instance a different id."
   echo "Exiting"
@@ -83,6 +83,7 @@ if [ ! -e ${LOGINDIR} ];
 then
   mkdir -p ${LOGINDIR}
 elif [ ! -d ${LOGINDIR} ];
+then
   echo "ERROR: Medley requires a directory named ${LOGINDIR}."
   echo "But ${LOGINDIR} exists appears not be a directory."
   echo "Exiting"
@@ -90,13 +91,13 @@ elif [ ! -d ${LOGINDIR} ];
 fi
 mkdir -p ${LOGINDIR}/vmem
 
-if [[ ${wsl} = 'false' || ${use_vnc} = 'false' ];
+if [[ ${wsl} = false || ${use_vnc} = false ]];
 then
   # If not using vnc, just call run-medley
-  ${MEDLEY_DIR}/run-medley -id ${run_id} ${run_args}
+  ${MEDLEYDIR}/run-medley -id ${run_id} ${run_args}
 else
   # do the vnc thing on wsl
-  source ${MEDLEY_DIR}/scripts/medley_vnc.sh
+  source ${MEDLEYDIR}/scripts/medley_vnc.sh
 fi
 
 

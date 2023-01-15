@@ -9,7 +9,7 @@
 #    Copyright 2023 by Interlisp.org
 #
 ###############################################################################
-#
+# set -x
 
 tarball_dir=tmp/tarballs
 
@@ -92,9 +92,11 @@ do
               -f "${tarball_dir}/medley-${medley_release}-runtime.tgz"
     tar -x -z -C ${il_dir} \
               -f "${tarball_dir}/medley-${medley_release}-loadups.tgz"
-    #     Postint script links /usr/local/bin/medley to medley.sh script
-    echo "#!/bin/bash" >>${pkg_dir}/DEBIAN/postint
-    echo "ln -s ${il_dir#${pkg_dir}}/medley/scripts/medley.sh /usr/local/bin/medley" >>${pkg_dir}/DEBIAN/postint
+    #     Configure postinst and postrm scripts and put in place in DEBIAN dir
+    sed -e "s/--MEDLEYDIR--/${MEDLEYDIR}/g" <postinst >${pkg_dir}/DEBIAN/postinst
+    chmod +x ${pkg_dir}/DEBIAN/postinst
+    sed -e "s/--MEDLEYDIR--/${MEDLEYDIR}/g" <postrm >${pkg_dir}/DEBIAN/postrm
+    chmod +x ${pkg_dir}/DEBIAN/postrm
     #     For wsl scripts, include the vncviewer.exe
     if [[ ${wslp} = wsl && ${arch} = x86_64 ]];
     then

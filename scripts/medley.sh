@@ -14,7 +14,9 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-#
+# 
+
+#set -x
 
 export IL_DIR=/usr/local/interlisp
 export MEDLEYDIR=${IL_DIR}/medley
@@ -30,10 +32,10 @@ else
 fi
 
 # Process args
-run_args=""
+run_args=()
 run_id="default"
 use_vnc='false'
-while [ "$#" -ne 0 ]; 
+while [ "$#" -ne 0 ];
 do
   case "$1" in
     -i | --id)
@@ -53,7 +55,7 @@ do
       fi
       ;;
     *)
-      run_args="${run_args} $1"
+      run_args+=("$1")
       ;;
   esac
   shift
@@ -65,7 +67,7 @@ if [ $? -eq 0 ];
 then
   echo "Another instance of Medley Interlisp is already running with the id \"${run_id}\"."
   echo "Only a single instance with a given id can be run at the same time."
-  echo "Please retry using the \"-id <name>\" argument to give this new instance a different id."
+  echo "Please retry using the \"--id <name>\" argument to give this new instance a different id."
   echo "Exiting"
   exit 3
 fi
@@ -94,7 +96,7 @@ mkdir -p ${LOGINDIR}/vmem
 if [[ ${wsl} = false || ${use_vnc} = false ]];
 then
   # If not using vnc, just call run-medley
-  ${MEDLEYDIR}/run-medley -id ${run_id} ${run_args}
+  ${MEDLEYDIR}/run-medley -id "${run_id}" "${run_args[@]}"
 else
   # do the vnc thing on wsl
   source ${MEDLEYDIR}/scripts/medley_vnc.sh

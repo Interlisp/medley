@@ -84,6 +84,7 @@ do
       <control-${wslp} >${pkg_dir}/DEBIAN/control
     #
     il_dir=${pkg_dir}/usr/local/interlisp
+    MEDLEYDIR=${il_dir#${pkg_dir}}/medley
     #    Maiko and Medley files to il_dir (/usr/local/interlisp)
     mkdir -p ${il_dir}
     tar -x -z -C ${il_dir} \

@@ -97,6 +97,8 @@
   #
   #  Find an unused display, start Xvnc, run-medley, then start the vnc viewer on the windows side
   #
+  LOG=${LOGINDIR}/logs/medley_${run_id}.log
+  echo "START" >${LOG}
   OPEN_DISPLAY=`find_open_display`
   if [ ${OPEN_DISPLAY} -eq -1 ];
   then
@@ -116,13 +118,28 @@
                 -SecurityTypes None \
                 -NeverShared \
                 -DisconnectClients=0 \
-                2> ${LOGINDIR}/logs/medley_${run_id}.log &
-  xvnc_pid=$(ps h -C Xvnc -o pid,command | grep "Xvnc :${OPEN_DISPLAY}" | awk '{print $1}')
+                >> ${LOG} 2>&1 &
+  xvnc_pid=""
+  while [ -z ${xvnc_pid} ];
+  do
+    sleep .25
+    xvnc_pid=$(ps h -C Xvnc -o pid,command | grep "Xvnc :${OPEN_DISPLAY}" | awk '{print $1}')
+  done
+  echo "XVNC_PID is ${xvnc_pid}"
   # run Medley
-  (${MEDLEYDIR}/run-medley -id "${run_id}" "${run_args[@]}"; kill -9 ${xvnc_pid}) &
-  #                2>/dev/null >/dev/null &
+  ( ${MEDLEYDIR}/run-medley -id "${run_id}" "${run_args[@]}" 2>>${LOG} \
+    ; \
+    kill -9 ${xvnc_pid} ${xvnc_pid} >>${LOG} 2>&1
+  ) &
+  # Give medley time to startup
   sleep 2
   # Start vnc viewer on Windows side
   pushd ${vnc_dir} >/dev/null
-  ./${vnc_exe} -ReconnectOnError=off −AlertOnFatalError=off `ip_addr`:${PORT_FOR_DISPLAY} >/dev/null 2>/dev/null &
+  ( ./${vnc_exe} -ReconnectOnError=off \
+                −AlertOnFatalError=off \
+                `ip_addr`:${PORT_FOR_DISPLAY} \
+                >>${LOG} 2>&1 \
+    ; \
+    kill -9 ${xvnc_pid} >>${LOG} 2>&1 \
+  ) &
   popd >/dev/null

@@ -94,9 +94,9 @@ do
     tar -x -z -C ${il_dir} \
               -f "${tarball_dir}/medley-${medley_release}-loadups.tgz"
     #     Configure postinst and postrm scripts and put in place in DEBIAN dir
-    sed -e "s/--MEDLEYDIR--/${MEDLEYDIR}/g" <postinst >${pkg_dir}/DEBIAN/postinst
+    sed -e "s>--MEDLEYDIR-->${MEDLEYDIR}>g" <postinst >${pkg_dir}/DEBIAN/postinst
     chmod +x ${pkg_dir}/DEBIAN/postinst
-    sed -e "s/--MEDLEYDIR--/${MEDLEYDIR}/g" <postrm >${pkg_dir}/DEBIAN/postrm
+    sed -e "s>--MEDLEYDIR-->${MEDLEYDIR}>g" <postrm >${pkg_dir}/DEBIAN/postrm
     chmod +x ${pkg_dir}/DEBIAN/postrm
     #     For wsl scripts, include the vncviewer.exe
     if [[ ${wslp} = wsl && ${arch} = x86_64 ]];

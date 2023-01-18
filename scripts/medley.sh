@@ -14,7 +14,6 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-# 
 
 #set -x
 
@@ -35,6 +34,9 @@ fi
 run_args=()
 run_id="default"
 use_vnc='false'
+geometry=""
+screensize=""
+noscroll='false'
 while [ "$#" -ne 0 ];
 do
   case "$1" in
@@ -54,9 +56,25 @@ do
         use_vnc=false
       fi
       ;;
+    --dimensions | -dimensions)
+      geometry="$2"
+      ;;
+    --geometry | -geometry | -g)
+      geometry="$2"
+      shift
+      ;;
+    --screensize | -screensize | -sc)
+      screensize="$2"
+      shift
+      ;;
+    -noscroll | --noscroll | -n)
+      noscroll=true
+      run_args+=("-noscroll")
+      ;;
     *)
       run_args+=("$1")
       ;;
+
   esac
   shift
 done
@@ -93,10 +111,14 @@ then
 fi
 mkdir -p ${LOGINDIR}/vmem
 
+# Figure out screensize and geometry based on arguments
+source ${MEDLEYDIR}/scripts/medley_geometry.sh
+
+# Call run-medley with or without vnc
 if [[ ${wsl} = false || ${use_vnc} = false ]];
 then
   # If not using vnc, just call run-medley
-  ${MEDLEYDIR}/run-medley -id "${run_id}" "${run_args[@]}"
+  ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}"
 else
   # do the vnc thing on wsl
   source ${MEDLEYDIR}/scripts/medley_vnc.sh

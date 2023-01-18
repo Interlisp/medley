@@ -35,25 +35,6 @@
     echo ${result}
   }
 
-  screen_dimensions() {
-    local dims="1440x900"
-    while (( "$#" ))
-    do
-      case "$1" in
-        "--dimensions" | "-dimensions" | "--geometry" | "-geometry" | "-g")
-          dims=$2
-          shift
-          shift
-          break
-          ;;
-        *)
-          shift
-          ;;
-      esac
-    done
-    echo ${dims}
-  }
-
   #
   # Make sure prequisites for vnc support are in place
   #
@@ -97,6 +78,7 @@
   #
   #  Find an unused display, start Xvnc, run-medley, then start the vnc viewer on the windows side
   #
+  #set -x
   LOG=${LOGINDIR}/logs/medley_${run_id}.log
   echo "START" >${LOG}
   OPEN_DISPLAY=`find_open_display`
@@ -114,7 +96,7 @@
   mkdir -p ${LOGINDIR}/logs
   /usr/bin/Xvnc ":${OPEN_DISPLAY}" \
                 -rfbport ${PORT_FOR_DISPLAY} \
-                -geometry `screen_dimensions "$@"` \
+                -geometry "${geometry#-g }" \
                 -SecurityTypes None \
                 -NeverShared \
                 -DisconnectClients=0 \
@@ -127,7 +109,7 @@
   done
   echo "XVNC_PID is ${xvnc_pid}"
   # run Medley
-  ( ${MEDLEYDIR}/run-medley -id "${run_id}" "${run_args[@]}" 2>>${LOG} \
+  ( ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}" 2>>${LOG} \
     ; \
     kill -9 ${xvnc_pid} ${xvnc_pid} >>${LOG} 2>&1
   ) &
@@ -135,7 +117,8 @@
   sleep 2
   # Start vnc viewer on Windows side
   pushd ${vnc_dir} >/dev/null
-  ( ./${vnc_exe} -ReconnectOnError=off \
+  ( ./${vnc_exe} -geometry "+50+50" \
+                -ReconnectOnError=off \
                 −AlertOnFatalError=off \
                 `ip_addr`:${PORT_FOR_DISPLAY} \
                 >>${LOG} 2>&1 \

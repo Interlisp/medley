@@ -93,6 +93,8 @@ do
               -f "${tarball_dir}/medley-${medley_release}-runtime.tgz"
     tar -x -z -C ${il_dir} \
               -f "${tarball_dir}/medley-${medley_release}-loadups.tgz"
+    tar -x -z -C ${il_dir} \
+              -f "${tarball_dir}/notecards.tgz"
     #     Configure postinst and postrm scripts and put in place in DEBIAN dir
     sed -e "s>--MEDLEYDIR-->${MEDLEYDIR}>g" <postinst >${pkg_dir}/DEBIAN/postinst
     chmod +x ${pkg_dir}/DEBIAN/postinst
@@ -108,6 +110,7 @@ do
       cp -p vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
       popd >/dev/null
     fi
+
     #
     # Create the deb file for this arch
     #

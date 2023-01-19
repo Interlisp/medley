@@ -17,8 +17,39 @@
 
 #set -x
 
-export IL_DIR=/usr/local/interlisp
-export MEDLEYDIR=${IL_DIR}/medley
+# functions to discover what directory this script is being executed from
+get_abs_filename() {
+  # $1 : relative filename
+  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+get_script_dir() {
+
+    # call this with ${BASH_SOURCE[0]:-$0} as its (only) parameter
+
+    set -x
+
+    local SCRIPT_PATH="$( get_abs_filename "$1" )";
+
+    pushd . > '/dev/null';
+
+    while [ -h "$SCRIPT_PATH" ];
+    do
+        cd "$( dirname -- "$SCRIPT_PATH"; )";
+        SCRIPT_PATH="$( readlink -f -- "$SCRIPT_PATH"; )";
+    done
+
+    cd "$( dirname -- "$SCRIPT_PATH"; )" > '/dev/null';
+    SCRIPT_PATH="$( pwd; )";
+
+    popd  > '/dev/null';
+
+    set +x
+
+    echo "${SCRIPT_PATH}"
+}
+
+SCRIPTDIR=$(get_script_dir "${BASH_SOURCE[0]:-$0}")
+export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ..; pwd)
 export LOGINDIR=${HOME}/il
 
 # Are we running under WSL?
@@ -71,6 +102,15 @@ do
       noscroll=true
       run_args+=("-noscroll")
       ;;
+    -e | --exec | --inter | --interlisp)
+      export MEDLEY_EXEC="inter"
+      ;;
+    -a | -apps | --apps | -app | --apps)
+      if [ -z ${sysout_flag} ]; then
+        export LDESRCESYSOUT="$MEDLEYDIR/loadups/apps.sysout"
+        export LDEINIT="$MEDLEYDIR/greetfiles/APPS-INIT.LCOM"
+      fi
+      ;;
     *)
       run_args+=("$1")
       ;;
@@ -112,7 +152,7 @@ fi
 mkdir -p ${LOGINDIR}/vmem
 
 # Figure out screensize and geometry based on arguments
-source ${MEDLEYDIR}/scripts/medley_geometry.sh
+source ${SCRIPTDIR}/medley_geometry.sh
 
 # Call run-medley with or without vnc
 if [[ ${wsl} = false || ${use_vnc} = false ]];
@@ -121,7 +161,7 @@ then
   ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}"
 else
   # do the vnc thing on wsl
-  source ${MEDLEYDIR}/scripts/medley_vnc.sh
+  source ${SCRIPTDIR}/medley_vnc.sh
 fi
 
 

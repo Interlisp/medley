@@ -26,7 +26,7 @@ get_script_dir() {
 
     # call this with ${BASH_SOURCE[0]:-$0} as its (only) parameter
 
-    set -x
+    # set -x
 
     local SCRIPT_PATH="$( get_abs_filename "$1" )";
 
@@ -43,7 +43,7 @@ get_script_dir() {
 
     popd  > '/dev/null';
 
-    set +x
+    # set +x
 
     echo "${SCRIPT_PATH}"
 }
@@ -72,7 +72,11 @@ while [ "$#" -ne 0 ];
 do
   case "$1" in
     -i | --id)
-      run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)
+      if [ "$2" = "-" ];
+      then
+        run_id=$( basename ${MEDLEYDIR} )
+      else
+        run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)
       shift
       ;;
     -v | --vnc)

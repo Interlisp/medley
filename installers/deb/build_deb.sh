@@ -117,7 +117,7 @@ do
     mkdir -p debs
     filename=debs/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.deb
     rm -rf ${filename}
-    dpkg-deb --build ${pkg_dir} ${filename}
+    dpkg-deb --build -Zxz ${pkg_dir} ${filename}
   done
 done
 

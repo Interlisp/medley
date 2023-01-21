@@ -77,6 +77,7 @@ do
         run_id=$( basename ${MEDLEYDIR} )
       else
         run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)
+      fi
       shift
       ;;
     -v | --vnc)

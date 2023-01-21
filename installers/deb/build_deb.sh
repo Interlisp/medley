@@ -48,7 +48,12 @@ then
   mkdir -p ${tarball_dir}
   echo "Fetching maiko and medley release tarballs"
   gh release download --repo interlisp/maiko --dir ${tarball_dir} --pattern "*.tgz"
-  gh release download --repo interlisp/medley --dir ${tarball_dir} --pattern "*.tgz"
+  TAG=$(gh release list --repo interlisp/medley | head -n 1 | awk "{print \$1 }")
+  gh release download ${TAG} --repo interlisp/medley --dir ${tarball_dir} --pattern "*.tgz"
+  gh repo clone interlisp/notecards notecards -- --depth 1
+  (cd notecards; git archive --format=tgz --output=../notecards.tgz --prefix=notecards/ main)
+  mv notecards.tgz ${tarball_dir}
+  rm -rf notecards
 fi
 
 # Figure out release tags from tarball names

@@ -19,11 +19,28 @@
   }
 
   find_open_display() {
+    local ctr=1
+    local result=-1
+    while [ ${ctr} -lt 64 ];
+    do
+      ss -a | grep -q "tmp/.X11-unix/X${ctr}[^0-9]"
+      if [ $? -ne 0 ];
+      then
+        result=${ctr}
+        break
+      else
+        (( ctr++ ))
+      fi
+    done
+    echo ${result}
+  }
+
+  find_open_port() {
     local ctr=5900
     local result=-1
     while [ ${ctr} -lt 6000 ];
     do
-      ps h -C Xvnc -o command | grep -q -s "Xvnc :${ctr}"
+      ss -a | grep -q "LISTEN.*:${ctr}[^0-9]"
       if [ $? -ne 0 ];
       then
         result=${ctr}
@@ -80,22 +97,31 @@
   #
   #set -x
   LOG=${LOGINDIR}/logs/medley_${run_id}.log
+  mkdir -p $(dirname -- ${LOG})
   echo "START" >${LOG}
   OPEN_DISPLAY=`find_open_display`
   if [ ${OPEN_DISPLAY} -eq -1 ];
   then
-    echo "Error: cannot find an unused DISPLAY between 5900 and 5999"
+    echo "Error: cannot find an unused DISPLAY between 1 and 63"
     echo "Exiting"
     exit 33
   else
     echo "Using DISPLAY=${OPEN_DISPLAY}"
   fi
-  PORT_FOR_DISPLAY=${OPEN_DISPLAY}
+  VNC_PORT=`find_open_port`
+  if [ ${VNC_PORT} -eq -1 ];
+  then
+    echo "Error: cannot find an unused port between 5900 and 5999"
+    echo "Exiting"
+    exit 33
+  else
+    echo "Using VNC_PORT=${VNC_PORT}"
+  fi
   export DISPLAY=":${OPEN_DISPLAY}"
   # start vnc
   mkdir -p ${LOGINDIR}/logs
   /usr/bin/Xvnc ":${OPEN_DISPLAY}" \
-                -rfbport ${PORT_FOR_DISPLAY} \
+                -rfbport ${VNC_PORT} \
                 -geometry "${geometry#-g }" \
                 -SecurityTypes None \
                 -NeverShared \
@@ -120,7 +146,7 @@
   ( ./${vnc_exe} -geometry "+50+50" \
                 -ReconnectOnError=off \
                 −AlertOnFatalError=off \
-                `ip_addr`:${PORT_FOR_DISPLAY} \
+                $(ip_addr):${VNC_PORT} \
                 >>${LOG} 2>&1 \
     ; \
     kill -9 ${xvnc_pid} >>${LOG} 2>&1 \

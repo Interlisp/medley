@@ -49,7 +49,7 @@ get_script_dir() {
 }
 
 SCRIPTDIR=$(get_script_dir "${BASH_SOURCE[0]:-$0}")
-export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ..; pwd)
+export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ../..; pwd)
 export LOGINDIR=${HOME}/il
 
 # Are we running under WSL?
@@ -61,68 +61,8 @@ else
   wsl='false'
 fi
 
-# Process args
-run_args=()
-run_id="default"
-use_vnc='false'
-geometry=""
-screensize=""
-noscroll='false'
-while [ "$#" -ne 0 ];
-do
-  case "$1" in
-    -i | --id)
-      if [ "$2" = "-" ];
-      then
-        run_id=$( basename ${MEDLEYDIR} )
-      else
-        run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)
-      fi
-      shift
-      ;;
-    -v | --vnc)
-      if [[ ${wsl} = true && $(uname -m) = x86_64 ]];
-      then
-        use_vnc=true
-      else
-        echo "Warning: The -v or --vnc flag was set."
-        echo "But the vnc option is only available when running on "
-        echo "Windows System for Linux (wsl) on x86_64 machines."
-        echo "Ignoring the -v or --vnc flag."
-        use_vnc=false
-      fi
-      ;;
-    --dimensions | -dimensions)
-      geometry="$2"
-      ;;
-    --geometry | -geometry | -g)
-      geometry="$2"
-      shift
-      ;;
-    --screensize | -screensize | -sc)
-      screensize="$2"
-      shift
-      ;;
-    -noscroll | --noscroll | -n)
-      noscroll=true
-      run_args+=("-noscroll")
-      ;;
-    -e | --exec | --inter | --interlisp)
-      export MEDLEY_EXEC="inter"
-      ;;
-    -a | -apps | --apps | -app | --apps)
-      if [ -z ${sysout_flag} ]; then
-        export LDESRCESYSOUT="$MEDLEYDIR/loadups/apps.sysout"
-        export LDEINIT="$MEDLEYDIR/greetfiles/APPS-INIT.LCOM"
-      fi
-      ;;
-    *)
-      run_args+=("$1")
-      ;;
-
-  esac
-  shift
-done
+# process args
+source ${SCRIPTDIR}/medley_args.sh
 
 # Make sure that there is not another instance currently running with this same id
 ps ax | grep ldex | grep --quiet "\-id ${run_id}"
@@ -136,11 +76,14 @@ then
 fi
 
 # Set the LDEDESTSYSOUT env variable based on id
-if [ "${run_id}" = "default" ];
+if [ -z ${LDEDESTSYSOUT} ];
 then
-  export LDEDESTSYSOUT=${LOGINDIR}/vmem/lisp.virtualmem
-else
-  export LDEDESTSYSOUT=${LOGINDIR}/vmem/lisp_${run_id}.virtualmem
+  if [ "${run_id}" = "default" ];
+  then
+    export LDEDESTSYSOUT=${LOGINDIR}/vmem/lisp.virtualmem
+  else
+    export LDEDESTSYSOUT=${LOGINDIR}/vmem/lisp_${run_id}.virtualmem
+  fi
 fi
 
 # Create LOGINDIR if necessary
@@ -155,9 +98,6 @@ then
   exit 2
 fi
 mkdir -p ${LOGINDIR}/vmem
-
-# Figure out screensize and geometry based on arguments
-source ${SCRIPTDIR}/medley_geometry.sh
 
 # Call run-medley with or without vnc
 if [[ ${wsl} = false || ${use_vnc} = false ]];

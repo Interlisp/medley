@@ -65,14 +65,14 @@
     echo "Please install TigerVNC using \"sudo apt install tigervnc-standalone-server tigervnc-xorg-extension\""
     echo "Exiting."
     exit 4
-  elif [ ! -e ${vnc_dir}/${vnc_exe} ];
+  elif [ ! -e "${vnc_dir}/${vnc_exe}" ];
   then
-    if [ -e /usr/local/interlisp/wsl/${vnc_exe} ];
+    if [ -e "${IL_DIR}/wsl/${vnc_exe}" ];
     then
       # make sure TigerVNC viewer is in a Windows (not Linux) directory.  If its in a Linux directory
       # there will be a long delay when it starts up
       mkdir -p ${vnc_dir}
-      cp -p /usr/local/interlisp/wsl/${vnc_exe} ${vnc_dir}/${vnc_exe}
+      cp -p "${IL_DIR}/wsl/${vnc_exe}" "${vnc_dir}/${vnc_exe}"
     else
       echo "TigerVnc viewer is required by the -vnc option but is not installed."
       echo -n "Ok to download from SourceForge? [y, Y, n or N, default n]  "
@@ -85,7 +85,7 @@
         echo "Exiting."
         exit 5
       else
-        pushd ${vnc_dir} >/dev/null
+        pushd "${vnc_dir}" >/dev/null
         wget https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
         popd >/dev/null
       fi

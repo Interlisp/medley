@@ -41,7 +41,9 @@ flags:
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
-    -i - | --id -              : use the basename of the current directory as the id
+    -i - | --id -              : for id use the basename of the directory where the Medley is located
+
+    -i -- | --id --            : for id use the basename of the parent of the directory where Medley is located
 
     -m N | --mem N             : set Medley memory size to N
 

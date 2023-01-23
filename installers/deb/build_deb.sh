@@ -1,7 +1,7 @@
 #!/bin/bash
 ###############################################################################
 #
-#    build_deb.sh: build .deb files for installing Medley Interlisp on Linux 
+#    build_deb.sh: build .deb files for installing Medley Interlisp on Linux
 #                  and WSL
 #
 #    2023-01-10 Frank Halasz
@@ -75,7 +75,7 @@ do
     fi
     arch=${arch_base%^*}
     debian_arch=${arch_base#*^}
-    pkg_dir=tmp/pkg/${arch}
+    pkg_dir=tmp/pkg/${wslp}-${arch}
     #
     # Set up the pkg directories for this arch using the release tarballs
     #
@@ -111,11 +111,16 @@ do
       pushd ./tmp >/dev/null
       rm -rf vncviewer64-1.12.0.exe
       wget -q https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
-      mkdir -p ${il_dir}/wsl
-      cp -p vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
       popd >/dev/null
+      mkdir -p ${il_dir}/wsl
+      cp -p tmp/vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
     fi
-
+    #
+    #  Create tar file for this arch
+    #
+    mkdir -p tars
+    echo "Creating tar file tars/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.tgz"
+    tar -C ${il_dir} -czf tars/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.tgz .
     #
     # Create the deb file for this arch
     #
@@ -123,6 +128,7 @@ do
     filename=debs/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.deb
     rm -rf ${filename}
     dpkg-deb --build -Zxz ${pkg_dir} ${filename}
+    #
   done
 done
 

@@ -36,6 +36,9 @@ do
         if [ "$2" = "-" ];
         then
           run_id=$( basename ${MEDLEYDIR} )
+        elif [ "$2" = "--" ];
+        then
+          run_id=$(cd ${MEDLEYDIR}; cd ..; basename $(pwd))
         else
           check_for_dash "$1" "$2"
           run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)

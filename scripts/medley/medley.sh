@@ -49,6 +49,9 @@ get_script_dir() {
 }
 
 SCRIPTDIR=$(get_script_dir "${BASH_SOURCE[0]:-$0}")
+#  Define some generally useful functions
+source ${SCRIPTDIR}/medley_utils.sh
+
 export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ../..; pwd)
 IL_DIR=$(cd ${MEDLEYDIR}; cd ..; pwd)
 export LOGINDIR=${HOME}/il

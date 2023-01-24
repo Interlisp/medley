@@ -27,20 +27,21 @@ full_flag=false
 apps_flag=false
 sysout_flag=false
 sysout_arg=""
+err_msg=""
 while [ "$#" -ne 0 ];
 do
   if [ ${pass_args} = false ];
   then
     case "$1" in
       -i | --id)
-        if [ "$2" = "-" ];
+        if [ "$2" = "." ];
         then
           run_id=$( basename ${MEDLEYDIR} )
-        elif [ "$2" = "--" ];
+        elif [ "$2" = ".." ];
         then
           run_id=$(cd ${MEDLEYDIR}; cd ..; basename $(pwd))
         else
-          check_for_dash "$1" "$2"
+          check_for_dash_or_end "$1" "$2"
           run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)
         fi
         shift
@@ -58,12 +59,12 @@ do
         fi
         ;;
       -g | --geometry)
-        check_for_dash "$1" "$2"
+        check_for_dash_or_end "$1" "$2"
         geometry="$2"
         shift
         ;;
       -s | --screensize)
-        check_for_dash "$1" "$2"
+        check_for_dash_or_end "$1" "$2"
         screensize="$2"
         shift
         ;;
@@ -87,17 +88,17 @@ do
         lisp_flag=true
         ;;
       -m | --mem)
-        check_for_dash "$1" "$2"
+        check_for_dash_or_end "$1" "$2"
         run_args+=(-m $2)
         shift
         ;;
       -t | --title)
-        check_for_dash "$1" "$2"
+        check_for_dash_or_end "$1" "$2"
         run_args+=(-title $2)
         shift
         ;;
       -d | --display)
-        check_for_dash "$1" "$2"
+        check_for_dash_or_end "$1" "$2"
         run_args+=(-d $2)
         shift
         ;;
@@ -106,13 +107,28 @@ do
         then
           run_args+=("--nogreet")
         else
-          check_for_dash "$1" "$2"
+          check_for_dash_or_end "$1" "$2"
+          check_file_readable "$1" "$2"
           run_args+=(-greet "$2")
         fi
+        shift
         ;;
       -p | --vmem)
-        check_for_dash "$1" "$2"
+        check_for_dash_or_end "$1" "$2"
+        check_file_writeable_or_creatable "$1" "$2"
         export LDEDESTSYSOUT="$2"
+        shift
+        ;;
+      -x | --logindir)
+        if [[ "$2" = "-" || "$2" = "--" ]];
+        then
+          check_dir_writeable_or_creatable "$1" "${MEDLEYDIR}/logindir"
+          LOGINDIR="${MEDLEYDIR}/logindir"
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_dir_writeable_or_creatable "$1" "$2"
+          LOGINDIR="$2"
+        fi
         shift
         ;;
       -h | --help)
@@ -122,8 +138,8 @@ do
         pass_args=true
         ;;
       -*)
-        echo "ERROR: Unknown flag: $1"
-        usage
+        err_msg=("ERROR: Unknown flag: $1" )
+        usage "${err_msg[@]}"
         ;;
       *)
         if [[ $# -eq 1 || "$2" = "--" ]];
@@ -131,9 +147,11 @@ do
           sysout_flag=true
           sysout_arg="$2"
         else
-          echo "ERROR: sysout argument must be last argument"
-          echo "or last argument before the \"--\" flag"
-          usage
+          err_msg=(
+            "ERROR: sysout argument must be last argument"
+            "or last argument before the \"--\" flag"
+          )
+          usage "${err_msg[@]}"
         fi
         ;;
     esac
@@ -157,10 +175,11 @@ do
 done
 if [ ${ctr} -gt 1 ];
 then
-  echo "Error: only one sysout can be specified.  Two or more sysouts were specified"
-  echo "via the -l (--lisp), -f (--full), -a (--apps) flags and/or a sysout filename"
-  echo
-  usage
+  err_msg=(
+    "Error: only one sysout can be specified.  Two or more sysouts were specified"
+    "via the -l (--lisp), -f (--full), -a (--apps) flags and/or a sysout filename"
+  )
+  usage "${err_msg[@]}"
 fi
 if [ "${sysout_arg}" = "apps" ];
 then

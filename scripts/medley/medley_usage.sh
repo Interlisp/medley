@@ -11,10 +11,28 @@
 #
 ###############################################################################
 
+PAGER=$( if [ -n $(which more) ]; then echo "more"; else echo "cat"; fi)
 
 usage() {
-   cat <<EOF
+   local err_msg
+   local msg_path=/tmp/msg-$$
+   local lines=("$@")
+   if [ $# -ne 0 ];
+   then
+     echo > ${msg_path}
+     echo "$(output_error_msg "${lines[@]}")" >> ${msg_path}
+     echo >> ${msg_path}
+     echo >> ${msg_path}
+   else
+     touch ${msg_path}
+   fi
+   cat ${msg_path} - <<EOF | ${PAGER}
 Usage: medley [flags] [sysout] [--] [pass_args ...]
+
+Note: MEDLEYDIR is the directory at the top of the code tree where this script is executed from
+      after all symbolic links have been resolved.  For standard installations this will be
+      /usr/local/interlisp/medley.  For "local" installations this will be the "medley" sub-directory
+      under the directory into which the Medley distribution was installed.
 
 flags:
     -h | --help                : print this usage information
@@ -41,9 +59,9 @@ flags:
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
-    -i - | --id -              : for id use the basename of the directory where the Medley is located
+    -i . | --id .              : for id use the basename of MEDLEYDIR
 
-    -i -- | --id --            : for id use the basename of the parent of the directory where Medley is located
+    -i .. | --id ..            : for id use the basename of the parent directory of MEDLEYDIR
 
     -m N | --mem N             : set Medley memory size to N
 
@@ -53,6 +71,9 @@ flags:
 
     -r - | --greet -           : do not use a greetfile
 
+    -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
+
+    -x -- | --logindir --      : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
 sysout:
     The name of the file to use as a sysout for Medley to start from.  If sysout is not
@@ -66,15 +87,5 @@ EOF
 
 exit 1
 
-}
-
-check_for_dash() {
-  if [ "${2:0:1}" = "-" ];
-  then
-     echo "Error: either the value for argument \"${1}\" is missing OR"
-     echo "the value begins with a \"-\", which is not allowed."
-     echo
-     usage
-  fi
 }
 

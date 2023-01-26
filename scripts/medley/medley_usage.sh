@@ -37,6 +37,8 @@ Note: MEDLEYDIR is the directory at the top of the code tree where this script i
 flags:
     -h | --help                : print this usage information
 
+    -z | --man                 : show the man page for medley
+
     -f | --full                : start Medley from the "full" sysout
 
     -l | --lisp                : start Medley from the "lisp" sysout
@@ -59,9 +61,9 @@ flags:
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
-    -i . | --id .              : for id use the basename of MEDLEYDIR
+    -i - | --id -              : for id use the basename of MEDLEYDIR
 
-    -i .. | --id ..            : for id use the basename of the parent directory of MEDLEYDIR
+    -i -- | --id --            : for id use the basename of the parent directory of MEDLEYDIR
 
     -m N | --mem N             : set Medley memory size to N
 
@@ -73,7 +75,7 @@ flags:
 
     -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
 
-    -x -- | --logindir --      : use MEDLEYDIR/logindir as LOGINDIR in Medley
+    -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
 sysout:
     The name of the file to use as a sysout for Medley to start from.  If sysout is not

@@ -28,16 +28,18 @@ apps_flag=false
 sysout_flag=false
 sysout_arg=""
 err_msg=""
+greet_specified='false'
+
 while [ "$#" -ne 0 ];
 do
   if [ ${pass_args} = false ];
   then
     case "$1" in
       -i | --id)
-        if [ "$2" = "." ];
+        if [ "$2" = "-" ];
         then
           run_id=$( basename ${MEDLEYDIR} )
-        elif [ "$2" = ".." ];
+        elif [ "$2" = "--" ];
         then
           run_id=$(cd ${MEDLEYDIR}; cd ..; basename $(pwd))
         else
@@ -103,14 +105,15 @@ do
         shift
         ;;
       -r | --greet)
-        if [[ "$2" = "-n" || "$2" = "--nogreet" ]];
+        if [[ "$2" = "-" || "$2" = "--" ]];
         then
           run_args+=("--nogreet")
         else
           check_for_dash_or_end "$1" "$2"
           check_file_readable "$1" "$2"
-          run_args+=(-greet "$2")
+          run_args+=("-greet" "$2")
         fi
+        greet_specified='true'
         shift
         ;;
       -p | --vmem)
@@ -133,6 +136,10 @@ do
         ;;
       -h | --help)
         usage
+        ;;
+      -z | --man)
+        /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
+        exit 0
         ;;
       --)
         pass_args=true
@@ -184,9 +191,13 @@ fi
 if [ "${sysout_arg}" = "apps" ];
 then
   export LDESRCESYSOUT="$MEDLEYDIR/loadups/apps.sysout"
-  export LDEINIT="$MEDLEYDIR/greetfiles/APPS-INIT.LCOM"
+  if [ "${greet_specified}" = "false" ];
+  then
+    export LDEINIT="$MEDLEYDIR/greetfiles/APPS-INIT.LCOM"
+  fi
 else
   # pass on to run-medley
+  export LDESRCESYSOUT=""
   run_args+=("${sysout_arg}")
 fi
 

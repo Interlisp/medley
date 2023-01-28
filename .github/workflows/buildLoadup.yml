@@ -151,6 +151,7 @@ jobs:
           echo "TARBALL_DIR=installers/deb/tmp/tarballs" >>${GITHUB_ENV}
           echo "DEBS_DIR=installers/deb/debs" >>${GITHUB_ENV}
           echo "TARS_DIR=installers/deb/tars" >>${GITHUB_ENV}
+          echo "MEDLEY_RELEASE_TAG=${RELEASE_TAG}" >>${GITHUB_ENV}
 
       # Setup some needed dirs in workspace
       - name: Create work dirs
@@ -205,7 +206,7 @@ jobs:
       - name: Build loadups release tar
         run: |
           cd ..
-          tar cfz medley/${TARBALL_DIR}/${RELEASE_TAG}-loadups.tgz        \
+          tar cfz medley/${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-loadups.tgz        \
             medley/loadups/lisp.sysout               \
             medley/loadups/full.sysout               \
             medley/loadups/apps.sysout               \
@@ -215,7 +216,7 @@ jobs:
       - name: Build runtime release tar
         run: |
           cd ..
-          tar cfz medley/${TARBALL_DIR}/${RELEASE_TAG}-runtime.tgz          \
+          tar cfz medley/${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-runtime.tgz          \
                      --exclude "*~" --exclude "*#*"              \
                      --exclude exports.all                       \
                      medley/clos                                 \
@@ -245,7 +246,7 @@ jobs:
       - name: Delete existing release with same tag (if any)
         uses: cb80/delrel@latest
         with:
-            tag: ${{ env.RELEASE_TAG }} 
+            tag: ${{ env.MEDLEY_RELEASE_TAG }} 
         continue-on-error: true
 
       - name: Push the release
@@ -254,11 +255,11 @@ jobs:
         with: 
           allowUpdates: true
           artifacts:
-            ${{ env.TARBALL_DIR }}/${{ env.RELEASE_TAG }}-loadups.tgz,
-            ${{ env.TARBALL_DIR }}/${{ env.RELEASE_TAG }}-runtime.tgz,
+            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-loadups.tgz,
+            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-runtime.tgz,
             ${{ env.DEBS_DIR }}/*.deb,
             ${{ env.TARS_DIR }}/*.tgz
-          tag: ${{ env.RELEASE_TAG }}
+          tag: ${{ env.MEDLEY_RELEASE_TAG }}
           draft: ${{ needs.inputs.outputs.draft }}
           prerelease: false
           generateReleaseNotes: true
@@ -267,9 +268,12 @@ jobs:
       - name: Update the downloads page hosted on OIO
         run: |
             maiko_release_tag="${{ steps.maiko.outputs.latest_tag }}"
-            full_release_tag="${{ env.RELEASE_TAG }}_${maiko_release_tag#maiko-}"
+            medley_short_release_tag="${MEDLEY_RELEASE_TAG#medley-}"
+            full_release_filename="${MEDLEY_RELEASE_TAG/medley/medley-full}_${maiko_release_tag#maiko-}"
+            # Need info about where github stores assets because draft releases are not tagged
             release_url="${{ steps.push_release.outputs.html_url }}"
-            medley_release_tag="$( echo "${release_url}" | sed -e "s#^.*/\([^/]\+\)\$#\1#g" )"
+            github_subdir="$( echo "${release_url}" | sed -e "s#^.*/\([^/]\+\)\$#\1#g" )"
+            #
             local_template="installers/downloads_page/medley_downloads.html"
             local_filename="medley_downloads.html"
             if [ "${{ needs.inputs.outputs.draft }}" = "true" ];
@@ -280,9 +284,9 @@ jobs:
             fi            
             remote_filepath="/srv/oio/static/${remote_filename}"
             sed \
-               -e "s/@@@FULL.RELEASE.TAG@@@/${full_release_tag}/g" \
-               -e "s/@@@MEDLEY.RELEASE.TAG@@@/${medley_release_tag}/g" \
-               -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${medley_release_tag#medley-}/g" \
+               -e "s/@@@FULL.RELEASE.FILENAME@@@/${full_release_filename}/g" \
+               -e "s/@@@GITHUB.SUBDIR@@@/${github_subdir}/g" \
+               -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${medley_short_release_tag}/g" \
                < "${local_template}" > "${local_filename}"
             echo "-rm ${remote_filepath}.oldold" > batch
             echo "-rename ${remote_filepath}.old ${remote_filepath}.oldold" >> batch

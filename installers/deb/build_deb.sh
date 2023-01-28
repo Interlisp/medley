@@ -122,16 +122,17 @@ do
     #
     #  Create tar file for this arch
     #
+    filename="medley-full-${medley_release}_${maiko_release}-${wslp}-${arch}"
     mkdir -p tars
-    echo "Creating tar file tars/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.tgz"
-    tar -C ${il_dir} -czf tars/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.tgz .
+    echo "Creating tar file tars/${filename}.tgz"
+    tar -C ${il_dir} -czf tars/${filename}.tgz .
     #
     # Create the deb file for this arch
     #
     mkdir -p debs
-    filename=debs/medley-${medley_release}_${maiko_release}-${wslp}-${arch}.deb
-    rm -rf ${filename}
-    dpkg-deb --build -Zxz ${pkg_dir} ${filename}
+    deb_filepath="debs/${filename}.deb"
+    rm -rf "${deb_filepath}"
+    dpkg-deb --build -Zxz "${pkg_dir}" "${deb_filepath}"
     #
   done
 done

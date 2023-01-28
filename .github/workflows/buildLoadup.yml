@@ -159,7 +159,7 @@ jobs:
       # Get Maiko release information, retrieves the name of the latest
       # release.  Used to download the correct Maiko release
       - name: Get Maiko Release Information
-        id: latest_version
+        id: maiko
         uses: abatilo/release-info-action@v1.3.2
         with:
           owner: ${{ github.repository_owner }}
@@ -173,11 +173,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           latest: true
           out-file-path: ${{ env.TARBALL_DIR }}
-          fileName: "${{ steps.latest_version.outputs.latest_tag }}-linux.*.tgz" 
+          fileName: "${{ steps.maiko.outputs.latest_tag }}-linux.*.tgz" 
 
       - name: Untar Maiko Release for use in loadup
         run: |
-          tar -xzf "${TARBALL_DIR}/${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz"
+          tar -xzf "${TARBALL_DIR}/${{ steps.maiko.outputs.latest_tag }}-linux.x86_64.tgz"
 
       # Checkout Notecards and tar it in the tarballsdir
       - name: Checkout Notecards
@@ -249,6 +249,7 @@ jobs:
         continue-on-error: true
 
       - name: Push the release
+        id: push_release
         uses: ncipollo/release-action@v1
         with: 
           allowUpdates: true
@@ -262,6 +263,36 @@ jobs:
           prerelease: false
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update the downloads page hosted on OIO
+        run: |
+            full_release_tag="${{ env.RELEASE_TAG }}_${{ steps.maiko.outputs.latest_tag }}"
+            release_url="${{ steps.push_release.outputs.html_url }}"
+            medley_release_tag="$( echo "${release_url}" | sed -e "s#^.*/\([^/]\+\)\$#\1#g" )"
+            local_template="installers/downloads_page/medley_downloads.html"
+            local_filename="medley_downloads.html"
+            if [ "${{ needs.inputs.outputs.draft }}" = "true" ];
+            then
+                remote_filename="draft_downloads"
+            else
+                remote_filename="${local_filename%.html}"
+            fi            
+            remote_filepath="/srv/oio/static/${remote_filename}"
+            sed \
+               -e "s/@@@FULL.RELEASE.TAG@@@/${full_release_tag}/g" \
+               -e "s/@@@MEDLEY.RELEASE.TAG@@@/${medley_release_tag}/g" \
+               -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${medley_release_tag#medley-}/g" \
+               < "${local_template}" > "${local_filename}"
+            echo "-rm ${remote_filepath}.oldold" > batch
+            echo "-rename ${remote_filepath}.old ${remote_filepath}.oldold" >> batch
+            echo "-rename ${remote_filepath}.html ${remote_filepath}.old" >> batch
+            echo "-put ${local_filename} ${remote_filepath}.html" >> batch
+            eval $(ssh-agent)
+            ssh-add - <<< "${SSH_KEY}"
+            sftp -o StrictHostKeyChecking=no -b batch ubuntu@online.interlisp.org
+        env:
+            SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
+
 
 ######################################################################################
 

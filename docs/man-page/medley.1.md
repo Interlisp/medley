@@ -20,17 +20,15 @@ DESCRIPTION
 
 Starts Medley Interlisp in a window.
 
-Note: **$MEDLEYDIR** is an environment variable set by Medley and used by many of the options described below.
+OPTIONS
+=======
+
+**MEDLEYDIR** is an environment variable set by Medley and used by many of the options described below.
 MEDLEYDIR is the top level directory of the Medley installation that contains the specific medley script that
 is invoked after all symbolic links are resolved.  In the standard global installation this will 
 be /usr/local/interlisp/medley.  But Medley can be installed in multiple places on any given machine and
 hence MEDLEYDIR is computed on each invocation of medley. 
 
-   
-OPTIONS
-=======
-
-&nbsp;
 
 Flags
 -----

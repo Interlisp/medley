@@ -102,7 +102,7 @@ do
               -f "${tarball_dir}/notecards.tgz"
     # Copy the medley man page into place
     man_dir="${pkg_dir}/usr/local/man/man1"
-    mkdir "${man_dir}"
+    mkdir -p "${man_dir}"
     cp -p "${il_dir}/medley/docs/man-page/medley.1.gz" "${man_dir}"
     #     Configure postinst and postrm scripts and put in place in DEBIAN dir
     sed -e "s>--MEDLEYDIR-->${MEDLEYDIR}>g" <postinst >${pkg_dir}/DEBIAN/postinst

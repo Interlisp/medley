@@ -19,18 +19,96 @@ name: "Build/Push Release & Docker"
 # Run this workflow on ...
 on:
   workflow_dispatch:
-  
+    inputs:
+      draft:
+        description: "Mark this as a draft release"
+        type: choice
+        options:
+        - 'false'
+        - 'true'
+      force:
+        description: "Force build even if build already successfully completed for this commit"
+        type: choice
+        options:
+        - 'false'
+        - 'true'
+
+  workflow_call:
+    outputs:
+      successful:
+        description: "'True' if medley build completed successully"
+        value: ${{ jobs.complete.outputs.build_successful }}
+    inputs:
+      draft:
+        description: "Mark this as a draft release"
+        required: false
+        type: string
+        default: 'false'
+      force:
+        description: "Force build even if build already successfully completed for this commit"
+        required: false
+        type: string
+        default: 'false'
+
+defaults:
+  run:
+    shell: bash
+    
 
 # Jobs that compose this workflow
 jobs:
+
+
+######################################################################################
+
+  # Regularize the inputs so they can be referenced the same way whether they are
+  # the result of a workflow_dispatch or a workflow_call
+
+  inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      draft: ${{ steps.one.outputs.draft }}
+      force: ${{ steps.one.outputs.force }}
+    steps:
+      - id: one
+        run: >
+          if [ '${{ toJSON(inputs) }}' = 'null'  ];
+          then
+              echo "workflow_dispatch";
+              echo "draft=${{ github.event.inputs.draft }}" >> $GITHUB_OUTPUT;
+              echo "force=${{ github.event.inputs.force }}" >> $GITHUB_OUTPUT;
+          else
+              echo "workflow_call";
+              echo "draft=${{ inputs.draft }}" >> $GITHUB_OUTPUT;
+              echo "force=${{ inputs.force }}" >> $GITHUB_OUTPUT;
+          fi
+        
+
+######################################################################################
+
+
   # Build Loadup
   do_release:
+    needs: inputs
     uses: ./.github/workflows/buildLoadup.yml
+    with:
+        draft: ${{ needs.inputs.outputs.draft }}
+        force: ${{ needs.inputs.outputs.force }}
     
+
+######################################################################################
+
   # Build Docker Image
   do_docker:
-    needs: do_release
+    needs: [inputs, do_release]
     uses: ./.github/workflows/buildDocker.yml
+    with:
+        draft: ${{ needs.inputs.outputs.draft }}
+        force: ${{ needs.inputs.outputs.force }}
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+
+######################################################################################
+

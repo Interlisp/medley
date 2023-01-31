@@ -10,7 +10,7 @@
 #
 # 2022-01-17 Frank Halasz based on an earlier version of buildLoadup for Medley.
 #
-# Copyright 2022 by Interlisp.org
+# Copyright 2022-2023 by Interlisp.org
 #
 # ******************************************************************************
 
@@ -20,6 +20,12 @@ name: Build/Push Medley Release
 on:
   workflow_dispatch:
     inputs:
+      draft:
+        description: "Mark this as a draft release"
+        type: choice
+        options:
+        - 'false'
+        - 'true'
       force:
         description: "Force build even if build already successfully completed for this commit"
         type: choice
@@ -33,6 +39,11 @@ on:
         description: "'True' if medley build completed successully"
         value: ${{ jobs.complete.outputs.build_successful }}
     inputs:
+      draft:
+        description: "Mark this as a draft release"
+        required: false
+        type: string
+        default: 'false'
       force:
         description: "Force build even if build already successfully completed for this commit"
         required: false
@@ -54,13 +65,20 @@ jobs:
   inputs:
     runs-on: ubuntu-latest
     outputs:
-      force: ${{ steps.force.outputs.force }}
+      draft: ${{ steps.one.outputs.draft }}
+      force: ${{ steps.one.outputs.force }}
     steps:
-      - id: force
+      - id: one
         run: >
           if [ '${{ toJSON(inputs) }}' = 'null'  ];
-          then echo "force=${{ github.event.inputs.force }}" >> $GITHUB_OUTPUT; echo "workflow_dispatch";
-          else echo "force=${{ inputs.force }}" >> $GITHUB_OUTPUT; echo "workflow_call";
+          then
+              echo "workflow_dispatch";
+              echo "draft=${{ github.event.inputs.draft }}" >> $GITHUB_OUTPUT;
+              echo "force=${{ github.event.inputs.force }}" >> $GITHUB_OUTPUT;
+          else
+              echo "workflow_call";
+              echo "draft=${{ inputs.draft }}" >> $GITHUB_OUTPUT;
+              echo "force=${{ inputs.force }}" >> $GITHUB_OUTPUT;
           fi
         
 
@@ -129,12 +147,20 @@ jobs:
       - name: Setup Environment Variables
         id: setup_env
         run: |
-          echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> ${GITHUB_OUTPUT}
+          echo "TARBALL_DIR=installers/deb/tmp/tarballs" >>${GITHUB_ENV}
+          echo "DEBS_DIR=installers/deb/debs" >>${GITHUB_ENV}
+          echo "TARS_DIR=installers/deb/tars" >>${GITHUB_ENV}
+          echo "MEDLEY_RELEASE_TAG=${RELEASE_TAG}" >>${GITHUB_ENV}
+
+      # Setup some needed dirs in workspace
+      - name: Create work dirs
+        run: mkdir -p ${TARBALL_DIR}
 
       # Get Maiko release information, retrieves the name of the latest
       # release.  Used to download the correct Maiko release
       - name: Get Maiko Release Information
-        id: latest_version
+        id: maiko
         uses: abatilo/release-info-action@v1.3.2
         with:
           owner: ${{ github.repository_owner }}
@@ -147,42 +173,59 @@ jobs:
           repository: ${{ github.repository_owner }}/maiko
           token: ${{ secrets.GITHUB_TOKEN }}
           latest: true
-          fileName: "${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz" 
+          out-file-path: ${{ env.TARBALL_DIR }}
+          fileName: "${{ steps.maiko.outputs.latest_tag }}-linux.*.tgz" 
 
-      - name: Untar Maiko Release
+      - name: Untar Maiko Release for use in loadup
         run: |
-          tar -xvzf "${{ steps.latest_version.outputs.latest_tag }}-linux.x86_64.tgz"
+          tar -xzf "${TARBALL_DIR}/${{ steps.maiko.outputs.latest_tag }}-linux.x86_64.tgz"
 
+      # Checkout Notecards and tar it in the tarballsdir
+      - name: Checkout Notecards
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository_owner }}/notecards
+          path: ./notecards
+      - run: mv ./notecards ../notecards
+      - name: Tar notecards into tarball dir
+        run: |
+          cd ..
+          tar cfz medley/${TARBALL_DIR}/notecards.tgz notecards
+
+      #
       - name: Install vnc
         run: sudo apt-get update && sudo apt-get install -y tightvncserver
 
-      - name: Build Loadout
+      - name: Build Loadup sysouts and databases
         run: |
           Xvnc -geometry 1280x720 :0 &
           export DISPLAY=":0"
           PATH="$PWD/maiko:$PATH" 
-          scripts/loadup-all.sh
+          scripts/loadup-all.sh -apps
 
       - name: Build loadups release tar
         run: |
           cd ..
-          tar cfz medley/tmp/${RELEASE_TAG}-loadups.tgz        \
+          tar cfz medley/${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-loadups.tgz        \
             medley/loadups/lisp.sysout               \
             medley/loadups/full.sysout               \
+            medley/loadups/apps.sysout               \
             medley/loadups/whereis.hash              \
             medley/library/exports.all
       
       - name: Build runtime release tar
         run: |
           cd ..
-          tar cfz medley/tmp/${RELEASE_TAG}-runtime.tgz          \
+          tar cfz medley/${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-runtime.tgz          \
                      --exclude "*~" --exclude "*#*"              \
                      --exclude exports.all                       \
                      medley/clos                                 \
                      medley/docs/dinfo                           \
+                     medley/docs/man-page/medley.1.gz            \
                      medley/doctools                             \
                      medley/greetfiles                           \
                      medley/rooms                                \
+                     medley/medley                               \
                      medley/run-medley                           \
                      medley/scripts                              \
                      medley/fonts/displayfonts                   \
@@ -194,24 +237,70 @@ jobs:
                      medley/sources                              \
                      medley/internal
 
+
+      - name: Build .deb files for 3 architectures
+        run: |
+          cd installers/deb
+          ./build_deb.sh
+
       - name: Delete existing release with same tag (if any)
         uses: cb80/delrel@latest
         with:
-            tag: ${{ env.RELEASE_TAG }} 
+            tag: ${{ env.MEDLEY_RELEASE_TAG }} 
         continue-on-error: true
 
       - name: Push the release
+        id: push_release
         uses: ncipollo/release-action@v1
         with: 
           allowUpdates: true
           artifacts:
-            tmp/${{ env.RELEASE_TAG }}-loadups.tgz,
-            tmp/${{ env.RELEASE_TAG }}-runtime.tgz
-          tag: ${{ env.RELEASE_TAG }}
-          draft: false
+            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-loadups.tgz,
+            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-runtime.tgz,
+            ${{ env.DEBS_DIR }}/*.deb,
+            ${{ env.TARS_DIR }}/*.tgz
+          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          draft: ${{ needs.inputs.outputs.draft }}
           prerelease: false
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update the downloads page and the man page to the OIO satic page host
+        run: |
+            maiko_release_tag="${{ steps.maiko.outputs.latest_tag }}"
+            medley_short_release_tag="${MEDLEY_RELEASE_TAG#medley-}"
+            full_release_filename="${MEDLEY_RELEASE_TAG/medley/medley-full}_${maiko_release_tag#maiko-}"
+            # Need info about where github stores assets because draft releases are not tagged
+            release_url="${{ steps.push_release.outputs.html_url }}"
+            github_subdir="$( echo "${release_url}" | sed -e "s#^.*/\([^/]\+\)\$#\1#g" )"
+            #
+            local_template="installers/downloads_page/medley_downloads.html"
+            local_filename="medley_downloads.html"
+            if [ "${{ needs.inputs.outputs.draft }}" = "true" ];
+            then
+                remote_filename="draft_downloads"
+            else
+                remote_filename="${local_filename%.html}"
+            fi            
+            remote_filepath="/srv/oio/static/${remote_filename}"
+            sed \
+               -e "s/@@@FULL.RELEASE.FILENAME@@@/${full_release_filename}/g" \
+               -e "s/@@@GITHUB.SUBDIR@@@/${github_subdir}/g" \
+               -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${medley_short_release_tag}/g" \
+               < "${local_template}" > "${local_filename}"
+            local_manpath="docs/man-page/man_medley.html"
+            remote_manpath="/srv/oio/static/man_medley.html"
+            echo "-rm ${remote_filepath}.oldold" > batch
+            echo "-rename ${remote_filepath}.old ${remote_filepath}.oldold" >> batch
+            echo "-rename ${remote_filepath}.html ${remote_filepath}.old" >> batch
+            echo "-put ${local_filename} ${remote_filepath}.html" >> batch
+            echo "-put ${local_manpath} ${remote_manpath}" >> batch
+            eval $(ssh-agent)
+            ssh-add - <<< "${SSH_KEY}"
+            sftp -o StrictHostKeyChecking=no -b batch ubuntu@online.interlisp.org
+        env:
+            SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
+
 
 ######################################################################################
 

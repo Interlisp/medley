@@ -3,7 +3,7 @@
 # Dockerfile to build Medley image from latest Maiko image 
 # plus latest release tars from github
 #
-# Copyright 2022 by Interlisp.org
+# Copyright 2022-2023 by Interlisp.org
 #
 # ******************************************************************************
 
@@ -29,26 +29,27 @@ LABEL maiko_release=$MAIKO_RELEASE
 ENV MEDLEY_BUILD_DATE=$BUILD_DATE
 ENV MEDLEY_RELEASE=$RELEASE_TAG
 
-ARG INSTALL_LOCATION=/usr/local/interlisp
-ENV INSTALL_LOCATION=${INSTALL_LOCATION}
+ARG IL_INSTALLDIR=/usr/local/interlisp
+ENV IL_INSTALLDIR=${IL_INSTALLDIR}
+ENV MAIKO_INSTALLDIR=${IL_INSTALLDIR}/maiko
+ENV MEDLEY_INSTALLDIR=${IL_INSTALLDIR}/medley
 
 ARG DOCKER_NAMESPACE=interlisp
 ENV DOCKER_NAMESPACE=${DOCKER_NAMESPACE}
 
-# Copy over the release tars
-RUN mkdir -p ${INSTALL_LOCATION}
-ADD ./*.tgz ${INSTALL_LOCATION}
+ENV LANG=C.UTF-8
 
-# Create a run_medley script in /usr/local/bin
-RUN mkdir -p /usr/local/bin                                     && \
-    echo "#!/bin/bash"                    > /usr/local/bin/run-medley && \
-    echo "cd ${INSTALL_LOCATION}/medley"  >> /usr/local/bin/run-medley && \
-    echo './run-medley "$@"'              >> /usr/local/bin/run-medley && \
-    chmod ugo+x /usr/local/bin/run-medley
+# Copy over the release tars
+RUN mkdir -p ${IL_INSTALLDIR}
+ADD ./*.tgz ${IL_INSTALLDIR}
+
+# Link run_medley script into /usr/local/bin
+RUN mkdir -p /usr/local/bin && \
+    ln -s ${MEDLEY_INSTALLDIR}/run-medley /usr/local/bin/run-medley
     
 # "Finalize" image
 EXPOSE 5900
 RUN adduser --disabled-password --gecos "" medley
 USER medley
 WORKDIR /home/medley
-ENTRYPOINT USER=medley Xvnc -geometry 1280x720 :0 & DISPLAY=:0 ${INSTALL_LOCATION}/medley/run-medley -full -g 1280x720 -sc 1280x720
+ENTRYPOINT USER=medley Xvnc -geometry 1280x720 :0 & DISPLAY=:0 ${MEDELY_INSTALLDIR}/run-medley -full -g 1280x720 -sc 1280x720

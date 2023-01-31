@@ -16,4 +16,7 @@ fi
 ./scripts/cpv tmp/lisp.sysout loadups
 ./scripts/cpv tmp/whereis.hash loadups
 ./scripts/cpv tmp/exports.all library
+if [ "${1}" = "-apps" ]; then
+    ./scripts/cpv tmp/apps.sysout loadups
+fi
 

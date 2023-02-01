@@ -1,0 +1,58 @@
+#*******************************************************************************
+# 
+# Dockerfile to build Medley image from latest Maiko image 
+# plus latest release tars from github
+#
+# Copyright 2022-2023 by Interlisp.org
+#
+# ******************************************************************************
+
+FROM ubuntu:22.04
+
+#  Handle ARGs, ENV variables, and LABELs
+ARG BUILD_DATE=unknown
+ARG MEDLEY_RELEASE=unknown
+ARG MAIKO_RELEASE=unknown
+ARG REPO_OWNER=Interlisp
+LABEL name="Medley"
+LABEL description="The Medley Interlisp environment"
+LABEL url="https://github.com/${REPO_OWNER}/medley"
+LABEL build-date=$BUILD_DATE
+LABEL medley_release=$MEDLEY_RELEASE
+LABEL maiko_release=$MAIKO_RELEASE
+
+ENV MEDLEY_DOCKER_BUILD_DATE=$BUILD_DATE
+ENV MEDLEY_RELEASE=$MEDLEY_RELEASE
+ENV MAIKO_RELEASE=$MAIKO_RELEASE
+
+ENV LANG=C.UTF-8
+
+# Copy over the release deb files
+ADD ./*.deb /tmp
+
+# Install Medley/Maiko and add tightvnc server and xclip to the image
+RUN apt-get update                                               \
+    && apt-get install -y tightvncserver                         \
+    && apt-get install -y xclip                                  \
+    && p=$(echo "${TARGETPLATFORM}" | sed -e "s#linux/##")       \
+    && p=$(                                                      \
+           if [ "$p" = "amd64" ];                                \
+               then echo "x86_64";                               \
+           elif [ "$p" = "arm64" ];                              \
+               then echo "aarch64";                              \
+           elif [ "$p" = "arm/v7" ];                             \
+               then echo "armv7l";                               \
+           else                                                  \
+               echo "X86_64";                                    \
+           fi                                                    \
+          )                                                      \
+    && deb="medley-full-${MEDLEY_RELEASE#medley-}"               \
+    && deb=${deb}_${MAIKO_RELEASE#maiko-}-linux-${p}.deb         \
+    && apt install -y /tmp/${deb}
+   
+# "Finalize" image
+EXPOSE 5900
+RUN adduser --disabled-password --gecos "" medley
+USER medley
+WORKDIR /home/medley
+ENTRYPOINT USER=medley Xvnc -geometry 1280x720 :0 & DISPLAY=:0 medley --full -g 1280x720

@@ -136,60 +136,46 @@ jobs:
       # Checkout latest commit
       - name: Checkout Medley
         uses: actions/checkout@v3
-
-      # Set repo env variables
-      - name: Set repo/docker env variables
-        id: repo_env
-        run: |
-          REPO_NAME=${GITHUB_REPOSITORY#*/}
-          echo "REPO_NAME=${REPO_NAME}" >> ${GITHUB_ENV}
-          echo "repo_name=${REPO_NAME}" >> ${GITHUB_OUTPUT}
-          DOCKER_NAMESPACE=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "DOCKER_NAMESPACE=${DOCKER_NAMESPACE}" >> ${GITHUB_ENV}
-          echo "docker_namespace=${DOCKER_NAMESPACE}" >> ${GITHUB_OUTPUT}
-
-      # Get tag of latest Medley release.
-      - name: Get Medley Release Information
-        id: release_info
-        uses: abatilo/release-info-action@v1.3.2
-        with:
-          owner: ${{ github.repository_owner }}
-          repo: medley
-          
-      # Get asset tars from latest Medley release
+  
+      # Get asset debs from latest Medley release
       - name: Download Release Assets
         uses: robinraju/release-downloader@v1.7
         with:
           repository: ${{ github.repository_owner }}/medley
           token: ${{ secrets.GITHUB_TOKEN }}
           latest: true
-          fileName: "*"
-          out-file-path: "release_tars"
+          fileName: "*-linux-*.deb"
+          out-file-path: "release_debs"
 
-      # Get Maiko release information about latest Maiko Docker Image
+      # Get Maiko and Medley release information from name of deb files
+      # just downloaded from the Medley latest release
       - name: Get info from latest Maiko image
         id: maiko_setup
         run: |
-          docker pull ${DOCKER_NAMESPACE}/maiko:latest
-          MAIKO_RELEASE=$(docker run --entrypoint /bin/bash ${DOCKER_NAMESPACE}/maiko:latest -c "echo \${MAIKO_RELEASE}")
-          echo "MAIKO_RELEASE=${MAIKO_RELEASE}" >> ${GITHUB_ENV}
-          echo "maiko_release=${MAIKO_RELEASE}" >> ${GITHUB_OUTPUT}
+          regex="^[^0-9]*\([^_]*\)_\([^-]*-[^-]*\)-\([^-]*\)-\([^.]*\).*\$"
+          ls -1 release_debs | head -n 1 > debname.tmp
+          medley_release="medley-$(sed -e "s/${regex}/\1/" debname.tmp)"
+          maiko_release="maiko-$(sed -e "s/${regex}/\2/" debname.tmp)"
+          rm -f debname.tmp
+          echo "MEDLEY_RELEASE=\"${medley_release}\""     >> ${GITHUB_ENV}
+          echo "MAIKO_RELEASE=\"${maiko_release}\""       >> ${GITHUB_ENV}
 
-      # Setup environment variables
-      - name: Setup Environment Variables
-        id: setup_env
+      # Set repo env variables
+      - name: Set repo/docker env variables
+        id: repo_env
         run: |
-          RELEASE_TAG=${{ steps.release_info.outputs.latest_tag }}
-          DOCKER_IMAGE=${DOCKER_NAMESPACE}/${REPO_NAME}
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          docker_namespace="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          docker_image="${docker_namespace}/${repo_name}"
           if [ "${{ needs.inputs.outputs.draft }}" = "false" ];
-              then DOCKER_TAGS="${DOCKER_IMAGE}:latest,${DOCKER_IMAGE}:${RELEASE_TAG#*-}_${MAIKO_RELEASE#*-}"
-              else DOCKER_TAGS="${DOCKER_IMAGE}:draft"
+              then docker_tags="${docker_image}:latest,${docker_image}:${MEDLEY_RELEASE#*-}_${MAIKO_RELEASE#*-}"
+              else docker_tags="${docker_image}:draft"
           fi
-          echo "docker_tags=${DOCKER_TAGS}" >> ${GITHUB_OUTPUT}
-          echo "docker_image=${DOCKER_IMAGE}" >> ${GITHUB_OUTPUT}
-          echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> ${GITHUB_OUTPUT}
-          echo "release_tag=${RELEASE_TAG}" >> ${GITHUB_OUTPUT}
-          echo "release_tag=${RELEASE_TAG}" >> ${GITHUB_ENV}
+          echo "REPO_NAME=\"${repo_name}\""                       >> ${GITHUB_ENV}
+          echo "DOCKER_NAMESPACE=\"${docker_namespace}\""         >> ${GITHUB_ENV}
+          echo "DOCKER_IMAGE=\"${docker_image}\""                 >> ${GITHUB_ENV}
+          echo "DOCKER_TAGS=\"${docker_tags}\""                   >> ${GITHUB_ENV}
+          echo "BUILD_DATE=\"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\""  >> ${GITHUB_ENV}
 
       # Setup the Docker Machine Emulation environment.  
       - name: Set up QEMU
@@ -217,17 +203,16 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           build-args: |
-            BUILD_DATE=${{ steps.setup_env.outputs.build_time }}
-            RELEASE_TAG=${{ steps.setup_env.outputs.release_tag }}
-            MAIKO_RELEASE=${{ steps.setup_env.outputs.maiko_release }}
-            DOCKER_NAMESPACE=${{ steps.repo_env.outputs.docker_namespace }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            MEDLEY_RELEASE=${{ env.MEDLEY_RELEASE }}
+            MAIKO_RELEASE=${{ env.MAIKO_RELEASE }}
             REPO_OWNER=${{ github.repository_owner }}
-          context: ./release_tars
-          file: ./Dockerfile
+          context: ./release_debs
+          file: ./.github/workflow/Dockerfile_medley
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           # Push the result to DockerHub
           push: true
-          tags: ${{ steps.setup_env.outputs.docker_tags }}
+          tags: ${{ env.DOCKER_TAGS }}
 
 ######################################################################################
 

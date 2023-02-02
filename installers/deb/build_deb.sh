@@ -120,6 +120,10 @@ do
       cp -p tmp/vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
     fi
     #
+    #  Make sure all files are owned by root
+    #
+    sudo su <<< "chown --recursive root:root ${il_dir}"
+    #
     #  Create tar file for this arch
     #
     filename="medley-full-${medley_release}_${maiko_release}-${wslp}-${arch}"

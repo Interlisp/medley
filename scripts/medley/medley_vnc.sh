@@ -105,7 +105,7 @@
   #    set the VNC_PORT to the value of the --port flag (or its default value)
   #    set DISPLAY to :0
   #
-  if [ "${docker} = "true" ];
+  if [ "${docker}" = "true" ];
   then
      VNC_PORT=5900
      export DISPLAY=:0
@@ -161,7 +161,7 @@
     kill -9 ${xvnc_pid} >>${LOG} 2>&1
 ....EOF
   chmod +x /tmp/run-medley_$$
-  if [ "${docker}" = "true" ]:
+  if [ "${docker}" = "true" ];
   then
     /tmp/run-medley_$$
   else

@@ -56,13 +56,20 @@ export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ../..; pwd)
 IL_DIR=$(cd ${MEDLEYDIR}; cd ..; pwd)
 export LOGINDIR=${HOME}/il
 
-# Are we running under WSL?
-grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
-if [ $? -eq 0 ];
+# Are we running under Docker or if not under WSL?
+if [ -n "${MEDLEY_DOCKER_BUILD_DATE}" ];
 then
-  wsl='true'
-else
+  docker='true'
   wsl='false'
+else
+  docker='false'
+  grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
+  if [ $? -eq 0 ];
+  then
+    wsl='true'
+  else
+    wsl='false'
+  fi
 fi
 
 # process args
@@ -104,12 +111,12 @@ fi
 mkdir -p ${LOGINDIR}/vmem
 
 # Call run-medley with or without vnc
-if [[ ${wsl} = false || ${use_vnc} = false ]];
+if [[ ( ${wsl} = false || ${use_vnc} = false ) && ${docker} = false ]];
 then
   # If not using vnc, just call run-medley
   ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}"
 else
-  # do the vnc thing on wsl
+  # do the vnc thing on wsl or docker
   source ${SCRIPTDIR}/medley_vnc.sh
 fi
 

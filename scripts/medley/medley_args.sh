@@ -116,7 +116,7 @@ do
         greet_specified='true'
         shift
         ;;
-      -p | --vmem)
+      -u | --vmem)
         check_for_dash_or_end "$1" "$2"
         check_file_writeable_or_creatable "$1" "$2"
         export LDEDESTSYSOUT="$2"

@@ -53,74 +53,92 @@
   }
 
   #
-  # Make sure prequisites for vnc support are in place
+  # Make sure prequisites for vnc support in wsl are in place
   #
-  win_userprofile="$(cmd.exe /c "<nul set /p=%UserProfile%" 2>/dev/null)"
-  vnc_dir="$(wslpath ${win_userprofile})/AppData/Local/Interlisp"
-  vnc_exe="vncviewer64-1.12.0.exe"
-  if [[ $(which Xvnc) = "" || $(Xvnc -version |& grep -iq tigervnc; echo $?) -eq 1 ]];
+  if [ "${use_vnc}" = "true" ];
   then
-    echo "Error: The -v or --vnc flag was set."
-    echo "But it appears that that TigerVNC \(Xvnc\) has not been installed."
-    echo "Please install TigerVNC using \"sudo apt install tigervnc-standalone-server tigervnc-xorg-extension\""
-    echo "Exiting."
-    exit 4
-  elif [ ! -e "${vnc_dir}/${vnc_exe}" ];
-  then
-    if [ -e "${IL_DIR}/wsl/${vnc_exe}" ];
+    win_userprofile="$(cmd.exe /c "<nul set /p=%UserProfile%" 2>/dev/null)"
+    vnc_dir="$(wslpath ${win_userprofile})/AppData/Local/Interlisp"
+    vnc_exe="vncviewer64-1.12.0.exe"
+    if [[ $(which Xvnc) = "" || $(Xvnc -version |& grep -iq tigervnc; echo $?) -eq 1 ]];
     then
-      # make sure TigerVNC viewer is in a Windows (not Linux) directory.  If its in a Linux directory
-      # there will be a long delay when it starts up
-      mkdir -p ${vnc_dir}
-      cp -p "${IL_DIR}/wsl/${vnc_exe}" "${vnc_dir}/${vnc_exe}"
-    else
-      echo "TigerVnc viewer is required by the -vnc option but is not installed."
-      echo -n "Ok to download from SourceForge? [y, Y, n or N, default n]  "
-      read resp
-      if [ -z ${resp} ]; then resp=n; else resp=${resp:0:1}; fi
-      if [[ ${resp} = 'n' || ${resp} = 'N' ]];
+      echo "Error: The -v or --vnc flag was set."
+      echo "But it appears that that TigerVNC \(Xvnc\) has not been installed."
+      echo "Please install TigerVNC using \"sudo apt install tigervnc-standalone-server tigervnc-xorg-extension\""
+      echo "Exiting."
+      exit 4
+    elif [ ! -e "${vnc_dir}/${vnc_exe}" ];
+    then
+      if [ -e "${IL_DIR}/wsl/${vnc_exe}" ];
       then
-        echo "Ok.  You can download the Tiger VNC viewer \(v1.12.0\) .exe yourself and "
-        echo "place it in ${vnc_dir}/${vnc_exe}.  Then retry."
-        echo "Exiting."
-        exit 5
+        # make sure TigerVNC viewer is in a Windows (not Linux) directory.  If its in a Linux directory
+        # there will be a long delay when it starts up
+        mkdir -p ${vnc_dir}
+        cp -p "${IL_DIR}/wsl/${vnc_exe}" "${vnc_dir}/${vnc_exe}"
       else
-        pushd "${vnc_dir}" >/dev/null
-        wget https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
-        popd >/dev/null
+        echo "TigerVnc viewer is required by the -vnc option but is not installed."
+        echo -n "Ok to download from SourceForge? [y, Y, n or N, default n]  "
+        read resp
+        if [ -z ${resp} ]; then resp=n; else resp=${resp:0:1}; fi
+        if [[ ${resp} = 'n' || ${resp} = 'N' ]];
+        then
+          echo "Ok.  You can download the Tiger VNC viewer \(v1.12.0\) .exe yourself and "
+          echo "place it in ${vnc_dir}/${vnc_exe}.  Then retry."
+          echo "Exiting."
+          exit 5
+        else
+          pushd "${vnc_dir}" >/dev/null
+          wget https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
+          popd >/dev/null
+        fi
       fi
     fi
   fi
-
   #
-  #  Find an unused display, start Xvnc, run-medley, then start the vnc viewer on the windows side
+  #  Start the log file so we can trace any issues with vnc, etc
   #
-  #set -x
   LOG=${LOGINDIR}/logs/medley_${run_id}.log
   mkdir -p $(dirname -- ${LOG})
   echo "START" >${LOG}
-  OPEN_DISPLAY=`find_open_display`
-  if [ ${OPEN_DISPLAY} -eq -1 ];
+  #
+  # If we're running under docker:
+  #    set the VNC_PORT to the value of the --port flag (or its default value)
+  #    set DISPLAY to :0
+  #
+  if [ "${docker} = "true" ];
   then
-    echo "Error: cannot find an unused DISPLAY between 1 and 63"
-    echo "Exiting"
-    exit 33
+     VNC_PORT=5900
+     export DISPLAY=:0
   else
-    echo "Using DISPLAY=${OPEN_DISPLAY}"
+    #  For not docker (i.e., for wsl/vnc)
+    #    find an unused display and an available port
+    #
+    #set -x
+    OPEN_DISPLAY=`find_open_display`
+    if [ ${OPEN_DISPLAY} -eq -1 ];
+    then
+      echo "Error: cannot find an unused DISPLAY between 1 and 63"
+      echo "Exiting"
+      exit 33
+    else
+      echo "Using DISPLAY=${OPEN_DISPLAY}"
+    fi
+    export DISPLAY=":${OPEN_DISPLAY}"
+    VNC_PORT=`find_open_port`
+    if [ ${VNC_PORT} -eq -1 ];
+    then
+      echo "Error: cannot find an unused port between 5900 and 5999"
+      echo "Exiting"
+      exit 33
+    else
+      echo "Using VNC_PORT=${VNC_PORT}"
+    fi
   fi
-  VNC_PORT=`find_open_port`
-  if [ ${VNC_PORT} -eq -1 ];
-  then
-    echo "Error: cannot find an unused port between 5900 and 5999"
-    echo "Exiting"
-    exit 33
-  else
-    echo "Using VNC_PORT=${VNC_PORT}"
-  fi
-  export DISPLAY=":${OPEN_DISPLAY}"
-  # start vnc
+  #
+  #  Start the Xvnc server
+  #
   mkdir -p ${LOGINDIR}/logs
-  /usr/bin/Xvnc ":${OPEN_DISPLAY}" \
+  /usr/bin/Xvnc "${DISPLAY}" \
                 -rfbport ${VNC_PORT} \
                 -geometry "${geometry#-g }" \
                 -SecurityTypes None \
@@ -131,24 +149,40 @@
   while [ -z ${xvnc_pid} ];
   do
     sleep .25
-    xvnc_pid=$(ps h -C Xvnc -o pid,command | grep "Xvnc :${OPEN_DISPLAY}" | awk '{print $1}')
+    xvnc_pid=$(ps h -C Xvnc -o pid,command | grep "Xvnc ${DISPLAY}" | awk '{print $1}')
   done
-  echo "XVNC_PID is ${xvnc_pid}"
-  # run Medley
-  ( ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}" 2>>${LOG} \
-    ; \
-    kill -9 ${xvnc_pid} ${xvnc_pid} >>${LOG} 2>&1
-  ) &
-  # Give medley time to startup
-  sleep 2
-  # Start vnc viewer on Windows side
-  pushd ${vnc_dir} >/dev/null
-  ( ./${vnc_exe} -geometry "+50+50" \
-                -ReconnectOnError=off \
-                −AlertOnFatalError=off \
-                $(ip_addr):${VNC_PORT} \
-                >>${LOG} 2>&1 \
-    ; \
-    kill -9 ${xvnc_pid} >>${LOG} 2>&1 \
-  ) &
-  popd >/dev/null
+  # echo "XVNC_PID is ${xvnc_pid}"
+  #
+  # Run Medley in foreground if docker, else in background
+  #
+  cat >/tmp/run-medley_$$  <<-....EOF
+    #!/bin/bash
+    ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}" 2>>${LOG}
+    kill -9 ${xvnc_pid} >>${LOG} 2>&1
+....EOF
+  chmod +x /tmp/run-medley_$$
+  if [ "${docker}" = "true" ]:
+  then
+    /tmp/run-medley_$$
+  else
+    /tmp/run-medley_$$ &
+    #
+    #  If not docker (i.e., if wsl/vnc), start the vncviewer on the windows side
+    #
+    #  First give medley time to startup
+    sleep 2
+    #  Then start vnc viewer on Windows side
+    pushd ${vnc_dir} >/dev/null
+    ( ./${vnc_exe} -geometry "+50+50" \
+                   -ReconnectOnError=off \
+                   −AlertOnFatalError=off \
+                   $(ip_addr):${VNC_PORT} \
+                   >>${LOG} 2>&1 \
+      ; \
+      kill -9 ${xvnc_pid} >>${LOG} 2>&1 \
+    ) &
+    popd >/dev/null
+  fi
+  #
+  #  That's all
+  #

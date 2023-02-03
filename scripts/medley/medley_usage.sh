@@ -17,6 +17,9 @@ usage() {
    local err_msg
    local msg_path=/tmp/msg-$$
    local lines=("$@")
+   export wsl_tmp="${wsl}"
+   export docker_tmp="${docker}"
+
    if [ $# -ne 0 ];
    then
      echo > ${msg_path}
@@ -26,6 +29,7 @@ usage() {
    else
      touch ${msg_path}
    fi
+
    cat ${msg_path} - <<EOF | ${PAGER}
 Usage: medley [flags] [sysout] [--] [pass_args ...]
 
@@ -56,9 +60,10 @@ flags:
     -t STRING | --title STRING : use STRING as title of window
 
     -d :N | --display :N       : use X display :N
-
+$( if [ ${wsl_tmp} = true ]; then echo "
     -v | --vnc                 : (WSL only) Use a VNC window instead of an X window
-
+    ";
+fi )
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
     -i - | --id -              : for id use the basename of MEDLEYDIR
@@ -67,25 +72,43 @@ flags:
 
     -m N | --mem N             : set Medley memory size to N
 
-    -p FILE | --vmem FILE      : use FILE as the Medley virtual memory store
+    -u FILE | --vmem FILE      : use FILE as the Medley virtual memory store$( if [ ${docker_tmp} = true ];
+                                   then echo ".
+                                 FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).";
+                                 fi )
 
-    -r FILE | --greet FILE     : use FILE as the Medley greetfile
+    -r FILE | --greet FILE     : use FILE as the Medley greetfile$( if [ ${docker_tmp} = true ];
+                                   then echo ".
+                                 FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).";
+                                 fi )
 
     -r - | --greet -           : do not use a greetfile
-
+$( if [ ${docker_tmp} = false ];
+   then echo "
     -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
 
     -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
+    ";
+    else echo "
+    -x DIR | --logindir DIR    : use DIR (on the host) to map to LOGINDIR (/home/medley/il) in Medley
+
+    -p N | --port N            : use N as the port for connecting to the Xvnc server inside Docker
+    ";
+fi )
 
 sysout:
-    The name of the file to use as a sysout for Medley to start from.  If sysout is not
-    provided and none of the flags [-a, -f & -l] is used, then Medley will start from
+    The pathname of the file to use as a sysout for Medley to start from.$( if [ ${docker_tmp} = true ]; then echo "
+    The pathname must be in the Medley file system under LOGINDIR (/home/medley/il)."; fi )
+    If sysout is not provided and none of the flags [-a, -f & -l] is used, then Medley will start from
     the saved virtual memory file for the id for this run.
 
 pass_args:
     All arguments after the "--" flag, are passed unaltered to lde via run-medley.
 
 EOF
+
+ unset wsl_tmp
+ unset docker_tmp
 
 exit 1
 

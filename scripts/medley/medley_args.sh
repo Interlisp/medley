@@ -197,8 +197,10 @@ then
   fi
 else
   # pass on to run-medley
-  export LDESRCESYSOUT=""
-  run_args+=("${sysout_arg}")
+  unset LDESRCESYSOUT
+  if [ -n "${sysout_arg}" ];
+  then
+    run_args+=("${sysout_arg}")
+  fi
 fi
-
 

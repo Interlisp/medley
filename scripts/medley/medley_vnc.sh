@@ -105,6 +105,7 @@
   #    set the VNC_PORT to the value of the --port flag (or its default value)
   #    set DISPLAY to :0
   #
+  #set -x
   if [ "${docker}" = "true" ];
   then
      VNC_PORT=5900
@@ -146,7 +147,7 @@
                 -DisconnectClients=0 \
                 >> ${LOG} 2>&1 &
   xvnc_pid=""
-  while [ -z ${xvnc_pid} ];
+  while [ -z "${xvnc_pid}" ];
   do
     sleep .25
     xvnc_pid=$(ps h -C Xvnc -o pid,command | grep "Xvnc ${DISPLAY}" | awk '{print $1}')
@@ -157,7 +158,7 @@
   #
   cat >/tmp/run-medley_$$  <<-....EOF
     #!/bin/bash
-    ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}" 2>>${LOG}
+    ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} ${run_args[@]} 2>>${LOG}
     kill -9 ${xvnc_pid} >>${LOG} 2>&1
 ....EOF
   chmod +x /tmp/run-medley_$$
@@ -172,17 +173,24 @@
     #  First give medley time to startup
     sleep 2
     #  Then start vnc viewer on Windows side
-    pushd ${vnc_dir} >/dev/null
-    ( ./${vnc_exe} -geometry "+50+50" \
+    (
+      cd ${vnc_dir} >/dev/null; \
+      ./${vnc_exe} -geometry "+50+50" \
                    -ReconnectOnError=off \
                    −AlertOnFatalError=off \
-                   $(ip_addr):${VNC_PORT} \
-                   >>${LOG} 2>&1 \
-      ; \
-      kill -9 ${xvnc_pid} >>${LOG} 2>&1 \
-    ) &
-    popd >/dev/null
+                   $(ip_addr):${VNC_PORT}; \
+      kill -9 ${xvnc_pid};
+    ) >>${LOG} 2>&1 &
   fi
   #
-  #  That's all
+  #  That's all, wait for vnc to come up before exiting
+  #
+  vncvw_pid=""
+  while [ -z "${vncvw_pid}" ];
+  do
+    sleep .25
+    vncvw_pid=$(ps h -C ${vnc_exe} -o pid,command | grep "${VNC_PORT}" | awk '{print $1}')
+  done
+  #
+  #  Exit
   #

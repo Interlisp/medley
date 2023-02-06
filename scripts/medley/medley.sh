@@ -86,7 +86,7 @@ then
   exit 3
 fi
 
-# Set the LDEDESTSYSOUT env variable based on id
+# Set LDEDESTSYSOUT env variable based on id
 if [ -z ${LDEDESTSYSOUT} ];
 then
   if [ "${run_id}" = "default" ];
@@ -114,7 +114,7 @@ mkdir -p ${LOGINDIR}/vmem
 if [[ ( ${wsl} = false || ${use_vnc} = false ) && ${docker} = false ]];
 then
   # If not using vnc, just call run-medley
-  ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} "${run_args[@]}"
+  ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} ${run_args[@]}
 else
   # do the vnc thing on wsl or docker
   source ${SCRIPTDIR}/medley_vnc.sh

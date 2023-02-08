@@ -108,7 +108,7 @@
   #set -x
   if [ "${docker}" = "true" ];
   then
-     VNC_PORT=5900
+     export VNC_PORT=5900
      export DISPLAY=:0
   else
     #  For not docker (i.e., for wsl/vnc)
@@ -125,7 +125,7 @@
       echo "Using DISPLAY=${OPEN_DISPLAY}"
     fi
     export DISPLAY=":${OPEN_DISPLAY}"
-    VNC_PORT=`find_open_port`
+    export VNC_PORT=`find_open_port`
     if [ ${VNC_PORT} -eq -1 ];
     then
       echo "Error: cannot find an unused port between 5900 and 5999"
@@ -145,52 +145,89 @@
                 -SecurityTypes None \
                 -NeverShared \
                 -DisconnectClients=0 \
+                --MaxDisconnectionTime=10 \
                 >> ${LOG} 2>&1 &
-  xvnc_pid=""
+  export xvnc_pid=""
+  end_time=$(expr $(date +%s) + 10)
   while [ -z "${xvnc_pid}" ];
   do
-    sleep .25
-    xvnc_pid=$(ps h -C Xvnc -o pid,command | grep "Xvnc ${DISPLAY}" | awk '{print $1}')
+    if [ $(date +%s) -gt $end_time ];
+    then
+       echo "Xvnc server failed to start."
+       echo "See log file at ${LOG}"
+       echo "Exiting"
+       exit 3
+    fi
+    sleep .125
+    xvnc_pid=$(pgrep -f "Xvnc ${DISPLAY}")
   done
   # echo "XVNC_PID is ${xvnc_pid}"
   #
   # Run Medley in foreground if docker, else in background
   #
-  cat >/tmp/run-medley_$$  <<-....EOF
+  tmp_dir=$(if [ -e /run/shm ]; then echo "/run/shm"; else echo "/tmp"; fi)
+  medley_run=$(mktemp --tmpdir=${tmp_dir} medley-XXXXX)
+  cat > ${medley_run} <<..EOF
     #!/bin/bash
-    ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} ${run_args[@]} 2>>${LOG}
-    kill -9 ${xvnc_pid} >>${LOG} 2>&1
-....EOF
-  chmod +x /tmp/run-medley_$$
+    ${MEDLEYDIR}/run-medley -id '${run_id}' ${geometry} ${screensize} ${run_args[@]} \
+         2>&1 | tee -a ${LOG} | grep -v "broken (explicit kill"
+    if [ -n "\$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
+..EOF
+  #cat ${medley_run}
+  chmod +x ${medley_run}
   if [ "${docker}" = "true" ];
   then
-    /tmp/run-medley_$$
+    ${medley_run}; rm ${medley_run}
   else
-    /tmp/run-medley_$$ &
+    (${medley_run}; rm ${medley_run}) &
     #
     #  If not docker (i.e., if wsl/vnc), start the vncviewer on the windows side
     #
     #  First give medley time to startup
-    sleep 2
+    # sleep .25
     #  Then start vnc viewer on Windows side
-    (
-      cd ${vnc_dir} >/dev/null; \
-      ./${vnc_exe} -geometry "+50+50" \
-                   -ReconnectOnError=off \
-                   −AlertOnFatalError=off \
-                   $(ip_addr):${VNC_PORT}; \
-      kill -9 ${xvnc_pid};
-    ) >>${LOG} 2>&1 &
+    start_time=$(date +%s)
+    ${vnc_dir}/${vnc_exe} \
+                 -geometry "+50+50" \
+                 -ReconnectOnError=off \
+                 −AlertOnFatalError=off \
+                 $(ip_addr):${VNC_PORT} \
+                 >>${LOG} 2>&1;
+    if [ $( expr $(date +%s) - ${start_time} ) -lt 5 ];
+    then
+      echo "VNC viewer failed to start.";
+      echo "See log file at ${LOG}";
+      echo "Exiting" ;
+      exit 4;
+    fi
   fi
   #
-  #  That's all, wait for vnc to come up before exiting
+  #  Done, "Go back" to medley.sh
   #
-  vncvw_pid=""
-  while [ -z "${vncvw_pid}" ];
-  do
-    sleep .25
-    vncvw_pid=$(ps h -C ${vnc_exe} -o pid,command | grep "${VNC_PORT}" | awk '{print $1}')
-  done
-  #
-  #  Exit
-  #
+  true
+
+#######################################
+if [ $(false) ]; then
+
+
+     #
+      #  That's all, wait for vnc viewer to come up
+      #  before exiting if its an interactive shell
+      #
+      vncvw_pid=""
+      end_time=$(expr $(date +%s) + 10)
+      while [ -z "${vncvw_pid}" ];
+      do
+        if [ $(date +%s) -gt $end_time ];
+        then
+          echo "VNC viewer failed to start."
+          echo "See log file at ${LOG}"
+          echo "Exiting"
+          exit 4
+        fi
+        sleep .25
+        vncvw_pid=$(pgrep -f "${vnc_exe}.*-:${VNC_PORT}")
+      done
+    #fi
+
+fi

@@ -177,7 +177,7 @@
   #
   # Run Medley in foreground if docker, else in background
   #
-  tmp_dir=$(if [ -e /run/shm ]; then echo "/run/shm"; else echo "/tmp"; fi)
+  tmp_dir=$(if [[ -d /run/shm && ! -h /run/shm ]]; then echo "/run/shm"; else echo "/tmp"; fi)
   medley_run=$(mktemp --tmpdir=${tmp_dir} medley-XXXXX)
   cat > ${medley_run} <<..EOF
     #!/bin/bash

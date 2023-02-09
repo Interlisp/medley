@@ -190,10 +190,10 @@ then
 fi
 if [ "${sysout_arg}" = "apps" ];
 then
-  export LDESRCESYSOUT="$MEDLEYDIR/loadups/apps.sysout"
+  export LDESRCESYSOUT="${MEDLEYDIR}/loadups/apps.sysout"
   if [ "${greet_specified}" = "false" ];
   then
-    export LDEINIT="$MEDLEYDIR/greetfiles/APPS-INIT.LCOM"
+    export LDEINIT="${MEDLEYDIR}/greetfiles/APPS-INIT.LCOM"
   fi
 else
   # pass on to run-medley

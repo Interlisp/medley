@@ -111,6 +111,11 @@
      export VNC_PORT=5900
      export DISPLAY=:0
   else
+    # are we running in background - used for pretty-fying the echos
+    case $(ps -o stat= -p $$) in
+      *+*) bg=false ;;
+      *) bg=true ;;
+    esac
     #  For not docker (i.e., for wsl/vnc)
     #    find an unused display and an available port
     #
@@ -122,6 +127,7 @@
       echo "Exiting"
       exit 33
     else
+      if [ ${bg} = true ]; then echo; fi
       echo "Using DISPLAY=${OPEN_DISPLAY}"
     fi
     export DISPLAY=":${OPEN_DISPLAY}"
@@ -147,21 +153,27 @@
                 -DisconnectClients=0 \
                 --MaxDisconnectionTime=10 \
                 >> ${LOG} 2>&1 &
-  export xvnc_pid=""
-  end_time=$(expr $(date +%s) + 10)
-  while [ -z "${xvnc_pid}" ];
-  do
-    if [ $(date +%s) -gt $end_time ];
-    then
-       echo "Xvnc server failed to start."
-       echo "See log file at ${LOG}"
-       echo "Exiting"
-       exit 3
-    fi
-    sleep .125
-    xvnc_pid=$(pgrep -f "Xvnc ${DISPLAY}")
-  done
+
+  # Commenting out the pid wait for now
+  # It seems like its not needed but we'll have
+  # to see how it runs on slower/faster machines
+  # FGH 2023-02-08
+  #xvnc_pid=""
+  #end_time=$(expr $(date +%s) + 10)
+  #while [ -z "${xvnc_pid}" ];
+  #do
+  #  if [ $(date +%s) -gt $end_time ];
+  #  then
+  #     echo "Xvnc server failed to start."
+  #     echo "See log file at ${LOG}"
+  #     echo "Exiting"
+  #     exit 3
+  #  fi
+  #  sleep .125
+  #  xvnc_pid=$(pgrep -f "Xvnc ${DISPLAY}")
+  #done
   # echo "XVNC_PID is ${xvnc_pid}"
+
   #
   # Run Medley in foreground if docker, else in background
   #
@@ -183,8 +195,12 @@
     #
     #  If not docker (i.e., if wsl/vnc), start the vncviewer on the windows side
     #
+
     #  First give medley time to startup
-    # sleep .25
+    #  sleep .25
+    #  SLeep appears not to be needed, but faster/slower machines ????
+    #  FGH 2023-02-08
+
     #  Then start vnc viewer on Windows side
     start_time=$(date +%s)
     ${vnc_dir}/${vnc_exe} \
@@ -192,13 +208,22 @@
                  -ReconnectOnError=off \
                  −AlertOnFatalError=off \
                  $(ip_addr):${VNC_PORT} \
-                 >>${LOG} 2>&1;
+                 >>${LOG} 2>&1 &
+    wait $!
     if [ $( expr $(date +%s) - ${start_time} ) -lt 5 ];
     then
-      echo "VNC viewer failed to start.";
-      echo "See log file at ${LOG}";
-      echo "Exiting" ;
-      exit 4;
+      if [ -z "$(pgrep -f "Xvnc ${DISPLAY}")" ];
+      then
+        echo "Xvnc server failed to start."
+        echo "See log file at ${LOG}"
+        echo "Exiting"
+        exit 3
+      else
+        echo "VNC viewer failed to start.";
+        echo "See log file at ${LOG}";
+        echo "Exiting" ;
+        exit 4;
+      fi
     fi
   fi
   #
@@ -207,27 +232,3 @@
   true
 
 #######################################
-if [ $(false) ]; then
-
-
-     #
-      #  That's all, wait for vnc viewer to come up
-      #  before exiting if its an interactive shell
-      #
-      vncvw_pid=""
-      end_time=$(expr $(date +%s) + 10)
-      while [ -z "${vncvw_pid}" ];
-      do
-        if [ $(date +%s) -gt $end_time ];
-        then
-          echo "VNC viewer failed to start."
-          echo "See log file at ${LOG}"
-          echo "Exiting"
-          exit 4
-        fi
-        sleep .25
-        vncvw_pid=$(pgrep -f "${vnc_exe}.*-:${VNC_PORT}")
-      done
-    #fi
-
-fi

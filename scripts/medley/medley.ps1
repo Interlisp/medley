@@ -65,15 +65,49 @@ function Test-MedleyInstalled {
     }
 }
 
+
+function Find-OpenPort {
+  $min_port=5900
+  $max_port=5999
+  $udp_openPorts = Get-NetUDPEndpoint | Where-Object { ($_.LocalPort -ge $min_port) -and ($_.LocalPort -le $max_port) }
+  $tcp_openPorts = Get-NetTCPConnection | Where-Object { ($_.LocalPort -ge $min_port) -and ($_.LocalPort -le $max_port) }
+  $openPorts = ($udp_openPorts + $tcp_openPorts) | Select-Object -Property LocalPort | Sort-Object -Property LocalPort -Unique
+  $expected=$min_port;
+  foreach ($port in $openPorts)
+    {
+      if ( $port.LocalPort -ne $expected )
+        {
+          break;
+        }
+      else
+        {
+          ${expected}++
+        }
+    }
+  if ($expected -gt $max_port)
+    {
+      Write-Output "Error: No available ports between 5900 and 5999."
+      Write-Output "Exiting."
+      exit 34
+    }
+  else
+    {
+      return $expected
+    }
+}
+
+
 function Process-Args {
 
   $script:wsl = $false
   $script:logindir = ""
-  $script:port = 5900
+  $script:port = $false
   $passRest = $false
   $script:medleyArgs = @()
   $script:draft = "latest"
   $script:bg = $false
+  $script:update = $false
+  $vncRequested = $false
 
   for ( $idx = 0; $idx -lt $args.count; $idx++ ) {
     $arg = $args[$idx]
@@ -97,6 +131,10 @@ function Process-Args {
               exit 33
             }
           $idx++
+        }
+      { @("-u", "--update") -contains $_ }
+        {
+          $script:update = $true
         }
       { @("-w", "--wsl") -contains $_ }
         { 
@@ -137,6 +175,10 @@ function Process-Args {
         {
           $script:draft="draft"
         }
+      {  @("-v", "--vnc") -contains $_ }
+        {
+          $vncRequested = $true
+        }
       { $_ -eq "--" }
         {
           $passRest=$true
@@ -150,9 +192,27 @@ function Process-Args {
     }
   if ($script:logindir)
     {
-      if ($wsl)
+      if ($script:wsl)
         {
           $script:medleyArgs = @( "--logindir", $script:logindir) + $script:medleyArgs
+        }
+    }
+  if ($script:update -and $script:wsl) 
+    {
+       Write-Output "Warning: Both the -u or --update flag and the -w or --wsl flags were given. "
+       Write-Output "The -u or --update flag is not relevant for wsl." 
+       Write-Output "Ignoring the -u or --update flag."
+    }
+  if ($vncRequested)
+    {
+      if (-not $script:wsl) 
+        {
+          Write-Output "Warning: The -v or --vnc flag is not relevant when running under docker"
+          Write-Output "Ignoring the -v or --vnc flag."
+        }
+      else
+        {
+          $script:medleyArgs = @( "--vnc") + $script:medleyArg
         }
     }
 }
@@ -164,6 +224,7 @@ Process-Args @args
 
 #
 # We're not calling wsl, so check if docker is installed and running
+# And if an update is called for, do so
 #
 if (-not $wsl)
   {
@@ -180,6 +241,10 @@ if (-not $wsl)
         Write-Output "This medley app requires the Docker Engine running unless the --wsl flag is used"
         Write-Output "Exiting."
         exit 33
+      }
+    if ($update -or (-not (docker image ls interlisp/medley:${draft} | Select-String medley)))
+      {
+        docker pull interlisp/medley:${draft}
       }
   } 
 
@@ -201,22 +266,27 @@ if ($wsl)
   }
 else
   {
-   Start-Job -ScriptBlock { 
+   if (-not $port) { $port=Find-OpenPort }
+   Write-Output "Using VNC_PORT=$port"
+   Start-Job -InputObject "$port" -ScriptBlock { 
+     $port = $input.Clone()
      $stopTime = (Get-Date).AddSeconds(10)
      $hit=$false
      while ((-not $hit) -and ((Get-Date) -lt $stopTime))
        {
-         $hit = docker container ls | Select-String 'medley' | Select-String "${port}->5900"
+         docker container ls | Select-String 'medley' | Select-String "${port}->5900" | Set-Variable "hit"
          if (-not $hit) { Start-Sleep -Milliseconds 250 }
        }
      if ($hit) 
        {
-         C:\"Program Files"\TigerVNC2\vncviewer -geometry '+50+50' -ReconnectOnError=off −AlertOnFatalError=off localhost:5900 
+         Write-Host $hit
+         C:\"Program Files"\TigerVNC2\vncviewer -geometry '+50+50' -ReconnectOnError=off −AlertOnFatalError=off localhost:${port}
        }
+       
    } >$null
    if (-not $bg) 
      {
-       docker run --rm -p ${port}:5900 --entrypoint medley interlisp/medley:${draft} @medleyArgs
+       docker run -it --rm -p ${port}:5900 --entrypoint medley --env TERM=xterm interlisp/medley:${draft} @medleyArgs
      }
    else
      {

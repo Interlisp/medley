@@ -14,27 +14,53 @@
 # load usage function
 source ${SCRIPTDIR}/medley_usage.sh
 
-# Process args
+# Defaults
+apps_flag=false
+err_msg=""
+full_flag=false
+geometry=""
+greet_specified=false
+lisp_flag=false
+noscroll=false
+pass_args=false
 run_args=()
 run_id="default"
-use_vnc='false'
-geometry=""
 screensize=""
-noscroll='false'
-pass_args=false
-lisp_flag=false
-full_flag=false
-apps_flag=false
 sysout_flag=false
 sysout_arg=""
-err_msg=""
-greet_specified='false'
+use_vnc=false
+windows=false
 
+# Loop thru args and process
 while [ "$#" -ne 0 ];
 do
   if [ ${pass_args} = false ];
   then
     case "$1" in
+      -a | --apps)
+        sysout_arg="apps"
+        apps_flag=true
+        ;;
+      -d | --display)
+        check_for_dash_or_end "$1" "$2"
+        run_args+=(-d $2)
+        shift
+        ;;
+      -e | --interlisp)
+        export MEDLEY_EXEC="inter"
+        ;;
+      -f | --full)
+        sysout_arg="-full"
+        full_flag=true
+        ;;
+      -g | --geometry)
+        check_for_dash_or_end "$1" "$2"
+        geometry="$2"
+        shift
+        ;;
+      -h | --help)
+        usage
+        ;;
       -i | --id)
         if [ "$2" = "-" ];
         then
@@ -46,6 +72,47 @@ do
           check_for_dash_or_end "$1" "$2"
           run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)
         fi
+        shift
+        ;;
+      -k | --vmem)
+        check_for_dash_or_end "$1" "$2"
+        check_file_writeable_or_creatable "$1" "$2"
+        export LDEDESTSYSOUT="$2"
+        shift
+        ;;
+      -l | --lisp)
+        sysout_arg="-lisp"
+        lisp_flag=true
+        ;;
+      -m | --mem)
+        check_for_dash_or_end "$1" "$2"
+        run_args+=(-m $2)
+        shift
+        ;;
+      -n | --noscroll)
+        noscroll=true
+        run_args+=("-noscroll")
+        ;;
+      -r | --greet)
+        if [[ "$2" = "-" || "$2" = "--" ]];
+        then
+          run_args+=("--nogreet")
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_file_readable "$1" "$2"
+          run_args+=("-greet" "$2")
+        fi
+        greet_specified='true'
+        shift
+        ;;
+      -s | --screensize)
+        check_for_dash_or_end "$1" "$2"
+        screensize="$2"
+        shift
+        ;;
+      -t | --title)
+        check_for_dash_or_end "$1" "$2"
+        run_args+=(-title $2)
         shift
         ;;
       -v | --vnc)
@@ -60,68 +127,6 @@ do
           use_vnc=false
         fi
         ;;
-      -g | --geometry)
-        check_for_dash_or_end "$1" "$2"
-        geometry="$2"
-        shift
-        ;;
-      -s | --screensize)
-        check_for_dash_or_end "$1" "$2"
-        screensize="$2"
-        shift
-        ;;
-      -n | --noscroll)
-        noscroll=true
-        run_args+=("-noscroll")
-        ;;
-      -e | --interlisp)
-        export MEDLEY_EXEC="inter"
-        ;;
-      -a | --apps)
-        sysout_arg="apps"
-        apps_flag=true
-        ;;
-      -f | --full)
-        sysout_arg="-full"
-        full_flag=true
-        ;;
-      -l | --lisp)
-        sysout_arg="-lisp"
-        lisp_flag=true
-        ;;
-      -m | --mem)
-        check_for_dash_or_end "$1" "$2"
-        run_args+=(-m $2)
-        shift
-        ;;
-      -t | --title)
-        check_for_dash_or_end "$1" "$2"
-        run_args+=(-title $2)
-        shift
-        ;;
-      -d | --display)
-        check_for_dash_or_end "$1" "$2"
-        run_args+=(-d $2)
-        shift
-        ;;
-      -r | --greet)
-        if [[ "$2" = "-" || "$2" = "--" ]];
-        then
-          run_args+=("--nogreet")
-        else
-          check_for_dash_or_end "$1" "$2"
-          check_file_readable "$1" "$2"
-          run_args+=("-greet" "$2")
-        fi
-        greet_specified='true'
-        shift
-        ;;
-      -u | --vmem)
-        check_for_dash_or_end "$1" "$2"
-        check_file_writeable_or_creatable "$1" "$2"
-        export LDEDESTSYSOUT="$2"
-        shift
-        ;;
       -x | --logindir)
         if [[ "$2" = "-" || "$2" = "--" ]];
         then
@@ -134,12 +139,13 @@ do
         fi
         shift
         ;;
-      -h | --help)
-        usage
-        ;;
       -z | --man)
         /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
         exit 0
+        ;;
+      --windows)
+        # internal:  called from Windows medley.ps1 (via docker)
+        windows=true
         ;;
       --)
         pass_args=true

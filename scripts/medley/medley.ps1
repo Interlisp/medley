@@ -1,4 +1,29 @@
-﻿# Function to check if docker is installed on this system
+﻿###############################################################################
+#
+#    medley.ps1 - PowerShell script for running Medley Interlisp in a Docker
+#                 container on Windows. This script will pull the
+#                 interlisp/medley docker container, run the container
+#                 using the Linux medley script as the entrypoint
+#                 passing on the flags as given to this script, and
+#                 then start a vncviewer onto medley running in the 
+#                 container.
+#
+#                 This script can also be used to start medley in a WSL
+#                 distro, although the same can easily be accomplished
+#                 using the wsl command.
+#
+#   2023-02-10 Frank Halasz
+#
+#   Copyright 2023 Interlisp.org
+#
+###############################################################################
+
+
+#
+#  Various useful functions
+#
+
+# Function to check if docker is installed on this system
 function Test-DockerInstalled {
     $ErrorActionPreference = "SilentlyContinue" 
     if (Get-Command "docker" -Syntax)
@@ -65,7 +90,7 @@ function Test-MedleyInstalled {
     }
 }
 
-
+# Function to find an unused port between 5900 and 5999
 function Find-OpenPort {
   $min_port=5900
   $max_port=5999
@@ -97,18 +122,26 @@ function Find-OpenPort {
 }
 
 
+#
+#  Function that processes all the arguments to this script
+#
 function Process-Args {
 
-  $script:wsl = $false
-  $script:logindir = ""
-  $script:port = $false
-  $passRest = $false
-  $script:medleyArgs = @()
-  $script:draft = "latest"
+  # Default values for script-scoped varaibles
   $script:bg = $false
+  $script:draft = "latest"
+  $script:logindir = "${env:USERPROFILE}\AppData\Local\medley"
+  $script:medleyArgs = @()
+  $script:noviewer = $false
+  $script:port = $false
   $script:update = $false
+  $script:wsl = $false
+
+  # Variables local this function
+  $passRest = $false
   $vncRequested = $false
 
+  # Loop thru args
   for ( $idx = 0; $idx -lt $args.count; $idx++ ) {
     $arg = $args[$idx]
     if ($passRest)
@@ -117,6 +150,15 @@ function Process-Args {
         continue
       }
     switch($arg) {
+      { @("-b", "--background") -contains $_ }
+        {
+          $script:bg= $true
+        }
+      {  @("-h", "--help", "-z", "--man") -contains $_ }
+        {
+          $script:noviewer = $true
+          $script:medleyArgs += $_
+        }
       { @("-p", "--port") -contains $_ }
         {
           if ( ($idx + 1 -gt $args.count) -or ($args[$idx+1] -match "^-") )
@@ -135,6 +177,10 @@ function Process-Args {
       { @("-u", "--update") -contains $_ }
         {
           $script:update = $true
+        }
+      {  @("-v", "--vnc") -contains $_ }
+        {
+          $vncRequested = $true
         }
       { @("-w", "--wsl") -contains $_ }
         { 
@@ -167,17 +213,9 @@ function Process-Args {
           $script:logindir=$args[$idx+1]
           $idx++
         }
-      { @("-b", "--background") -contains $_ }
-        {
-          $script:bg= $true
-        }
       { @("-y", "--draft") -contains $_ }
         {
           $script:draft="draft"
-        }
-      {  @("-v", "--vnc") -contains $_ }
-        {
-          $vncRequested = $true
         }
       { $_ -eq "--" }
         {
@@ -217,24 +255,32 @@ function Process-Args {
     }
 }
 
+###############################################################################
+
+#
+#  Main script
+#
+
 #
 #  Process the arguments
 #
 Process-Args @args
 
 #
-# We're not calling wsl, so check if docker is installed and running
-# And if an update is called for, do so
+# If we're not calling wsl, check if docker is installed and running,
+# check if logindir is a legitamte directory, do the pull if required.
 #
 if (-not $wsl)
   {
+    # Make sure docker is installed
     if (-not (Test-DockerInstalled) )
       {
         Write-Output "Error: Docker is not installed on this system."
         Write-Output "This medley app requires Docker unless the --wsl flag is used"
         Write-Output "Exiting."
-        exit 33
+        exit 34
       }
+    # Make sure docker is running
     if (-not (Test-DockerRunning) )
       {
         Write-Output "Error: The Docker engine is not currently on this system."
@@ -242,6 +288,21 @@ if (-not $wsl)
         Write-Output "Exiting."
         exit 33
       }
+     # Check/create logindir
+     if (-not (Test-Path -Path $logindir -PathType Container))
+       {
+         try 
+           {
+             $null = New-Item -ItemType Directory -Path ${logindir} -Force -ErrorAction Stop
+           }
+         catch 
+           {
+             Write-Output "Error: The specified logindir does not exist and cannot be created: ${logindir}"
+             Write-Output "Exiting."
+             exit 35
+           }
+       }
+    # Do a pull if required
     if ($update -or (-not (docker image ls interlisp/medley:${draft} | Select-String medley)))
       {
         docker pull interlisp/medley:${draft}
@@ -249,10 +310,13 @@ if (-not $wsl)
   } 
 
 #
-#  Call wsl or docker
+#  Call wsl or run docker
 #
 if ($wsl)
   {
+    #
+    # Call wsl
+    #
     if ( $wslDistro -eq "-" )
       {
         $distro = @()
@@ -265,34 +329,59 @@ if ($wsl)
     wsl @distro medley @medleyArgs
   }
 else
+  
   {
+   #
+   # Run docker and vncviewer
+   #
+
+   # Find an open port to use for vnc
    if (-not $port) { $port=Find-OpenPort }
    Write-Output "Using VNC_PORT=$port"
-   Start-Job -InputObject "$port" -ScriptBlock { 
-     $port = $input.Clone()
-     $stopTime = (Get-Date).AddSeconds(10)
-     $hit=$false
-     while ((-not $hit) -and ((Get-Date) -lt $stopTime))
-       {
-         docker container ls | Select-String 'medley' | Select-String "${port}->5900" | Set-Variable "hit"
-         if (-not $hit) { Start-Sleep -Milliseconds 250 }
-       }
-     if ($hit) 
-       {
-         Write-Host $hit
-         C:\"Program Files"\TigerVNC2\vncviewer -geometry '+50+50' -ReconnectOnError=off −AlertOnFatalError=off localhost:${port}
-       }
-       
-   } >$null
+   
+   
+   # Unless $noviewer is set (i.e., if --help and --man flag are set),
+   # start the vncviwer in the background.
+   # But wait for the docker container to actually come up
+   # before starting it
+   if (-not $noviewer)
+     {
+       Start-Job -InputObject "$port" -ScriptBlock { 
+         $port = $input.Clone()
+         $stopTime = (Get-Date).AddSeconds(10)
+         $hit=$false
+         while ((-not $hit) -and ((Get-Date) -lt $stopTime))
+           {
+             docker container ls | Select-String 'medley' | Select-String "${port}->5900" | Set-Variable "hit"
+             if (-not $hit) { Start-Sleep -Milliseconds 250 }
+           }
+         if ($hit) 
+           {
+             Write-Host $hit
+             C:\"Program Files"\TigerVNC2\vncviewer -geometry '+50+50' -ReconnectOnError=off −AlertOnFatalError=off localhost:${port}
+           }
+       } >$null
+     }
+
+   #
+   # Run the docker container using medley as the entrypoint and passing on the args
+   # Run in the foreground unless requested to run in the background by the -b flag.
+   #
+
    if (-not $bg) 
      {
-       docker run -it --rm -p ${port}:5900 --entrypoint medley --env TERM=xterm interlisp/medley:${draft} @medleyArgs
+       docker run -it --rm -p ${port}:5900 -v ${logindir}:/home/medley/il --entrypoint medley --env TERM=xterm interlisp/medley:${draft} --windows @medleyArgs
      }
    else
      {
-       $dockerArgs=@("run", "--rm", "-p", "${port}:5900", "--entrypoint", "medley", "interlisp/medley:${draft}") + $medleyArgs
+       $dockerArgs=@("run", "--rm", "-p", "${port}:5900", "-v", "${logindir}:/home/medley/il", "--entrypoint", "medley", "interlisp/medley:${draft}", "--windows") + $medleyArgs
        Start-Process -NoNewWindow -FilePath "docker" -ArgumentList $dockerArgs
      }
-   #$dockerArgs=@("run", "--rm", "-p", "${port}:5900", "--entrypoint", "medley", "interlisp/medley:${draft}") + $medleyArgs
-   # Start-Process -NoNewWindow -FilePath "docker" -ArgumentList $dockerArgs
   }
+
+###############################################################################
+#
+#  Done
+#
+###############################################################################
+

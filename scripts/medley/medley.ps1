@@ -130,7 +130,7 @@ function Process-Args {
   # Default values for script-scoped varaibles
   $script:bg = $false
   $script:draft = "latest"
-  $script:logindir = "${env:USERPROFILE}\AppData\Local\medley"
+  $script:logindir = "${env:USERPROFILE}\AppData\Local\Medley\il"
   $script:medleyArgs = @()
   $script:noviewer = $false
   $script:port = $false

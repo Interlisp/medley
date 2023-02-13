@@ -116,6 +116,38 @@ jobs:
 
 ######################################################################################
 
+  #
+  # Create the Windows installer
+  #
+  windows:
+
+    runs-on: windows-latest
+
+    needs: [inputs, sentry]
+    if: |
+      needs.sentry.outputs.release_not_built == 'true'
+      || needs.inputs.outputs.force == 'true'
+
+    steps:
+      # Checkout latest commit
+      - name: Checkout Medley
+        uses: actions/checkout@v3
+
+      # Run iscc.exe to compile the
+      - name: Compile medley.iss
+        run: |
+           $env:COMBINED_RELEASE_TAG="XXXVERSIONXXX"
+           iscc installers/win/medley.iss
+      
+      # Upload the installer as an artifact     
+      - name Upload windows installer
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows_installer
+          path: installers/win/medley_install_vXXXVERSIONXXX_x64.exe
+          retention-days: 1
+
+  #
   # Do the loadup
   # 
 
@@ -123,7 +155,7 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    needs: [inputs, sentry]
+    needs: [inputs, sentry, windows]
     if: |
       needs.sentry.outputs.release_not_built == 'true'
       || needs.inputs.outputs.force == 'true'
@@ -248,6 +280,21 @@ jobs:
           cd installers/deb
           ./build_deb.sh
 
+      - name: Download the Windows installer created in windows job
+        uses: actions/download-artifact@v3
+        with:
+           name: windows_installer
+           path: installers/win
+
+      - name: Rename the Windows installer w/ version tag
+        run: |
+          maiko_release_tag="${{ steps.maiko.outputs.latest_tag }}"
+          combined_release_tag="${MEDLEY_RELEASE_TAG#medley-}"_${maiko_release_tag#maiko-}"
+          windows_installer_filename="medley_install_${combined_release_tag}_x64.exe"
+          cd installers/win
+          mv medley_install_vXXXVERSIONXXX_x64.exe "${windows_installer_filename}"  
+          echo "WINDOWS_INSTALLER_FILENAME=${windows_installer_filename}" >>${GITHUB_ENV}
+
       - name: Delete existing release with same tag (if any)
         uses: cb80/delrel@latest
         with:
@@ -263,7 +310,8 @@ jobs:
             ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-loadups.tgz,
             ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-runtime.tgz,
             ${{ env.DEBS_DIR }}/*.deb,
-            ${{ env.TARS_DIR }}/*.tgz
+            ${{ env.TARS_DIR }}/*.tgz,
+            installers/win/${{ env.WINDOWS_INSTALLER_FILENAME }}
           tag: ${{ env.MEDLEY_RELEASE_TAG }}
           draft: ${{ needs.inputs.outputs.draft }}
           prerelease: false
@@ -292,6 +340,7 @@ jobs:
                -e "s/@@@FULL.RELEASE.FILENAME@@@/${full_release_filename}/g" \
                -e "s/@@@GITHUB.SUBDIR@@@/${github_subdir}/g" \
                -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${medley_short_release_tag}/g" \
+               -e "s/@@@WINDOWS.INSTALLER.FILENAME@@@/${WINDOWS_INSTALLER_FILENAME}/g \
                < "${local_template}" > "${local_filename}"
             local_manpath="docs/man-page/man_medley.html"
             remote_manpath="/srv/oio/static/man_medley.html"
@@ -319,7 +368,7 @@ jobs:
     outputs:
       build_successful: ${{ steps.output.outputs.build_successful }}
 
-    needs: [inputs, sentry, loadup]
+    needs: [inputs, sentry, windows, loadup]
 
     steps: 
       # Checkout the actions for this repo owner

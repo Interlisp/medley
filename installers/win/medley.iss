@@ -51,7 +51,7 @@ Source: "..\..\scripts\medley\medley.ps1"; DestDir: "{app}"; DestName: "medley.p
 Source: "..\..\scripts\medley\medley.cmd"; DestDir: "{app}"; DestName: "medley.cmd"; Flags: ignoreversion
 Source: "editpath\x86_64\EditPath.exe"; DestDir: "{app}"; DestName: "EditPath.exe"; Flags: ignoreversion
 Source: "Medley.ico"; DestDir: "{app}"; DestName: "Medley.ico"; Flags: ignoreversion
-
+Source: "vncviewer64-1.12.0.exe"; DestDir: "{app}"; DestName: "vncviewer64-1.12.0.exe"; Flags: ignoreversion
 [Icons]
 Name: "{group}\Medley\Uninstall_Medley"; Filename: "{uninstallexe}"
 Name: "{group}\Medley\Medley"; Filename: "powershell"; Parameters: "-NoExit -File {app}\medley.ps1 --help"; IconFilename: "{app}\Medley.ico"

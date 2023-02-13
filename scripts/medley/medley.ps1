@@ -283,7 +283,7 @@ if (-not $wsl)
     # Make sure docker is running
     if (-not (Test-DockerRunning) )
       {
-        Write-Output "Error: The Docker engine is not currently on this system."
+        Write-Output "Error: The Docker engine is installed but not currently running on this system."
         Write-Output "This medley app requires the Docker Engine running unless the --wsl flag is used"
         Write-Output "Exiting."
         exit 33
@@ -358,7 +358,7 @@ else
          if ($hit) 
            {
              Write-Host $hit
-             C:\"Program Files"\TigerVNC2\vncviewer -geometry '+50+50' -ReconnectOnError=off −AlertOnFatalError=off localhost:${port}
+             vncviewer64-1.12.0.exe -geometry '+50+50' -ReconnectOnError=off −AlertOnFatalError=off localhost:${port}
            }
        } >$null
      }

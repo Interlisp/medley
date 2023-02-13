@@ -18,6 +18,7 @@
 #endif
 
 [Setup]
+PrivilegesRequired=lowest
 ArchitecturesAllowed={#x86_or_x64}
 AppName=Medley
 AppVersion={#version}
@@ -26,7 +27,6 @@ AppPublisherURL=https://interlisp.org/
 AppCopyright=Copyright (C) 2023 Interlisp.org
 DefaultDirName={localappdata}\Medley\Scripts
 DefaultGroupName=Medley
-UninstallDisplayIcon={app}\makeflix.exe
 Compression=lzma2
 SolidCompression=yes
 ; "ArchitecturesInstallIn64BitMode=x64" requests that the install be
@@ -37,21 +37,29 @@ OutputDir="."
 OutputBaseFilename="medley_install_v{#version}_{#x86_or_x64}"
 SetupIconFile="Medley.ico"
 DisableWelcomePage=no
+MissingRunOnceIdsWarning=no
+DisableProgramGroupPage=yes
+WizardImageFile=medley_logo.bmp
+WizardSmallImageFile=medley_logo_small.bmp
+WizardImageStretch=no
+UninstallDisplayIcon="{app}\Medley.ico"
+
+
 
 [Files]
 Source: "..\..\scripts\medley\medley.ps1"; DestDir: "{app}"; DestName: "medley.ps1"; Flags: ignoreversion
 Source: "..\..\scripts\medley\medley.cmd"; DestDir: "{app}"; DestName: "medley.cmd"; Flags: ignoreversion
-Source: "editpath\x86_64\EditPath.exe" DestDir: "{app}"; DestName: "EditPath.exe"; Flags: ignoreversion
-Source: "Medley.ico" DestDir: "{app}"; DestName: "Medley.ico"; Flags: ignoreversion
+Source: "editpath\x86_64\EditPath.exe"; DestDir: "{app}"; DestName: "EditPath.exe"; Flags: ignoreversion
+Source: "Medley.ico"; DestDir: "{app}"; DestName: "Medley.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Medley"; Filename: "{app}\Medley.ico"
-Name: "{group}\Uninstall Medley"; Filename: "{app}\Medley.ico"
+Name: "{group}\Medley\Uninstall_Medley"; Filename: "{uninstallexe}"
+Name: "{group}\Medley\Medley"; Filename: "powershell"; Parameters: "-NoExit -File {app}\medley.ps1 --help"; IconFilename: "{app}\Medley.ico"
 
 
 [Run]
-Filename: "{app}\EditPath.exe"; Params: "--user --add {app}"
+Filename: "{app}\EditPath.exe"; Parameters: "--user --add {app}"; Flags: runhidden
 
-[RunUninstall]
-Filename: "{app}\EditPath.exe"; Params: "--user --remove {app}" 
+[UninstallRun]
+Filename: "{app}\EditPath.exe"; Parameters: "--user --remove {app}"; Flags: runhidden 
 

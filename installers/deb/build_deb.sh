@@ -136,7 +136,7 @@ do
     #
     #  Create tar file for this arch
     #
-    filename="${debs_filenames_base}-${wslp}-${arch}"
+    filename="${debs_filename_base}-${wslp}-${arch}"
     mkdir -p tars
     echo "Creating tar file tars/${filename}.tgz"
     tar -C ${il_dir} -czf tars/${filename}.tgz .

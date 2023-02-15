@@ -128,6 +128,8 @@ jobs:
     outputs:
       combined_release_tag: ${{ steps.job_outputs.outputs.COMBINED_RELEASE_TAG }}
       medley_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_RELEASE_TAG }}
+      medley_short_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_SHORT_RELEASE_TAG }}
+      debs_filename_base: ${{ steps.debs.outputs.DEBS_FILENAME_BASE }}
 
     needs: [inputs, sentry]
     if: |
@@ -182,6 +184,7 @@ jobs:
         run: |
           echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT;
           echo "MEDLEY_RELEASE_TAG=${MEDLEY_RELEASE_TAG}" >> $GITHUB_OUTPUT;
+          echo "MEDLEY_SHORT_RELEASE_TAG=${MEDLEY_SHORT_RELEASE_TAG}" >> $GITHUB_OUTPUT;
 
       # Setup some needed dirs in workspace
       - name: Create work dirs
@@ -213,7 +216,7 @@ jobs:
           cd ..
           tar cfz medley/${TARBALL_DIR}/notecards.tgz notecards
 
-      #
+      # Install vnc
       - name: Install vnc
         run: sudo apt-get update && sudo apt-get install -y tightvncserver
 
@@ -223,7 +226,7 @@ jobs:
           export DISPLAY=":0"
           PATH="$PWD/maiko:$PATH" 
           scripts/loadup-all.sh -apps
-
+      
       - name: Build loadups release tar
         run: |
           cd ..
@@ -261,11 +264,16 @@ jobs:
                      medley/internal
 
 
+      # Build the deb files as well as the tgz files
       - name: Build .deb files for 3 architectures
+        id: debs
         run: |
           cd installers/deb
-          ./build_deb.sh
+          debs_filename_base=$(./build_deb.sh)
+          echo "DEBS_FILENAME_BASE=${debs_filename_base}" >> $GITHUB_ENV;
+          echo "DEBS_FILENAME_BASE=${debs_filename_base}" >> $GITHUB_OUTPUT;
 
+      # Push the release up to github releases
       - name: Delete existing release with same tag (if any)
         uses: cb80/delrel@latest
         with:
@@ -288,44 +296,10 @@ jobs:
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update the downloads page and the man page to the OIO satic page host
-        run: |
-            full_release_filename="medley-full_${COMBINED_RELEASE_TAG}"
-            windows_installer_filename="medley_install_${COMBINED_RELEASE_TAG}_x64.exe"
-            # Need info about where github stores assets because draft releases are not tagged
-            release_url="${{ steps.push_release.outputs.html_url }}"
-            github_subdir="$( echo "${release_url}" | sed -e "s#^.*/\([^/]\+\)\$#\1#g" )"
-            #
-            local_template="installers/downloads_page/medley_downloads.html"
-            local_filename="medley_downloads.html"
-            if [ "${{ needs.inputs.outputs.draft }}" = "true" ];
-            then
-                remote_filename="draft_downloads"
-            else
-                remote_filename="${local_filename%.html}"
-            fi            
-            remote_filepath="/srv/oio/static/${remote_filename}"
-            sed \
-               -e "s/@@@FULL.RELEASE.FILENAME@@@/${full_release_filename}/g" \
-               -e "s/@@@GITHUB.SUBDIR@@@/${github_subdir}/g" \
-               -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${MEDLEY_SHORT_RELEASE_TAG}/g" \
-               -e "s/@@@WINDOWS.INSTALLER.FILENAME@@@/${windows_installer_filename}/g" \
-               < "${local_template}" > "${local_filename}"
-            local_manpath="docs/man-page/man_medley.html"
-            remote_manpath="/srv/oio/static/man_medley.html"
-            echo "-rm ${remote_filepath}.oldold" > batch
-            echo "-rename ${remote_filepath}.old ${remote_filepath}.oldold" >> batch
-            echo "-rename ${remote_filepath}.html ${remote_filepath}.old" >> batch
-            echo "-put ${local_filename} ${remote_filepath}.html" >> batch
-            echo "-put ${local_manpath} ${remote_manpath}" >> batch
-            eval $(ssh-agent)
-            ssh-add - <<< "${SSH_KEY}"
-            sftp -o StrictHostKeyChecking=no -b batch ubuntu@online.interlisp.org
-        env:
-            SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
 
   #
-  # Create the Windows installer
+  # Create the Windows installer, push it up to the release on github and
+  # update the downloads page on OIO
   #
   windows_installer:
 
@@ -349,6 +323,10 @@ jobs:
           echo "COMBINED_RELEASE_TAG=$crt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           $mrt="${{ needs.loadup.outputs.medley_release_tag }}"
           echo "MEDLEY_RELEASE_TAG=$mrt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          $msrt="${{ needs.loadup.outputs.medley_short_release_tag }}"
+          echo "MEDLEY_SHORT_RELEASE_TAG=$msrt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          $debs="${{ needs.loadup.outputs.debs_filename_base }}"
+          echo "DEBS_FILENAME_BASE=$debs" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       # Download vnc viewer
       - name: Download vncviewer
@@ -358,18 +336,19 @@ jobs:
           $output = "installers\win\vncviewer64-1.12.0.exe"
           (New-Object System.Net.WebClient).DownloadFile($url, $output)
  
-      # Run iscc.exe to compile the
+      # Run iscc.exe to compile the installer
       - name: Compile medley.iss
         shell: powershell
         run: |
            iscc installers\win\medley.iss
-           $old_filename="medley_install_v${env:COMBINED_RELEASE_TAG}_x64.exe"
-           $new_filename="medley_install_${env:COMBINED_RELEASE_TAG}_x64.exe"
+           $old_filename="medley-install_v${env:COMBINED_RELEASE_TAG}_x64.exe"
+           $new_filename="medley-install_${env:COMBINED_RELEASE_TAG}_x64.exe"
            mv installers\win\$old_filename installers\win\$new_filename
            echo "INSTALLER_FILENAME=$new_filename" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       # Upload windows installer to release
       - name: Upload windows installer to release
+        id: push
         uses: ncipollo/release-action@v1
         with: 
           allowUpdates: true
@@ -381,6 +360,46 @@ jobs:
           omitNameDuringUpdate: true
           omitPrereleaseDuringUpdate: true
 
+      # Install the OpenSSH Client
+      - name: Install the OpenSSH Client
+        shell: powershell
+        run: |
+          Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+
+      # Update the downloads page and the man page on OIO
+      - name: Update the downloads page and the man page to the OIO static page host
+        shell: bash
+        run: |
+            download_url="${{ steps.push.outputs.html_url }}"
+            download_url="${download_url/\/tag\//\/download\/}"
+            local_template="installers/downloads_page/medley_downloads.html"
+            local_filename="medley_downloads.html"
+            if [ "${{ needs.inputs.outputs.draft }}" = "true" ];
+            then
+                remote_filename="draft_downloads"
+            else
+                remote_filename="${local_filename%.html}"
+            fi            
+            remote_filepath="/srv/oio/static/${remote_filename}"
+            sed \
+               -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${MEDLEY_SHORT_RELEASE_TAG}/g" \
+               -e "s~@@@DOWNLOAD_URL@@@~${download_url}~g" \
+               -e "s/@@@DEBS.FILENAME.BASE@@@/${DEBS_FILENAME_BASE}/g" \
+               -e "s/@@@WINDOWS.INSTALLER.FILENAME@@@/${INSTALLER_FILENAME}/g" \
+               < "${local_template}" > "${local_filename}"
+            local_manpath="docs/man-page/man_medley.html"
+            remote_manpath="/srv/oio/static/man_medley.html"
+            echo "-rm ${remote_filepath}.oldold" > batch
+            echo "-rename ${remote_filepath}.old ${remote_filepath}.oldold" >> batch
+            echo "-rename ${remote_filepath}.html ${remote_filepath}.old" >> batch
+            echo "-put ${local_filename} ${remote_filepath}.html" >> batch
+            echo "-put ${local_manpath} ${remote_manpath}" >> batch
+            eval $(ssh-agent)
+            ssh-add - <<< "${SSH_KEY}"
+            sftp -o StrictHostKeyChecking=no -b batch ubuntu@online.interlisp.org
+        env:
+            SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
+      
 
 
 ######################################################################################

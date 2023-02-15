@@ -34,7 +34,7 @@ SolidCompression=yes
 ; 64-bit Program Files directory and the 64-bit view of the registry.
 ArchitecturesInstallIn64BitMode=x64
 OutputDir="."
-OutputBaseFilename="medley_install_v{#version}_{#x86_or_x64}"
+OutputBaseFilename="medley-install_v{#version}_{#x86_or_x64}"
 SetupIconFile="Medley.ico"
 DisableWelcomePage=no
 MissingRunOnceIdsWarning=no

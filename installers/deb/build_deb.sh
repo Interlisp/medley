@@ -11,6 +11,15 @@
 ###############################################################################
 # set -x
 
+# mess with file desscriptors so we get only one line on stdout
+# so we can communicate only what we want back to any githib runner
+# stash fd 1 in fd 3
+exec 3>&1
+# make fd 1 (stdout) be the same as stdout
+# so none of the std output from this file will be captured by
+# $() but it will still be written out to the tty (via stderr)
+exec 1>&2
+
 tarball_dir=tmp/tarballs
 
 #  Make sure we are in the right directory
@@ -60,6 +69,7 @@ fi
 pushd ${tarball_dir} >/dev/null 2>/dev/null
 medley_release=$(echo medley-*-loadups.tgz | sed "s/medley-\(.*\)-loadups.tgz/\1/")
 maiko_release=$(echo maiko-*-linux.x86_64.tgz | sed "s/maiko-\(.*\)-linux.x86_64.tgz/\1/")
+debs_filename_base="medley-full-${medley_release}_${maiko_release}"
 popd >/dev/null 2>/dev/null
 
 
@@ -126,7 +136,7 @@ do
     #
     #  Create tar file for this arch
     #
-    filename="medley-full-${medley_release}_${maiko_release}-${wslp}-${arch}"
+    filename="${debs_filenames_base}-${wslp}-${arch}"
     mkdir -p tars
     echo "Creating tar file tars/${filename}.tgz"
     tar -C ${il_dir} -czf tars/${filename}.tgz .
@@ -140,4 +150,9 @@ do
     #
   done
 done
+
+# send just one line back to github $() construct
+# do this by restoring fd 1 to what it was orginally
+exec 1>&3
+echo "${debs_filename_base}"
 

@@ -17,8 +17,8 @@ usage() {
    local err_msg
    local msg_path=/tmp/msg-$$
    local lines=("$@")
-   
-   if [ ${wsl} =true ];
+
+   if [ ${wsl} = true ];
    then
      wsl_incl="+w"
      wsl_excl="-w"
@@ -26,7 +26,7 @@ usage() {
      wsl_incl="-w"
      wsl_excl="+w"
    fi
-      
+
    if [ ${docker} = true ];
    then
      docker_incl="+d"
@@ -90,7 +90,7 @@ flags:
 
     -d :N | --display :N       : use X display :N
 +w
-+w    -v | --vnc                 : (WSL only) Use a VNC window instead of an X window
++w  -v | --vnc                 : (WSL only) Use a VNC window instead of an X window
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
@@ -100,15 +100,11 @@ flags:
 
     -m N | --mem N             : set Medley memory size to N
 
-    -k FILE | --vmem FILE      : use FILE as the Medley virtual memory store$( if [ ${docker_tmp} = true ];
-                                   then echo ".
-                                 FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).";
-                                 fi )
+    -k FILE | --vmem FILE      : use FILE as the Medley virtual memory store.
++d                               FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).
 
-    -r FILE | --greet FILE     : use FILE as the Medley greetfile$( if [ ${docker_tmp} = true ];
-                                   then echo ".
-                                 FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).";
-                                 fi )
+    -r FILE | --greet FILE     : use FILE as the Medley greetfile.
++d                               FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).
 
     -r - | --greet -           : do not use a greetfile
 -d
@@ -117,14 +113,14 @@ flags:
 -d  -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 +d
 +d  -x DIR | --logindir DIR    : use DIR (on the host) to map to LOGINDIR (/home/medley/il) in Medley
-+d 
++d
 +d  -p N | --port N            : use N as the port for connecting to the Xvnc server inside the Docker container
 +d
-+d  -u | --update              : first do a pull to get the latest medley Docker image 
++d  -u | --update              : first do a pull to get the latest medley Docker image
 +W
 +W  -w DISTRO | --wsl DISTRO   : run in WSL (on the named DISTRO) instead of in a Docker container
 +W
-+W  -b | --background          : run as background process   
++W  -b | --background          : run as background process
 
 sysout:
     The pathname of the file to use as a sysout for Medley to start from.

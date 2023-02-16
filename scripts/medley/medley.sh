@@ -63,12 +63,31 @@ then
   wsl='false'
 else
   docker='false'
+  wsl_ver=0
+  # WSL2
   grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
   if [ $? -eq 0 ];
   then
     wsl='true'
+    wsl_ver=2
   else
-    wsl='false'
+    # WSL1
+    grep --ignore-case --quiet microsoft /proc/sys/kernel/osrelease
+    if [ $? -eq 0 ];
+    then
+      if [ $(uname -m) = x86_64 ];
+      then
+        wsl='true'
+        wsl_ver=1
+      else
+        echo "ERROR: Running Medley on WSL1 requires an x86_64-based PC."
+        echo "This is not an x86_64-based PC."
+        echo "Exiting"
+        exit 23
+      fi
+    else
+      wsl='false'
+    fi
   fi
 fi
 

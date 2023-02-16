@@ -21,15 +21,23 @@
   find_open_display() {
     local ctr=1
     local result=-1
+    local locked_pid=0
     while [ ${ctr} -lt 64 ];
     do
-      ss -a | grep -q "tmp/.X11-unix/X${ctr}[^0-9]"
-      if [ $? -ne 0 ];
+      if [ ! -e /tmp/.X${ctr}-lock ];
       then
         result=${ctr}
         break
       else
-        (( ctr++ ))
+        locked_pid=$(cat /tmp/.X${ctr}-lock)
+        ps lax | awk '{print $3}' | grep --quiet ${locked_pid} >/dev/null
+        if [ $? -eq 1 ];
+        then
+          result=${ctr}
+          break
+        else
+          (( ctr++ ))
+        fi
       fi
     done
     echo ${result}
@@ -40,8 +48,13 @@
     local result=-1
     while [ ${ctr} -lt 6000 ];
     do
-      ss -a | grep -q "LISTEN.*:${ctr}[^0-9]"
-      if [ $? -ne 0 ];
+      if [[ ${wsl} = true && ${wsl_ver} -eq 1 ]];
+      then
+        netstat.exe -a -n | awk '{ print $2 }' | grep -q ":${ctr}\$"
+      else
+        ss -a | grep -q "LISTEN.*:${ctr}[^0-9]"
+      fi
+      if [ $? -eq 1 ];
       then
         result=${ctr}
         break
@@ -128,7 +141,7 @@
       exit 33
     else
       if [ ${bg} = true ]; then echo; fi
-      echo "Using DISPLAY=${OPEN_DISPLAY}"
+      echo "Using DISPLAY=:${OPEN_DISPLAY}"
     fi
     export DISPLAY=":${OPEN_DISPLAY}"
     export VNC_PORT=`find_open_port`

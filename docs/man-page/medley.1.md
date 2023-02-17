@@ -83,14 +83,17 @@ window geometry.  If neither \-\-screensize nor \-\-geometry is provided, then t
 : Use STRING as title of Medley window.  Not relevent when the \-\-vnc flag is set.
 
 -d *:N*, \-\-display *:N*
-: Use X display :N.  Defaults to the value of $DISPLAY.  Not relevant when
-the \-\-vnc flag is set.
+: **Not applicable to Windows (Docker) installations**
 
--v, \-\-vnc  (Applicable only to Windows System for Linux installations)
+: Use X display :N.  Defaults to the value of $DISPLAY.  This flag is ignored when the \-\-vnc flag is set as well as on Windows (Docker) installations.
+
+-v, \-\-vnc
+: **Applicable only to WSL installations**
+
 : Use a VNC window running on the Windows side instead of an X window.
 The VNC window will folllow the Windows desktop scaling setting allowing
 for much more usable Medley on high resolution displays.  On WSL, X windows
-do not scale well.
+do not scale well.  This flag is always set for WSL1 installations.
 
 -i [*ID_STRING* | - | \-\-], \-\-id [*ID_STRING* | - | \-\-]
 : Use ID_STRING as the id for this run of Medley, iunless ID_STRING is "-" or "\-\-". 
@@ -117,10 +120,34 @@ is $MEDLEYDIR/greetfiles/MEDLEYDIR-INIT, except when the \-\-apps flag is used
 in which case it is $MEDLEYDIR/greetfiles/APPS-INIT.
 
 -x \[*DIR* | -], \-\-logindir \[*DIR* | -]
-: use DIR as LOGINDIR in Medley, unless DIR is "-", in which case use
+: **On Linux and WSL installations**: use DIR as LOGINDIR in Medley, unless DIR is "-", in which case use
 \$MEDLEYDIR/logindir.  DIR (or \$MEDLEYDIR/logindir) must be writeable by the current user.
 LOGINDIR defaults to \$HOME/il.  LOGINDIR is used by Medley as the working directory on start-up
 and where it loads any "personal" initialization file from.
+
+: **On Windows (Docker) installations**: map DIR in the Windows host file system to /home/medley/il in the Medley
+file system (in the Docker container).  LOGINDIR is always /home/medley/il from Medley's standpoint.  The "-" value is not valid in this case.
+
+-u, \-\-update
+: **Windows (Docker) installations only**
+
+: Before running Medley, do a pull to retrieve the latest interlisp/medley docker image from Docker Hub.
+
+-b, \-\-background
+: **Windows (Docker) installations only**
+
+: Run Medley in background rather than foreground.
+
+-p *PORT*, \-\-port *PORT*
+: **Windows (Docker) installations only**
+
+: Use *PORT* as the port that VNC viewer uses to contact the VNC server within the Docker container.  Default is 5900.
+
+-w \[*DISTRO* | -], \-\-wsl \[*DISTRO* | -]
+: **Windows (Docker) installations only**
+
+: Run Medley in the context of the named WSL *DISTRO* instead of within Docker.  If *DISTRO* is "-", used the default WSL distro.  Equivalent to typing "wsl -d *DISTRO* medley ..." into a Command or Powershell window.
+
 
 Other Options
 -------------

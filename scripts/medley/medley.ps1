@@ -136,6 +136,8 @@ function Process-Args {
   $script:port = $false
   $script:update = $false
   $script:wsl = $false
+  $displayFlag = $false
+  $display = ""
 
   # Variables local this function
   $passRest = $false
@@ -153,6 +155,21 @@ function Process-Args {
       { @("-b", "--background") -contains $_ }
         {
           $script:bg= $true
+        }
+      { @("-d", "--display") -contains $_ }
+        {
+         $displayFlag = $true
+         $display = $args[$idx+1]
+         if ( ($idx + 1 -gt $args.count) -or ($display -match "^-") )
+            {
+              Write-Output "Error: the `"--display`" flag is missing its value" "Exiting"
+              exit 33
+            }
+          if ( $display -notmatch ":[0-9]+" )
+            {
+              Write-Output "Error: the `"--display`" value is not of the form `":N`, where N is number between 0 and 63: $display" "Exiting"
+              exit 33
+            }
         }
       {  @("-h", "--help", "-z", "--man") -contains $_ }
         {
@@ -253,7 +270,13 @@ function Process-Args {
           $script:medleyArgs = @( "--vnc") + $script:medleyArg
         }
     }
+  if ($script:wsl -and $displayFlag)
+    {
+      $script:medleyArgs = @( "--display", "$display") + $script:medleyArg
+    }
 }
+
+ 
 
 ###############################################################################
 

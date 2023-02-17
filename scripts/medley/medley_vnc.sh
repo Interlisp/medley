@@ -167,26 +167,29 @@
                 --MaxDisconnectionTime=10 \
                 >> ${LOG} 2>&1 &
 
-  # Commenting out the pid wait for now
-  # It seems like its not needed but we'll have
+  # Leaving pid wait for all but docker,
+  # which seems to need it.  For all others
+  # it seems like its not needed but we'll have
   # to see how it runs on slower/faster machines
-  # FGH 2023-02-08
-  #xvnc_pid=""
-  #end_time=$(expr $(date +%s) + 10)
-  #while [ -z "${xvnc_pid}" ];
-  #do
-  #  if [ $(date +%s) -gt $end_time ];
-  #  then
-  #     echo "Xvnc server failed to start."
-  #     echo "See log file at ${LOG}"
-  #     echo "Exiting"
-  #     exit 3
-  #  fi
-  #  sleep .125
-  #  xvnc_pid=$(pgrep -f "Xvnc ${DISPLAY}")
-  #done
-  # echo "XVNC_PID is ${xvnc_pid}"
-
+  # FGH 2023-02-16
+  if [ ${docker} = true ];
+  then
+    xvnc_pid=""
+    end_time=$(expr $(date +%s) + 10)
+    while [ -z "${xvnc_pid}" ];
+    do
+      if [ $(date +%s) -gt $end_time ];
+      then
+         echo "Xvnc server failed to start."
+         echo "See log file at ${LOG}"
+         echo "Exiting"
+         exit 3
+      fi
+      sleep .125
+      xvnc_pid=$(pgrep -f "Xvnc ${DISPLAY}")
+    done
+    # echo "XVNC_PID is ${xvnc_pid}"
+  fi
   #
   # Run Medley in foreground if docker, else in background
   #

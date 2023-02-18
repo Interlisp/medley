@@ -1,0 +1,78 @@
+#*******************************************************************************
+# 
+# Dockerfile to build Medley image from latest Maiko image 
+# plus latest release tars from github
+#
+# Copyright 2022-2023 by Interlisp.org
+#
+# ******************************************************************************
+
+FROM ubuntu:22.10
+ARG TARGETPLATFORM
+
+#  Handle ARGs, ENV variables, and LABELs
+ARG BUILD_DATE=unknown
+ARG MEDLEY_RELEASE=unknown
+ARG MAIKO_RELEASE=unknown
+ARG REPO_OWNER=Interlisp
+LABEL name="Medley"
+LABEL description="The Medley Interlisp environment"
+LABEL url="https://github.com/${REPO_OWNER}/medley"
+LABEL build-date=$BUILD_DATE
+LABEL medley_release=$MEDLEY_RELEASE
+LABEL maiko_release=$MAIKO_RELEASE
+
+ENV MEDLEY_DOCKER_BUILD_DATE=$BUILD_DATE
+ENV MEDLEY_RELEASE=$MEDLEY_RELEASE
+ENV MAIKO_RELEASE=$MAIKO_RELEASE
+
+ENV LANG=C.UTF-8
+
+# Copy over the release deb files
+ADD ./*.deb /tmp
+
+# Install Medley/Maiko and add tightvnc server and xclip to the image
+RUN apt-get update                                               \
+    && apt-get install -y apt-utils                              \ 
+    && apt-get install -y tigervnc-standalone-server             \
+    && apt-get install -y xclip                                  \
+    && apt-get install -y man-db                                 \
+    && apt-get install -y nano                                   \
+    && apt-get install -y sudo                                   \
+    && p=$(echo "${TARGETPLATFORM}" | sed -e "s#linux/##")       \
+    && p=$(                                                      \
+           if [ "$p" = "amd64" ];                                \
+               then echo "x86_64";                               \
+           elif [ "$p" = "arm64" ];                              \
+               then echo "aarch64";                              \
+           elif [ "$p" = "arm/v7" ];                             \
+               then echo "armv7l";                               \
+           else                                                  \
+               echo "x86_64";                                    \
+           fi                                                    \
+          )                                                      \
+    && deb="medley-full-${MEDLEY_RELEASE#medley-}"               \
+    && deb=${deb}_${MAIKO_RELEASE#maiko-}-linux-${p}.deb         \
+    && apt-get install -y /tmp/${deb}                            \
+    && chown --recursive root:root /usr/local/interlisp          \
+    && (if [ -n "$(which unminimize)" ]; then (yes | unminimize); fi)
+
+# "Finalize" image
+EXPOSE 5900
+RUN    adduser --gecos "" medley                                 \
+    && adduser --gecos "" ubuntu                                 \
+    && adduser medley sudo                                       \
+    && adduser ubuntu sudo                                       \
+    && (echo 'medley:yeldem' | chpasswd )                        \
+    && (echo 'ubuntu:utnubu' | chpasswd )                        \
+    && echo "medley     ALL=(ALL) NOPASSWD:ALL" >>/etc/sudoers   \
+    && echo "ubuntu     ALL=(ALL) NOPASSWD:ALL" >>/etc/sudoers   \  
+    && mkdir -p /home/medley/il                                  \
+    && chown medley:medley /home/medley/il
+
+ENV TERM=xterm
+USER medley
+WORKDIR /home/medley
+#ENTRYPOINT USER=medley Xvnc -SecurityTypes none -geometry 1280x720 :0 & DISPLAY=:0 medley --full -g 1280x720
+ENTRYPOINT /bin/bash
+

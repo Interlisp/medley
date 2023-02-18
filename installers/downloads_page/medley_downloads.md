@@ -1,38 +1,42 @@
 *    # MEDLEY DOWNLOADS
  
-     *    ## Standard Installations (for Debian-based distros)
+     *    ## LINUX (including Windows System for Linux)
 
-         * ### Standard Linux
+         *    ### Standard Installations (for Debian-based distros)
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-linux-x86\_64.deb)
+             * #### Standard Linux
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-linux-aarch64.deb)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-linux-x86\_64.deb)
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARMv7 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-linux-armv7l.deb)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-linux-aarch64.deb)
 
-         * ### Windows System for Linux
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARMv7 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-linux-armv7l.deb)
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\.64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-wsl-x86\_64.deb)
+             * #### Windows System for Linux
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-wsl-aarch64.deb)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\.64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-wsl-x86\_64.deb)
 
-     *    ## Local Installations (for any Linux distro)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-wsl-aarch64.deb)
 
-         * ### Standard Linux
+         *    ### Local Installations (for any Linux distro)
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-linux-x86\_64.tgz)
+             * #### Standard Linux
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-linux-aarch64.tgz)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-linux-x86\_64.tgz)
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARMv7 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-linux-armv7l.tgz)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-linux-aarch64.tgz)
 
-         * ### Windows System for Linux
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARMv7 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-linux-armv7l.tgz)
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-wsl-x86\_64.tgz)
+             * #### Windows System for Linux
 
-         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](https://github.com/Interlisp/medley/releases/download/@@@GITHUB.SUBDIR@@@/@@@FULL.RELEASE.FILENAME@@@-wsl-aarch64.tgz)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-wsl-x86\_64.tgz)
 
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-wsl-aarch64.tgz)
 
+     *    ## WINDOWS 10/11 (Medley runs in a Docker container)
+
+         [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for Windows x64 machines](@@@DOWNLOAD_URL@@@/@@@WINDOWS.INSTALLER.FILENAME@@@)
 
 
 

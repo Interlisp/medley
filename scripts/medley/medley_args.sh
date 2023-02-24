@@ -140,7 +140,12 @@ do
         shift
         ;;
       -z | --man)
-        /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
+        if [ ${darwin} = true ];
+        then
+          /usr/bin/man "${MEDLEYDIR}/docs/man-page/medley.1.gz"
+        else
+          /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
+        fi
         exit 0
         ;;
       --windows)

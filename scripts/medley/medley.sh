@@ -22,6 +22,7 @@ get_abs_filename() {
   # $1 : relative filename
   echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 }
+
 get_script_dir() {
 
     # call this with ${BASH_SOURCE[0]:-$0} as its (only) parameter
@@ -56,13 +57,20 @@ export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ../..; pwd)
 IL_DIR=$(cd ${MEDLEYDIR}; cd ..; pwd)
 export LOGINDIR=${HOME}/il
 
-# Are we running under Docker or if not under WSL?
-if [ -n "${MEDLEY_DOCKER_BUILD_DATE}" ];
+# Are we running under Docker or if not under WSL
+# or under Darwin?
+#
+docker=false
+wsl=false
+darwin=false
+
+if [ "$(uname)" = "Darwin" ];
+then
+  darwin=true
+elif [ -n "${MEDLEY_DOCKER_BUILD_DATE}" ];
 then
   docker='true'
-  wsl='false'
 else
-  docker='false'
   wsl_ver=0
   # WSL2
   grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
@@ -130,7 +138,7 @@ fi
 mkdir -p ${LOGINDIR}/vmem
 
 # Call run-medley with or without vnc
-if [[ ( ${wsl} = false || ${use_vnc} = false ) && ${docker} = false ]];
+if [[ ( ${darwin} = true ) || (( ${wsl} = false || ${use_vnc} = false ) && ${docker} = false) ]];
 then
   # If not using vnc, just call run-medley
   ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} ${run_args[@]}
@@ -138,5 +146,6 @@ else
   # do the vnc thing on wsl or docker
   source ${SCRIPTDIR}/medley_vnc.sh
 fi
+
 
 

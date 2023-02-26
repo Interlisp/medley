@@ -140,3 +140,9 @@ ln -s scripts/medley/medley.command medley
 popd >/dev/null 2>&1
 
 ######################################################################################################
+#
+#   pkgbuild --component Medley.app --install-location /tmp Medley-base.pkg
+#   productbuild --distribution Distribution.xml Medley.pkg
+#
+#
+#

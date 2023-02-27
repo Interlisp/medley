@@ -10,7 +10,7 @@
 ###############################################################################
 
 APPNAME=Medley
-APPBUNDLE=${APPNAME}.app
+APPBUNDLE=tmp/${APPNAME}.app
 APPBUNDLECONTENTS=${APPBUNDLE}/Contents
 APPBUNDLEEXE=${APPBUNDLECONTENTS}/MacOS
 APPBUNDLERESOURCES=${APPBUNDLECONTENTS}/Resources
@@ -19,9 +19,9 @@ APPBUNDLEICON=${APPBUNDLECONTENTS}/Resources
 tarball_dir=tmp/tarballs
 
 #  Make sure we are in the right directory
-if [ ! -f ./Info.plist ];
+if [ ! -f ./app/Info.plist ];
 then
-  echo "Can't find ./Info.plist file."
+  echo "Can't find ./app/Info.plist file."
   echo "Incorrect cwd?"
   echo "Should be in medley/installers/macos"
   echo "Exiting"
@@ -87,29 +87,29 @@ mkdir ${APPBUNDLE}/Contents/Resources
 #
 #  Create icons and put in bundle
 #
-rm -rf ${APPNAME}.iconset
-mkdir ${APPNAME}.iconset
-sips -z 16 16     ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_16x16.png >/dev/null 2>&1
-sips -z 32 32     ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_16x16@2x.png >/dev/null 2>&1
-sips -z 32 32     ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_32x32.png >/dev/null 2>&1
-sips -z 64 64     ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_32x32@2x.png >/dev/null 2>&1
-sips -z 128 128   ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_128x128.png >/dev/null 2>&1
-sips -z 256 256   ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_128x128@2x.png >/dev/null 2>&1
-sips -z 256 256   ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_256x256.png >/dev/null 2>&1
-sips -z 512 512   ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_256x256@2x.png >/dev/null 2>&1
-sips -z 512 512   ${APPNAME}Icon.png --out ${APPNAME}.iconset/icon_512x512.png >/dev/null 2>&1
-cp ${APPNAME}Icon.png ${APPNAME}.iconset/icon_512x512@2x.png
-iconutil -c icns -o ${APPNAME}.icns ${APPNAME}.iconset
-cp ${APPNAME}.icns ${APPBUNDLEICON}/
-rm -r ${APPNAME}.iconset
-rm ${APPNAME}.icns
+rm -rf tmp/${APPNAME}.iconset
+mkdir -p tmp/${APPNAME}.iconset
+sips -z 16 16     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_16x16.png >/dev/null 2>&1
+sips -z 32 32     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_16x16@2x.png >/dev/null 2>&1
+sips -z 32 32     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_32x32.png >/dev/null 2>&1
+sips -z 64 64     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_32x32@2x.png >/dev/null 2>&1
+sips -z 128 128   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_128x128.png >/dev/null 2>&1
+sips -z 256 256   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_128x128@2x.png >/dev/null 2>&1
+sips -z 256 256   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_256x256.png >/dev/null 2>&1
+sips -z 512 512   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_256x256@2x.png >/dev/null 2>&1
+sips -z 512 512   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_512x512.png >/dev/null 2>&1
+cp images/${APPNAME}Icon.png tmp/${APPNAME}.iconset/icon_512x512@2x.png
+iconutil -c icns -o tmp/${APPNAME}.icns tmp/${APPNAME}.iconset
+cp tmp/${APPNAME}.icns ${APPBUNDLEICON}/
+rm -r tmp/${APPNAME}.iconset
+rm tmp/${APPNAME}.icns
 #
 #  Update and copy in "control" files
 #
 sed -e "s/--VERSION_TAG--/${medley_release}.${maiko_release}.0/g" \
-    < Info.plist \
+    < app/Info.plist \
     > ${APPBUNDLECONTENTS}/Info.plist
-cp PkgInfo ${APPBUNDLECONTENTS}/
+cp app/PkgInfo ${APPBUNDLECONTENTS}/
 #
 #  Untar the maiko and medley releases into the bundle
 #
@@ -131,7 +131,7 @@ ln -s darwin.universal darwin.aarch64
 ln -s darwin.universal darwin.x86_64
 popd >/dev/null 2>&1
 #
-#  Handle medley shell vs medley.commnd to make launching Medley easier
+#  Handle medley shell vs medley.command to make launching Medley easier
 #
 ln ${il_dir}/medley/scripts/medley/medley.sh ${il_dir}/medley/scripts/medley/medley.command
 pushd ${il_dir}/medley >/dev/null 2>&1

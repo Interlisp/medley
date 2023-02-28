@@ -131,13 +131,20 @@ ln -s darwin.universal darwin.aarch64
 ln -s darwin.universal darwin.x86_64
 popd >/dev/null 2>&1
 #
-#  Handle medley shell vs medley.command to make launching Medley easier
+#  Add file icon to medley.command
 #
-ln ${il_dir}/medley/scripts/medley/medley.sh ${il_dir}/medley/scripts/medley/medley.command
-pushd ${il_dir}/medley >/dev/null 2>&1
-rm medley
-ln -s scripts/medley/medley.command medley
-popd >/dev/null 2>&1
+if [ -z "$(which fileicon)" ];
+then
+  brew install fileicon
+fi
+fileicon set ${il_dir}/medley/scripts/medley/medley.command images/Command_icon128.png
+
+
+
+
+
+
+
 
 ######################################################################################################
 #

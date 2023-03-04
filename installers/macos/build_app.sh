@@ -10,13 +10,6 @@
 ###############################################################################
 
 APPNAME=Medley
-APPBUNDLE=tmp/${APPNAME}.app
-APPBUNDLECONTENTS=${APPBUNDLE}/Contents
-APPBUNDLEEXE=${APPBUNDLECONTENTS}/MacOS
-APPBUNDLERESOURCES=${APPBUNDLECONTENTS}/Resources
-APPBUNDLEICON=${APPBUNDLECONTENTS}/Resources
-
-tarball_dir=tmp/tarballs
 
 #  Make sure we are in the right directory
 if [ ! -f ./app/Info.plist ];
@@ -28,6 +21,18 @@ then
   exit 1
 fi
 
+#
+#  Setup directories
+#
+CWD=$(pwd)
+RESULTS_DIR=${CWD}/artifacts
+APPBUNDLE=${RESULTS_DIR}/${APPNAME}.app
+APPBUNDLECONTENTS=${APPBUNDLE}/Contents
+APPBUNDLEEXE=${APPBUNDLECONTENTS}/MacOS
+APPBUNDLERESOURCES=${APPBUNDLECONTENTS}/Resources
+APPBUNDLEICON=${APPBUNDLECONTENTS}/Resources
+tmp_dir=${CWD}/tmp
+tarball_dir=${tmp_dir}/tarballs
 
 #  If running as a github action or -t arg, then skip downloading the tarballs
 if ! [[ -n "${GITHUB_WORKSPACE}" || "$1" = "-t" ]];
@@ -47,8 +52,8 @@ then
     exit 3
   fi
   # then clear out the ./tmp directory
-  rm -rf ./tmp
-  mkdir ./tmp
+  rm -rf ${tmp_dir}
+  mkdir -p ${tmp_dir}
   # then download the maiko and medley tarballs
   mkdir -p ${tarball_dir}
   echo "Fetching maiko and medley release tarballs"
@@ -79,30 +84,34 @@ popd >/dev/null 2>/dev/null
 #
 #  Create bundle dirs
 #
+rm -rf ${RESULTS_DIR}
+mkdir -p ${RESULTS_DIR}
 rm -rf ${APPBUNDLE}
-mkdir ${APPBUNDLE}
+mkdir -p ${APPBUNDLE}
 mkdir ${APPBUNDLE}/Contents
 mkdir ${APPBUNDLE}/Contents/MacOS
 mkdir ${APPBUNDLE}/Contents/Resources
 #
 #  Create icons and put in bundle
 #
-rm -rf tmp/${APPNAME}.iconset
-mkdir -p tmp/${APPNAME}.iconset
-sips -z 16 16     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_16x16.png >/dev/null 2>&1
-sips -z 32 32     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_16x16@2x.png >/dev/null 2>&1
-sips -z 32 32     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_32x32.png >/dev/null 2>&1
-sips -z 64 64     images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_32x32@2x.png >/dev/null 2>&1
-sips -z 128 128   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_128x128.png >/dev/null 2>&1
-sips -z 256 256   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_128x128@2x.png >/dev/null 2>&1
-sips -z 256 256   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_256x256.png >/dev/null 2>&1
-sips -z 512 512   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_256x256@2x.png >/dev/null 2>&1
-sips -z 512 512   images/${APPNAME}Icon.png --out tmp/${APPNAME}.iconset/icon_512x512.png >/dev/null 2>&1
-cp images/${APPNAME}Icon.png tmp/${APPNAME}.iconset/icon_512x512@2x.png
-iconutil -c icns -o tmp/${APPNAME}.icns tmp/${APPNAME}.iconset
-cp tmp/${APPNAME}.icns ${APPBUNDLEICON}/
-rm -r tmp/${APPNAME}.iconset
-rm tmp/${APPNAME}.icns
+iconset_dir=${tmp_dir}/${APPNAME}.iconset
+rm -rf ${iconset_dir}
+mkdir -p ${iconset_dir}
+image_dir=${CWD}/images
+sips -z 16 16     ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_16x16.png >/dev/null 2>&1
+sips -z 32 32     ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_16x16@2x.png >/dev/null 2>&1
+sips -z 32 32     ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_32x32.png >/dev/null 2>&1
+sips -z 64 64     ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_32x32@2x.png >/dev/null 2>&1
+sips -z 128 128   ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_128x128.png >/dev/null 2>&1
+sips -z 256 256   ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_128x128@2x.png >/dev/null 2>&1
+sips -z 256 256   ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_256x256.png >/dev/null 2>&1
+sips -z 512 512   ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_256x256@2x.png >/dev/null 2>&1
+sips -z 512 512   ${image_dir}/App_icon1024.png --out ${iconset_dir}/icon_512x512.png >/dev/null 2>&1
+cp ${image_dir}/App_icon1024.png ${iconset_dir}/icon_512x512@2x.png
+iconutil -c icns -o ${tmp_dir}/${APPNAME}.icns ${iconset_dir}
+cp ${tmp_dir}/${APPNAME}.icns ${APPBUNDLEICON}/
+rm -r ${iconset_dir}
+rm ${tmp_dir}/${APPNAME}.icns
 #
 #  Update and copy in "control" files
 #
@@ -137,19 +146,16 @@ if [ -z "$(which fileicon)" ];
 then
   brew install fileicon
 fi
-fileicon set ${il_dir}/medley/scripts/medley/medley.command images/Command_icon128.png
-
-
-
+fileicon set ${il_dir}/medley/scripts/medley/medley.command ${image_dir}/Command_icon128.png
+#
+#  Also create the zip file of il_dir for distribution
+#
+pushd ${il_dir} >/dev/null 2>&1
+zip -r -9 -y -q  ${RESULTS_DIR}/medley-full-${medley_release}_${maiko_release}-macos-universal.zip .
+popd >/dev/null 2>&1
 
 
 
 
 
 ######################################################################################################
-#
-#   pkgbuild --component Medley.app --install-location /tmp Medley-base.pkg
-#   productbuild --distribution Distribution.xml Medley.pkg
-#
-#
-#

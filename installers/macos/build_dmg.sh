@@ -73,7 +73,7 @@ fi
 #  Create initial dmg image
 #
 if [ -e "/Volumes/${VOL_NAME}" ];
-then 
+then
   hdiutil detach /Volumes/${VOL_NAME}
 fi
 rm -f ${DMG_PATH}.temp.dmg
@@ -172,6 +172,9 @@ mv ${DMG_PATH}.dmg ${RESULTS_DIR}/${DMG_NAME/VERSION/${version}}
 #  Done
 #
 echo "DMG build completed."
-ls ${RESULTS_DIR}/*.dmg
+base_name=${DMG_NAME/VERSION/${version}}
+base_name=${base_name%.dmg}
+echo ${base_name}
+
 
 ###############################################################################

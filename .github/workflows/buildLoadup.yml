@@ -56,8 +56,8 @@ on:
 defaults:
   run:
     shell: bash
-    
-  
+
+
 jobs:
 
 ######################################################################################
@@ -83,7 +83,7 @@ jobs:
               echo "draft=${{ inputs.draft }}" >> $GITHUB_OUTPUT;
               echo "force=${{ inputs.force }}" >> $GITHUB_OUTPUT;
           fi
-        
+
 
 
 ######################################################################################
@@ -97,7 +97,7 @@ jobs:
     outputs:
       release_not_built: ${{ steps.check.outputs.release_not_built }}
 
-    steps: 
+    steps:
       # Checkout the actions for this repo owner
       - name: Checkout Actions
         uses: actions/checkout@v3
@@ -107,7 +107,7 @@ jobs:
       - run: mv ./Actions_${{ github.sha }}/actions ../actions && rm -rf ./Actions_${{ github.sha }}
 
       # Check if build already run for this commit
-      - name: Build already completed? 
+      - name: Build already completed?
         id: check
         continue-on-error: true
         uses: ./../actions/check-sentry-action
@@ -118,7 +118,7 @@ jobs:
 
 
   #
-  # Do the loadup
+  # Do the loadup and push to release on github
   # 
 
   loadup:
@@ -129,13 +129,13 @@ jobs:
       combined_release_tag: ${{ steps.job_outputs.outputs.COMBINED_RELEASE_TAG }}
       medley_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_RELEASE_TAG }}
       medley_short_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_SHORT_RELEASE_TAG }}
-      debs_filename_base: ${{ steps.debs.outputs.DEBS_FILENAME_BASE }}
+      release_url: ${{ steps.push.outputs.html_url }}
 
     needs: [inputs, sentry]
     if: |
       needs.sentry.outputs.release_not_built == 'true'
       || needs.inputs.outputs.force == 'true'
-    
+
     steps:
       # Checkout the actions for this repo owner
       - name: Checkout Actions
@@ -156,22 +156,30 @@ jobs:
 
       # Get Maiko release information, retrieves the name of the latest
       # release.  Used to download the correct Maiko release
-      - name: Get Maiko Release Information
+      # Find latest release (draft or normal)
+      - name: Get maiko release information
         id: maiko
-        uses: abatilo/release-info-action@v1.3.2
-        with:
-          owner: ${{ github.repository_owner }}
-          repo: maiko
-          
+        run: |
+          tag=""
+          if [ "${{ needs.inputs.outputs.draft }}" = "true" ];
+          then
+            tag=$(gh release list --repo ${{ github.repository_owner }}/maiko | grep Draft | head -n 1 | awk '{ print $3 }')
+          fi
+          if [ -z "${tag}" ];
+          then
+            tag=$(gh release list --repo ${{ github.repository_owner }}/maiko | grep Latest | head -n 1 | awk '{ print $3 }')
+          fi
+          echo "maiko_tag=${tag}" >> ${GITHUB_OUTPUT}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # Setup environment variables & establish job outputs
       - name: Setup Environment Variables
         run: |
           echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> ${GITHUB_OUTPUT}
-          echo "TARBALL_DIR=installers/deb/tmp/tarballs" >>${GITHUB_ENV}
-          echo "DEBS_DIR=installers/deb/debs" >>${GITHUB_ENV}
-          echo "TARS_DIR=installers/deb/tars" >>${GITHUB_ENV}
+          echo "TARBALL_DIR=/tmp/tarballs" >>${GITHUB_ENV}
           echo "MEDLEY_RELEASE_TAG=${RELEASE_TAG}" >>${GITHUB_ENV}
-          echo "MAIKO_RELEASE_TAG=${{ steps.maiko.outputs.latest_tag }}" >>${GITHUB_ENV}
+          echo "MAIKO_RELEASE_TAG=${{ steps.maiko.outputs.maiko_tag }}" >>${GITHUB_ENV}
       - name: More Environment Variables
         run: |
           echo "MEDLEY_SHORT_RELEASE_TAG=${MEDLEY_RELEASE_TAG#medley-}" >>${GITHUB_ENV}
@@ -182,27 +190,24 @@ jobs:
       - name: Establish job outputs
         id: job_outputs
         run: |
-          echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT;
-          echo "MEDLEY_RELEASE_TAG=${MEDLEY_RELEASE_TAG}" >> $GITHUB_OUTPUT;
-          echo "MEDLEY_SHORT_RELEASE_TAG=${MEDLEY_SHORT_RELEASE_TAG}" >> $GITHUB_OUTPUT;
+          echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> ${GITHUB_OUTPUT}
+          echo "MEDLEY_RELEASE_TAG=${MEDLEY_RELEASE_TAG}" >> ${GITHUB_OUTPUT}
+          echo "MEDLEY_SHORT_RELEASE_TAG=${MEDLEY_SHORT_RELEASE_TAG}" >> ${GITHUB_OUTPUT}
 
       # Setup some needed dirs in workspace
       - name: Create work dirs
         run: mkdir -p ${TARBALL_DIR}
 
-      # Download Maiko Release Assets
+      # Download Maiko Release Assets and untar it
       - name: Download Release Assets
-        uses: robinraju/release-downloader@v1.6
-        with:
-          repository: ${{ github.repository_owner }}/maiko
-          token: ${{ secrets.GITHUB_TOKEN }}
-          latest: true
-          out-file-path: ${{ env.TARBALL_DIR }}
-          fileName: "${{ env.MAIKO_RELEASE_TAG }}-linux.*.tgz" 
-
-      - name: Untar Maiko Release for use in loadup
         run: |
-          tar -xzf "${TARBALL_DIR}/${{ env.MAIKO_RELEASE_TAG }}-linux.x86_64.tgz"
+          gh release download ${MAIKO_RELEASE_TAG} \
+                              -D ${TARBALL_DIR}    \
+                              --repo ${{ github.repository_owner }}/maiko \
+                              -p '*-linux-*.tgz'
+          tar -xzf "${TARBALL_DIR}/${MAIKO_RELEASE_TAG}-linux.x86_64.tgz"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Checkout Notecards and tar it in the tarballsdir
       - name: Checkout Notecards
@@ -214,7 +219,7 @@ jobs:
       - name: Tar notecards into tarball dir
         run: |
           cd ..
-          tar cfz medley/${TARBALL_DIR}/notecards.tgz notecards
+          tar cfz ${TARBALL_DIR}/notecards.tgz notecards
 
       # Install vnc
       - name: Install vnc
@@ -224,25 +229,25 @@ jobs:
         run: |
           Xvnc -geometry 1280x720 :0 &
           export DISPLAY=":0"
-          PATH="$PWD/maiko:$PATH" 
+          PATH="$PWD/maiko:$PATH"
           scripts/loadup-all.sh -apps
-      
+
       - name: Build loadups release tar
         run: |
           cd ..
-          mkdir -p medley/${TARBALL_DIR}
-          tar cfz medley/${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-loadups.tgz        \
+          mkdir -p ${TARBALL_DIR}
+          tar cfz ${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-loadups.tgz        \
             medley/loadups/lisp.sysout               \
             medley/loadups/full.sysout               \
             medley/loadups/apps.sysout               \
             medley/loadups/whereis.hash              \
             medley/library/exports.all
-      
+
       - name: Build runtime release tar
         run: |
           cd ..
-          mkdir -p medley/${TARBALL_DIR}
-          tar cfz medley/${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-runtime.tgz          \
+          mkdir -p ${TARBALL_DIR}
+          tar cfz  ${TARBALL_DIR}/${MEDLEY_RELEASE_TAG}-runtime.tgz          \
                      --exclude "*~" --exclude "*#*"              \
                      --exclude exports.all                       \
                      medley/clos                                 \
@@ -264,37 +269,160 @@ jobs:
                      medley/internal
 
 
+      # Push the release up to github releases
+      - name: Delete existing release with same tag (if any)
+        uses: cb80/delrel@latest
+        with:
+            tag: ${{ env.MEDLEY_RELEASE_TAG }}
+        continue-on-error: true
+
+      - name: Push the release
+        id: push
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts:
+            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-loadups.tgz,
+            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-runtime.tgz,
+          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          draft: ${{ needs.inputs.outputs.draft }}
+          prerelease: false
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Save the tarball directory for subsequent jobs
+      - name: Save tarballs
+        uses: actions/upload-artifact@v3
+        with:
+          name: tarballs
+          path: ${{ env.TARBALL_DIR }}
+          if-no-files-found: error
+
+
+  #
+  # Create the linux installers (.deb and .tgz) and push to release on github
+  #
+  linux_installer:
+
+    runs-on: ubuntu-latest
+
+    needs: [inputs, sentry, loadup]
+    if: |
+      needs.sentry.outputs.release_not_built == 'true'
+      || needs.inputs.outputs.force == 'true'
+
+    outputs:
+      debs_filename_base: ${{ steps.debs.outputs.DEBS_FILENAME_BASE }}
+
+    steps:
+      # Environment variables
+      - name: Environment variables
+        run: |
+          echo "DEBS_DIR=installers/deb/debs" >>${GITHUB_ENV}
+          echo "TARS_DIR=installers/deb/tars" >>${GITHUB_ENV}
+          echo "TARBALL_DIR=installers/deb/tmp/tarballs" >>${GITHUB_ENV}
+          echo "MEDLEY_RELEASE_TAGS=${{ needs.loadup.outputs.medley_release_tag }}" \
+                >>${GITHUB_ENV}
+
+      # Create taball dir
+      - run: mkdir -p ${TARBALL_DIR}
+
+      #  Get the tarballs
+      - name: Get tarballs
+        uses: actions/download-artifact@v3
+        with:
+          name: tarballs
+          path: ${{ env.TARBALL_DIR }}
+
       # Build the deb files as well as the tgz files
       - name: Build .deb files for 3 architectures
         id: debs
         run: |
           cd installers/deb
           debs_filename_base=$(./build_deb.sh)
-          echo "DEBS_FILENAME_BASE=${debs_filename_base}" >> $GITHUB_ENV;
-          echo "DEBS_FILENAME_BASE=${debs_filename_base}" >> $GITHUB_OUTPUT;
+          echo "DEBS_FILENAME_BASE=${debs_filename_base}" >> $GITHUB_OUTPUT
 
-      # Push the release up to github releases
-      - name: Delete existing release with same tag (if any)
-        uses: cb80/delrel@latest
-        with:
-            tag: ${{ env.MEDLEY_RELEASE_TAG }} 
-        continue-on-error: true
-
+      # Push the debs and tgz up to github releases
       - name: Push the release
         id: push_release
         uses: ncipollo/release-action@v1
-        with: 
+        with:
           allowUpdates: true
           artifacts:
-            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-loadups.tgz,
-            ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-runtime.tgz,
             ${{ env.DEBS_DIR }}/*.deb,
             ${{ env.TARS_DIR }}/*.tgz
           tag: ${{ env.MEDLEY_RELEASE_TAG }}
-          draft: ${{ needs.inputs.outputs.draft }}
-          prerelease: false
-          generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
+          omitBodyDuringUpdate: true
+          omitDraftDuringUpdate: true
+          omitNameDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
+
+
+  #
+  # Create the macos installers (.dmg and .zip) and push to release on github
+  #
+  macos_installer:
+
+    runs-on: macos-12
+
+    needs: [inputs, sentry, loadup]
+    if: |
+      needs.sentry.outputs.release_not_built == 'true'
+      || needs.inputs.outputs.force == 'true'
+
+    outputs:
+      macos_filename_base: ${{ steps.dmg-zip.outputs.MACOS_FILENAME_BASE }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # Environment variables
+      - name: Environment variables
+        run: |
+          MACOS_DIR=installers/macos
+          echo "MACOS_DIR=${MACOS_DIR}" >>${GITHUB_ENV}
+          echo "ARTIFACTS_DIR=${MACOS_DIR}/artifacts" >>${GITHUB_ENV}
+          echo "TARBALL_DIR=${MACOS_DIR}/tmp/tarballs" >>${GITHUB_ENV}
+          echo "MEDLEY_RELEASE_TAGS=${{ needs.loadup.outputs.medley_release_tag }}" \
+                >>${GITHUB_ENV}
+
+      # Create tarball dir
+      - run: mkdir -p ${TARBALL_DIR}
+
+      #  Get the tarballs
+      - name: Get tarballs
+        uses: actions/download-artifact@v3
+        with:
+          name: tarballs
+          path: ${{ env.TARBALL_DIR }}
+
+      # Build the .dmg and .zip files
+      - name: Build .dmg & .zip files
+        id: dmg-zip
+        run: |
+          cd ${MACOS_DIR}
+          ./build_artifacts | tee /tmp/out$$
+          MACOS_FILENAME_BASE=$(tail -q -n 1 /tmp/out$$)
+          echo "MACOS_FILENAME_BASE=${MACOS_FILENAME_BASE}" >>{GITHUB_OUTPUT}
+
+      # Push the .dmg and .zip up to github releases
+      - name: Push the release
+        id: push_release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts:
+            ${{ env.ARTIFACTS_DIR }}/*.dmg,
+            ${{ env.ARTIFACTS_DIR }}/*.zip
+          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          omitBodyDuringUpdate: true
+          omitDraftDuringUpdate: true
+          omitNameDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
 
 
   #
@@ -310,6 +438,9 @@ jobs:
       needs.sentry.outputs.release_not_built == 'true'
       || needs.inputs.outputs.force == 'true'
 
+    outputs:
+      windows_installer_filename: ${{ steps.jobout.outputs.INSTALLER_FILENAME }}
+
     steps:
       # Checkout latest commit
       - name: Checkout Medley
@@ -321,12 +452,10 @@ jobs:
         run: |
           $crt="${{ needs.loadup.outputs.combined_release_tag }}"
           echo "COMBINED_RELEASE_TAG=$crt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          $mrt="${{ needs.loadup.outputs.medley_release_tag }}"
+          $mrt="${{ needs.loadup.outputs.medley_release_tag }} >>${GITHUB_ENV}"
           echo "MEDLEY_RELEASE_TAG=$mrt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           $msrt="${{ needs.loadup.outputs.medley_short_release_tag }}"
           echo "MEDLEY_SHORT_RELEASE_TAG=$msrt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          $debs="${{ needs.loadup.outputs.debs_filename_base }}"
-          echo "DEBS_FILENAME_BASE=$debs" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       # Download vnc viewer
       - name: Download vncviewer
@@ -335,7 +464,7 @@ jobs:
           $url = "https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe"
           $output = "installers\win\vncviewer64-1.12.0.exe"
           (New-Object System.Net.WebClient).DownloadFile($url, $output)
- 
+
       # Run iscc.exe to compile the installer
       - name: Compile medley.iss
         shell: powershell
@@ -344,11 +473,18 @@ jobs:
            $filename="medley-install_${env:COMBINED_RELEASE_TAG}_x64.exe"
            echo "INSTALLER_FILENAME=$filename" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
+      # Set job output
+      - name: Job outputs
+        id: jobout
+        shell: bash
+        run: echo "INSTALLER_FILENAME=${INSTALLER_FILENAME}" >>${GITHUB_OUTPUT}
+
+
       # Upload windows installer to release
       - name: Upload windows installer to release
         id: push
         uses: ncipollo/release-action@v1
-        with: 
+        with:
           allowUpdates: true
           artifacts: installers/win/${{ env.INSTALLER_FILENAME }}
           tag: ${{ env.MEDLEY_RELEASE_TAG }}
@@ -358,18 +494,43 @@ jobs:
           omitNameDuringUpdate: true
           omitPrereleaseDuringUpdate: true
 
-      # Install the OpenSSH Client
-      - name: Install the OpenSSH Client
-        shell: powershell
+
+  downloads_page:
+
+    runs-on: ubuntu-latest
+
+    needs: [inputs, sentry, loadup, linux_installer, macos_installer, windows_installer]
+    if: |
+      needs.sentry.outputs.release_not_built == 'true'
+      || needs.inputs.outputs.force == 'true'
+
+
+      # Environment variables
+      - name: Environment Varibales (from other jobs)
         run: |
-          Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+          crt="${{ needs.loadup.outputs.combined_release_tag }}"
+          echo "COMBINED_RELEASE_TAG=${crt}" >>${GITHUB_ENV}
+          mrt="${{ needs.loadup.outputs.medley_release_tag }}"
+          echo "MEDLEY_RELEASE_TAG=${mrt}" >>${GITHUB_ENV}
+          msrt="${{ needs.loadup.outputs.medley_short_release_tag }}"
+          echo "MEDLEY_SHORT_RELEASE_TAG=${msrt}" >>${GITHUB_ENV}
+          debs="${{ needs.linux_installer.outputs.debs_filename_base }}"
+          echo "DEBS_FILENAME_BASE=${debs}" >>${GITHUB_ENV}
+          win="${{ needs.windows_installer.outputs.windows_installer_filename }}"
+          echo "WINDOWS_INSTALLER_FILENAME=${win}" >>${GITHUB_ENV}
+          macos="${{ needs.macos_installer.outputs.macos_filename_base }}"
+          echo "MACOS_FILENAME_BASE=${macos}" >>${GITHUB_ENV}
+
+      # Checkout latest commit
+      - name: Checkout Medley
+        uses: actions/checkout@v3
 
       # Update the downloads page and the man page on OIO
       - name: Update the downloads page and the man page to the OIO static page host
         shell: bash
         run: |
             # Figure out filenames
-            download_url="${{ steps.push.outputs.html_url }}"
+            download_url="${{ needs.loadup.outputs.release_url }}"
             download_url="${download_url/\/tag\//\/download\/}"
             local_template="installers/downloads_page/medley_downloads.html"
             local_filename="medley_downloads.html"
@@ -381,7 +542,7 @@ jobs:
             else
                 remote_filename="${local_filename%.html}"
                 remote_manname="man_medley.html"
-            fi            
+            fi
             remote_filepath="/srv/oio/static/${remote_filename}"
             remote_manpath="/srv/oio/static/${remote_manname}"
             # Fill in downloads page template
@@ -389,7 +550,8 @@ jobs:
                -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${MEDLEY_SHORT_RELEASE_TAG}/g" \
                -e "s~@@@DOWNLOAD_URL@@@~${download_url}~g" \
                -e "s/@@@DEBS.FILENAME.BASE@@@/${DEBS_FILENAME_BASE}/g" \
-               -e "s/@@@WINDOWS.INSTALLER.FILENAME@@@/${INSTALLER_FILENAME}/g" \
+               -e "s/@@@MACOS.FILENAME.BASE@@@/${MACOS_FILENAME_BASE}/g" \
+               -e "s/@@@WINDOWS.INSTALLER.FILENAME@@@/${WINDOWS_INSTALLER_FILENAME}/g" \
                < "${local_template}" > "${local_filename}"
             # Create sftp instruction file
             echo "-rm ${remote_filepath}.oldold" > batch
@@ -403,7 +565,7 @@ jobs:
             sftp -o StrictHostKeyChecking=no -b batch ubuntu@online.interlisp.org
         env:
             SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
-      
+
 
 
 ######################################################################################
@@ -418,9 +580,9 @@ jobs:
     outputs:
       build_successful: ${{ steps.output.outputs.build_successful }}
 
-    needs: [inputs, sentry, loadup, windows_installer]
+    needs: [inputs, sentry, loadup, downloads_page]
 
-    steps: 
+    steps:
       # Checkout the actions for this repo owner
       - name: Checkout Actions
         uses: actions/checkout@v3
@@ -440,7 +602,7 @@ jobs:
         id: output
         run: |
           echo "build_successful='true'" >> $GITHUB_OUTPUT
-          
+
 ######################################################################################
 
 

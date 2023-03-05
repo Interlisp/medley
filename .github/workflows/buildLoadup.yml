@@ -60,7 +60,7 @@ defaults:
 
 jobs:
 
-######################################################################################
+# JOB: inputs #######################################################################
 
   # Regularize the inputs so they can be referenced the same way whether they are
   # the result of a workflow_dispatch or a workflow_call
@@ -86,7 +86,7 @@ jobs:
 
 
 
-######################################################################################
+# JOB: sentry #######################################################################
 
   # Use sentry-action to determine if this release has already been built
   # based on the latest commit to the repo
@@ -114,8 +114,8 @@ jobs:
         with:
           tag: "loadup"
 
-######################################################################################
 
+# JOB: loadup #######################################################################
 
   #
   # Do the loadup and push to release on github
@@ -301,6 +301,25 @@ jobs:
           path: ${{ env.TARBALL_DIR }}
           if-no-files-found: error
 
+      # Download the vncviewer for the windows installer
+      # and save it as an artifact
+      # Easier to do in linux
+      - name: Download vncviewer
+        run: |
+          mkdir -p /tmp/vncv
+          cd /tmp/vncv
+          url = "https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe"
+          wget ${url}
+      - name: Upload vncviewer as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: vncviewer
+          path: /tmp/vncv
+          if-no-files-found: error
+
+
+
+# JOB: linux_installer ##############################################################
 
   #
   # Create the linux installers (.deb and .tgz) and push to release on github
@@ -367,6 +386,9 @@ jobs:
           omitPrereleaseDuringUpdate: true
 
 
+
+# JOB: macos_installer ##############################################################
+
   #
   # Create the macos installers (.dmg and .zip) and push to release on github
   #
@@ -418,7 +440,7 @@ jobs:
         id: dmg-zip
         run: |
           cd ${MACOS_DIR}
-          ./build_artifacts | tee /tmp/out$$
+          ./build_artifacts.sh | tee /tmp/out$$
           MACOS_FILENAME_BASE=$(tail -q -n 1 /tmp/out$$)
           echo "MACOS_FILENAME_BASE=${MACOS_FILENAME_BASE}" >>{GITHUB_OUTPUT}
 
@@ -438,6 +460,9 @@ jobs:
           omitNameDuringUpdate: true
           omitPrereleaseDuringUpdate: true
 
+
+
+# JOB: windows_installer #############################################################
 
   #
   # Create the Windows installer, push it up to the release on github and
@@ -472,13 +497,12 @@ jobs:
           $msrt="${{ needs.loadup.outputs.medley_short_release_tag }}"
           echo "MEDLEY_SHORT_RELEASE_TAG=$msrt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
-      # Download vnc viewer
-      - name: Download vncviewer
-        shell: powershell
-        run: |
-          $url = "https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe"
-          $output = "installers\win\vncviewer64-1.12.0.exe"
-          (New-Object System.Net.WebClient).DownloadFile($url, $output)
+      # Download vnc viewer artifact (from loadups job)
+      - name: Download vncviewer artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: vncviewer
+          path: installers\win
 
       # Run iscc.exe to compile the installer
       - name: Compile medley.iss
@@ -509,6 +533,19 @@ jobs:
           omitNameDuringUpdate: true
           omitPrereleaseDuringUpdate: true
 
+      # Delete the vncviewer artifact
+      - name: Delete vncviewer artifact
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: vncviewer
+          failOnError: false
+
+
+# JOB: downloads_page ################################################################
+
+  #
+  # Update the downloads page on OIO
+  #
 
   downloads_page:
 
@@ -584,7 +621,7 @@ jobs:
 
 
 
-######################################################################################
+# JOB: complete #####################################################################
 
   # Use set-sentry-action to determine set the sentry that says this release has
   # been successfully built
@@ -627,21 +664,4 @@ jobs:
           echo "build_successful='true'" >> $GITHUB_OUTPUT
 
 ######################################################################################
-
-
-
-#      - name: Download the Windows installer created in windows job
-#        uses: actions/download-artifact@v3
-#        with:
-#           name: windows_installer
-#           path: installers/win
-
-#     - name: Rename the Windows installer w/ version tag
-#        run: |
-#          maiko_release_tag="${{ steps.maiko.outputs.latest_tag }}"
-#          combined_release_tag="${MEDLEY_RELEASE_TAG#medley-}_${maiko_release_tag#maiko-}"
-#          windows_installer_filename="medley_install_${combined_release_tag}_x64.exe"
-#          cd installers/win
-#          mv medley_install_vXXXVERSIONXXX_x64.exe "${windows_installer_filename}"  
-#          echo "WINDOWS_INSTALLER_FILENAME=${windows_installer_filename}" >>${GITHUB_ENV}
-
+######################################################################################

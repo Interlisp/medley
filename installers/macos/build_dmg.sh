@@ -20,7 +20,7 @@
 #
 APP_NAME="Medley.app"
 VOL_NAME="Medley_Install"
-DMG_NAME=medley-install-VERSION-macos-universal.dmg
+DMG_NAME=medley-full-VERSION-macos-universal.dmg
 BG_NAME=Install_Message.png
 WIN_WIDTH=700
 WIN_HEIGHT=850

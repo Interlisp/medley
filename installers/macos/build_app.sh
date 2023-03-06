@@ -151,7 +151,7 @@ fileicon set ${il_dir}/medley/scripts/medley/medley.command ${image_dir}/Command
 #  Also create the zip file of il_dir for distribution
 #
 pushd ${il_dir} >/dev/null 2>&1
-zip -r -9 -y -q  ${RESULTS_DIR}/medley-full-${medley_release}_${maiko_release}-macos-universal.zip .
+zip -r -6 -y -q  ${RESULTS_DIR}/medley-full-${medley_release}_${maiko_release}-macos-universal.zip .
 popd >/dev/null 2>&1
 
 

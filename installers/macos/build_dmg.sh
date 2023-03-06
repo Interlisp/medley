@@ -63,7 +63,8 @@ then
   #
   #  Assemble source directory for DMG
   #
-  ditto ${APP_PATH} ${SRC_DIR}/${APP_NAME}
+  #ditto ${APP_PATH} ${SRC_DIR}/${APP_NAME}
+  mv ${APP_PATH} ${SRC_DIR}/${APP_NAME}
   SetFile -a B ${SRC_DIR}/${APP_NAME}
   ditto ${SCRIPTS_DIR}/medley_add2path ${SRC_DIR}/medley_add2path
   ditto ${IMAGES_DIR}/${BG_NAME} ${SRC_DIR}/.background/${BG_NAME}
@@ -158,7 +159,7 @@ popd >/dev/null 2>&1
 hdiutil detach ${device}
 sync
 rm -f ${DMG_PATH}.dmg
-hdiutil convert "${DMG_PATH}".temp.dmg -format UDZO -imagekey zlib-level=9 -o ${DMG_PATH}.dmg
+hdiutil convert "${DMG_PATH}".temp.dmg -format UDZO -imagekey zlib-level=6 -o ${DMG_PATH}.dmg
 rm -rf "${DMG_PATH}".temp.dmg
 
 #
@@ -174,7 +175,7 @@ mv ${DMG_PATH}.dmg ${RESULTS_DIR}/${DMG_NAME/VERSION/${version}}
 echo "DMG build completed."
 base_name=${DMG_NAME/VERSION/${version}}
 base_name=${base_name%.dmg}
-echo "=====${base_name}"
+echo "=@=@=@${base_name}"
 
 
 ###############################################################################

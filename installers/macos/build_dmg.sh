@@ -174,7 +174,7 @@ mv ${DMG_PATH}.dmg ${RESULTS_DIR}/${DMG_NAME/VERSION/${version}}
 echo "DMG build completed."
 base_name=${DMG_NAME/VERSION/${version}}
 base_name=${base_name%.dmg}
-echo ${base_name}
+echo "=====${base_name}"
 
 
 ###############################################################################

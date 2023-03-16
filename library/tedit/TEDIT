@@ -1,10 +1,10 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 2-Mar-2023 14:59:10" {WMEDLEY}<library>tedit>TEDIT.;132 128985 
+(FILECREATED "15-Mar-2023 22:36:24" {WMEDLEY}<library>tedit>TEDIT.;135 129044 
 
-      :CHANGES-TO (FNS \TEDIT.OBJECT.SHOWSEL TEDIT.COPY TEDIT.MOVE \TEDIT.DELETE TEDIT.INSERT.OBJECT)
+      :CHANGES-TO (FNS TEDIT.\INSERT TEDIT.INSERT)
 
-      :PREVIOUS-DATE "22-Feb-2023 21:43:17" {WMEDLEY}<library>tedit>TEDIT.;131)
+      :PREVIOUS-DATE " 2-Mar-2023 14:59:10" {WMEDLEY}<library>tedit>TEDIT.;132)
 
 
 (* ; "
@@ -568,14 +568,11 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                 TEXTOBJ])
 
 (TEDIT.INSERT
-  [LAMBDA (TSTREAM TEXT CH#ORSEL LOOKS DONTSCROLL)           (* ; "Edited 22-Feb-2023 21:28 by rmk")
-                                                             (* ; "Edited 21-Feb-2023 14:58 by rmk")
-                                                             (* ; "Edited 19-Feb-2023 17:31 by rmk")
-                                                             (* ; "Edited 13-Feb-2023 00:25 by rmk")
+  [LAMBDA (TSTREAM TEXT CH#ORSEL LOOKS DONTSCROLL)           (* ; "Edited 15-Mar-2023 11:49 by rmk")
                                                              (* ; "Edited  9-Nov-2022 10:36 by rmk")
                                                              (* ; "Edited 29-May-91 18:21 by jds")
 
-    (* ;; "Insert TEXT (character, litatom or string) at the appropriate spot in the text..  No-op if given something else--should it error?")
+    (* ;; "Insert TEXT (charcode, litatom or string) at the appropriate spot in the text..  No-op if given something else--should it error?")
 
     (CL:WHEN (LITATOM TEXT)
         (SETQ TEXT (MKSTRING TEXT)))
@@ -585,9 +582,8 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
     (CL:UNLESS [AND (STRINGP TEXT)
                     (ZEROP (NCHARS TEXT))
                     (NOT (fetch (TEXTOBJ TXTREADONLY) of (TEXTOBJ TSTREAM]
-        (PROG ((TEXTOBJ (TEXTOBJ TSTREAM)
-                      (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
-               CH# LINE OTEXTLEN DS LINES NCHARSADDED)
+        (PROG ((TEXTOBJ (TEXTOBJ TSTREAM))
+               CH# NCHARSADDED)
               (if (FIXP CH#ORSEL)
                   then (TEDIT.SETSEL TSTREAM CH#ORSEL 1 'LEFT) 
                                                              (* ; "He gave us a ch# to insert before")
@@ -602,29 +598,7 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                     "If the selected text was for pending delete, delete it before doing the insert.")
               (CL:WHEN LOOKS                                 (* ; "Set up any specified looks.")
                   (TEDIT.CARETLOOKS TSTREAM LOOKS))
-              (SETQ OTEXTLEN (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                                                             (* ; 
-                                 "The PRE-INSERT text length, for starting the screen update process")
-              (CL:WHEN (fetch (TEXTOBJ \WINDOW) of TEXTOBJ)
-
-                  (* ;; "If this text is in a pane, move it so the insertion point is on-screen, then turn off the selection highlight")
-
-                  (CL:UNLESS DONTSCROLL                      (* ; 
-                                          "If DONTSCROLL is T, then don't scroll to show the change.")
-                      (TEDIT.NORMALIZECARET TEXTOBJ CH#ORSEL))
-                  (\SHOWSEL CH#ORSEL NIL NIL))
-              (SETQ CH# (TEDIT.GETPOINT TEXTOBJ CH#ORSEL))   (* ; 
-                                                     "Insert characters one-by-one to test for  EOL.")
-              (for ACHAR instring TEXT as NCH# from CH# by 1
-                 do (SELCHARQ ACHAR
-                         ((EOL %#EOL Meta,EOL) 
-                              (\INSERTEOL ACHAR NCH# TEXTOBJ))
-                         (\INSERTCH ACHAR NCH# TEXTOBJ)))
-              (SETQ NCHARSADDED (NCHARS TEXT))
-              (\FIXILINES TEXTOBJ CH#ORSEL CH# NCHARSADDED OTEXTLEN)
-                                                             (* ; 
-                                                     "Fix up the line descriptors and the Selection.")
-              (TEDIT.INSERT.UPDATESCREEN CH# NCHARSADDED TEXTOBJ CH#ORSEL DONTSCROLL)
+              (TEDIT.\INSERT TEXT CH#ORSEL TEXTOBJ DONTSCROLL T)
               (BTVALIDATE 'TEDIT.INSERT 'END TEXTOBJ)))])
 
 (TEDIT.KILL
@@ -974,31 +948,62 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                  (T TEXT])
 
 (TEDIT.\INSERT
-  [LAMBDA (CH SEL TEXTOBJ)                                   (* ; "Edited 21-Feb-2023 14:44 by rmk")
+  [LAMBDA (TEXT SEL TEXTOBJ DONTSCROLL NOTINCREMENTAL)       (* ; "Edited 15-Mar-2023 22:35 by rmk")
+                                                             (* ; "Edited 21-Feb-2023 14:44 by rmk")
                                                              (* ; "Edited 19-Feb-2023 14:10 by rmk")
-                                                             (* ; "Edited  9-Nov-2022 08:50 by rmk")
-                                                             (* ; "Edited  4-Nov-2022 17:43 by rmk")
                                                              (* ; "Edited 20-Oct-2022 10:19 by rmk")
                                                              (* ; "Edited 29-May-91 18:22 by jds")
 
-    (* ;; "Insert the single character-code CH at the appropriate spot in the text.")
+    (* ;; "Inserts TEXT at the location picked out by the selection, and then implements all the consequences for line and screen updates. Assumes that the caller got the selection and the text set up properly.")
+
+    (* ;; "Text can be a string or a single charcode (only on the call from \TEDIT.COMMAND.LOOP).  ")
+
+    (* ;; 
+   "TEDIT.INSERT passes DONTSCROLL and asserts NOTINCREMENTAL, other calls do incremental scrolling.")
+
+    (* ;; "SELECTION-SET test may be unnecessary here, TEDIT.INSERT already checks, not sure about the 2 other calls.")
 
     (if (AND SEL (fetch (SELECTION SET) of SEL))
-        then (CL:WHEN (fetch (TEXTOBJ \WINDOW) of TEXTOBJ)
+        then (LET ((CH# (TEDIT.GETPOINT TEXTOBJ SEL))
+                   (ONSCREEN (fetch (TEXTOBJ \WINDOW) of TEXTOBJ))
+                   NCHARSADDED LINE)
+                  (CL:WHEN ONSCREEN
+                      (CL:UNLESS DONTSCROLL                  (* ; 
+                                              "Make sure the insertion point is visible on all panes")
+                          (TEDIT.NORMALIZECARET TEXTOBJ SEL))
+                      (\SHOWSEL SEL NIL NIL)
 
-                 (* ;; "There is a window;  make sure the insert point is on-screen, and turn off any highlighted selection")
+                      (* ;; "Turn off the selection highlight, find a preexisting containing CH, for the break adjustment below.")
 
-                 (TEDIT.NORMALIZECARET TEXTOBJ SEL)
-                 (\SHOWSEL SEL NIL NIL))
-             (LET ((CH# (TEDIT.GETPOINT TEXTOBJ SEL))
-                   (OTEXTLEN (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ)))
-                  (SELCHARQ CH
-                       ((EOL %#EOL Meta,EOL)                 (* ; 
-                                                        "This was an EOL.  Need to do para breaking.")
-                            (\INSERTEOL CH CH# TEXTOBJ))
-                       (\INSERTCH CH CH# TEXTOBJ))
-                  (\FIXILINES TEXTOBJ SEL CH# 1 OTEXTLEN)
-                  (TEDIT.INSERT.UPDATESCREEN CH# 1 TEXTOBJ SEL NIL T))
+                      [find PANE inside (fetch (TEXTOBJ LINES) of TEXTOBJ)
+                         suchthat (SETQ LINE (find L inlines PANE suchthat (WITHINLINEP CH# L])
+                  (if (CHARCODEP TEXT)
+                      then (SELCHARQ TEXT
+                                ((EOL %#EOL Meta,EOL)        (* ; "Need to do para breaking if EOL.")
+                                     (\INSERTEOL TEXT CH# TEXTOBJ))
+                                (\INSERTCH TEXT CH# TEXTOBJ))
+                           (SETQ NCHARSADDED 1)
+                    else (for CH instring TEXT as NCH# from CH#
+                            do (SELCHARQ ACHAR
+                                    ((EOL %#EOL Meta,EOL) 
+                                         (\INSERTEOL CH NCH# TEXTOBJ))
+                                    (\INSERTCH CH NCH# TEXTOBJ)))
+                         (SETQ NCHARSADDED (NCHARS TEXT)))
+
+                  (* ;; "If we inserted at the beginning of a pre-existing LINE, back up to make sure we recalculate LINE's overhang and break.  IGEQ 1 to avoid backing into the dummy initial line.")
+
+                  (\FIXILINES TEXTOBJ SEL (CL:IF (AND LINE (IEQP CH# (fetch (LINEDESCRIPTOR LCHAR1)
+                                                                        of LINE))
+                                                      (IGREATERP CH# 1))
+                                              (SUB1 CH#)
+                                              CH#)
+                         NCHARSADDED)
+
+                  (* ;; "But the new selection comes after the insert.")
+
+                  (TEDIT.INSERT.UPDATESCREEN CH# NCHARSADDED TEXTOBJ SEL DONTSCROLL (NOT 
+                                                                                       NOTINCREMENTAL
+                                                                                         )))
       else (TEDIT.PROMPTPRINT TEXTOBJ "Please select a place for the insertion." T])
 
 (\TEDIT.INCLUDE
@@ -1991,7 +1996,7 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
 (* ; "TEDIT Support information")
 
 
-(RPAQQ TEDITSYSTEMDATE " 2-Mar-2023 14:59:10")
+(RPAQQ TEDITSYSTEMDATE "15-Mar-2023 22:36:24")
 
 
 
@@ -2003,19 +2008,19 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
 (PUTPROPS TEDIT COPYRIGHT ("Venue & Xerox Corporation" 1983 1984 1985 1986 1987 1988 1989 1990 1991 
 1992 1993 1995 1999 2018 2021))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3944 5381 (MAKE-TEDIT-EXPORTS.ALL 3954 . 4211) (UPDATE-TEDIT 4213 . 4826) (EDIT-TEDIT 
-4828 . 5379)) (6231 6524 (\CREATE.TEDIT.RESTART.MENU 6241 . 6522)) (6899 56514 (TEDIT 6909 . 12245) (
-COERCETEXTOBJ 12247 . 18375) (TEDITSTRING 18377 . 18936) (TEDIT-SEE 18938 . 21091) (TEDIT.CHARWIDTH 
-21093 . 23117) (TEDIT.COPY 23119 . 31748) (TEDIT.DELETE 31750 . 32530) (TEDIT.INSERT 32532 . 36546) (
-TEDIT.KILL 36548 . 38105) (TEDIT.MAPPIECES 38107 . 39169) (TEDIT.QUIT 39171 . 41171) (
-TEDIT.DO.BLUEPENDINGDELETE 41173 . 43841) (TEDIT.MOVE 43843 . 53015) (TEDIT.STRINGWIDTH 53017 . 53688)
- (TEXTOBJ 53690 . 54815) (TEXTSTREAM 54817 . 56512)) (56560 110429 (\TEDIT2 56570 . 59321) (
-TEDIT.\INSERT 59323 . 61115) (\TEDIT.INCLUDE 61117 . 65017) (\TEDIT.INSERT.PIECES 65019 . 73033) (
-\TEDIT.MOVE.PIECEMAPFN 73035 . 74671) (\TEDIT.OBJECT.SHOWSEL 74673 . 78741) (\TEDIT.RESTARTFN 78743 . 
-80816) (\TEDIT.CHARDELETE 80818 . 84184) (\TEDIT.COPYPIECE 84186 . 87657) (\TEDIT.DELETE 87659 . 93652
-) (\TEDIT.DIFFUSE.PARALOOKS 93654 . 95950) (\TEDIT.FOREIGN.COPY? 95952 . 100037) (\TEDIT.QUIT 100039
- . 103185) (\TEDIT.WORDDELETE 103187 . 107729) (\TEDIT1 107731 . 110427)) (110583 128209 (
-TEDIT.INSERT.OBJECT 110593 . 118328) (TEDIT.EDIT.OBJECT 118330 . 120685) (TEDIT.FIND.OBJECT 120687 . 
-121094) (TEDIT.PUT.OBJECT 121096 . 122795) (TEDIT.GET.OBJECT 122797 . 125723) (TEDIT.OBJECT.CHANGED 
-125725 . 127373) (TEDIT.MAP.OBJECTS 127375 . 128207)))))
+  (FILEMAP (NIL (3893 5330 (MAKE-TEDIT-EXPORTS.ALL 3903 . 4160) (UPDATE-TEDIT 4162 . 4775) (EDIT-TEDIT 
+4777 . 5328)) (6180 6473 (\CREATE.TEDIT.RESTART.MENU 6190 . 6471)) (6848 54499 (TEDIT 6858 . 12194) (
+COERCETEXTOBJ 12196 . 18324) (TEDITSTRING 18326 . 18885) (TEDIT-SEE 18887 . 21040) (TEDIT.CHARWIDTH 
+21042 . 23066) (TEDIT.COPY 23068 . 31697) (TEDIT.DELETE 31699 . 32479) (TEDIT.INSERT 32481 . 34531) (
+TEDIT.KILL 34533 . 36090) (TEDIT.MAPPIECES 36092 . 37154) (TEDIT.QUIT 37156 . 39156) (
+TEDIT.DO.BLUEPENDINGDELETE 39158 . 41826) (TEDIT.MOVE 41828 . 51000) (TEDIT.STRINGWIDTH 51002 . 51673)
+ (TEXTOBJ 51675 . 52800) (TEXTSTREAM 52802 . 54497)) (54545 110488 (\TEDIT2 54555 . 57306) (
+TEDIT.\INSERT 57308 . 61174) (\TEDIT.INCLUDE 61176 . 65076) (\TEDIT.INSERT.PIECES 65078 . 73092) (
+\TEDIT.MOVE.PIECEMAPFN 73094 . 74730) (\TEDIT.OBJECT.SHOWSEL 74732 . 78800) (\TEDIT.RESTARTFN 78802 . 
+80875) (\TEDIT.CHARDELETE 80877 . 84243) (\TEDIT.COPYPIECE 84245 . 87716) (\TEDIT.DELETE 87718 . 93711
+) (\TEDIT.DIFFUSE.PARALOOKS 93713 . 96009) (\TEDIT.FOREIGN.COPY? 96011 . 100096) (\TEDIT.QUIT 100098
+ . 103244) (\TEDIT.WORDDELETE 103246 . 107788) (\TEDIT1 107790 . 110486)) (110642 128268 (
+TEDIT.INSERT.OBJECT 110652 . 118387) (TEDIT.EDIT.OBJECT 118389 . 120744) (TEDIT.FIND.OBJECT 120746 . 
+121153) (TEDIT.PUT.OBJECT 121155 . 122854) (TEDIT.GET.OBJECT 122856 . 125782) (TEDIT.OBJECT.CHANGED 
+125784 . 127432) (TEDIT.MAP.OBJECTS 127434 . 128266)))))
 STOP

@@ -105,7 +105,7 @@ dump of your system located in your home directory named
 specify a specific image to run, Medley restores that image so that
 you can continue right where you left off.
 
-* [Using Medley Interlisp](https://docs.interlisp.org/home/documentation/using)
+* [Using Medley Interlisp](https://interlisp.org/doc/info/Using.html)
 
 ## Naming conventions and directory structure
 

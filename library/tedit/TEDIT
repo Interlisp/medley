@@ -1,10 +1,10 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "22-Mar-2023 09:11:10" {WMEDLEY}<library>tedit>TEDIT.;155 127129 
+(FILECREATED "27-Mar-2023 20:35:52" {WMEDLEY}<library>tedit>TEDIT.;162 127994 
 
-      :CHANGES-TO (FNS \TEDIT.INSERT \TEDIT.OBJECT.SHOWSEL)
+      :CHANGES-TO (FNS \TEDIT.INSERT)
 
-      :PREVIOUS-DATE "20-Mar-2023 15:07:13" {WMEDLEY}<library>tedit>TEDIT.;151)
+      :PREVIOUS-DATE "25-Mar-2023 11:48:39" {WMEDLEY}<library>tedit>TEDIT.;161)
 
 
 (* ; "
@@ -853,26 +853,35 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                                         (CHARWIDTH CH FONT])
 
 (TEXTOBJ
-  [LAMBDA (STREAM)                                           (* jds "11-Jul-85 12:06")
-                                                             (* Convert from a text stream to the 
-                                                             associated textobj)
-    (COND
-       ((type? TEXTOBJ STREAM)                               (* It's already a TEXTOBJ)
-        STREAM)
-       ((AND (type? STREAM STREAM)
-             (fetch (TEXTSTREAM TEXTOBJ) of STREAM)
-             (type? TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of STREAM)))
-                                                             (* It's a TEXTSTREAM)
-        (fetch (TEXTSTREAM TEXTOBJ) of STREAM))
-       ((AND (PROCESSP STREAM)
-             (PROCESS.WINDOW STREAM))                        (* It's an edit PROCESS)
-        (WINDOWPROP (PROCESS.WINDOW STREAM)
-               'TEXTOBJ))
-       [(AND (WINDOWP STREAM)
-             (WINDOWPROP STREAM 'TEXTOBJ]
-       [(AND (DISPLAYSTREAMP STREAM)
-             (WINDOWPROP STREAM 'TEXTOBJ]
-       ((\ILLEGAL.ARG STREAM])
+  [LAMBDA (STREAM)                                           (* ; "Edited 24-Mar-2023 18:01 by rmk")
+                                                             (* jds "11-Jul-85 12:06")
+
+    (* ;; "Convert from a text stream to the associated textobj")
+
+    (LET (TOBJ)
+         (if (type? TEXTOBJ STREAM)
+             then STREAM
+           else [SETQ TOBJ (if [AND (type? STREAM STREAM)
+                                    (type? TEXTOBJ (SETQ TOBJ (fetch (TEXTSTREAM TEXTOBJ)
+                                                                 of STREAM]
+                               then 
+                                    (* ;; 
+                                "Text stream - test TEXTOBJ to distinguish displaystream case below.")
+
+                                    TOBJ
+                             else (WINDOWP STREAM)
+                               then (WINDOWPROP STREAM 'TEXTOBJ)
+                             elseif (AND (PROCESSP STREAM)
+                                         (PROCESS.WINDOW STREAM))
+                               then                          (* ; "It's an edit PROCESS")
+                                    (WINDOWPROP (PROCESS.WINDOW STREAM)
+                                           'TEXTOBJ)
+                             elseif (AND (DISPLAYSTREAMP STREAM)
+                                         (SETQ TOBJ (WFROMDS STREAM)))
+                               then (WINDOWPROP TOBJ 'TEXTOBJ]
+                (CL:UNLESS (type? TEXTOBJ TOBJ)
+                       (\ILLEGAL.ARG STREAM))
+                TOBJ])
 
 (TEXTSTREAM
   [LAMBDA (STREAM)                                           (* ; "Edited 21-Aug-2022 08:14 by rmk")
@@ -949,7 +958,7 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                  (T TEXT])
 
 (\TEDIT.INSERT
-  [LAMBDA (INSERT SEL TEXTOBJ DONTSCROLL NOTINCREMENTAL)     (* ; "Edited 22-Mar-2023 09:11 by rmk")
+  [LAMBDA (INSERT SEL TEXTOBJ DONTSCROLL NOTINCREMENTAL)     (* ; "Edited 27-Mar-2023 15:38 by rmk")
                                                              (* ; "Edited 29-May-91 18:22 by jds")
 
     (* ;; "Inserts INSERT at the location picked out by the selection, and then implements all the consequences for line and screen updates. Assumes that the caller got the selection and the text set up properly.")
@@ -966,9 +975,11 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
       elseif (NOT (AND SEL (fetch (SELECTION SET) of SEL)))
         then (TEDIT.PROMPTPRINT TEXTOBJ "Please select a place for the insertion." T)
       else (PROG ((CHNO (TEDIT.GETPOINT TEXTOBJ SEL))
-                  (WINDOW (fetch (TEXTOBJ \WINDOW) of TEXTOBJ))
+                  (PANES (fetch (TEXTOBJ \WINDOW) of TEXTOBJ))
                   NCHARSADDED)
-                 (\SHOWSEL SEL NIL NIL)                      (* ; "Turn off any old highlights")
+                 (CL:WHEN PANES
+                     (TEDIT.NORMALIZECARET TEXTOBJ SEL)
+                     (\SHOWSEL SEL NIL NIL))                 (* ; "Turn off any old highlights")
                  (if (CHARCODEP INSERT)
                      then (SELCHARQ INSERT
                                ((EOL %#EOL Meta,EOL)         (* ; "Need to do para breaking if EOL.")
@@ -982,26 +993,32 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                                    (\INSERTCH CH NCH# TEXTOBJ)))
                         (SETQ NCHARSADDED (NCHARS INSERT)))
 
-            (* ;; "NCHARSADDED new characters have been been added in front of CHNO.")
+            (* ;; "")
+
+            (* ;; "The model (piece table) is now correct:  NCHARSADDED new characters have been been added in front of CHNO.  Figure out which lines are dirty and need to be reformatted, update SEL to a point-selection just after the last inserted character")
 
                  (\FIXILINES TEXTOBJ SEL CHNO NCHARSADDED)
-                 (\FIXSEL SEL TEXTOBJ)
-
-            (* ;; 
-            "Update the edit window after an insertion just in front of the point-selection SEL.   ")
 
             (* ;; "Bail out if we're doing incremental updates without type-in waiting, screen isn't being updated, or no window to update.")
 
                  (CL:UNLESS (OR (AND (NOT NOTINCREMENTAL)
                                      (\SYSBUFP))
                                 (fetch (TEXTOBJ TXTDON'TUPDATE) of TEXTOBJ)
-                                WINDOW)
-                        (RETURN))
+                                PANES)
+                     (\FIXSEL SEL TEXTOBJ)
+                     (RETURN))
                  (TEDIT.UPDATE.SCREEN TEXTOBJ T (fetch (SELECTION CH#) of SEL))
+
+            (* ;; "")
+
+            (* ;; "The viewer is now correct and characters now reside in properly broken lines.   Set the  XY point-positions of the controller (the caret).")
+
+                 (\FIXSEL SEL TEXTOBJ)
                  (\SHOWSEL SEL NIL T)
                  (\COPYSEL SEL TEDIT.SELECTION)
-                 (CL:UNLESS DONTSCROLL (TEDIT.NORMALIZECARET TEXTOBJ SEL))
-                 (for PANE inside WINDOW do (\TEDIT.SET.WINDOW.EXTENT TEXTOBJ PANE])
+                 (CL:WHEN (AND PANES (NOT DONTSCROLL))
+                        (TEDIT.NORMALIZECARET TEXTOBJ SEL))
+                 (for PANE inside PANES do (\TEDIT.SET.WINDOW.EXTENT TEXTOBJ PANE])
 
 (\TEDIT.INCLUDE
   [LAMBDA (TEXTOBJ FILE START END)                   (* ; "Edited 29-May-91 18:22 by jds")
@@ -1352,7 +1369,8 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
          PC])
 
 (\TEDIT.DELETE
-  [LAMBDA (SEL TEXTOBJ)                                      (* ; "Edited 20-Mar-2023 15:07 by rmk")
+  [LAMBDA (SEL TEXTOBJ)                                      (* ; "Edited 25-Mar-2023 11:41 by rmk")
+                                                             (* ; "Edited 20-Mar-2023 15:07 by rmk")
                                                              (* ; "Edited 18-Mar-2023 21:24 by rmk")
                                                              (* ; "Edited 23-Aug-2022 11:53 by rmk")
                                                              (* ; "Edited 21-Aug-2022 08:11 by rmk")
@@ -1373,7 +1391,7 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                      (RETURN))
               (CL:WHEN WINDOW (TEDIT.NORMALIZECARET TEXTOBJ SEL))
                                                              (* ; 
-                                 "If the text appears in a window, move the deletion point on-screen")
+                   "If the text appears in a window, move the deletion point on-screen in every pane")
               (\TEDIT.SHOWSELS TEXTOBJ NIL NIL)              (* ; 
                                                              "Turn off the selection's highlighting")
               (\FIXDLINES SEL CH# CHLIM TEXTOBJ)             (* ; 
@@ -1386,35 +1404,32 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                                                              (* ; 
                            "Remember which side of the selection we were on, in case it gets undone.")
               (CL:WHEN WINDOW                                (* ; 
-                                                       "If there's no window to update, don't bother")
+                                                      "If there are no panes to update, don't bother")
                   (for OLINE1 inside (fetch (SELECTION L1) of SEL) as OLINEN
-                     inside (fetch (SELECTION LN) of SEL) as TOPLINE inside (fetch (TEXTOBJ LINES)
-                                                                               of TEXTOBJ)
-                     as PANE inside WINDOW
+                     inside (fetch (SELECTION LN) of SEL) as PLINES inpanelines TEXTOBJ as PANE
+                     inside WINDOW
                      do 
                         (* ;; "Remove any lines which were completely deleted.")
 
                         (\TEDIT.CLOSEUPLINES
                          TEXTOBJ
-                         (OR (AND OLINE1 (COND
-                                            ((fetch (LINEDESCRIPTOR DELETED) of OLINE1)
-                                             (fetch (LINEDESCRIPTOR PREVLINE) of OLINE1))
-                                            (T OLINE1)))
+                         (OR (AND OLINE1 (CL:IF (fetch (LINEDESCRIPTOR DELETED) of OLINE1)
+                                             (fetch (LINEDESCRIPTOR PREVLINE) of OLINE1)
+                                             OLINE1))
                              (COND
-                                ((AND (fetch (LINEDESCRIPTOR NEXTLINE) of TOPLINE)
+                                ((AND (fetch (LINEDESCRIPTOR NEXTLINE) of PLINES)
                                       (OR (IGEQ (fetch (LINEDESCRIPTOR LCHAR1)
-                                                   of (fetch (LINEDESCRIPTOR NEXTLINE) of TOPLINE))
+                                                   of (fetch (LINEDESCRIPTOR NEXTLINE) of PLINES))
                                                 (fetch (SELECTION CHLIM) of SEL))
                                           (ILESSP (fetch (LINEDESCRIPTOR LCHARLIM)
-                                                     of (fetch (LINEDESCRIPTOR NEXTLINE) of TOPLINE))
+                                                     of (fetch (LINEDESCRIPTOR NEXTLINE) of PLINES))
                                                  CH#)))      (* ; 
         "The first line on the screen is already past where we're to delete.  DON'T delete any lines")
                                  NIL)
-                                (T TOPLINE)))
-                         (AND OLINEN (COND
-                                        ((fetch (LINEDESCRIPTOR DELETED) of OLINEN)
-                                         (fetch (LINEDESCRIPTOR NEXTLINE) of OLINEN))
-                                        (T OLINEN)))
+                                (T PLINES)))
+                         (AND OLINEN (CL:IF (fetch (LINEDESCRIPTOR DELETED) of OLINEN)
+                                         (fetch (LINEDESCRIPTOR NEXTLINE) of OLINEN)
+                                         OLINEN))
                          NIL PANE))
 
                   (* ;; "This line needs be reformatted the hard way--it isn't a left ragged line or one of the lines is off-screen.")
@@ -1423,7 +1438,8 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
                                                           "Correct the text that's displayed already")
                   (\FIXSEL SEL TEXTOBJ)                      (* ; 
                                                              "Then fix up the selection as needed.")
-                  (\TEDIT.SHOWSELS TEXTOBJ NIL T))))])
+                  (\TEDIT.SHOWSELS TEXTOBJ NIL T))
+          TOPLINE))])
 
 (\TEDIT.DIFFUSE.PARALOOKS
   [LAMBDA (PRIORPC SUCCEEDINGPC)                             (* ; "Edited 22-Oct-2022 22:22 by rmk")
@@ -1969,7 +1985,7 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
 (* ; "TEDIT Support information")
 
 
-(RPAQQ TEDITSYSTEMDATE "22-Mar-2023 09:11:10")
+(RPAQQ TEDITSYSTEMDATE "27-Mar-2023 20:35:52")
 
 
 
@@ -1981,19 +1997,19 @@ Copyright (c) 1983-1993, 1995, 1999, 2018, 2021 by Venue & Xerox Corporation.
 (PUTPROPS TEDIT COPYRIGHT ("Venue & Xerox Corporation" 1983 1984 1985 1986 1987 1988 1989 1990 1991 
 1992 1993 1995 1999 2018 2021))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3902 5339 (MAKE-TEDIT-EXPORTS.ALL 3912 . 4169) (UPDATE-TEDIT 4171 . 4784) (EDIT-TEDIT 
-4786 . 5337)) (6189 6482 (\CREATE.TEDIT.RESTART.MENU 6199 . 6480)) (6857 54726 (TEDIT 6867 . 12203) (
-COERCETEXTOBJ 12205 . 18333) (TEDITSTRING 18335 . 18894) (TEDIT-SEE 18896 . 21049) (TEDIT.CHARWIDTH 
-21051 . 23075) (TEDIT.COPY 23077 . 31807) (TEDIT.DELETE 31809 . 32589) (TEDIT.INSERT 32591 . 34750) (
-TEDIT.KILL 34752 . 36309) (TEDIT.MAPPIECES 36311 . 37373) (TEDIT.QUIT 37375 . 39375) (
-TEDIT.DO.BLUEPENDINGDELETE 39377 . 42045) (TEDIT.MOVE 42047 . 51227) (TEDIT.STRINGWIDTH 51229 . 51900)
- (TEXTOBJ 51902 . 53027) (TEXTSTREAM 53029 . 54724)) (54772 108573 (\TEDIT2 54782 . 57533) (
-\TEDIT.INSERT 57535 . 60760) (\TEDIT.INCLUDE 60762 . 64662) (\TEDIT.INSERT.PIECES 64664 . 72622) (
-\TEDIT.MOVE.PIECEMAPFN 72624 . 74260) (\TEDIT.OBJECT.SHOWSEL 74262 . 78328) (\TEDIT.RESTARTFN 78330 . 
-80403) (\TEDIT.CHARDELETE 80405 . 82995) (\TEDIT.COPYPIECE 82997 . 86468) (\TEDIT.DELETE 86470 . 91796
-) (\TEDIT.DIFFUSE.PARALOOKS 91798 . 94094) (\TEDIT.FOREIGN.COPY? 94096 . 98181) (\TEDIT.QUIT 98183 . 
-101329) (\TEDIT.WORDDELETE 101331 . 105873) (\TEDIT1 105875 . 108571)) (108727 126353 (
-TEDIT.INSERT.OBJECT 108737 . 116472) (TEDIT.EDIT.OBJECT 116474 . 118829) (TEDIT.FIND.OBJECT 118831 . 
-119238) (TEDIT.PUT.OBJECT 119240 . 120939) (TEDIT.GET.OBJECT 120941 . 123867) (TEDIT.OBJECT.CHANGED 
-123869 . 125517) (TEDIT.MAP.OBJECTS 125519 . 126351)))))
+  (FILEMAP (NIL (3880 5317 (MAKE-TEDIT-EXPORTS.ALL 3890 . 4147) (UPDATE-TEDIT 4149 . 4762) (EDIT-TEDIT 
+4764 . 5315)) (6167 6460 (\CREATE.TEDIT.RESTART.MENU 6177 . 6458)) (6835 55245 (TEDIT 6845 . 12181) (
+COERCETEXTOBJ 12183 . 18311) (TEDITSTRING 18313 . 18872) (TEDIT-SEE 18874 . 21027) (TEDIT.CHARWIDTH 
+21029 . 23053) (TEDIT.COPY 23055 . 31785) (TEDIT.DELETE 31787 . 32567) (TEDIT.INSERT 32569 . 34728) (
+TEDIT.KILL 34730 . 36287) (TEDIT.MAPPIECES 36289 . 37351) (TEDIT.QUIT 37353 . 39353) (
+TEDIT.DO.BLUEPENDINGDELETE 39355 . 42023) (TEDIT.MOVE 42025 . 51205) (TEDIT.STRINGWIDTH 51207 . 51878)
+ (TEXTOBJ 51880 . 53546) (TEXTSTREAM 53548 . 55243)) (55291 109438 (\TEDIT2 55301 . 58052) (
+\TEDIT.INSERT 58054 . 61708) (\TEDIT.INCLUDE 61710 . 65610) (\TEDIT.INSERT.PIECES 65612 . 73570) (
+\TEDIT.MOVE.PIECEMAPFN 73572 . 75208) (\TEDIT.OBJECT.SHOWSEL 75210 . 79276) (\TEDIT.RESTARTFN 79278 . 
+81351) (\TEDIT.CHARDELETE 81353 . 83943) (\TEDIT.COPYPIECE 83945 . 87416) (\TEDIT.DELETE 87418 . 92661
+) (\TEDIT.DIFFUSE.PARALOOKS 92663 . 94959) (\TEDIT.FOREIGN.COPY? 94961 . 99046) (\TEDIT.QUIT 99048 . 
+102194) (\TEDIT.WORDDELETE 102196 . 106738) (\TEDIT1 106740 . 109436)) (109592 127218 (
+TEDIT.INSERT.OBJECT 109602 . 117337) (TEDIT.EDIT.OBJECT 117339 . 119694) (TEDIT.FIND.OBJECT 119696 . 
+120103) (TEDIT.PUT.OBJECT 120105 . 121804) (TEDIT.GET.OBJECT 121806 . 124732) (TEDIT.OBJECT.CHANGED 
+124734 . 126382) (TEDIT.MAP.OBJECTS 126384 . 127216)))))
 STOP

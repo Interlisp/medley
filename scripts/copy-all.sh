@@ -12,10 +12,21 @@ fi
 # cp -p tmp/exports.all tmp/RDSYS tmp/RDSYS.LCOM library/
 # just copy the files that are released
 
+
+./scripts/cpv tmp/init.dribble loadups
+./scripts/cpv tmp/lisp.dribble loadups
+./scripts/cpv tmp/full.dribble loadups
+./scripts/cpv tmp/fuller.dribble loadups
+./scripts/cpv tmp/whereis.dribble loadups
+
+./scripts/cpv tmp/fuller.database loadups
+./scripts/cpv tmp/fuller.sysout loadups
+
 ./scripts/cpv tmp/full.sysout loadups
 ./scripts/cpv tmp/lisp.sysout loadups
 ./scripts/cpv tmp/whereis.hash loadups
 ./scripts/cpv tmp/exports.all library
+
 if [ "${1}" = "-apps" ]; then
     ./scripts/cpv tmp/apps.sysout loadups
 fi

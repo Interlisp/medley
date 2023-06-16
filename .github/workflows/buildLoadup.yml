@@ -130,6 +130,7 @@ jobs:
       medley_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_RELEASE_TAG }}
       medley_short_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_SHORT_RELEASE_TAG }}
       debs_filename_base: ${{ steps.debs.outputs.DEBS_FILENAME_BASE }}
+      maiko_release_tag: ${{ steps.job_outputs.outputs.MAIKO_RELEASE_TAG }}
 
     needs: [inputs, sentry]
     if: |
@@ -185,6 +186,7 @@ jobs:
           echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT;
           echo "MEDLEY_RELEASE_TAG=${MEDLEY_RELEASE_TAG}" >> $GITHUB_OUTPUT;
           echo "MEDLEY_SHORT_RELEASE_TAG=${MEDLEY_SHORT_RELEASE_TAG}" >> $GITHUB_OUTPUT;
+          echo "MAIKO_RELEASE_TAG=${MAIKO_RELEASE_TAG}" >> $GITHUB_OUTPUT;
 
       # Setup some needed dirs in workspace
       - name: Create work dirs
@@ -296,6 +298,19 @@ jobs:
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Rename medley tars
+        run: |
+            cd ${{ env.TARBALL_DIR }}
+            mv ${{ env.MEDLEY_RELEASE_TAG }}-loadups.tgz medley-loadups.tgz
+            mv ${{ env.MEDLEY_RELEASE_TAG }}-runtime.tgz medley-runtime.tgz
+
+      - name: Save medley tars for use in cygwin installers
+        uses: actions/upload-artifact@v3
+        with: 
+          name: medley-tars
+          path: |
+            ${{ env.TARBALL_DIR }}/medley-loadups.tgz
+            ${{ env.TARBALL_DIR }}/medley-runtime.tgz
 
   #
   # Create the Windows installer, push it up to the release on github and
@@ -303,7 +318,7 @@ jobs:
   #
   windows_installer:
 
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     needs: [inputs, sentry, loadup]
     if: |
@@ -328,29 +343,58 @@ jobs:
           $debs="${{ needs.loadup.outputs.debs_filename_base }}"
           echo "DEBS_FILENAME_BASE=$debs" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
-      # Download vnc viewer
-      - name: Download vncviewer
+      # Retrieve medley tars from artifact store
+      - name: Retrieve medley tars
+        uses: actions/download-artifact@v3
+        with:  
+          name: medley-tars
+          path: installers/cygwin/
+
+      # Download maiko cygwin build
+      - name: Retrieve maiko cygwin build
         shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $url = "https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe"
-          $output = "installers\win\vncviewer64-1.12.0.exe"
-          (New-Object System.Net.WebClient).DownloadFile($url, $output)
+          gh release download ${{ needs.loadup.outputs.maiko_release_tag }} --repo interlisp/maiko --pattern ${{ needs.loadup.outputs.maiko_release_tag }}-cygwin.x86_64.tgz --output installers\cygwin\maiko-cygwin.x86_64.tgz
+
+      # Download cygwin installer to be included by medley.iss
+      - name: Download cygwin installer
+        id: cygwin
+        run: |
+          wget https://cygwin.com/setup-x86_64.exe -OutFile installers\cygwin\setup-x86_64.exe
+
+      # Download vnc viewer
+      #- name: Download vncviewer
+      #  shell: powershell
+      #  run: |
+      #    $url = "https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe"
+      #    $output = "installers\win\vncviewer64-1.12.0.exe"
+      #    (New-Object System.Net.WebClient).DownloadFile($url, $output)
  
       # Run iscc.exe to compile the installer
-      - name: Compile medley.iss
+      #- name: Compile medley.iss
+      #  shell: powershell
+      #  run: |
+      #     iscc installers\win\medley.iss
+      #     $filename="medley-install_${env:COMBINED_RELEASE_TAG}_x64.exe"
+      #     echo "INSTALLER_FILENAME=$filename" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+      # Run iscc.exe to compile the installer
+      - name: Compile cygwin_medley.iss
         shell: powershell
         run: |
-           iscc installers\win\medley.iss
-           $filename="medley-install_${env:COMBINED_RELEASE_TAG}_x64.exe"
+           iscc installers\cygwin\medley.iss
+           $filename="medley-full-${env:COMBINED_RELEASE_TAG}-cygwin-x86_64.exe"
            echo "INSTALLER_FILENAME=$filename" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
+     
       # Upload windows installer to release
       - name: Upload windows installer to release
         id: push
         uses: ncipollo/release-action@v1
         with: 
           allowUpdates: true
-          artifacts: installers/win/${{ env.INSTALLER_FILENAME }}
+          artifacts: installers/cygwin/${{ env.INSTALLER_FILENAME }}
           tag: ${{ env.MEDLEY_RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           omitBodyDuringUpdate: true

@@ -63,7 +63,7 @@ Name: "{group}\Medley\Uninstall_Medley"; Filename: "{uninstallexe}"
 ; Name: "{group}\Medley\Medley"; Filename: "powershell"; Parameters: "-NoExit -File {app}\medley.ps1 --help"; IconFilename: "{app}\Medley.ico"
 
 [Run]
-Filename: "{app}\cygwin\setup-x86_64.exe"; Parameters: "--quiet-mode --no-admin --wait --no-shortcuts --no-write-registry --verbose --root {app} --site http://www.gtlib.gatech.edu/pub/cygwin/ --only-site --local-package-dir {app}\cygwin --packages nano,xdg-utils"
+Filename: "{app}\cygwin\setup-x86_64.exe"; Parameters: "--quiet-mode --no-admin --wait --no-shortcuts --no-write-registry --verbose --root {app} --site http://www.gtlib.gatech.edu/pub/cygwin/ --only-site --local-package-dir {app}\cygwin --packages nano,xdg-utils"; StatusMsg: "Installing Cygwin ..."
 Filename: "{app}\bin\bash"; Parameters: "-login -c 'sed -i -e s/^none/#none/ /etc/fstab && echo none / cygdrive binary,posix=0,user 0 0 >>/etc/fstab'"; Flags: runhidden
 Filename: "{app}\bin\bash"; Parameters: "-login -c 'tar -x -z -C / -f /install/medley.tgz'"; Flags: runhidden; StatusMsg: "Installing Medley ..."
 Filename: "{app}\bin\bash"; Parameters: "-login -c 'rm -rf /maiko'"; Flags: runhidden; StatusMsg: "Installing Maiko ..."

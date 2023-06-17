@@ -34,7 +34,7 @@
 
              [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-wsl-aarch64.tgz)
 
-     *    ## WINDOWS 10/11 (Medley runs in a Docker container)
+     *    ## WINDOWS 10/11 (Single install based on cygwin - Docker install deprecated)
 
          [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for Windows x64 machines](@@@DOWNLOAD_URL@@@/@@@WINDOWS.INSTALLER.FILENAME@@@)
 

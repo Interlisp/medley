@@ -54,7 +54,6 @@ Name: "{app}\cygwin"; Permissions: everyone-full
 Source: "setup-x86_64.exe"; DestDir: "{app}\cygwin"; DestName: "setup-x86_64.exe"; Flags: ignoreversion
 Source: "maiko-cygwin.x86_64.tgz"; DestDir: "{app}\install"; DestName: "maiko-cygwin.x86_64.tgz"; Flags: ignoreversion
 Source: "medley.tgz"; DestDir: "{app}\install"; DestName: "medley.tgz"; Flags: ignoreversion
-Source: "make_medley-bat.sh"; DestDir: "{app}\install"; DestName: "make_medley-bat.sh"; Flags: ignoreversion
 Source: "..\win\editpath\x86_64\EditPath.exe"; DestDir: "{app}\uninstall"; DestName: "EditPath.exe"; Flags: ignoreversion
 Source: "Medley.ico"; DestDir: "{app}"; DestName: "Medley.ico"; Flags: ignoreversion
 
@@ -65,12 +64,13 @@ Name: "{group}\Medley\Uninstall_Medley"; Filename: "{uninstallexe}"
 [Run]
 Filename: "{app}\cygwin\setup-x86_64.exe"; Parameters: "--quiet-mode --no-admin --wait --no-shortcuts --no-write-registry --verbose --root {app} --site http://www.gtlib.gatech.edu/pub/cygwin/ --only-site --local-package-dir {app}\cygwin --packages nano,xdg-utils"; StatusMsg: "Installing Cygwin ..."
 Filename: "{app}\bin\bash"; Parameters: "-login -c 'sed -i -e s/^none/#none/ /etc/fstab && echo none / cygdrive binary,posix=0,user 0 0 >>/etc/fstab'"; Flags: runhidden
-Filename: "{app}\bin\bash"; Parameters: "-login -c 'tar -x -z -C / -f /install/medley.tgz'"; Flags: runhidden; StatusMsg: "Installing Medley ..."
-Filename: "{app}\bin\bash"; Parameters: "-login -c 'rm -rf /maiko'"; Flags: runhidden; StatusMsg: "Installing Maiko ..."
-Filename: "{app}\bin\bash"; Parameters: "-login -c 'tar -x -z -C / -f /install/maiko-cygwin.x86_64.tgz'"; Flags: runhidden; StatusMsg: "Installing Maiko ..."
-Filename: "{app}\bin\bash"; Parameters: "-login /install/make_medley-bat.sh"; WorkingDir: "{app}"; Flags: runhidden; StatusMsg: "Installing medley.bat ..."
+Filename: "tar"; Parameters: "-x -z -C {app} -f {app}\install\medley.tgz"; Flags: runhidden; StatusMsg: "Installing Medley ..."
+Filename: "powershell"; Parameters: "remove-item -force -recurse {app}\maiko"; Flags: runhidden; StatusMsg: "Installing Maiko ..."
+Filename: "tar"; Parameters: "-x -z -C {app} -f {app}\install\maiko-cygwin.x86_64.tgz"; Flags: runhidden; StatusMsg: "Installing Maiko ..."
+; Create medley.bat
+Filename: "powershell"; Parameters: "write-output \""{app}\bin\bash -login -c '/medley/scripts/medley/medley.sh %*'\""  | out-file medley.bat -Encoding ascii"; WorkingDir: "{app}"; Flags: runhidden; StatusMsg: "Creating medley.bat ..."
 Filename: "{app}\uninstall\EditPath.exe"; Parameters: "--user --add {app}"; Flags: runhidden; StatusMsg: "Adding to PATH ..."
-Filename: "{app}\bin\bash"; Parameters: "-login -c 'rm -rf /install'"; Flags: runhidden; StatusMsg: "Cleaning up ..."
+Filename: "powershell"; Parameters: "remove-item -recurse -force {app}\install"; Flags: runhidden; StatusMsg: "Cleaning up ..."
 
 [UninstallRun]
 Filename: "{app}\uninstall\EditPath.exe"; Parameters: "--user --remove {app}"; Flags: runhidden 

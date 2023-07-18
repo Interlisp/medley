@@ -34,6 +34,16 @@
 
              [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/@@@DEBS.FILENAME.BASE@@@-wsl-aarch64.tgz)
 
+     *    ## macOS 11 (Big Sur) and later - for both Intel and Apple Silicon
+
+         *    ### DMG Installer
+
+              [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@](@@@DOWNLOAD_URL@@@/@@@MACOS.FILENAME.BASE@@@.dmg)
+
+         *    ### ZIP Installer
+
+              [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@](@@@DOWNLOAD_URL@@@/@@@MACOS.FILENAME.BASE@@@.zip)
+
      *    ## WINDOWS 10/11 (Medley runs in a Docker container)
 
          [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for Windows x64 machines](@@@DOWNLOAD_URL@@@/@@@WINDOWS.INSTALLER.FILENAME@@@)

@@ -56,9 +56,10 @@ t=""
 c=""
 if [[ "$1" = "-t" || "$2" = "-t" ]]; then t="-t"; fi
 if [[ "$1" = "-c" || "$2" = "-c" ]]; then c="-c"; fi
-./build_app.sh "${t}"
-./build_dmg.sh "${c}" 2>&1 | tee /tmp/output$$
-grep "^=@=@=@" < /tmp/output$$ | sed -e "s/^=@=@=@/+=+=+=/"
+./build_app.sh "${t}" 2>&1
+# 2023-07-20 Not building dmg as yet, just using this to build zip file
+# while we finish work around dmg
+# ./build_dmg.sh "${c}"
 
 
 

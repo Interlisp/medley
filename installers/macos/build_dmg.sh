@@ -9,18 +9,23 @@
 #    Copyright 2023 by Interlisp.org
 #
 #    Based on code found at:
-#    http://stackoverflow.com/questions/96882/how-do-i-create-a-nice-looking-dmg-for-mac-os-x-using-command-line-tools 
+#    http://stackoverflow.com/questions/96882/how-do-i-create-a-nice-looking-dmg-for-mac-os-x-using-command-line-tools
 #
 ###############################################################################
 
 #set -o verbose #echo onset +o verbose #echo off
+
+# template for artifacts file names should be passed down in the ENV variable: ARTIFACTS_FILENAME_TEMPLATE
+if [ -z "${ARTIFACTS_FILENAME_TEMPLATE}" ];
+then
+  ARTIFACTS_FILENAME_TEMPLATE="medley-full-<<PLATFORM>>-<<ARCH>>-<<MEDLEY.RELEASE>>_<<MAIKO.RELEASE>>"
+fi
 
 #
 #  Set Parameters
 #
 APP_NAME="Medley.app"
 VOL_NAME="Medley_Install"
-DMG_NAME=medley-full-VERSION-macos-universal.dmg
 BG_NAME=Install_Message.png
 WIN_WIDTH=700
 WIN_HEIGHT=850
@@ -167,15 +172,14 @@ rm -rf "${DMG_PATH}".temp.dmg
 #
 sed_script='{/CFBundleVersion/!d;N;s/^.*<string>\(.*\)<\/string>/\1/;s/.0$//;s/\./_/;p;}'
 version=$(sed -ne "${sed_script}" ${SRC_DIR}/${APP_NAME}/Contents/Info.plist)
-mv ${DMG_PATH}.dmg ${RESULTS_DIR}/${DMG_NAME/VERSION/${version}}
+DMG_NAME="$(echo ${ARTIFACTS_FILENAME_TEMPLATE} | sed -e 's#<<PLATFORM>>#macos#' -e 's#<<ARCH>>#$universal#' -e 's#<<MEDLEY.RELEASE>>_<<MAIKO.RELEASE>>#${version}#' )"
+mv ${DMG_PATH}.dmg ${RESULTS_DIR}/${DMG_NAME}.dmg
 
 #
 #  Done
 #
 echo "DMG build completed."
-base_name=${DMG_NAME/VERSION/${version}}
-base_name=${base_name%.dmg}
-echo "=@=@=@${base_name}"
-
 
 ###############################################################################
+###############################################################################
+

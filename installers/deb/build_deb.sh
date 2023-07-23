@@ -133,7 +133,7 @@ do
     #
     #  Create tar file for this arch
     #
-    filename="$(echo ${ARTIFACTS_FILENAME_TEMPLATE} | sed -e 's#@@PLATFORM@@#${wslp}#' -e 's#@@ARCH@@#${arch}#' -e 's#@@MEDLEY.RELEASE@@#${medley_release}#' -e 's#@@MAIKO.RELEASE@@#${maiko_release}#' )"
+    filename="$(echo ${ARTIFACTS_FILENAME_TEMPLATE} | sed -e "s#@@PLATFORM@@#${wslp}#" -e "s#@@ARCH@@#${arch}#" -e "s#@@MEDLEY.RELEASE@@#${medley_release}#" -e "s#@@MAIKO.RELEASE@@#${maiko_release}#" )"
     mkdir -p tars
     echo "Creating tar file tars/${filename}.tgz"
     tar -C ${il_dir} -czf tars/${filename}.tgz .

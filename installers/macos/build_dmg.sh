@@ -18,7 +18,7 @@
 # template for artifacts file names should be passed down in the ENV variable: ARTIFACTS_FILENAME_TEMPLATE
 if [ -z "${ARTIFACTS_FILENAME_TEMPLATE}" ];
 then
-  ARTIFACTS_FILENAME_TEMPLATE="medley-full-<<PLATFORM>>-<<ARCH>>-<<MEDLEY.RELEASE>>_<<MAIKO.RELEASE>>"
+  ARTIFACTS_FILENAME_TEMPLATE="medley-full-@@PLATFORM@@-@@ARCH@@-@@MEDLEY.RELEASE@@_@@MAIKO.RELEASE@@"
 fi
 
 #
@@ -172,7 +172,7 @@ rm -rf "${DMG_PATH}".temp.dmg
 #
 sed_script='{/CFBundleVersion/!d;N;s/^.*<string>\(.*\)<\/string>/\1/;s/.0$//;s/\./_/;p;}'
 version=$(sed -ne "${sed_script}" ${SRC_DIR}/${APP_NAME}/Contents/Info.plist)
-DMG_NAME="$(echo ${ARTIFACTS_FILENAME_TEMPLATE} | sed -e 's#<<PLATFORM>>#macos#' -e 's#<<ARCH>>#$universal#' -e 's#<<MEDLEY.RELEASE>>_<<MAIKO.RELEASE>>#${version}#' )"
+DMG_NAME="$(echo ${ARTIFACTS_FILENAME_TEMPLATE} | sed -e 's#@@PLATFORM@@#macos#' -e 's#@@ARCH@@#$universal#' -e 's#@@MEDLEY.RELEASE@@_@@MAIKO.RELEASE@@#${version}#' )"
 mv ${DMG_PATH}.dmg ${RESULTS_DIR}/${DMG_NAME}.dmg
 
 #

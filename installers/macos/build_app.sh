@@ -27,7 +27,7 @@ fi
 # template for artifacts file names should be passed down in the ENV variable: ARTIFACTS_FILENAME_TEMPLATE
 if [ -z "${ARTIFACTS_FILENAME_TEMPLATE}" ];
 then
-  ARTIFACTS_FILENAME_TEMPLATE="medley-full-<<PLATFORM>>-<<ARCH>>-<<MEDLEY.RELEASE>>_<<MAIKO.RELEASE>>"
+  ARTIFACTS_FILENAME_TEMPLATE="medley-full-@@PLATFORM@@-@@ARCH@@-@@MEDLEY.RELEASE@@_@@MAIKO.RELEASE@@"
 fi
 
 #
@@ -164,7 +164,7 @@ fileicon set ${il_dir}/medley/scripts/medley/medley.command ${image_dir}/Command
 #  Also create the zip file of il_dir for distribution
 #
 pushd ${il_dir} >/dev/null 2>&1
-filename="$(echo ${ARTIFACTS_FILENAME_TEMPLATE} | sed -e 's#<<PLATFORM>>#macos#' -e 's#<<ARCH>>#universal#' -e 's#<<MEDLEY.RELEASE>>#${medley_release}#' -e 's#<<MAIKO.RELEASE>>#${maiko_release}#' )"
+filename="$(echo ${ARTIFACTS_FILENAME_TEMPLATE} | sed -e 's#@@PLATFORM@@#macos#' -e 's#@@ARCH@@#universal#' -e 's#@@MEDLEY.RELEASE@@#${medley_release}#' -e 's#@@MAIKO.RELEASE@@#${maiko_release}#' )"
 zip -r -6 -y -q  ${RESULTS_DIR}/${filename}.zip .
 popd >/dev/null 2>&1
 

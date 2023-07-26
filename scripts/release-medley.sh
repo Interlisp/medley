@@ -19,14 +19,15 @@ echo making $tag-loadups.tgz
 tar cfz medley/tmp/$tag-loadups.tgz                       \
     medley/loadups/lisp.sysout                            \
     medley/loadups/full.sysout                            \
+    medley/loadups/fuller.database                        \
+    medley/loadups/*.dribble                              \
     medley/loadups/whereis.hash                           \
-    medley/library/exports.all
+    medley/loadups//exports.all
 	
 echo making $tag-runtime.tgz
 
 tar cfz medley/tmp/$tag-runtime.tgz                       \
     --exclude "*~" --exclude "*#*"                        \
-    --exclude exports.all                                 \
     medley/docs/dinfo                                     \
     medley/doctools                                       \
     medley/greetfiles                                     \

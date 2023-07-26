@@ -1,15 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "20-Jun-2023 14:02:31" {WMEDLEY}<library>tedit>TEDIT-FIND.;72 29474  
+(FILECREATED "12-Jul-2023 08:32:15" {WMEDLEY}<library>TEDIT>TEDIT-FIND.;76 31102  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS TEDIT-FINDCOMS)
-                  (FNS \TEDIT.WCFIND.BACKWARD TEDIT.FIND.BACKWARD \TEDIT.BASICFIND.BACKWARD 
-                       \TEDIT.BASICFIND TEDIT.FIND \TEDIT.PARSE.SEARCHSTRING \TEDIT.SUBST.FN2 
-                       \TEDIT.WCFIND TEDIT.NEXT \TEDIT.SUBST.FN1 \TEDIT.FIND.WC)
+      :CHANGES-TO (FNS TEDIT.FIND.BACKWARD \TEDIT.BASICFIND.BACKWARD)
 
-      :PREVIOUS-DATE "18-Jun-2023 18:15:29" {WMEDLEY}<library>tedit>TEDIT-FIND.;57)
+      :PREVIOUS-DATE "20-Jun-2023 14:02:31" {WMEDLEY}<library>TEDIT>TEDIT-FIND.;72)
 
 
 (PRETTYCOMPRINT TEDIT-FINDCOMS)
@@ -153,7 +150,8 @@
                             TARGETSTRING START END)))))])
 
 (TEDIT.FIND.BACKWARD
-  [LAMBDA (TEXTOBJ TARGETSTRING START END WILDCARDS?)        (* ; "Edited 20-Jun-2023 12:12 by rmk")
+  [LAMBDA (TEXTOBJ TARGETSTRING START END WILDCARDS? AGAIN)  (* ; "Edited 12-Jul-2023 08:24 by rmk")
+                                                             (* ; "Edited 20-Jun-2023 12:12 by rmk")
                                                              (* ; "Edited 18-Jun-2023 23:43 by rmk")
                                                              (* ; "Edited 30-May-91 19:17 by jds")
 
@@ -166,6 +164,11 @@
         (SETQ START (IMAX 1 (OR START 1)))
         (SETQ END (IMIN (OR END (SUB1 (TEDIT.GETPOINT TEXTOBJ)))
                         (TEXTLEN TEXTOBJ)))
+        (CL:WHEN AGAIN
+
+            (* ;; "Assume that we aren't interested in another match at the current position.")
+
+            (ADD END -1))
         (CL:WHEN (ILEQ START END)
             (CL:IF WILDCARDS?
                 (\TEDIT.WCFIND.BACKWARD (ffetch (TEXTOBJ STREAMHINT) of TEXTOBJ)
@@ -481,30 +484,51 @@
                     (OR HITEND (CADR RESULT])
 
 (\TEDIT.BASICFIND.BACKWARD
-  [LAMBDA (TSTREAM TARGETSTRING START END ANCHORED)          (* ; "Edited 20-Jun-2023 12:46 by rmk")
-                                                             (* ; "Edited 18-Jun-2023 23:00 by rmk")
+  [LAMBDA (TSTREAM TARGETSTRING START END ANCHORED)          (* ; "Edited 12-Jul-2023 08:14 by rmk")
                                                              (* ; "Edited 23-Apr-2023 12:42 by rmk")
 
-    (* ;; "Returns a (startmatch endmatch) pair of character positions in TSTREAM")
+    (* ;; "Returns a (Startmatch Endmatch) pair of character positions in TSTREAM that denote the nearest occurrence of TARGETSTRING whose first character is at or ahead of START and whose last character is at or before END. ")
 
-    (* ;; "Returns the character position that matches the first (not the last) character of string. A better interface would return a selection for the string-match.")
+    (* ;; "A better interface would return a selection for the string-match, but we repeat the pair interface that is documented for forward search.")
 
-    (bind LASTANCHOR (NCHARS1 _ (SUB1 (NCHARS TARGETSTRING)))
+    (* ;; 
+    "Note that caller must decrement END in subsequent calls to avoid looping on the same match.")
+
+    (* ;; "")
+
+    (* ;; "The last target character first matches at END.  Setting the initial ANCHOR one past END and going into the anchor backup loop won't work if END points to the last character in the stream--the \TEXTSETFILEPTR would be out of bounds.  So the first anchor-match has to be special, by setting the fileptr at END and peeking.")
+
+    [SETQ END (IMIN END (TEXTLEN (TEXTOBJ TSTREAM]
+    (bind ANCHOR LASTANCHOR (NCHARS1 _ (SUB1 (NCHARS TARGETSTRING)))
           (CHARN _ (NTHCHARCODE TARGETSTRING -1))
-          (ANCHOR _ END) first 
-                               (* ;; "Useful to use (SUB1 NCHARS)")
+       first 
+             (* ;; "NCHARS1 because the last character is matched separately.")
 
-                               (SETQ LASTANCHOR (CL:IF ANCHORED
-                                                    ANCHOR
-                                                    (IPLUS START NCHARS1)))
-       eachtime (\TEXTSETFILEPTR TSTREAM ANCHOR) 
-
-             (* ;; "Match failed, bump the start.  Single char wild-card # always matches")
- while [SETQ ANCHOR (find A from ANCHOR to LASTANCHOR by -1 suchthat (EQ CHARN (\BACKBIN TSTREAM]
+             (CL:WHEN (ILESSP (IDIFFERENCE END START)
+                             NCHARS1)                        (* ; "Too few characters")
+                 (RETURN NIL))
+             (\TEXTSETFILEPTR TSTREAM (SUB1 END))
+             (CL:WHEN [AND (EQ CHARN (\TEXTPEEKBIN TSTREAM))
+                           (OR (EQ NCHARS1 0)
+                               (for I from NCHARS1 to 1 by -1 always (EQ (NTHCHARCODE TARGETSTRING I)
+                                                                         (\TEXTBACKFILEPTR TSTREAM]
+                 (RETURN (LIST (IDIFFERENCE END NCHARS1)
+                               END)))
+             (CL:WHEN ANCHORED                               (* ; "Anchored at END, didn't match")
+                 (RETURN NIL))
+             (SETQ ANCHOR (SUB1 END))
+             (SETQ LASTANCHOR (IPLUS START NCHARS1)) eachtime (\TEXTSETFILEPTR TSTREAM ANCHOR) 
+                                                             (* ; 
+                                                       "The filepos one before  the last CHARN match")
+                                                           (ADD ANCHOR -1) 
+                                                             (* ; "For next attempt")
+       while (find old ANCHOR from ANCHOR to LASTANCHOR by -1 suchthat (EQ CHARN (\TEXTBACKFILEPTR
+                                                                                  TSTREAM)))
        when [OR (EQ NCHARS1 0)
                 (for I from NCHARS1 to 1 by -1 always (EQ (NTHCHARCODE TARGETSTRING I)
-                                                          (\BACKBIN TSTREAM]
-       do (RETURN (LIST (IDIFFERENCE ANCHOR NCHARS1)
+                                                          (\TEXTBACKFILEPTR TSTREAM]
+       do (ADD ANCHOR 1)
+          (RETURN (LIST (IDIFFERENCE ANCHOR NCHARS1)
                         ANCHOR])
 
 (\TEDIT.PARSE.SEARCHSTRING
@@ -544,8 +568,8 @@
                                                TARGETSTRING)])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (2734 4067 (\TEDIT.SEARCH.CODETABLE 2744 . 4065)) (4172 20444 (TEDIT.FIND 4182 . 5822) (
-TEDIT.FIND.BACKWARD 5824 . 7373) (TEDIT.SUBSTITUTE 7375 . 16704) (TEDIT.NEXT 16706 . 20442)) (20477 
-29451 (\TEDIT.WCFIND 20487 . 22488) (\TEDIT.BASICFIND 22490 . 23853) (\TEDIT.WCFIND.BACKWARD 23855 . 
-25799) (\TEDIT.BASICFIND.BACKWARD 25801 . 27428) (\TEDIT.PARSE.SEARCHSTRING 27430 . 29449)))))
+  (FILEMAP (NIL (2495 3828 (\TEDIT.SEARCH.CODETABLE 2505 . 3826)) (3933 20469 (TEDIT.FIND 3943 . 5583) (
+TEDIT.FIND.BACKWARD 5585 . 7398) (TEDIT.SUBSTITUTE 7400 . 16729) (TEDIT.NEXT 16731 . 20467)) (20502 
+31079 (\TEDIT.WCFIND 20512 . 22513) (\TEDIT.BASICFIND 22515 . 23878) (\TEDIT.WCFIND.BACKWARD 23880 . 
+25824) (\TEDIT.BASICFIND.BACKWARD 25826 . 29056) (\TEDIT.PARSE.SEARCHSTRING 29058 . 31077)))))
 STOP

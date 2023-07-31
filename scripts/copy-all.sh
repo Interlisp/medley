@@ -26,3 +26,6 @@ fi
 ./scripts/cpv ${LOADUP_WORKDIR}/full.dribble loadups
 ./scripts/cpv ${LOADUP_WORKDIR}/whereis.dribble loadups
 
+./scripts/cpv ${LOADUP_WORKDIR}/RDSYS library
+./scripts/cpv ${LOADUP_WORKDIR}/RDSYS.LCOM library
+

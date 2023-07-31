@@ -1,30 +1,28 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
 if [ ! -x run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi
+
+. scripts/loadup-setup.sh
 
 # was
 # cp -p tmp/full.sysout tmp/lisp.sysout tmp/*.dribble tmp/whereis.hash loadups/
 # cp -p tmp/exports.all tmp/RDSYS tmp/RDSYS.LCOM library/
 # just copy the files that are released
 
-./scripts/cpv tmp/init.dribble loadups
-./scripts/cpv tmp/lisp.dribble loadups
-./scripts/cpv tmp/full.dribble loadups
-./scripts/cpv tmp/fuller.dribble loadups
-./scripts/cpv tmp/whereis.dribble loadups
-
-./scripts/cpv tmp/fuller.database loadups
-
-./scripts/cpv tmp/full.sysout loadups
-./scripts/cpv tmp/lisp.sysout loadups
-./scripts/cpv tmp/whereis.hash loadups
-./scripts/cpv tmp/exports.all loadups
+./scripts/cpv ${LOADUP_WORKDIR}/full.sysout loadups
+./scripts/cpv ${LOADUP_WORKDIR}/lisp.sysout loadups
 if [ "${1}" = "-apps" ]; then
-    ./scripts/cpv tmp/apps.sysout loadups
+    ./scripts/cpv ${LOADUP_WORKDIR}/apps.sysout loadups
 fi
+
+./scripts/cpv ${LOADUP_WORKDIR}/whereis.hash loadups
+./scripts/cpv ${LOADUP_WORKDIR}/exports.all loadups
+
+./scripts/cpv ${LOADUP_WORKDIR}/init.dribble loadups
+./scripts/cpv ${LOADUP_WORKDIR}/lisp.dribble loadups
+./scripts/cpv ${LOADUP_WORKDIR}/full.dribble loadups
+./scripts/cpv ${LOADUP_WORKDIR}/whereis.dribble loadups
 

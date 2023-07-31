@@ -1,32 +1,12 @@
-#!/bin/bash
+#!/bin/sh
 
-#set -x
+if [ ! -x run-medley ] ; then
+    echo must run from MEDLEYDIR ;
+    exit 1 ;
+fi
 
-# function to discover what directory this script is being executed from
-where_am_i() {
+. scripts/loadup-setup.sh
 
-    # call this with ${BASH_SOURCE[0]:-$0} as its (only) parameter
-
-    local SCRIPT_PATH="$1";
-
-    pushd . > '/dev/null';
-
-    while [ -h "$SCRIPT_PATH" ];
-    do
-        cd "$( dirname -- "$SCRIPT_PATH"; )";
-        SCRIPT_PATH="$( readlink -f -- "$SCRIPT_PATH"; )";
-    done
-
-    cd "$( dirname -- "$SCRIPT_PATH"; )" > '/dev/null';
-    SCRIPT_PATH="$( pwd; )";
-
-    popd  > '/dev/null';
-
-    echo "${SCRIPT_PATH}"
-}
-
-SCRIPTDIR=$(where_am_i "${BASH_SOURCE[0]:-$0}")
-export MEDLEYDIR=$(cd ${SCRIPTDIR} && cd .. && pwd)
 export ROOMSDIR=${MEDLEYDIR}/rooms
 export CLOSDIR=${MEDLEYDIR}/clos
 
@@ -41,33 +21,8 @@ if [ ! -e ${NOTECARDSDIR} ]; then
     fi
 fi
 
-if [ -z "${SYSOUTDIR}" ]; then
-    export SYSOUTDIR=${MEDLEYDIR}/tmp
-fi
+./run-medley $scr -loadup "${MEDLEYDIR}/sources/LOADUP-APPS.CM" "${LOADUP_TMP}/full.sysout"
 
-if [ -z "${FULLSYSOUTPATH}" ]; then
-    FULLSYSOUTPATH=${SYSOUTDIR}/full.sysout
-    if [ ! -e ${FULLSYSOUTPATH} ]; then
-       FULLSYSOUTPATH=${MEDLEYDIR}/loadups/full.sysout
-    fi
-fi
+loadup_finish "loadup-apps-from-full" "apps.sysout" "apps.*"
 
-cd ${MEDLEYDIR}
-
-scr="-sc 1024x768 -g 1042x790"
-
-mkdir -p ${SYSOUTDIR}
-touch ${SYSOUTDIR}/loadup.timestamp
-
-./run-medley $scr -loadup "${MEDLEYDIR}/sources/LOADUP-APPS.CM" "${FULLSYSOUTPATH}"
-
-if [ ${SYSOUTDIR}/apps.sysout -nt ${SYSOUTDIR}/loadup.timestamp ]; then
-    echo ---- made ----
-    ls -l ${SYSOUTDIR}/apps.*
-    echo --------------
-else
-    echo XXXXX FAILURE XXXXX
-    ls -l ${SYSOUTDIR}/apps.*
-    exit 1
-fi
 

@@ -1,26 +1,22 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
-if [ ! -f run-medley ] ; then
+if [ ! -x run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi
 
-touch tmp/db.timestamp
+. scripts/loadup-setup.sh
 
-scr="-sc 1024x768 -g 1042x790"
+./scripts/loadup-db-from-full.sh && ./scripts/copy-db.sh
 
-echo '" (IL:MEDLEY-INIT-VARS)(IL:FILESLOAD MEDLEY-UTILS)(IL:MAKE-FULLER-DB)(IL:LOGOUT T)"' > tmp/db.cm
-./run-medley $scr -loadup "$MEDLEYDIR"/tmp/db.cm -n
-if [ tmp/fuller.database -nt tmp/db.timestamp ]; then
-    
-    echo ---- made ----
-    ls -l tmp/fuller*
-    echo --------------
-
+if [ $? -eq 0 ];
+then
+  echo "+++++ loadup-db.sh: SUCCESS +++++"
 else
-    echo XXXXX FAILURE XXXXX
-    ls -l tmp/fuller*
-    exit 1
+  echo "----- loadup-db.sh: FAILURE -----"
 fi
+
+
+
+
+

@@ -1,25 +1,12 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
 if [ ! -f run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi
 
-touch tmp/loadup.timestamp
+. scripts/loadup-setup.sh
 
-scr="-sc 1024x768 -g 1042x790"
+./run-medley $scr -loadup "$MEDLEYDIR/sources/LOADUP-LISP.CM" ${LOADUP_WORKDIR}/init-mid.sysout
 
-
-./run-medley $scr -loadup "$MEDLEYDIR/sources/LOADUP-LISP.CM" tmp/init-mid.sysout
-
-if [ tmp/lisp.sysout -nt tmp/loadup.timestamp ]; then
-    
-    echo ---- made ----
-    ls -l tmp/lisp.*
-    echo --------------
-else
-    echo XXXXX FAILURE XXXXX
-    exit 1
-fi
+loadup_finish "loadup-lisp-from-mid" "lisp.sysout" "lisp.*"

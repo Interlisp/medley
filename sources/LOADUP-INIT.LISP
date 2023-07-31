@@ -1,7 +1,7 @@
 (* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
 
 (LOAD (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
-(CNDIR (MEDLEYDIR "tmp"))
+(CNDIR (UNIX-GETENV "LOADUP_WORKDIR"))
 (DRIBBLE "init.dribble")
 
 (UNADVISE)

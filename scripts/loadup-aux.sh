@@ -1,28 +1,14 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
 if [ ! -f run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi
 
-mkdir -p tmp
-touch tmp/loadup.timestamp
+. scripts/loadup-setup.sh
 
-scr="-sc 1024x768 -g 1042x790"
+echo '" (IL:MEDLEY-INIT-VARS)(IL:LOAD(QUOTE MEDLEY-UTILS))(IL:MAKE-EXPORTS-ALL)(IL:MAKE-WHEREIS-HASH)(IL:LOGOUT T)"' > ${LOADUP_WORKDIR}/loadup-aux.cm
 
-echo '" (IL:MEDLEY-INIT-VARS)(IL:LOAD(QUOTE MEDLEY-UTILS))(IL:MAKE-EXPORTS-ALL)(IL:MAKE-WHEREIS-HASH)(IL:LOGOUT T)"' > tmp/loadup-aux.cm
-./run-medley $scr -loadup "$MEDLEYDIR"/tmp/loadup-aux.cm tmp/full.sysout
+./run-medley $scr -loadup "${LOADUP_WORKDIR}/loadup-aux.cm ${LOADUP_WORKDIR}/full.sysout
 
-if [ tmp/whereis.hash -nt tmp/loadup.timestamp ]; then
-    
-    echo ---- made ----
-    ls -l tmp/whereis.hash tmp/exports.all
-    echo --------------
-
-else
-    echo XXXXX FAILURE XXXXX
-    ls -l tmp/whereis.hash tmp/exports.all
-    exit 1
-fi
+loadup_finish "loadup-aux" "whereis.hash" "whereis.hash" "exports.all"

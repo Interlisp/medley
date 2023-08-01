@@ -7,6 +7,8 @@ fi
 
 . scripts/loadup-setup.sh
 
-./run-medley -prog "ldeinit" -NF -loadup $MEDLEYDIR/sources/XREM.CM $scr -vmem tmp/init-mid.sysout ${LOADUP_WORKDIR}/init.dlinit
+loadup_start "loadup-mid-from-init"
+
+./run-medley -prog "ldeinit" -NF -loadup $MEDLEYDIR/sources/XREM.CM $scr -vmem ${LOADUP_WORKDIR}/init-mid.sysout ${LOADUP_WORKDIR}/init.dlinit
 
 loadup_finish "loadup-mid-from-init" "init-mid.sysout" "init-mid.sysout"

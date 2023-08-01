@@ -1,8 +1,6 @@
 
 export MEDLEYDIR=`pwd`
 
-# echo "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%${LOADUP_WORKDIR}============="
-
 if [ -z "${LOADUP_WORKDIR}" ];
 then
   export LOADUP_WORKDIR=/tmp/loadups-$$
@@ -14,8 +12,13 @@ scr="-sc 1024x768 -g 1042x790"
 
 touch "${LOADUP_WORKDIR}"/loadup.timestamp
 
+
+loadup_start () {
+  echo ">>>>> START ${1}"
+}
+
 loadup_finish () {
-  echo "===== ${1}"
+  local script_name=${1}
   if [ "${LOADUP_WORKDIR}/${2}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
   then
     echo "+++++ SUCCESS +++++"
@@ -24,13 +27,14 @@ loadup_finish () {
     echo "----- FAILURE -----"
     exit_code=1
   fi
-  echo "===== files created ======"
+  echo "..... files created ....."
     shift; shift
     for f in ${*};
     do
       ls -l "${LOADUP_WORKDIR}"/$f 2>/dev/null
     done
-  echo "======================================="
+  echo "<<<<< END ${script_name}"
+  echo ""
   exit ${exit_code}
 }
 

@@ -7,6 +7,8 @@ fi
 
 . scripts/loadup-setup.sh
 
+loadup_start "loadup-lisp-from-mid"
+
 ./run-medley $scr -loadup "$MEDLEYDIR/sources/LOADUP-LISP.CM" ${LOADUP_WORKDIR}/init-mid.sysout
 
 loadup_finish "loadup-lisp-from-mid" "lisp.sysout" "lisp.*"

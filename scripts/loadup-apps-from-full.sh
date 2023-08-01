@@ -7,6 +7,8 @@ fi
 
 . scripts/loadup-setup.sh
 
+loadup_start "loadup-apps-from-full"
+
 export ROOMSDIR=${MEDLEYDIR}/rooms
 export CLOSDIR=${MEDLEYDIR}/clos
 
@@ -21,7 +23,7 @@ if [ ! -e ${NOTECARDSDIR} ]; then
     fi
 fi
 
-./run-medley $scr -loadup "${MEDLEYDIR}/sources/LOADUP-APPS.CM" "${LOADUP_TMP}/full.sysout"
+./run-medley $scr -loadup "${MEDLEYDIR}/sources/LOADUP-APPS.CM" "${LOADUP_WORKDIR}/full.sysout"
 
 loadup_finish "loadup-apps-from-full" "apps.sysout" "apps.*"
 

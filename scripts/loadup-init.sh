@@ -7,6 +7,8 @@ fi
 
 . scripts/loadup-setup.sh
 
+loadup_start "loadup-init"
+
 ./run-medley $scr -loadup "${MEDLEYDIR}"/sources/LOADUP-INIT.LISP loadups/starter.sysout
 
 loadup_finish "loadup-init" "init.dlinit" "init.*" "RDSYS*" "I-NEW*"

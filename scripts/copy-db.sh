@@ -7,6 +7,11 @@ fi
 
 . scripts/loadup-setup.sh
 
-./scripts/cpv ${LOADUP_WORKDIR}/fuller.database loadups
-./scripts/cpv ${LOADUP_WORKDIR}/fuller.dribble loadups
+echo ">>>>> START ${script_name}"
 
+./scripts/cpv "${LOADUP_WORKDIR}"/fuller.database loadups
+./scripts/cpv "${LOADUP_WORKDIR}"/fuller.dribble loadups
+
+echo "<<<<< END ${script_name}"
+echo ""
+exit 0

@@ -7,9 +7,9 @@ fi
 
 . scripts/loadup-setup.sh
 
-loadup_start "loadup-aux"
+loadup_start
 
-cat >"${LOADUP_WORKDIR}"/loadup-aux.cm <<"EOF"
+cat >"${cmfile}" <<"EOF"
 "
   (IL:MEDLEY-INIT-VARS)
   (IL:LOAD(QUOTE MEDLEY-UTILS))
@@ -19,6 +19,6 @@ cat >"${LOADUP_WORKDIR}"/loadup-aux.cm <<"EOF"
 "
 EOF
 
-./run-medley $scr -loadup "${LOADUP_WORKDIR}"/loadup-aux.cm "${LOADUP_WORKDIR}"/full.sysout
+./run-medley ${scr} -loadup "${cmfile}" "${LOADUP_WORKDIR}"/full.sysout
 
-loadup_finish "loadup-aux" "whereis.hash" "whereis.hash" "exports.all"
+loadup_finish "whereis.hash" "whereis.hash" "exports.all"

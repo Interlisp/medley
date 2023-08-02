@@ -7,11 +7,20 @@ fi
 
 . scripts/loadup-setup.sh
 
-DBCM="${LOADUP_WORKDIR}"/db.cm
+loadup_start
 
-echo '" (IL:MEDLEY-INIT-VARS)(IL:FILESLOAD MEDLEY-UTILS)(IL:MAKE-FULLER-DB)(IL:LOGOUT T)"' > ${DBCM}
+cat >"${cmfile}" <<"EOF"
+"
 
-./run-medley $scr -loadup "${DBCM}" -full
+(IL:MEDLEY-INIT-VARS)
+(IL:FILESLOAD MEDLEY-UTILS)
+(IL:MAKE-FULLER-DB)
+(IL:LOGOUT T)
 
-loadup_finish "loadup-db" "fuller.database" "fuller*"
+"
+EOF
+
+./run-medley ${scr} -loadup "${cmfile}" -full
+
+loadup_finish "fuller.database" "fuller*"
 

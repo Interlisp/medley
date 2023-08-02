@@ -7,8 +7,26 @@ fi
 
 . scripts/loadup-setup.sh
 
-loadup_start "loadup-lisp-from-mid"
+loadup_start
 
-./run-medley $scr -loadup "$MEDLEYDIR/sources/LOADUP-LISP.CM" ${LOADUP_WORKDIR}/init-mid.sysout
+cat >"${cmfile}" <<"EOF"
+"
 
-loadup_finish "loadup-lisp-from-mid" "lisp.sysout" "lisp.*"
+(PROGN
+  (LOAD(CONCAT(QUOTE {DSK})(UNIX-GETENV(QUOTE MEDLEYDIR))(QUOTE /sources/LOADUP-LISP.LCOM)))
+  (LOADUP-LISP(CONCAT(QUOTE {DSK})(UNIX-GETENV(QUOTE LOADUP_WORKDIR))(QUOTE /lisp.dribble)))
+  (HARDRESET)
+)
+SHH
+(PROGN
+  (IL:ENDLOADUP)
+  (IL:MAKESYS (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /lisp.sysout))) :LISP)
+  (IL:LOGOUT T)
+)
+
+"
+EOF
+
+./run-medley ${scr} -loadup "${cmfile}" "${LOADUP_WORKDIR}/init-mid.sysout"
+
+loadup_finish "lisp.sysout" "lisp.*"

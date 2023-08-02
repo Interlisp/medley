@@ -25,6 +25,13 @@ if workdir and loadups are on the same filesystem, otherwise they are copied.
 
 * loadup-full.sh  -- Phases 1-4 only, no copy into loadups at the end.
 
+## releases
+
+* release-medley.sh --  will create Medley release tars and upload as a release on github.  
+                      Arguments: -d to make a draft release. <Tag> to uses as a tag for this 
+                      release on github (defaults to meldey-\<date>-\<seconds since epoch>).
+
+* release-make-tars.sh -- will create the Medley release tars and store them in the releases directory.
 
 ## possibly handy scripts
 

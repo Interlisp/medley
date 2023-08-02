@@ -37,7 +37,13 @@ loadup_finish () {
     shift;
     for f in ${*};
     do
-      ls -l "${LOADUP_WORKDIR}"/$f 2>/dev/null
+      for ff in $(ls -1 "${LOADUP_WORKDIR}"/$f);
+      do
+        if [ "${ff}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
+        then
+          ls -l ${ff} 2>/dev/null | grep -v "^.*~[0-9]\+~$"
+        fi
+      done
     done
   echo "<<<<< END ${script_name}"
   echo ""

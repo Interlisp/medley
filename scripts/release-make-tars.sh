@@ -81,6 +81,8 @@ tar -c -z -f "${release_dir}"/$tag-runtime.tgz                  \
     "${dirname}"/library                                        \
     "${dirname}"/lispusers                                      \
     "${dirname}"/sources                                        \
-    "${dirname}"/internal                                       ;
+    "${dirname}"/internal                                       \
+    "${dirname}"/unicode                                        ;
+
 
 echo "Done with release tars"

@@ -6,6 +6,16 @@ then
   export LOADUP_WORKDIR=/tmp/loadups-$$
 fi
 
+if [ -z "${LOADUP_SOURCEDIR}" ];
+then
+  export LOADUP_SOURCEDIR="${MEDLEYDIR}"/internal/loadups
+fi
+
+if [ -z "${LOADUP_OUTDIR}" ];
+then
+  export LOADUP_OUTDIR="${MEDLEYDIR}"/loadups
+fi
+
 mkdir -p "${LOADUP_WORKDIR}"
 
 scr="-sc 1024x768 -g 1042x790"

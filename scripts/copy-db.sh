@@ -9,8 +9,8 @@ fi
 
 echo ">>>>> START ${script_name}"
 
-./scripts/cpv "${LOADUP_WORKDIR}"/fuller.database loadups
-./scripts/cpv "${LOADUP_WORKDIR}"/fuller.dribble loadups
+./scripts/cpv "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"
+./scripts/cpv "${LOADUP_WORKDIR}"/fuller.dribble "${LOADUP_OUTDIR}"
 
 echo "<<<<< END ${script_name}"
 echo ""

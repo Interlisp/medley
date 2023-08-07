@@ -61,8 +61,10 @@ tar -c -z -f "${release_dir}"/$tag-loadups.tgz                  \
 echo making releases/${short_tag}/$tag-runtime.tgz
 
 tar -c -z -f "${release_dir}"/$tag-runtime.tgz                  \
-    --exclude "*~" --exclude "*#*"                              \
+    --exclude "*~"                                              \
+    --exclude "*#*"                                             \
     --exclude exports.all                                       \
+    --exclude "venuesysouts"                                   \
     ${name_xform}                                               \
     "${dirname}"/clos                                           \
     "${dirname}"/docs/dinfo                                     \

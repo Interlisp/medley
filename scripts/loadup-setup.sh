@@ -17,6 +17,7 @@ then
 fi
 
 mkdir -p "${LOADUP_WORKDIR}"
+mkdir -p "${LOADUP_OUTDIR}"
 
 scr="-sc 1024x768 -g 1042x790"
 

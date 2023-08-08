@@ -16,8 +16,26 @@ then
   export LOADUP_OUTDIR="${MEDLEYDIR}"/loadups
 fi
 
-mkdir -p "${LOADUP_WORKDIR}"
-mkdir -p "${LOADUP_OUTDIR}"
+if [ ! -d "${LOADUP_OUTDIR}" ];
+then
+  if [ ! -e "${LOADUP_OUTDIR}" ];
+  then
+    mkdir -p "${LOADUP_OUTDIR}"
+  else
+    "Error: ${LOADUP_OUTDIR} exists but is not a directory. Exiting."
+  fi
+fi
+
+if [ ! -d "${LOADUP_WORKDIR}" ];
+then
+  if [ ! -e "${LOADUP_WORKDIR}" ];
+  then
+    mkdir -p "${LOADUP_WORKDIR}"
+  else
+    "Error: ${LOADUP_WORKDIR} exists but is not a directory. Exiting."
+  fi
+fi
+
 
 scr="-sc 1024x768 -g 1042x790"
 

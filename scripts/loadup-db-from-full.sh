@@ -9,6 +9,13 @@ fi
 
 loadup_start
 
+SYSOUT="${MEDLEYDIR}/loadups/full.sysout"
+if [ ! -f "${SYSOUT}" ];
+then
+  echo "Error: cannot find ${SYSOUT}.  Exiting."
+  exit 1
+fi
+
 cat >"${cmfile}" <<"EOF"
 "
 
@@ -16,6 +23,7 @@ cat >"${cmfile}" <<"EOF"
   ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
   (IL:MEDLEY-INIT-VARS)
   (IL:FILESLOAD MEDLEY-UTILS)
+  (SETQ IL:DIRECTORIES (CONS (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) IL:DIRECTORIES))
   (IL:MAKE-FULLER-DB
     (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.dribble)))
     (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.database)))
@@ -27,7 +35,7 @@ cat >"${cmfile}" <<"EOF"
 "
 EOF
 
-./run-medley ${scr} -loadup "${cmfile}" -full
+./run-medley ${scr} -loadup "${cmfile}" "${SYSOUT}"
 
 loadup_finish "fuller.database" "fuller*"
 

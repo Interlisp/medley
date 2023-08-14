@@ -1,30 +1,31 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
 if [ ! -x run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi
 
-# was
-# cp -p tmp/full.sysout tmp/lisp.sysout tmp/*.dribble tmp/whereis.hash loadups/
-# cp -p tmp/exports.all tmp/RDSYS tmp/RDSYS.LCOM library/
-# just copy the files that are released
+. scripts/loadup-setup.sh
 
-./scripts/cpv tmp/init.dribble loadups
-./scripts/cpv tmp/lisp.dribble loadups
-./scripts/cpv tmp/full.dribble loadups
-./scripts/cpv tmp/fuller.dribble loadups
-./scripts/cpv tmp/whereis.dribble loadups
+echo ">>>>> START ${script_name}"
 
-./scripts/cpv tmp/fuller.database loadups
-
-./scripts/cpv tmp/full.sysout loadups
-./scripts/cpv tmp/lisp.sysout loadups
-./scripts/cpv tmp/whereis.hash loadups
-./scripts/cpv tmp/exports.all loadups
+./scripts/cpv "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"  | sed -e "s#${MEDLEYDIR}/##g"
+./scripts/cpv "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"  | sed -e "s#${MEDLEYDIR}/##g"
 if [ "${1}" = "-apps" ]; then
-    ./scripts/cpv tmp/apps.sysout loadups
+    ./scripts/cpv "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
 fi
 
+./scripts/cpv "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+./scripts/cpv "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+
+./scripts/cpv "${LOADUP_WORKDIR}"/init.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+./scripts/cpv "${LOADUP_WORKDIR}"/lisp.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+./scripts/cpv "${LOADUP_WORKDIR}"/full.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+./scripts/cpv "${LOADUP_WORKDIR}"/whereis.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+
+./scripts/cpv "${LOADUP_WORKDIR}"/RDSYS library | sed -e "s#${MEDLEYDIR}/##g"
+./scripts/cpv "${LOADUP_WORKDIR}"/RDSYS.LCOM library | sed -e "s#${MEDLEYDIR}/##g"
+
+echo "<<<<< END ${script_name}"
+echo ""
+exit 0

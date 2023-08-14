@@ -54,13 +54,13 @@ loadup_start () {
 loadup_finish () {
   local exit_code
   rm -f "${cmfile}"
-  if [ "${LOADUP_WORKDIR}/${1}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
+  if [ "${LOADUP_WORKDIR}"/loadup.timestamp -nt "${LOADUP_WORKDIR}/${1}"  ];
   then
-    echo "+++++ SUCCESS +++++"
-    exit_code=0
-  else
     echo "----- FAILURE -----"
     exit_code=1
+  else
+    echo "+++++ SUCCESS +++++"
+    exit_code=0
   fi
   echo "..... files created ....."
     shift;

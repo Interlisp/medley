@@ -9,9 +9,6 @@ fi
 
 loadup_start
 
-# wait to make sure timestamp ages enough since this run-medley is very short
-sleep 2
-
 cat >"${cmfile}" <<"EOF"
 "
 (MOVD? (QUOTE NILL) (QUOTE PROMPTPRINT))

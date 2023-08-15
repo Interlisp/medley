@@ -49,6 +49,19 @@ cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
 
 loadup_start () {
   echo ">>>>> START ${script_name}"
+  if [ -d "${MEDLEYDIR}/tmp" ];
+    then
+      TMP_PRE_EXISTS="true"
+      if [ -d "${MEDLEYDIR}/tmp/logindir" ];
+      then
+        LOGINDIR_PRE_EXISTS="true"
+      else
+        LOGINDIR_PRE_EXISTS="false"
+      fi
+    else
+      LOGINDIR_PRE_EXISTS="false"
+      TMP_PRE_EXISTS="false"
+  fi
 }
 
 loadup_finish () {
@@ -74,6 +87,15 @@ loadup_finish () {
         fi
       done
     done
+  if [ "${TMP_PRE_EXISTS}" = "false" ];
+  then
+    rm -rf "${MEDLEYDIR}/tmp"
+  else
+    if [ "${LOGINDIR_PRE_EXISTS}" = "false" ];
+    then
+      rm -rf "${MEDLEYDIR}/tmp/logindir"
+    fi
+  fi
   echo "<<<<< END ${script_name}"
   echo ""
   exit ${exit_code}

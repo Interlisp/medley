@@ -1,20 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "20-Aug-2023 20:27:44" {WMEDLEY}<library>TEDIT>TEDIT-TFBRAVO.;126 92667  
+(FILECREATED "20-Aug-2023 23:13:41" {WMEDLEY}<library>TEDIT>TEDIT-TFBRAVO.;128 93412  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS TEDITFROMBRAVO \TFBRAVO.SPLIT.PARA \TFBRAVO.INSERT.PARAGRAPH 
-                       \TFBRAVO.INSERT.RUN \TFBRAVO.RUN.TABSPEC \TFBRAVO.READ.USER.CM 
-                       \TFBRAVO.PARSE.PARA \TFBRAVO.READ.PARALOOKS \TFBRAVO.GET.USER.CM 
-                       \TFBRAVO.PARSE.PROFILE.PARA \TFBRAVO.READ.CHARLOOKS \TFBRAVO.CREATE.RUNS 
-                       \TFBRAVO.INSERT.PARA \TFBRAVO.HANDLE.HEADING \TFBRAVO.ADD.NAMEDTAB 
-                       \TFBRAVO.USER.CM.LOOKS \TFBRAVO.XCCSCONVERT.RUNS \TFBRAVO.INSTALL.PAGEFORMAT 
-                       TEDIT.BRAVOFILE? \TEST.CHARACTER.LOOKS)
-                  (VARS TEDIT-TFBRAVOCOMS)
-                  (RECORDS PARA RUN)
+      :CHANGES-TO (FNS \TFBRAVO.PARSE.PARA \TFBRAVO.CREATE.RUNS \TFBRAVO.XCCSCONVERT.RUNS 
+                       \TFBRAVO.SPLIT.PARA)
 
-      :PREVIOUS-DATE "18-Aug-2023 20:14:57" {WMEDLEY}<library>TEDIT>TEDIT-TFBRAVO.;123)
+      :PREVIOUS-DATE "20-Aug-2023 20:27:44" {WMEDLEY}<library>TEDIT>TEDIT-TFBRAVO.;126)
 
 
 (PRETTYCOMPRINT TEDIT-TFBRAVOCOMS)
@@ -478,7 +471,7 @@
 (DEFINEQ
 
 (\TFBRAVO.PARSE.PARA
-  [LAMBDA (OLDFMTSPEC BSTREAM TEXTOBJ)                       (* ; "Edited 20-Aug-2023 15:43 by rmk")
+  [LAMBDA (OLDFMTSPEC BSTREAM TEXTOBJ)                       (* ; "Edited 20-Aug-2023 22:48 by rmk")
                                                              (* ; "Edited 16-Aug-2023 21:28 by rmk")
                                                             (* ; "Edited 13-Jun-2021 09:46 by rmk:")
 
@@ -528,12 +521,7 @@
                          NIL)))
          (SELCHARQ BYTE
               (^Z (SETQ FMTSPEC (\TFBRAVO.READ.PARALOOKS OLDFMTSPEC BSTREAM TEXTOBJ))
-                  (SETQ RUNS (\TFBRAVO.CREATE.RUNS BSTREAM PSTART PLEN))
-
-                  (* ;; "Some runs may have characters that need XCCS translation.")
-
-                  (CL:WHEN XCCSTRANSLATIONPTRS?
-                      (SETQ RUNS (\TFBRAVO.XCCSCONVERT.RUNS RUNS BSTREAM XCCSTRANSLATIONPTRS?))))
+                  (SETQ RUNS (\TFBRAVO.CREATE.RUNS BSTREAM PSTART PLEN XCCSTRANSLATIONPTRS?)))
               (NIL)
               (SHOULDNT "Bravo paragraph not ending in ^Z, CR, EOF"))
          (create PARA
@@ -630,16 +618,25 @@
                      '" is not a legal paragraph look"])
 
 (\TFBRAVO.CREATE.RUNS
-  [LAMBDA (BSTREAM PSTART PLEN)                              (* ; "Edited 20-Aug-2023 15:33 by rmk")
+  [LAMBDA (BSTREAM PSTART PLEN XCCSTRANSLATIONPTRS?)         (* ; "Edited 20-Aug-2023 23:03 by rmk")
 
     (* ;; "BSTREAM is pointing at the first byte of the charlook for the first run, maybe at the post-trailer CR if the paragraph has one run with no looks.  Not sure that CHARLOOKS propagate across the runs in a paragraph, maybe each run starts with the USER.CM default?")
 
-    (bind RUNS RUN RLEN (RUNSTART _ PSTART)
+    (bind RUNS RUN RLEN XCCSTRANSLATIONRUNS (RUNSTART _ PSTART)
           (OLDCHARLOOKS _ USER.CM.CHARLOOKS) do (SETQ RUN (\TFBRAVO.READ.CHARLOOKS BSTREAM 
                                                                  OLDCHARLOOKS RUNSTART PLEN))
                                                 (push RUNS RUN)
+                                                (SETQ OLDCHARLOOKS (fetch (RUN RUNLOOKS) of RUN))
+                                                (CL:WHEN (MEMB (fetch (CHARLOOKS CLNAME) of 
+                                                                                         OLDCHARLOOKS
+                                                                      )
+                                                               '(HIPPO MATH))
+                                                       (push XCCSTRANSLATIONRUNS RUN))
                                                 (CL:WHEN (fetch (RUN RUNLAST) of RUN)
-                                                    (RETURN (DREVERSE RUNS)))
+                                                    (RETURN (\TFBRAVO.XCCSCONVERT.RUNS (DREVERSE
+                                                                                        RUNS)
+                                                                   BSTREAM XCCSTRANSLATIONPTRS? 
+                                                                   XCCSTRANSLATIONRUNS)))
                                                 (SETQ RLEN (fetch (RUN RUNLENGTH) of RUN)) 
                                                              (* ; "Set up for next run")
                                                 (ADD RUNSTART RLEN)
@@ -969,7 +966,7 @@
              PC))])
 
 (\TFBRAVO.SPLIT.PARA
-  [LAMBDA (PARA)                                             (* ; "Edited 20-Aug-2023 20:19 by rmk")
+  [LAMBDA (PARA)                                             (* ; "Edited 20-Aug-2023 22:30 by rmk")
 
     (* ;; "The Bravo paragraph para may contain internal CRs or FORMS that should be broken out into separate  Tedit paragraphs.  All of them share the same basic FMTSPEC, except that paragraphs after the first should have 0 for paragraph leading and first-paragraph margins. The charlooks for each run are carried over to the splits.")
 
@@ -992,8 +989,10 @@
                 while (SETQ PTR (pop FORMATPTRS)) when (AND (ILEQ START (CDR PTR))
                                                             (ILEQ (CDR PTR)
                                                                   END))
-                unless (OR (fetch (FMTSPEC FMTSPECIALX) of NEWFMTSPEC)
-                           (fetch (FMTSPEC FMTSPECIALY) of NEWFMTSPEC))
+                unless [OR (FMEMB (fetch (FMTSPEC FMTSPECIALX) of NEWFMTSPEC)
+                                  '(0 NIL))
+                           (FMEMB (fetch (FMTSPEC FMTSPECIALY) of NEWFMTSPEC)
+                                  '(0 NIL]
                 do 
                    (* ;; "We create a new paragraph with the runs starting at the current FIRSTTAIL, and we chop the current RUNS just after RUN, which we will truncate. Then set up FIRSTTAIL for the next paragraph, by packing on as a new first run the suffix of RUN beyond the pointer.   ")
 
@@ -1307,57 +1306,63 @@
 (DEFINEQ
 
 (\TFBRAVO.XCCSCONVERT.RUNS
-  [LAMBDA (RUNS BSTREAM XCCSTRANSLATIONPTRS?)                (* ; "Edited 18-Aug-2023 20:05 by rmk")
+  [LAMBDA (RUNS BSTREAM XCCSTRANSLATIONPTRS? XCCSTRANSLATIONRUNS)
+                                                             (* ; "Edited 20-Aug-2023 23:08 by rmk")
+                                                             (* ; "Edited 18-Aug-2023 20:05 by rmk")
 
     (* ;; "Some run in RUNS may have characters and fonts that needed to be translated to XCSS equivalents. This replaces the RUNSTART of BSTREAM runs that need translation with strings holding the translated characters.  ")
 
-    (* ;; 
-    "If XCCSTRANSLATIONPTRS? is NIL, we know that there are no characters that need translation.")
-
-    (for RUNTAIL RUN PREVRUN RSTART NEXTRSTART NEWFONT CODEMAP CHARLOOKS (ORIGFILEPTR _ (GETFILEPTR
-                                                                                         BSTREAM))
-         (TRANSPTRS _ XCCSTRANSLATIONPTRS?) on RUNS eachtime (SETQ RUN (CAR RUNTAIL))
-                                                          (SETQ RSTART (fetch (RUN RUNSTART)
-                                                                          of RUN))
-                                                          (SETQ NEXTRSTART
-                                                           (OR (AND (CADR RUNTAIL)
-                                                                    (fetch (RUN RUNSTART)
-                                                                       of (CADR RUNTAIL)))
-                                                               MAX.FIXP))
-       do (CL:WHEN (AND (find TRANSPTR in old TRANSPTRS while (ILESSP TRANSPTR NEXTRSTART)
-                           suchthat (IGEQ TRANSPTR RSTART))
-                        (SETQ CODEMAP (SELECTQ (fetch (CHARLOOKS CLNAME) of (SETQ CHARLOOKS
-                                                                             (fetch (RUN RUNLOOKS)
-                                                                                of RUN)))
-                                          ((TIMESROMAN HELVETICA MODERN CLASSIC TERMINAL) 
+    (if (OR XCCSTRANSLATIONPTRS? XCCSTRANSLATIONRUNS)
+        then (for RUNTAIL RUN PREVRUN RSTART NEXTRSTART NEWFONT CODEMAP CHARLOOKS (ORIGFILEPTR
+                                                                                   _
+                                                                                   (GETFILEPTR 
+                                                                                          BSTREAM))
+                  (TRANSPTRS _ XCCSTRANSLATIONPTRS?) on RUNS
+                eachtime (SETQ RUN (CAR RUNTAIL))
+                      (SETQ RSTART (fetch (RUN RUNSTART) of RUN))
+                      (SETQ NEXTRSTART (OR (AND (CADR RUNTAIL)
+                                                (fetch (RUN RUNSTART) of (CADR RUNTAIL)))
+                                           MAX.FIXP))
+                do (CL:WHEN (AND (OR (MEMB RUN XCCSTRANSLATIONRUNS)
+                                     (find TRANSPTR in old TRANSPTRS while (ILESSP TRANSPTR 
+                                                                                  NEXTRSTART)
+                                        suchthat (IGEQ TRANSPTR RSTART)))
+                                 (SETQ CODEMAP (SELECTQ (fetch (CHARLOOKS CLNAME)
+                                                           of (SETQ CHARLOOKS (fetch (RUN RUNLOOKS)
+                                                                                 of RUN)))
+                                                   ((TIMESROMAN HELVETICA MODERN CLASSIC TERMINAL) 
                                                              (* ; "Keep the name")
-                                               HELVTIMESTOXCCS)
-                                          (HIPPO (SETQ NEWFONT T)
-                                                 HIPPOTOXCCS)
-                                          (MATH (SETQ NEWFONT T)
-                                                MATHTOXCCS)
-                                          NIL)))
+                                                        HELVTIMESTOXCCS)
+                                                   (HIPPO (SETQ NEWFONT T)
+                                                          HIPPOTOXCCS)
+                                                   (MATH (SETQ NEWFONT T)
+                                                         MATHTOXCCS)
+                                                   NIL)))
 
-              (* ;; "This run has at least one character that needs translation.")
+                       (* ;; "This run has at least one character that needs translation.")
 
-              (SETFILEPTR BSTREAM (fetch (RUN RUNSTART) of RUN))
-              [for I C XCCS from 1 to (fetch (RUN RUNLENGTH) of RUN)
-                 collect (SETQ C (BIN BSTREAM))
-                       (OR (CADR (ASSOC C CODEMAP))
-                           C) finally (CL:WHEN NEWFONT       (* ; "Hippo and Math should continue the prior font--or guess the default font if math or greek begins a paragraph.")
-                                          (SETQ CHARLOOKS (create CHARLOOKS
-                                                             using (fetch (RUN RUNLOOKS) of RUN)
-                                                                   CLNAME _
-                                                                   (OR (AND PREVRUN
-                                                                            (fetch (CHARLOOKS CLNAME)
-                                                                               of CHARLOOKS))
-                                                                       USER.CM.CHARLOOKS.)))
-                                          (\TFBRAVO.FONT.FROM.CHARLOOKS CHARLOOKS)
-                                          (replace (RUN RUNLOOKS) of RUN with CHARLOOKS))
-                                    (CL:WHEN $$VAL
-                                        (replace (RUN RUNSTART) of RUN with (CONCATCODES $$VAL)))]
-              (SETQ PREVRUN RUN)) finally (SETFILEPTR BSTREAM ORIGFILEPTR)
-                                        (RETURN RUNS])
+                       (SETFILEPTR BSTREAM (fetch (RUN RUNSTART) of RUN))
+                       [for I C XCCS from 1 to (fetch (RUN RUNLENGTH) of RUN)
+                          collect (SETQ C (BIN BSTREAM))
+                                (OR (CADR (ASSOC C CODEMAP))
+                                    C) finally (CL:WHEN NEWFONT
+                                                             (* ; "Hippo and Math should continue the prior font--or guess the default font if math or greek begins a paragraph.")
+                                                   [SETQ CHARLOOKS
+                                                    (create CHARLOOKS
+                                                       using (fetch (RUN RUNLOOKS) of RUN)
+                                                             CLNAME _
+                                                             (fetch (CHARLOOKS CLNAME)
+                                                                of (OR (fetch (RUN RUNLOOKS)
+                                                                          of PREVRUN)
+                                                                       USER.CM.CHARLOOKS]
+                                                   (\TFBRAVO.FONT.FROM.CHARLOOKS CHARLOOKS)
+                                                   (replace (RUN RUNLOOKS) of RUN with CHARLOOKS))
+                                             (CL:WHEN $$VAL
+                                                 (replace (RUN RUNSTART) of RUN with (CONCATCODES
+                                                                                      $$VAL)))]
+                       (SETQ PREVRUN RUN)) finally (SETFILEPTR BSTREAM ORIGFILEPTR)
+                                                 (RETURN RUNS))
+      else RUNS])
 )
 
 (RPAQQ HIPPOTOXCCS
@@ -1607,19 +1612,19 @@
 (\NAMEDTAB.INIT)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (6663 12436 (TEDIT.BRAVOFILE? 6673 . 8348) (TEDITFROMBRAVO 8350 . 12434)) (12547 26964 (
-\TFBRAVO.GET.USER.CM 12557 . 14931) (\TFBRAVO.USER.CM.LOOKS 14933 . 16108) (\TFBRAVO.READ.USER.CM 
-16110 . 20447) (\TFBRAVO.INIT.PARALOOKS 20449 . 22210) (\TFBRAVO.INIT.PAGEFORMAT 22212 . 22959) (
-\TFBRAVO.GETPARAMS 22961 . 25815) (\TFBRAVO.FIND.LAST.TRAILER 25817 . 26962)) (27006 46906 (
-\TFBRAVO.PARSE.PARA 27016 . 30993) (\TFBRAVO.READ.PARALOOKS 30995 . 37393) (\TFBRAVO.CREATE.RUNS 37395
- . 38739) (\TFBRAVO.READ.CHARLOOKS 38741 . 43636) (\TFBRAVO.FONT.FROM.CHARLOOKS 43638 . 45007) (
-\TFBRAVO.READNUM? 45009 . 46904)) (46943 57269 (\TFBRAVO.HANDLE.HEADING 46953 . 49585) (
-\TFBRAVO.PARSE.PROFILE.PARA 49587 . 57267)) (57312 78080 (\TFBRAVO.INSERT.PARA 57322 . 57975) (
-\TFBRAVO.INSERT.RUN 57977 . 60657) (\TFBRAVO.SPLIT.PARA 60659 . 65883) (\TFBRAVO.RUN.TABSPEC 65885 . 
-69356) (\TFBRAVO.ADD.NAMEDTAB 69358 . 72500) (\TFBRAVO.INSTALL.PAGEFORMAT 72502 . 78078)) (78081 82041
- (\TFBRAVO.ASSERT 78091 . 78438) (\TEST.CHARACTER.LOOKS 78440 . 80326) (\TEST.PARAGRAPH.LOOKS 80328 . 
-82039)) (82166 86258 (\TFBRAVO.XCCSCONVERT.RUNS 82176 . 86256)) (89572 92517 (\TFBRAVO.COPY.NAMEDTAB 
-89582 . 90030) (\TFBRAVO.PUT.NAMEDTAB 90032 . 90312) (\TFBRAVO.GET.NAMEDTAB 90314 . 90691) (
-\NAMEDTABNYET 90693 . 90853) (\NAMEDTABSIZE 90855 . 91370) (\NAMEDTABPREPRINT 91372 . 91570) (
-\NAMEDTAB.INIT 91572 . 92515)))))
+  (FILEMAP (NIL (6105 11878 (TEDIT.BRAVOFILE? 6115 . 7790) (TEDITFROMBRAVO 7792 . 11876)) (11989 26406 (
+\TFBRAVO.GET.USER.CM 11999 . 14373) (\TFBRAVO.USER.CM.LOOKS 14375 . 15550) (\TFBRAVO.READ.USER.CM 
+15552 . 19889) (\TFBRAVO.INIT.PARALOOKS 19891 . 21652) (\TFBRAVO.INIT.PAGEFORMAT 21654 . 22401) (
+\TFBRAVO.GETPARAMS 22403 . 25257) (\TFBRAVO.FIND.LAST.TRAILER 25259 . 26404)) (26448 47003 (
+\TFBRAVO.PARSE.PARA 26458 . 30216) (\TFBRAVO.READ.PARALOOKS 30218 . 36616) (\TFBRAVO.CREATE.RUNS 36618
+ . 38836) (\TFBRAVO.READ.CHARLOOKS 38838 . 43733) (\TFBRAVO.FONT.FROM.CHARLOOKS 43735 . 45104) (
+\TFBRAVO.READNUM? 45106 . 47001)) (47040 57366 (\TFBRAVO.HANDLE.HEADING 47050 . 49682) (
+\TFBRAVO.PARSE.PROFILE.PARA 49684 . 57364)) (57409 78277 (\TFBRAVO.INSERT.PARA 57419 . 58072) (
+\TFBRAVO.INSERT.RUN 58074 . 60754) (\TFBRAVO.SPLIT.PARA 60756 . 66080) (\TFBRAVO.RUN.TABSPEC 66082 . 
+69553) (\TFBRAVO.ADD.NAMEDTAB 69555 . 72697) (\TFBRAVO.INSTALL.PAGEFORMAT 72699 . 78275)) (78278 82238
+ (\TFBRAVO.ASSERT 78288 . 78635) (\TEST.CHARACTER.LOOKS 78637 . 80523) (\TEST.PARAGRAPH.LOOKS 80525 . 
+82236)) (82363 87003 (\TFBRAVO.XCCSCONVERT.RUNS 82373 . 87001)) (90317 93262 (\TFBRAVO.COPY.NAMEDTAB 
+90327 . 90775) (\TFBRAVO.PUT.NAMEDTAB 90777 . 91057) (\TFBRAVO.GET.NAMEDTAB 91059 . 91436) (
+\NAMEDTABNYET 91438 . 91598) (\NAMEDTABSIZE 91600 . 92115) (\NAMEDTABPREPRINT 92117 . 92315) (
+\NAMEDTAB.INIT 92317 . 93260)))))
 STOP

@@ -1,12 +1,16 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "18-Aug-2023 20:14:42" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;452 144540 
+(FILECREATED " 9-Sep-2023 17:16:23" {WMEDLEY}<library>tedit>TEDIT-STREAM.;469 151088 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \INSERTCH OPENTEXTSTREAM OPENTEXTSTREAM.WINDOW)
+      :CHANGES-TO (FNS OPENTEXTSTREAM.SETUP.SEL OPENTEXTSTREAM OPENTEXTSTREAM.GET.FILE 
+                       OPENTEXTSTREAM.PIECES OPENTEXTSTREAM.WINDOW \INSTALL.FILEBUFFER 
+                       \TEDIT.REOPEN.STREAM)
+                  (VARS TEDIT-STREAMCOMS)
+                  (MACROS TEXTLEN)
 
-      :PREVIOUS-DATE "14-Aug-2023 22:44:58" {WMEDLEY}<library>tedit>TEDIT-STREAM.;450)
+      :PREVIOUS-DATE " 5-Sep-2023 23:44:24" {WMEDLEY}<library>tedit>TEDIT-STREAM.;465)
 
 
 (PRETTYCOMPRINT TEDIT-STREAMCOMS)
@@ -15,7 +19,7 @@
        [(DECLARE%: EVAL@COMPILE DONTCOPY
                (EXPORT (RECORDS PIECE TEXTOBJ TEXTSTREAM)
                       (MACROS NEXTPIECE PREVPIECE PLEN PTYPE PCONTENTS PLOOKS PPARALOOKS PPARALAST 
-                             PFPOS PNEW PCHARSET PBYTESPERCHAR SETPC FSETPC)
+                             PFPOS PBYTELEN PNEW PCHARSET PBYTESPERCHAR SETPC FSETPC GETPC FGETPC)
                       (MACROS GETTOBJ SETTOBJ FGETTOBJ FSETTOBJ TEXTLEN TEXTSEL)
                       (OPTIMIZERS TEXTPROP)
                       (CONSTANTS (THINFILE.PTYPE 0)
@@ -26,7 +30,12 @@
                              (SUBSTREAM.PTYPE 5)
                              (OBJECT.PTYPE 6)
                              (LOOKS.PTYPE 7)
-                             (FILE.PTYPES (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE))
+                             (UTF8-2.PTYPE 8)
+                             (UTF8-3.PTYPE 9)
+                             (UTF8-4.PTYPE 10)
+                             (UTF8.PTYPES (LIST UTF8-2.PTYPE UTF8-3.PTYPE UTF8-4.PTYPE))
+                             (FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE)
+                                                 UTF8.PTYPES))
                              (STRING.PTYPES (LIST THINSTRING.PTYPE FATSTRING.PTYPE))
                              (BINABLE.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE)))
                       (GLOBALVARS \TEXTIMAGEOPS \TEXTFDEV)))
@@ -46,7 +55,8 @@
         
         (* ;; "High-level stream operations")
 
-        (FNS COPYTEXTSTREAM OPENTEXTSTREAM OPENTEXTSTREAM.WINDOW \TEDIT.OPENTEXTFILE 
+        (FNS COPYTEXTSTREAM OPENTEXTSTREAM OPENTEXTSTREAM.GET.FILE OPENTEXTSTREAM.PIECES 
+             OPENTEXTSTREAM.REUSE OPENTEXTSTREAM.SETUP.SEL OPENTEXTSTREAM.WINDOW \TEDIT.OPENTEXTFILE
              OPENTEXTSTREAM.DEFAULTLOOKS REOPENTEXTSTREAM TEDIT.STREAMCHANGEDP TEXTSTREAMP TXTFILE 
              \TEDIT.REOPEN.STREAM \TEXTINIT \TEXTTTYBOUT)
         
@@ -60,11 +70,11 @@
 
               (DECLARE%: EVAL@COMPILE DONTCOPY (CONSTANTS (INSERTSTRINGLENGTH 512))
                      (MACROS \INSERTCH.EXTENDABLE \LASTPIECEP \NOTLASTPIECEP))
-              (FNS \TEDIT.DELETE.SELPIECES \SETUPGETCH \INSERTCH \INSERTCH.HISTORY \INSERTEOL 
-                   \INSERTCH.INSERTION \INSERTCH.EXTEND))
+              (FNS \TEDIT.DELETE.SELPIECES \INSERTSELPIECES \SETUPGETCH \INSERTCH \INSERTCH.HISTORY 
+                   \INSERTEOL \INSERTCH.INSERTION \INSERTCH.EXTEND))
         (COMS                                                (* ; 
                                                              "Piece and piece-table manipulation")
-              (FNS \DELETEPIECES \INSERTPIECES \ALIGNEDPIECE \INSTALL.PIECE)
+              (FNS \DELETEPIECES \ALIGNEDPIECE \INSTALL.PIECE)
               (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS \NEXT.VISIBLE.PIECE \PREV.VISIBLE.PIECE)))
         (COMS                                                (* ; "Support for TEXTPROP")
               (FNS CGETTEXTPROP CTEXTPROP GETTEXTPROP PUTTEXTPROP TEXTPROP))
@@ -106,7 +116,7 @@
                  (PEXTERNALFORMAT POINTER)                   (* ; 
                                                            "The external format of a piece on a file")
                  (PCHARSET POINTER))                         (* ; 
-                                                    "The common charset for a run of thin characters")
+                                      "The common charset for a run of thin characters, shifted by 8")
                 [ACCESSFNS ((POBJ (IMAGEOBJP (PCONTENTS DATUM]
                 PFPOS _ 0 PLEN _ 0 PPARALOOKS _ TEDIT.DEFAULT.FMTSPEC PCHARSET _ 0)
 
@@ -234,7 +244,8 @@
                              HASCARET _ NIL)
           TEXTLEN _ 0 WRIGHT _ 0 WTOP _ 0 WLEFT _ 0 WBOTTOM _ 0 TXTFILE _ NIL \XDIRTY _ NIL 
           MOUSEREGION _ 'TEXT THISLINE _ (create THISLINE)
-          MENUFLG _ NIL FMTSPEC _ TEDIT.DEFAULT.FMTSPEC FORMATTEDP _ NIL INSERTSTRING _ NIL)
+          MENUFLG _ NIL DEFAULTCHARLOOKS _ TEDIT.DEFAULT.CHARLOOKS FMTSPEC _ TEDIT.DEFAULT.FMTSPEC 
+          FORMATTEDP _ NIL INSERTSTRING _ NIL)
 
 (ACCESSFNS TEXTSTREAM 
            (
@@ -255,10 +266,6 @@
                    (replace (STREAM F1) of DATUM with NEWVALUE))
                                                              (* ; 
                                                              "Runs from PLEN to 0: piece exhausted")
-            (NIL)                                            (* ; 
-                                 "WAS: PCSTARTPG The underlying file page# that this piece starts on")
-            (NIL)                                            (* ; "WAS: PCSTARTCH The char within page of the underlying file that this piece starts on -- for backbin & co")
-            (NIL)                                            (* ; "Was: PCOFFSET: The offset into the current piece, as of the last page cross, using TIPCOFFSET of TEXTIMAGEDATA")
             (CURRENTLOOKS (fetch (STREAM F10) of DATUM)
                    (replace (STREAM F10) of DATUM with NEWVALUE))
                                                              (* ; 
@@ -266,8 +273,6 @@
             (CURRENTPARALOOKS (fetch (STREAM IMAGEDATA) of DATUM)
                    (REPLACE (STREAM IMAGEDATA) of DATUM with NEWVALUE))
                                                              (* ; "The FMTSPEC that is currently applicable to characters being taken from the stream. This was  the only residual field of TEXTIMAGEDATA, now gone.")
-            (NIL                                             (* ; "Was CURRENTIMAGESTREAM: The image stream that this text is being put onto;  used for scaling decisions.  But the imagestream for scaling is passed as an argument, not a property of the textstream.  This was indirected through TEXTIMAGEDATA")
-                 )
             (LOOKSUPDATEFN (fetch (STREAM F4) of DATUM)
                    (REPLACE (STREAM F4) OF DATUM with NEWVALUE))
                                                              (* ; 
@@ -409,6 +414,9 @@
 (PUTPROPS PFPOS MACRO ((PC)
                        (ffetch (PIECE PFPOS) of PC)))
 
+(PUTPROPS PBYTELEN MACRO ((PC)
+                          (ffetch (PIECE PBYTELEN) of PC)))
+
 (PUTPROPS PNEW MACRO ((PC)
                       (ffetch (PIECE PNEW) of PC)))
 
@@ -423,6 +431,12 @@
 
 (PUTPROPS FSETPC MACRO ((PC FIELD NEWVALUE)
                         (freplace (PIECE FIELD) of PC with NEWVALUE)))
+
+(PUTPROPS GETPC MACRO ((PC FIELD)
+                       (fetch (PIECE FIELD) of PC)))
+
+(PUTPROPS FGETPC MACRO ((PC FIELD)
+                        (ffetch (PIECE FIELD) of PC)))
 )
 (DECLARE%: EVAL@COMPILE 
 
@@ -439,7 +453,7 @@
                           (freplace (TEXTOBJ FIELD) of TOBJ with NEWVALUE)))
 
 (PUTPROPS TEXTLEN MACRO ((TOBJ)
-                         (fetch (TEXTOBJ TEXTLEN) of TOBJ)))
+                         (ffetch (TEXTOBJ TEXTLEN) of TOBJ)))
 
 (PUTPROPS TEXTSEL MACRO ((TOBJ)
                          (fetch (TEXTOBJ SEL) of TOBJ)))
@@ -500,7 +514,16 @@
 
 (RPAQQ LOOKS.PTYPE 7)
 
-(RPAQ FILE.PTYPES (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE))
+(RPAQQ UTF8-2.PTYPE 8)
+
+(RPAQQ UTF8-3.PTYPE 9)
+
+(RPAQQ UTF8-4.PTYPE 10)
+
+(RPAQ UTF8.PTYPES (LIST UTF8-2.PTYPE UTF8-3.PTYPE UTF8-4.PTYPE))
+
+(RPAQ FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE)
+                         UTF8.PTYPES))
 
 (RPAQ STRING.PTYPES (LIST THINSTRING.PTYPE FATSTRING.PTYPE))
 
@@ -515,7 +538,12 @@
        (SUBSTREAM.PTYPE 5)
        (OBJECT.PTYPE 6)
        (LOOKS.PTYPE 7)
-       (FILE.PTYPES (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE))
+       (UTF8-2.PTYPE 8)
+       (UTF8-3.PTYPE 9)
+       (UTF8-4.PTYPE 10)
+       (UTF8.PTYPES (LIST UTF8-2.PTYPE UTF8-3.PTYPE UTF8-4.PTYPE))
+       (FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE)
+                           UTF8.PTYPES))
        (STRING.PTYPES (LIST THINSTRING.PTYPE FATSTRING.PTYPE))
        (BINABLE.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE)))
 )
@@ -627,6 +655,8 @@
 (\TEXTBIN
   [LAMBDA (TSTREAM)
 
+    (* ;; "Edited  5-Sep-2023 00:11 by rmk")
+
     (* ;; "Edited 14-Aug-2023 22:40 by rmk")
 
     (* ;; "Edited 17-Jun-2023 13:47 by rmk")
@@ -696,15 +726,20 @@
                                     (ADD (ffetch (STREAM COFFSET) of TSTREAM)
                                          1)))
                            (FATFILE1.PTYPE 
-                                (PROG1 (LOGOR (ffetch (PIECE PCHARSET) of PC)
+                                (PROG1 (LOGOR (PCHARSET PC)
                                               (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
                                                      (ffetch (STREAM COFFSET) of TSTREAM)))
                                     (ADD (ffetch (STREAM COFFSET) of TSTREAM)
                                          1)))
                            (FATFILE2.PTYPE 
-                                           (* ;; "This is the most complicated case, because the 2 bytes of a character could be in separate buffers.")
-
-                                (\FATFILE2.CHAR TSTREAM PC NIL))
+                                (PROG1 [LOGOR (UNFOLD (\GETBASEBYTE (ffetch (STREAM CBUFPTR)
+                                                                       of TSTREAM)
+                                                             (ffetch (STREAM COFFSET) of TSTREAM))
+                                                     256)
+                                              (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                                     (ADD1 (ffetch (STREAM COFFSET) of TSTREAM]
+                                    (ADD (ffetch (STREAM COFFSET) of TSTREAM)
+                                         2)))
                            (OBJECT.PTYPE 
                                          (* ;; 
               "Return the object as BIN's result, and make sure we'll go to the next page next time.")
@@ -742,7 +777,8 @@
              NPC)])
 
 (\TEXTPEEKBIN
-  [LAMBDA (TSTREAM NOERROR)                                  (* ; "Edited 17-Jun-2023 13:47 by rmk")
+  [LAMBDA (TSTREAM NOERROR)                                  (* ; "Edited  5-Sep-2023 00:11 by rmk")
+                                                             (* ; "Edited 17-Jun-2023 13:47 by rmk")
                                                              (* ; "Edited  3-May-2023 15:06 by rmk")
                                                              (* ; "Edited 12-Oct-2022 15:27 by rmk")
                                                              (* ; "Edited  8-Sep-2022 20:24 by rmk")
@@ -777,13 +813,15 @@
                                 (\GETBASEFAT (ffetch (STREAM CBUFPTR) of TSTREAM)
                                        (ffetch (STREAM COFFSET) of TSTREAM)))
                            (FATFILE1.PTYPE 
-                                (LOGOR (ffetch (PIECE PCHARSET) of PC)
+                                (LOGOR (PCHARSET PC)
                                        (\GETBASEBYTE (ffetch (STREAM CPPTR) of TSTREAM)
                                               (ffetch (STREAM COFFSET) of TSTREAM))))
                            (FATFILE2.PTYPE 
-                                           (* ;; "This is the most complicated case, because the 2 bytes of a character could be in separate buffers.")
-
-                                (\FATFILE2.CHAR TSTREAM PC T))
+                                [LOGOR (UNFOLD (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                                      (ffetch (STREAM COFFSET) of TSTREAM))
+                                              256)
+                                       (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                              (ADD1 (ffetch (STREAM COFFSET) of TSTREAM])
                            (OBJECT.PTYPE 
                                          (* ;; 
               "Return the object as BIN's result, and make sure we'll go to the next page next time.")
@@ -808,7 +846,8 @@
                         then (\INSTALL.FILEBUFFER TSTREAM PCCHARSLEFT)))])
 
 (\TEXTBACKFILEPTR
-  [LAMBDA (TSTREAM)                                          (* ; "Edited 17-Jun-2023 13:47 by rmk")
+  [LAMBDA (TSTREAM)                                          (* ; "Edited  5-Sep-2023 00:13 by rmk")
+                                                             (* ; "Edited 17-Jun-2023 13:47 by rmk")
                                                              (* ; "Edited  3-May-2023 15:05 by rmk")
                                                              (* ; "Edited 12-Oct-2022 15:26 by rmk")
                                                              (* ; "Edited 28-Mar-94 15:32 by jds")
@@ -851,15 +890,18 @@
                       (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
                              (ffetch (STREAM COFFSET) of TSTREAM)))
                  (FATFILE1.PTYPE 
-                      (LOGOR (ffetch (PIECE PCHARSET) of PC)
+                      (LOGOR (PCHARSET PC)
                              (\GETBASEBYTE (ffetch (STREAM CPPTR) of TSTREAM)
                                     (ffetch (STREAM COFFSET) of TSTREAM))))
                  (FATSTRING.PTYPE 
                       (\GETBASEFAT (ffetch (STREAM CBUFPTR) of TSTREAM)
                              (ffetch (STREAM COFFSET) of TSTREAM)))
-                 (FATFILE2.PTYPE                             (* ; 
-                                                          "The 2 bytes could cross a buffer boundary")
-                      (\FATFILE2.CHAR TSTREAM PC T))
+                 (FATFILE2.PTYPE 
+                      [LOGOR (UNFOLD (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                            (ffetch (STREAM COFFSET) of TSTREAM))
+                                    256)
+                             (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                    (ADD1 (ffetch (STREAM COFFSET) of TSTREAM])
                  (OBJECT.PTYPE (OR (GETTEXTPROP (ffetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
                                           'OBJECTBYTE)
                                    (PCONTENTS PC)))
@@ -875,8 +917,8 @@
            (fetch (TEXTSTREAM TEXTOBJ) of STREAM])
 
 (\INSTALL.FILEBUFFER
-  [LAMBDA (TSTREAM PCCHARSLEFT)                              (* ; "Edited  8-Sep-2022 14:17 by rmk")
-                                                             (* ; "Edited  6-Sep-2022 17:15 by rmk")
+  [LAMBDA (TSTREAM PCCHARSLEFT)                              (* ; "Edited  8-Sep-2023 10:40 by rmk")
+                                                             (* ; "Edited  8-Sep-2022 14:17 by rmk")
                                                              (* ; "Edited 21-Aug-2022 22:35 by rmk")
                                                              (* ; "Edited  7-Aug-2022 20:35 by rmk")
                                                              (* ; "Edited 31-Jul-2022 20:09 by rmk")
@@ -902,18 +944,28 @@
           (CL:UNLESS PCCHARSLEFT                             (* ; "First character of the piece")
               (SETQ PCCHARSLEFT PLEN))
 
-          (* ;; "PCBYTESLEFT is the number of bytes already covered so that PCCHARSLEFT characters are left in the piece..")
+          (* ;; "PCBYTESLEFT is the number of bytes already covered so that PCCHARSLEFT characters are left in the piece.")
 
-          (if (EQ FATFILE2.PTYPE (PTYPE PC))
-              then (SETQ PCBYTEOFFSET (UNFOLD (IDIFFERENCE PLEN PCCHARSLEFT)
+          (* ;; "When PBYTESPERCHAR has been properly installed everywhere, then here and elsewhere we scan just do a simple fetch, no multiply.  In fact, maybe just select on PBYTESPERCHAR (1...4)?")
+
+          [SELECTC (PTYPE PC)
+              (FATFILE2.PTYPE 
+                   (SETQ PCBYTEOFFSET (UNFOLD (IDIFFERENCE PLEN PCCHARSLEFT)
                                              2))
-                   (SETQ PCBYTELENGTH (UNFOLD PLEN 2))
-            else (SETQ PCBYTEOFFSET (IDIFFERENCE PLEN PCCHARSLEFT))
-                 (SETQ PCBYTELENGTH PLEN))
+                   (SETQ PCBYTELENGTH (UNFOLD PLEN 2)))
+              (THINFILE.PTYPE 
+                   (SETQ PCBYTEOFFSET (IDIFFERENCE PLEN PCCHARSLEFT))
+                   (SETQ PCBYTELENGTH PLEN))
+              (PROGN 
+                     (* ;; "Presumably UTF-8.  ")
+
+                     (SETQ PCBYTEOFFSET (ITIMES (IDIFFERENCE PLEN PCCHARSLEFT)
+                                               (PBYTESPERCHAR PC)))
+                     (SETQ PCBYTELENGTH (ITIMES PLEN (PBYTESPERCHAR PC]
 
           (* ;; "Set PFILE to the byte position of the next character of this piece, establishing the PFILE buffer, offset")
 
-          (\SETFILEPTR PFILE (IPLUS (ffetch (PIECE PFPOS) of PC)
+          (\SETFILEPTR PFILE (IPLUS (PFPOS PC)
                                     PCBYTEOFFSET))
           (\PEEKBIN PFILE T)
 
@@ -970,6 +1022,8 @@
 (DECLARE%: EVAL@COMPILE 
 
 (PUTPROPS \FATFILE2.CHAR MACRO [(TSTREAM PC DONTADVANCE)
+
+                                (* ;; "NOT USED")
 
                                 (* ;; "DONTADVANCE is T for calls from \TEXTPEEKBIN and \TEXTBACKFILEPTR, NIL for calls from \TEXTBIN.  In each case, the streams PCCHARSLEFT is set to what it should be AFTER this operation.  So, in the buffer-overflow case, we have to back up 1 character (2 bytes) in the SETFILEPTR so we can read the proper character. ")
 
@@ -1154,195 +1208,260 @@
 (OPENTEXTSTREAM
   [LAMBDA (TEXT WINDOW START END PROPS)
 
-    (* ;; "Edited 17-Aug-2023 09:54 by rmk")
+    (* ;; "Edited  9-Sep-2023 16:28 by rmk")
 
-    (* ;; "Edited 13-Aug-2023 17:09 by rmk")
-
-    (* ;; "Edited  3-Aug-2023 23:20 by rmk")
-
-    (* ;; "Edited 30-Jul-2023 23:31 by rmk")
+    (* ;; "Edited  5-Sep-2023 12:54 by rmk")
 
     (* ;; "Edited 31-Jan-2022 17:25 by rmk: A string TEXT is converted here to a stream")
 
     (* ;; "Edited  4-May-93 14:38 by jds")
 
-    (* ;; 
-    "Create a text-type STREAM to describe TEXT.  Optionally, connect that to WINDOW for display.")
+    (* ;; "Create a TEXTSTREAM to describe the segment of TEXT between START and END.  Optionally, connect that to WINDOW for display. This is the user entry for creating a (sub) textstream.  ")
 
-    (LET* ((WAS-TEXTSTREAM (TEXTOBJ TEXT T))
-           [TEXTOBJ (COND
-                       (WAS-TEXTSTREAM                       (* ; 
-                                 "If the guy gave us a text stream to edit, use its TEXTOBJ as ours.")
-                              (create TEXTOBJ reusing (fetch (TEXTSTREAM TEXTOBJ) of TEXT)
-                                                    HINTPC _ NIL LINES _ NIL))
-                       ((type? TEXTOBJ TEXT)
-                        (create TEXTOBJ using TEXT HINTPC _ NIL LINES _ NIL))
-                       (T (create TEXTOBJ]
-           (PROPS (APPEND PROPS TEDIT.DEFAULT.PROPS (GETTOBJ TEXTOBJ EDITPROPS)))
-           [TEXTOBJ.WINDOW.VALID (AND WINDOW (EQ WINDOW (\TEDIT.PRIMARYW TEXTOBJ))
-                                      (EQ TEXTOBJ (WINDOWPROP WINDOW 'TEXTOBJ]
-           SEL TSTREAM OTEXTOBJ PROP)
-          (for PROPNAME in PROPS by (CDDR PROPNAME) as PROPVAL in (CDR PROPS)
-             by (CDDR PROPVAL) do (TEXTPROP TEXTOBJ PROPNAME PROPVAL))
-                                                             (* ; 
-                                            "Save the PROPS for later people who'd like to know them")
-          (OPENTEXTSTREAM.DEFAULTLOOKS TEXTOBJ PROPS)
+    (* ;; "")
 
-          (* ;; "We have an ordering constraint in that the stream has to be set up as stashed in the STREAMHINT before the window is opened, but the window has to be set up before at least the foreign file is gotten.  So we replicate the window call in each branch.")
+    (LET (TSTREAM)
+         (if (NOT (TEXTOBJ TEXT T))
+             then 
+                  (* ;; "Create brand new textstream and textobj, no history to worry about.  TEXT is denotes the file (maybe NIL=empty).")
 
-          [COND
-             (WAS-TEXTSTREAM                                 (* ; 
-                                                          "We got a TEXTSTREAM to edit;  just use it")
-                    (SETQ OTEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TEXT))
-                    (SETQ TSTREAM TEXT)
-                    (SETTOBJ TEXTOBJ STREAMHINT TSTREAM)
-                    (OPENTEXTSTREAM.WINDOW WINDOW TEXTOBJ TSTREAM PROPS)
-                    (for SELN in (\TEDIT.COLLECTSELS TEXTOBJ)
-                       do 
-                          (* ;; "Make all the selections point to the CURRENT textobj!")
+                  (SETQ TSTREAM (OPENTEXTSTREAM.GET.FILE TEXT START END PROPS))
+                  (OPENTEXTSTREAM.SETUP.SEL (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
+                         PROPS)
+           elseif (OR START END PROPS)
+             then 
+                  (* ;; "Try to reuse an existing stream or object in some sensible way. In this case, START and END are character positions in the text stream, not in the (possibly already edited) underlying file(s).   ")
 
-                          (COND
-                             ((EQ OTEXTOBJ (GETSEL SELN SELTEXTOBJ))
-                              (SETSEL SELN SELTEXTOBJ TEXTOBJ))
-                             (T (SETSEL SELN SET NIL)))
-                          (SETSEL SELN ONFLG NIL))
-                    (replace (TEXTSTREAM TEXTOBJ) of TSTREAM with TEXTOBJ)
-                    (SETTOBJ TEXTOBJ EDITFINISHEDFLG NIL)    (* ; 
-                                                           "Mark the edit incomplete but not changed")
-                    (SETTOBJ TEXTOBJ \DIRTY NIL))
-             ((type? TEXTOBJ TEXT)                           (* ; 
-                       "We got a TEXTOBJ to edit; fill in the stream, since it might have been GC'd.")
-              (SETQ TSTREAM (create TEXTSTREAM
-                                   TEXTOBJ _ TEXTOBJ))
-              (SETTOBJ TEXTOBJ STREAMHINT TSTREAM)
-              (OPENTEXTSTREAM.WINDOW WINDOW TEXTOBJ TSTREAM PROPS))
-             (T (SETQ TEXT (\TEDIT.OPENTEXTFILE TEXT PROPS))
+                  (SETQ TSTREAM TEXT (OPENTEXTSTREAM.REUSE TEXT START END PROPS))
+           else 
+                (* ;; "An unchanging textstream, a no-op")
 
-                (* ;; "Otherwise, create a textstream appropriate for TEXT, initially empty.  Might cause a filenotfound error")
+                (SETQ TSTREAM TEXT))
+         (CL:WHEN WINDOW (OPENTEXTSTREAM.WINDOW WINDOW TSTREAM PROPS))
+         (\TEXTSETFILEPTR TSTREAM 0)
+         TSTREAM])
 
-                (SETQ TSTREAM (create TEXTSTREAM
-                                     TEXTOBJ _ TEXTOBJ))
-                (SETTOBJ TEXTOBJ STREAMHINT TSTREAM)
-                (OPENTEXTSTREAM.WINDOW WINDOW TEXTOBJ TSTREAM PROPS)
-                (SETTOBJ TEXTOBJ TXTFILE TEXT)
-                (\MAKEPCTB TEXTOBJ)
-                (SETQ SEL (TEXTSEL TEXTOBJ))
-                (SETSEL SEL SELTEXTOBJ TEXTOBJ)
-                (\TEDIT.UPDATE.SEL SEL 1 0 'LEFT NIL T)
-                (SETSEL SEL SET T)
-                (CL:WHEN TEXT
-                    (SETTOBJ TEXTOBJ TXTDON'TUPDATE T)       (* ; 
-                                                       "Don't display or record histories until done")
-                    (SETTOBJ TEXTOBJ TXTHISTORY 'DON'T)
-                    (if (OR (LISTGET PROPS 'CLEARGET)
-                            (LISTGET PROPS 'UNFORMATTED?)
-                            (LISTGET PROPS 'UNFORMATTED)
-                            (LISTGET PROPS 'PLAINTEXT))
-                        then (\TEDIT.GET.UNFORMATTED.FILE TEXT TEXTOBJ START END)
-                      elseif (\TEDIT.GET.FORMATTED.FILE TEXT TEXTOBJ START END)
-                      elseif (\TEDIT.GET.FOREIGN.FILE TEXT TEXTOBJ START END)
-                      else (\TEDIT.GET.UNFORMATTED.FILE TEXT TEXTOBJ START END))
-                    (SETTOBJ TEXTOBJ TXTHISTORY NIL)
-                    (SETTOBJ TEXTOBJ TXTDON'TUPDATE NIL)
-                    (\TEDIT.MARK.LINES.DIRTY TEXTOBJ 1 -1)
-                    (TEDIT.UPDATE.SCREEN TEXTOBJ)
-                    (SETTOBJ TEXTOBJ \DIRTY NIL))]
-          (\TEDIT.UNIQUIFY.ALL TEXTOBJ)
-          (SETTOBJ TEXTOBJ TXTREADONLY (LISTGET PROPS 'READONLY))
-          (SETTOBJ TEXTOBJ TXTTERMSA (AND (SETQ PROP (LISTGET PROPS 'TERMTABLE))
-                                          (fetch TERMSA of PROP)))
-          (SETTOBJ TEXTOBJ TXTRTBL (LISTGET PROPS 'READTABLE))
-          (SETTOBJ TEXTOBJ TXTWTBL (LISTGET PROPS 'BOUNDTABLE))
-          (CL:WHEN (LISTGET PROPS 'PAGEFORMAT)               (* ; 
+(OPENTEXTSTREAM.GET.FILE
+  [LAMBDA (TEXT START END PROPS UNFORMATTED)                 (* ; "Edited  9-Sep-2023 16:43 by rmk")
+                                                             (* ; "Edited  5-Sep-2023 12:28 by rmk")
+                                                             (* ; "Edited  1-Sep-2023 23:02 by rmk")
+
+    (* ;; "TEXT is either NIL (empty text) or specifies a file. This returns a TEXTSTREAM holding that text, ready for attachment to window and process.  If OLDTSTREAM is given, the information created for TEXT is smashed into that structure, and returned.")
+
+    (LET ((TEXTOBJ (create TEXTOBJ))
+          TSTREAM PROP TEDIT.GET.FINISHEDFORMS)
+         (DECLARE (SPECVARS TEDIT.GET.FINISHEDFORMS))        (* ; 
+                 "Undocumented, but available for special-purpose actions specified somewhere below.")
+
+         (* ;; 
+        "Everything is fresh, but as documented the textstream data structure is reused if possible.")
+
+         (SETQ TSTREAM (create TEXTSTREAM
+                              TEXTOBJ _ TEXTOBJ))
+         (SETTOBJ TEXTOBJ STREAMHINT TSTREAM)
+         (OPENTEXTSTREAM.DEFAULTLOOKS TEXTOBJ PROPS)
+         (SETQ PROPS (APPEND PROPS TEDIT.DEFAULT.PROPS))     (* ; 
+                                                    "Install the props, REVERSE to do defaults last ")
+         (for PROPTAIL on (REVERSE PROPS) by (CDDR PROPTAIL) do (PUTTEXTPROP TEXTOBJ (CAR PROPTAIL)
+                                                                       (CADR PROPTAIL)))
+         (SETQ TEXT (\TEDIT.OPENTEXTFILE TEXT PROPS))
+         (SETTOBJ TEXTOBJ TXTFILE TEXT)
+         (OPENTEXTSTREAM.PIECES TEXT TEXTOBJ START END PROPS)
+         (\INSTALL.PIECE TSTREAM (\FIRSTPIECE TEXTOBJ)
+                0)
+         (CL:WHEN (LISTGET PROPS 'PAGEFORMAT)                (* ; 
                                                   "Impose the default page formatting, if specified.")
-              (TEDIT.PAGEFORMAT TEXTOBJ (LISTGET PROPS 'PAGEFORMAT)))
-          (for S in (\TEDIT.COLLECTSELS TEXTOBJ) when S do (SETSEL S SELTEXTOBJ TEXTOBJ))
-          (SETQ SEL (TEXTSEL TEXTOBJ))
-          (SETQ PROP (LISTGET PROPS 'SEL))                   (* ; "Initial Selection, if any.")
-          [COND
-             ((EQ PROP 'DON'T)                               (* ; 
-                                          "A SEL prop of DON'T means don't make an initial selection")
-              (SETSEL SEL SET NIL))
-             ((type? SELECTION PROP)                         (* ; 
-                                               "We came in with an explicit initial sel.  Set it up.")
-              (\COPYSEL PROP SEL)
-              (SETSEL SEL SET T)
-              (SETSEL SEL SELTEXTOBJ TEXTOBJ))
-             ((AND (GETSEL SEL SET)
-                   (NOT PROP))                               (* ; 
-                                         "If we came into this with a valid selection, highlight it.")
-              (SETSEL SEL SELTEXTOBJ TEXTOBJ))
-             (T (if (LISTP PROP)
-                    then (with SELECTION SEL (SETQ CH# (CAR PROP))
-                               (SETQ DCH (CADR PROP))
-                               (SETQ CHLIM (IPLUS (CAR PROP)
-                                                  (CADR PROP)))
-                               (SETQ POINT 'LEFT)
-                               (SETQ SELKIND 'CHAR)
-                               (SETQ SELTEXTOBJ TEXTOBJ))
-                  else 
-                       (* ;; "No selection specified:  Default start is a point selection that puts the caret before the first character.")
+             (TEDIT.PAGEFORMAT TEXTOBJ (LISTGET PROPS 'PAGEFORMAT)))
 
-                       (TEDIT.MAKEPOINT SEL (OR PROP 1)
-                              'LEFT))
-                (SETSEL SEL SET (NOT (fetch (TEXTOBJ TXTREADONLY) of TEXTOBJ]
-          (SETTOBJ TEXTOBJ CARETLOOKS (if (GETSEL SEL SET)
+         (* ;; "")
+
+         (* ;; "We now have all the pieces, even for TEXT=NIL (empty document) case.")
+
+         (SETTOBJ TEXTOBJ TXTREADONLY (LISTGET PROPS 'READONLY))
+         (for FORM in TEDIT.GET.FINISHEDFORMS do (EVAL FORM))
+         TSTREAM])
+
+(OPENTEXTSTREAM.PIECES
+  [LAMBDA (TEXT TEXTOBJ START END PROPS UNFORMATTED)         (* ; "Edited  9-Sep-2023 16:41 by rmk")
+
+    (* ;; "This replaces the pieces in TEXTOBJ with new pieces representing TEXT, an input stream or NIL=empty.")
+
+    (\MAKEPCTB TEXTOBJ)
+    (CL:WHEN TEXT
+        (SETTOBJ TEXTOBJ TXTDON'TUPDATE T)                   (* ; 
+                                                       "Don't display or record histories until done")
+        (SETTOBJ TEXTOBJ TXTHISTORY 'DON'T)
+        (SETTOBJ TEXTOBJ TXTREADONLY NIL)                    (* ; 
+                                                         "READONLY only after creation, if specified")
+        (if (OR UNFORMATTED (LISTGET PROPS 'CLEARGET)
+                (LISTGET PROPS 'UNFORMATTED?)
+                (LISTGET PROPS 'UNFORMATTED)
+                (LISTGET PROPS 'PLAINTEXT))
+            then (\TEDIT.GET.UNFORMATTED.FILE TEXT TEXTOBJ START END)
+          elseif (\TEDIT.GET.FORMATTED.FILE TEXT TEXTOBJ START END)
+          elseif (\TEDIT.GET.FOREIGN.FILE TEXT TEXTOBJ START END)
+          else (\TEDIT.GET.UNFORMATTED.FILE TEXT TEXTOBJ START END))
+        (SETTOBJ TEXTOBJ TXTHISTORY NIL)
+        (SETTOBJ TEXTOBJ TXTHISTORYUNDONE NIL)
+        (\TEDIT.HISTORYADD TEXTOBJ (create TEDITHISTORYEVENT
+                                          THACTION _ 'Get))
+        (SETTOBJ TEXTOBJ TXTDON'TUPDATE NIL))])
+
+(OPENTEXTSTREAM.REUSE
+  [LAMBDA (TEXT START END PROPS)                             (* ; "Edited  2-Sep-2023 10:39 by rmk")
+
+    (* ;; "This implements the behavior of OPENTEXTSTREAM when its TEXT argument is already a TEXTSTREAM (or an existing TEXTOBJ)")
+
+    (* ;; "If START, END, and WINDOW are NIL, then TEXT is returned unmodified except perhaps by the application of PROPS. Nothing else is changed.  The current selection, for example, is not moved unless PROPS has a SEL feature.")
+
+    (* ;; "")
+
+    (* ;; "If WINDOW is not NIL in that case and the stream doesn't yet have a window, WINDOW is used.  If TEXT already has a window, WINDOW is ignored so as not to have 2 windows open on the same textstream.  (Alternatively, we could create a 1 to -1 copy of TEXT and bring that up in WINDOW)")
+
+    (* ;; "")
+
+    (* ;; "If START or END are specified, a new stream is returned that covers just those characters in TEXT. That text will be shown in WINDOW, if provided, otherwise not shown.  TEXT itself is unchanged and remains in its window with its process.  START and END are interpreted in terms of characters in TEXT, not in terms of bytes in the underlying file.  The underlying file is carried over just because the various pieces point to it.  In this case the selection is move to the beginning of the new (sub)stream")
+
+    (LET ((TEXTOBJ (TEXTOBJ TEXT T)))
+         (if (AND TEXTOBJ (NOT (OR START END)))
+             then (for PROPTAIL on (REVERSE (APPEND PROPS (GETTOBJ TEXTOBJ EDITPROPS)
+                                                   TEDIT.DEFAULT.PROPS)) by (CDDR PROPTAIL)
+                     do (PUTTEXTPROP TEXT (CAR PROPTAIL)
+                               (CADR PROPTAIL)))
+                  (TEXTSTREAM TEXTOBJ)
+           else (HELP)
+                (LET (OTEXTOBJ TSTREAM)
+                     (CL:WHEN (type? TEXTOBJ TEXT)
+
+                         (* ;; "Very tricky.  If TEXTOBJ has a STREAMHINT, it would seem that we should reuse it as if that had been passed as TEXT.  But it may have been collected even if it is in the STREAMHINT field, and we can't tell.  So we create a new STREAMHINT and assume we are in the 1 -1  copy case.")
+
+                         (SETQ TEXT (create TEXTSTREAM
+                                           TEXTOBJ _ TEXTOBJ))
+                         (SETTOBJ TEXTOBJ STREAMHINT TEXT))
+                     (SETQ TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TEXT))
+                     (SETQ PROPS (APPEND PROPS (GETTOBJ TEXTOBJ EDITPROPS)
+                                        TEDIT.DEFAULT.PROPS))
+                     (for PROPTAIL on (REVERSE PROPS) by (CDDR PROPTAIL)
+                        do (PUTTEXTPROP TEXTOBJ (CAR PROPTAIL)
+                                  (CADR PROPTAIL)))
+                     (SETQ OTEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TEXT))
+                     (SETQ TSTREAM TEXT)
+                     (SETTOBJ TEXTOBJ STREAMHINT TSTREAM)
+                     (for SELN in (\TEDIT.COLLECTSELS TEXTOBJ)
+                        do 
+                           (* ;; "Make all the selections point to the CURRENT textobj!")
+
+                           (COND
+                              ((EQ OTEXTOBJ (GETSEL SELN SELTEXTOBJ))
+                               (SETSEL SELN SELTEXTOBJ TEXTOBJ))
+                              (T (SETSEL SELN SET NIL)))
+                           (SETSEL SELN ONFLG NIL))
+                     (replace (TEXTSTREAM TEXTOBJ) of TSTREAM with TEXTOBJ)
+                     (SETTOBJ TEXTOBJ EDITFINISHEDFLG NIL)   (* ; 
+                                                           "Mark the edit incomplete but not changed")
+                     (SETTOBJ TEXTOBJ \DIRTY NIL)
+                     TSTREAM])
+
+(OPENTEXTSTREAM.SETUP.SEL
+  [LAMBDA (TEXTOBJ PROPS)                                    (* ; "Edited  9-Sep-2023 13:43 by rmk")
+                                                             (* ; "Edited  1-Sep-2023 23:02 by rmk")
+
+    (* ;; "This sets up the initial SEL for TEXTOBJ according to the SEL PROPS entry.  If SELPROP is NIL, the default is 1-0-LEFT--just before the first character.  This doesn't show the selection--this stream may not yet have a window.")
+
+    (for S in (\TEDIT.COLLECTSELS TEXTOBJ) do (SETSEL S SELTEXTOBJ TEXTOBJ)
+                                              (SETSEL S SET NIL))
+    (PROG [(SEL (TEXTSEL TEXTOBJ))
+           (SELPROP (LISTGET PROPS 'SEL]
+          (CL:WHEN (EQ SELPROP 'DON'T)                       (* ; "Leave it unset if DON't")
+              (RETURN SEL))
+
+     (* ;; "")
+
+          (if (type? SELECTION SELPROP)
+              then                                           (* ; 
+                                         "We came in with an explicit initial selection.  Set it up.")
+                   (\COPYSEL SELPROP SEL)
+                   (SETSEL SEL SELTEXTOBJ TEXTOBJ)
+            elseif (LISTP SELPROP)
+              then (\TEDIT.UPDATE.SEL (CAR SELPROP)
+                          (CADR SELPROP)
+                          'LEFT TEXTOBJ T)
+                   (SETSEL SEL SELKIND 'CHAR)
+            else 
+                 (* ;; "Default to before the first character")
+
+                 (TEDIT.MAKEPOINT SEL (OR (FIXP SELPROP)
+                                          1)
+                        'LEFT))
+          [SETTOBJ TEXTOBJ CARETLOOKS (if (GETSEL SEL SET)
                                           then               (* ; 
                                                   "An initial selection implies initial caret looks.")
                                                (\TEDIT.GET.INSERT.CHARLOOKS TEXTOBJ SEL)
-                                        else (\TEDIT.UNIQUIFY.CHARLOOKS (\TEDIT.CARETLOOKS.VERIFY
-                                                                         TEXTOBJ
-                                                                         (GETTOBJ TEXTOBJ 
-                                                                                DEFAULTCHARLOOKS))
-                                                    TEXTOBJ)))
-          (\INSTALL.PIECE TSTREAM (\FIRSTPIECE TEXTOBJ)
-                 0)                                          (* ; 
-                                                      "Set the file ptr to 0 so that looks are good.")
-          TSTREAM])
+                                        else (\TEDIT.CARETLOOKS.VERIFY TEXTOBJ (GETTOBJ TEXTOBJ 
+                                                                                     DEFAULTCHARLOOKS
+                                                                                      ]
+          (SETSEL SEL SET (NOT (GETTOBJ TEXTOBJ TXTREADONLY)))
+                                                             (* ; 
+                                                     "Don't blink for read-only, but do highlighting")
+          (SETSEL SEL ONFLG T])
 
 (OPENTEXTSTREAM.WINDOW
-  [LAMBDA (WINDOW TEXTOBJ TSTREAM PROPS)                     (* ; "Edited 12-Aug-2023 09:52 by rmk")
+  [LAMBDA (WINDOW TSTREAM PROPS)                             (* ; "Edited  8-Sep-2023 16:46 by rmk")
+                                                             (* ; "Edited  1-Sep-2023 23:15 by rmk")
+                                                             (* ; "Edited 12-Aug-2023 09:52 by rmk")
 
-    (* ;; "If WINDOW is provided, sets it up for textstream use.")
+    (* ;; 
+    "Associates WINDOW with TSTREAM.  Brute force, doesn't let this window stuff change the fileptr ")
 
-    (if WINDOW
-        then (SETTOBJ TEXTOBJ \WINDOW (AND WINDOW (LIST WINDOW))) 
+    (LET ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
+          (FILEPTR (\TEXTGETFILEPTR TSTREAM)))
+         (if WINDOW
+             then (SETTOBJ TEXTOBJ \WINDOW (AND WINDOW (LIST WINDOW))) 
                                                              (* ; 
                                                      "Some incoming objects want to know the window.")
-             (SETTOBJ TEXTOBJ PANES (CONS (create PANE
-                                                 PWINDOW _ WINDOW)))
-             (SETTOBJ TEXTOBJ CARET (create TEDITCARET
-                                           TCCARETDS _ (WINDOWPROP WINDOW 'DSP)
-                                           TCFORCEUP _ T))
-             (CL:UNLESS [AND (EQ WINDOW (\TEDIT.PRIMARYW TEXTOBJ))
-                             (EQ TEXTOBJ (WINDOWPROP WINDOW 'TEXTOBJ]
-                    (\TEDIT.WINDOW.SETUP WINDOW TEXTOBJ TSTREAM PROPS))
-      elseif (LISTGET PROPS 'PROMPTWINDOW)
-        then 
-             (* ;; "There is no window for the session, but he has passed in a promptwindow to use, install it in the textobj")
+                  (SETTOBJ TEXTOBJ PANES (CONS (create PANE
+                                                      PWINDOW _ WINDOW)))
+                  (SETTOBJ TEXTOBJ CARET (create TEDITCARET
+                                                TCCARETDS _ (WINDOWPROP WINDOW 'DSP)
+                                                TCFORCEUP _ T))
+                  (CL:UNLESS [AND (EQ WINDOW (\TEDIT.PRIMARYW TEXTOBJ))
+                                  (EQ TEXTOBJ (WINDOWPROP WINDOW 'TEXTOBJ]
+                         (\TEDIT.WINDOW.SETUP WINDOW TEXTOBJ TSTREAM PROPS))
+                  (\TEDIT.MARK.LINES.DIRTY TEXTOBJ 1 -1)
+                  (TEDIT.UPDATE.SCREEN TEXTOBJ)
+                  (SETTOBJ TEXTOBJ \DIRTY NIL)
+                  (SETTOBJ TEXTOBJ TXTREADONLY (LISTGET PROPS 'READONLY))
+                  (TEDIT.NORMALIZECARET TEXTOBJ)
+                  (\TEXTSETFILEPTR TSTREAM FILEPTR)
+           elseif (LISTGET PROPS 'PROMPTWINDOW)
+             then 
+                  (* ;; "There is no window for the session, but he has passed in a promptwindow to use, install it in the textobj")
 
-             (SETTOBJ TEXTOBJ PROMPTWINDOW (LISTGET PROPS 'PROMPTWINDOW])
+                  (SETTOBJ TEXTOBJ PROMPTWINDOW (LISTGET PROPS 'PROMPTWINDOW])
 
 (\TEDIT.OPENTEXTFILE
-  [LAMBDA (TEXT PROPS)                                       (* ; "Edited 30-Jul-2023 23:03 by rmk")
+  [LAMBDA (TEXT PROPS)                                       (* ; "Edited  5-Sep-2023 23:42 by rmk")
+                                                             (* ; "Edited 30-Jul-2023 23:03 by rmk")
                                                              (* ; "Edited 28-Jul-2023 11:36 by rmk")
 
-    (* ;; "Finds the file %"intended%" by a user who is calling TEDIT.  If no extension, prefers TEDIT/TXT files.  A file name ending in just a dot forces the null extension")
+    (* ;; "Finds the file %"intended%" by a user who is calling TEDIT.  If no extension, prefers TEDIT/TXT files.  A file name ending in just a dot forces the null extension.  Returns NIL")
 
-    (if (AND TEXT (OR (LITATOM TEXT)
-                      (STRINGP TEXT)
-                      (CL:PATHNAMEP TEXT)))
-        then                                                 (* ; "rmk: Strings are now file names")
-             (CL:UNLESS (OR (CL:PATHNAMEP TEXT)
-                            (FILENAMEFIELD.STRING TEXT 'EXTENSION))
-
-                 (* ;; "FOO. has the empty extension, FOO has no extension.  So FOO. goes for FOO, FOO would prefer FOO.TEDIT")
-
-                 (SETQ TEXT (OR (FINDFILE-WITH-EXTENSIONS TEXT NIL '(TEDIT TED TXT TEXT NIL))
-                                TEXT)))
-             [OPENSTREAM TEXT 'INPUT 'OLD `((TYPE TEXT)
-                                            (FORMAT ,(LISTGET PROPS 'FORMAT]
-      else TEXT])
+    (LET (FILE)
+         (CL:WHEN TEXT
+             (if (OR (LITATOM TEXT)
+                     (STRINGP TEXT)
+                     (CL:PATHNAMEP TEXT))
+                 then                                        (* ; "String detects empty extension")
+                      [SETQ FILE (CL:IF (OR (CL:PATHNAMEP TEXT)
+                                            (FILENAMEFIELD.STRING TEXT 'EXTENSION))
+                                     (FINDFILE TEXT T)
+                                     (FINDFILE-WITH-EXTENSIONS TEXT NIL
+                                            '(TEDIT TED TXT TEXT NIL)))]
+                      (CL:WHEN FILE
+                          [OPENSTREAM FILE 'INPUT 'OLD `((TYPE TEXT)
+                                                         (FORMAT ,(LISTGET PROPS 'FORMAT])
+               elseif (\GETSTREAM TEXT 'INPUT T)
+               else TEXT))])
 
 (OPENTEXTSTREAM.DEFAULTLOOKS
   [LAMBDA (TEXTOBJ PROPS)                                    (* ; "Edited  3-Aug-2023 23:02 by rmk")
@@ -1404,11 +1523,12 @@
     (fetch (TEXTOBJ TXTFILE) of (TEXTOBJ TEXTOBJ])
 
 (\TEDIT.REOPEN.STREAM
-  [LAMBDA (TSTREAM PIECESTREAM)                              (* ; "Edited 15-Sep-2022 22:56 by rmk")
+  [LAMBDA (TSTREAM PIECESTREAM)                              (* ; "Edited  8-Sep-2023 00:23 by rmk")
+                                                             (* ; "Edited 15-Sep-2022 22:56 by rmk")
                                                              (* ; "Edited 11-Jun-99 15:12 by rmk:")
                                                              (* ; "Edited 15-Apr-93 15:53 by jds")
 
-    (* ;; "Re-open the backing file stream, and propogate the change thru the entire piece table.  Also, if TXTFILE is set to the closed stream, fill it in as well.  If there is a reopen operation that simply smashes the existing stream-datum, we wouldn't have to do the sweep.")
+    (* ;; "Re-open a backing file stream, and propogate the change thru the entire piece table.  Also, if TXTFILE is set to the closed stream, fill it in as well.  If there is a reopen operation that simply smashes the existing stream-datum, we wouldn't have to do the sweep.")
 
     (LET ([NEWSTREAM (OPENSTREAM PIECESTREAM 'INPUT NIL `((TYPE TEXT)
                                                           (FORMAT ,(STREAMPROP PIECESTREAM 
@@ -1417,15 +1537,15 @@
 
          (* ;; "Run thru the pieces, correcting any that used this stream to use the new one:")
 
-         (for PC _ (\FIRSTPIECE TEXTOBJ) by (NEXTPIECE PC) while PC when (EQ (PCONTENTS PC)
-                                                                             PIECESTREAM)
-            do (replace (PIECE PCONTENTS) of PC with NEWSTREAM))
+         (for PC inpieces (\FIRSTPIECE TEXTOBJ) when (EQ (PCONTENTS PC)
+                                                         PIECESTREAM)
+            do (FSETPC PC PCONTENTS NEWSTREAM))
 
          (* ;; "Check the TXTFILE, and if it uses the closed stream, fix it as well:")
 
-         (CL:WHEN (EQ (fetch (TEXTOBJ TXTFILE) of TEXTOBJ)
+         (CL:WHEN (EQ (GETTOBJ TEXTOBJ TXTFILE)
                       PIECESTREAM)
-             (replace (TEXTOBJ TXTFILE) of TEXTOBJ with NEWSTREAM))
+                (SETTOBJ TEXTOBJ TXTFILE NEWSTREAM))
 
          (* ;; "Return the new value for the stream:")
 
@@ -1564,21 +1684,22 @@
 (DEFINEQ
 
 (\TEXTCLOSEF
-  [LAMBDA (TSTREAM)                                          (* ; "Edited 26-Oct-2022 11:17 by rmk")
+  [LAMBDA (TSTREAM)                                          (* ; "Edited 28-Aug-2023 13:12 by rmk")
+                                                             (* ; "Edited 26-Oct-2022 11:17 by rmk")
                                                              (* ; "Edited 22-Aug-2022 14:18 by rmk")
                                                              (* ; "Edited  8-Aug-2022 14:56 by rmk")
                                                              (* ; "Edited 15-Apr-93 16:43 by jds")
                                                              (* ; 
                                                              "Close the files underlying a stream")
     (LET ((TEXTOBJ (TEXTOBJ TSTREAM)))
-         (for (PC _ (\FIRSTPIECE TEXTOBJ)) by (NEXTPIECE PC) while PC
-            when (AND (MEMB (PTYPE PC)
-                            FILE.PTYPES)
-                      (PCONTENTS PC)) do (CLOSEF? (PCONTENTS PC)))
+         (for PC inpieces (\FIRSTPIECE TEXTOBJ) when (AND (MEMB (PTYPE PC)
+                                                                FILE.PTYPES)
+                                                          (PCONTENTS PC))
+            do (CLOSEF? (PCONTENTS PC)))
 
          (* ;; "And close the REAL file as well, in case we'd made a local cache.")
 
-         (CLOSEF? (fetch (TEXTOBJ TXTFILE) of TEXTOBJ])
+         (CLOSEF? (GETTOBJ TEXTOBJ TXTFILE])
 
 (\TEXTDSPFONT
   [LAMBDA (STREAM NEWFONT)                                   (* ; "Edited  8-Sep-2022 14:16 by rmk")
@@ -1851,6 +1972,24 @@
                                 THLEN _ NCHARSCHANGED
                                 THDELETEDPIECES _ SELPIECES)))])])
 
+(\INSERTSELPIECES
+  [LAMBDA (SELPIECES TEXTOBJ CH#)                            (* ; "Edited 29-Aug-2023 11:01 by rmk")
+                                                             (* ; "Edited  2-Jul-2023 16:35 by rmk")
+                                                             (* ; "Edited  3-Jun-2023 20:53 by rmk")
+                                                             (* ; "Edited 21-May-2023 21:00 by rmk")
+
+    (* ;; "")
+
+    (* ;; " ")
+
+    (* ;; "Inserts pieces in  SELPIECES into TEXTOBJ starting at CH#.  This assumes that these pieces are already properly copied, if need be, and they are initially linked from SFIRST to SPLAST.")
+
+    (LET ((NEXTPC (\ALIGNEDPIECE CH# TEXTOBJ)))
+         (\INSERTPIECES (fetch (SELPIECES SPFIRST) of SELPIECES)
+                NEXTPC TEXTOBJ)
+         (\TEDIT.DIFFUSE.PARALOOKS (PREVPIECE NEXTPC)
+                NEXTPC])
+
 (\SETUPGETCH
   [LAMBDA (CH# TEXTOBJ)                                      (* ; "Edited 22-Aug-2022 13:04 by rmk")
                                                              (* ; "Edited 10-Aug-2022 17:20 by rmk")
@@ -2114,62 +2253,40 @@
 (DEFINEQ
 
 (\DELETEPIECES
-  [LAMBDA (SELPIECES TEXTOBJ)                                (* ; "Edited  8-Jun-2023 23:12 by rmk")
+  [LAMBDA (SELPIECES TEXTOBJ)                                (* ; "Edited  5-Sep-2023 22:32 by rmk")
+                                                             (* ; "Edited  8-Jun-2023 23:12 by rmk")
                                                              (* ; "Edited  3-Jun-2023 22:44 by rmk")
                                                              (* ; "Edited 30-May-2023 08:57 by rmk")
                                                              (* ; "Edited 20-Apr-93 19:06 by jds")
 
-    (* ;; "Removes all pieces in SELPIECES from TEXTOBJ. The chain is disconnected from the tree but is kept intact so the whole chain can still be recovered by following the NEXTPIECE links from the first piece (for history/undo). ")
+    (* ;; "As the PC is deleted from the tree on each iteration, the original previous PREV piece is linked to PC's next, and the next PREVPIECE is linked to PREV so that the tree and the links are uninterruptably consistent.")
 
-    (* ;; "Returns NIL if an object objected, otherwise T.")
+    (* ;; "PREV is NIL if SPFIRST=\FIRSTPIECE; in that case the tree itself manages the connection.  If SPLAST is the final actual piece (its NEXTPIECE is NIL), then LASTPIECE's PREVPIECE will be updated.")
 
     (* ;; " Since the pieces are not unlinked on the fly, the tree may be invalid until all the pieces are gone.")
+
+    (* ;; "This may not be entirely safe against an interrupt, which only matters on the call from \INSERTSELPIECES (otherwise the data isn't yet visible).  Although the tree is consistent  with the remaining pieces after each deletion, the fact that we keep the SELPIECE links intact means that the remaining pieces point to pieces that are no longer in the tree.  We could do a little more work to collect the incrementally chain the deleted pieces together, one by one, as they are deleted--in the end they would all be out of the tree, and the deletion chain would have been reconnected.  Alternatively, we can make the whole loop be uninterruptable. ")
 
     (BTVALIDATE '\DELETEPIECES 'BEFORE TEXTOBJ)
     (for PC PREV NEXT first (SETQ PREV (PREVPIECE (fetch (SELPIECES SPFIRST) of SELPIECES))) 
                                                              (* ; "For incremental chain-update")
                             (SETQ NEXT (OR (NEXTPIECE (fetch (SELPIECES SPLAST) of SELPIECES))
-                                           (ffetch (TEXTOBJ LASTPIECE) of TEXTOBJ))) inselpieces
-                                                                                     SELPIECES
+                                           (FGETTOBJ TEXTOBJ LASTPIECE))) inselpieces SELPIECES
        do (UNINTERRUPTABLY
               (\DELETETREE PC (ffetch (PIECE PTREENODE) of PC)
                      TEXTOBJ)
 
-              (* ;; "This piece is gone but its links are still there. To keep the tree valid, we incrementally splice it out.")
+              (* ;; "This piece is gone but its links are still there. To keep the tree valid at each point, we incrementally splice it out.")
 
-              (freplace (PIECE NEXTPIECE) of PREV with (NEXTPIECE PC))
-              (freplace (PIECE PREVPIECE) of NEXT with PREV)
+              (CL:WHEN PREV                                  (* ; "Not at the very beginning")
+                  (FSETPC PREV NEXTPIECE (NEXTPIECE PC)))
+              (FSETPC NEXT PREVPIECE PREV)
               (\UPDATEPCNODES PC (IMINUS (PLEN PC))
-                     TEXTOBJ)) finally (CL:WHEN PREV
-                                           (replace (PIECE PREVPIECE) of (fetch (SELPIECES SPFIRST)
-                                                                            of SELPIECES)
-                                              with NIL))
-                                     (replace (PIECE NEXTPIECE) of (fetch (SELPIECES SPLAST)
-                                                                      of SELPIECES) with NIL))
+                     TEXTOBJ)) finally (FSETPC (fetch (SELPIECES SPFIRST) of SELPIECES)
+                                              PREVPIECE NIL) (* ; "Disconnect the SELPIECE chain")
+                                     (FSETPC (fetch (SELPIECES SPLAST) of SELPIECES)
+                                            NEXTPIECE NIL))
     (BTVALIDATE '\DELETEPIECES 'AFTER TEXTOBJ])
-
-(\INSERTPIECES
-  [LAMBDA (SELPIECES TEXTOBJ CH#)                            (* ; "Edited  2-Jul-2023 16:35 by rmk")
-                                                             (* ; "Edited  3-Jun-2023 20:53 by rmk")
-                                                             (* ; "Edited 21-May-2023 21:00 by rmk")
-
-    (* ;; "")
-
-    (* ;; " ")
-
-    (* ;; "Inserts pieces in  SELPIECES into TEXTOBJ starting at CH#.  This assumes that these pieces are already properly copied, if need be, and they are initially linked from SFIRST to SPLAST. So the chain in TEXTOBJ would be correct if we simply link SPFIRST to the preceding piece and SPLAST to the following piece.  But then we would have to make a separate pass to install the new pieces in the b-tree.")
-
-    (replace (TEXTOBJ \DIRTY) of TEXTOBJ with T)
-    (for (PC _ (fetch (SELPIECES SPFIRST) of SELPIECES))
-         (LASTPC _ (fetch (SELPIECES SPLAST) of SELPIECES))
-         (POSTINSERTPC _ (\ALIGNEDPIECE CH# TEXTOBJ))
-         NEXTPC PREINSERTPC by (SETQ PC NEXTPC) first (SETQ PREINSERTPC (PREVPIECE POSTINSERTPC)) 
-                                                             (* ; "Hold it for looks diffusion")
-       while PC do (SETQ NEXTPC (NEXTPIECE PC))              (* ; "\INSERTPIECE smashes the next")
-                   (\INSERTPIECE PC POSTINSERTPC TEXTOBJ) repeatuntil (EQ PC LASTPC)
-       finally (\TEDIT.DIFFUSE.PARALOOKS PREINSERTPC (CL:UNLESS (EQ POSTINSERTPC (\LASTPIECE TEXTOBJ)
-                                                                    )
-                                                            POSTINSERTPC])
 
 (\ALIGNEDPIECE
   [LAMBDA (CHNO TEXTOBJ)                                     (* ; "Edited 29-May-2023 23:48 by rmk")
@@ -2355,7 +2472,8 @@
                                          (CADDR FORMTAIL])
 
 (GETTEXTPROP
-  [LAMBDA (TEXTOBJ PROP)                                     (* ; "Edited 10-Jul-2023 21:15 by rmk")
+  [LAMBDA (TEXTOBJ PROP)                                     (* ; "Edited  1-Sep-2023 13:30 by rmk")
+                                                             (* ; "Edited 10-Jul-2023 21:15 by rmk")
                                                              (* ; "Edited 30-Oct-2022 23:21 by rmk")
                                                              (* ; "Edited  9-Feb-89 11:20 by jds")
 
@@ -2363,44 +2481,57 @@
 
     (SELECTQ PROP
         ((READONLY READ-ONLY) 
-             (FETCH (TEXTOBJ TXTREADONLY) OF TEXTOBJ))
+             (GETTOBJ TEXTOBJ TXTREADONLY))
         ((BEING-EDITED ACTIVE) 
-             (FETCH (TEXTOBJ TXTEDITING) OF TEXTOBJ))
+             (GETTOBJ TEXTOBJ TXTEDITING))
         ((NO-NS-CHARS NONSCHARS NO-NSCHARS) 
-             (FETCH (TEXTOBJ TXTNONSCHARS) OF TEXTOBJ))
-        (READTABLE (fetch (TEXTOBJ TXTRTBL) of TEXTOBJ))
-        (BOUNDTABLE (fetch (TEXTOBJ TXTWTBL) of TEXTOBJ))
-        (DON'TUPDATE (fetch (TEXTOBJ TXTDON'TUPDATE) of TEXTOBJ))
-        (LISTGET (fetch (TEXTOBJ EDITPROPS) of TEXTOBJ)
+             (GETTOBJ TEXTOBJ TXTNONSCHARS))
+        (READTABLE (GETTOBJ TEXTOBJ TXTRTBL))
+        (BOUNDTABLE (GETTOBJ TEXTOBJ TXTWTBL))
+        (DON'TUPDATE (GETTOBJ TEXTOBJ TXTDON'TUPDATE))
+        (LISTGET (GETTOBJ TEXTOBJ EDITPROPS)
                PROP])
 
 (PUTTEXTPROP
-  [LAMBDA (TEXTOBJ PROP VALUE)                               (* ; "Edited 10-Jul-2023 21:14 by rmk")
+  [LAMBDA (TEXTOBJ PROP VALUE)                               (* ; "Edited  1-Sep-2023 13:28 by rmk")
+                                                             (* ; "Edited 10-Jul-2023 21:14 by rmk")
                                                              (* ; "Edited 30-Oct-2022 23:21 by rmk")
                                                              (* ; "Edited  9-Feb-89 11:19 by jds")
                                                              (* ; 
                                                              "put a value on prop list for a textobj")
+    (SETQ TEXTOBJ (TEXTOBJ TEXTOBJ))
     (SELECTQ PROP
         ((READONLY READ-ONLY) 
-             (PROG1 (fetch (TEXTOBJ TXTREADONLY) of TEXTOBJ)
-                 (replace (TEXTOBJ TXTREADONLY) of TEXTOBJ with VALUE)))
+             (PROG1 (FGETTOBJ TEXTOBJ TXTREADONLY)
+                    (FSETTOBJ TEXTOBJ TXTREADONLY VALUE)))
         ((BEING-EDITED ACTIVE) 
-             (PROG1 (fetch (TEXTOBJ TXTEDITING) of TEXTOBJ)
-                 (replace (TEXTOBJ TXTEDITING) of TEXTOBJ with VALUE)))
+             (PROG1 (FGETTOBJ TEXTOBJ TXTEDITING)
+                    (FSETTOBJ TEXTOBJ TXTEDITING VALUE)))
         ((NO-NS-CHARS NONSCHARS NO-NSCHARS) 
-             (PROG1 (fetch (TEXTOBJ TXTNONSCHARS) of TEXTOBJ)
-                 (replace (TEXTOBJ TXTNONSCHARS) of TEXTOBJ with VALUE)))
-        (READTABLE (replace (TEXTOBJ TXTRTBL) of TEXTOBJ with VALUE))
-        (BOUNDTABLE (replace (TEXTOBJ TXTWTBL) of TEXTOBJ with VALUE))
-        (DON'TUPDATE (replace (TEXTOBJ TXTDON'TUPDATE) of TEXTOBJ with VALUE))
-        (COND
-           ((fetch (TEXTOBJ EDITPROPS) of (TEXTOBJ TEXTOBJ))
-            (PROG1 (LISTGET (ffetch (TEXTOBJ EDITPROPS) of (TEXTOBJ TEXTOBJ))
-                          PROP)
-                (LISTPUT (ffetch (TEXTOBJ EDITPROPS) of (TEXTOBJ TEXTOBJ))
-                       PROP VALUE)))
-           (T (freplace (TEXTOBJ EDITPROPS) of (TEXTOBJ TEXTOBJ) with (LIST PROP VALUE))
-              NIL])
+             (PROG1 (FGETTOBJ TEXTOBJ TXTNONSCHARS TEXTOBJ)
+                    (FSETTOBJ TEXTOBJ TXTNONSCHARS VALUE)))
+        (READTABLE (PROG1 (FGETTOBJ TEXTOBJ TXTRTBL)
+                          (FSETTOBJ TEXTOBJ TXTRTBL VALUE)))
+        (TERMTABLE (FSETTOBJ TEXTOBJ TXTTERMSA (fetch (TERMTABLEP TERMSA) of VALUE))
+
+                   (* ;; "Also put the table in EDITPROPS, so the get returns it")
+
+                   (CL:UNLESS (FGETTOBJ TEXTOBJ EDITPROPS)
+                       (FSETTOBJ TEXTOBJ EDITPROPS (LIST 'TERMTABLE NIL)))
+                   (PROG1 (LISTGET (FSETTOBJ TEXTOBJ EDITPROPS)
+                                 'TERMTABLE)
+                       (LISTPUT (FSETTOBJ TEXTOBJ EDITPROPS)
+                              'TERMTABLE VALUE)))
+        (BOUNDTABLE (PROG1 (FGETTOBJ TEXTOBJ TXTWTBL)
+                           (FSETTOBJ TEXTOBJ TXTWTBL VALUE)))
+        (DON'TUPDATE (PROG1 (FGETTOBJ TEXTOBJ TXTDON'TUPDATE)
+                            (FSETTOBJ TEXTOBJ TXTDON'TUPDATE VALUE)))
+        (PROGN (CL:UNLESS (FGETTOBJ TEXTOBJ EDITPROPS)
+                   (FSETTOBJ TEXTOBJ EDITPROPS (LIST PROP NIL)))
+               (PROG1 (LISTGET (FGETTOBJ TEXTOBJ EDITPROPS)
+                             PROP)
+                   (LISTPUT (FGETTOBJ TEXTOBJ EDITPROPS)
+                          VALUE))])
 
 (TEXTPROP
   [LAMBDA X                                                  (* ; "Edited  9-Feb-89 11:20 by jds")
@@ -2439,24 +2570,26 @@
 (ADDTOVAR LAMA TEXTPROP)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (35050 56783 (\TEXTBIN 35060 . 42073) (\TEXTBIN.NEXT.PIECE 42075 . 42610) (\TEXTPEEKBIN 
-42612 . 46949) (\TEXTBACKFILEPTR 46951 . 50738) (\TEXTOUTCHARFN 50740 . 51031) (\INSTALL.FILEBUFFER 
-51033 . 54724) (\TEXTBOUT 54726 . 56781)) (61061 66064 (\TEXTSTREAM.OUTCHARFN 61071 . 62715) (
-\TEXTSTREAM.INCCCODEFN 62717 . 63400) (\TEXTSTREAM.PEEKCCODEFN 63402 . 63687) (\TEXTSTREAM.BACKCCODEFN
- 63689 . 64167) (\TEXTSTREAM.OUTCHARFN 64169 . 65813) (\TEXTSTREAM.FORMATBYTESTREAM 65815 . 66062)) (
-66111 92751 (COPYTEXTSTREAM 66121 . 68979) (OPENTEXTSTREAM 68981 . 78041) (OPENTEXTSTREAM.WINDOW 78043
- . 79326) (\TEDIT.OPENTEXTFILE 79328 . 80522) (OPENTEXTSTREAM.DEFAULTLOOKS 80524 . 82095) (
-REOPENTEXTSTREAM 82097 . 82523) (TEDIT.STREAMCHANGEDP 82525 . 82827) (TEXTSTREAMP 82829 . 83243) (
-TXTFILE 83245 . 83714) (\TEDIT.REOPEN.STREAM 83716 . 85382) (\TEXTINIT 85384 . 91432) (\TEXTTTYBOUT 
-91434 . 92749)) (92805 104812 (\TEXTCLOSEF 92815 . 93870) (\TEXTDSPFONT 93872 . 94954) (\TEXTEOFP 
-94956 . 96411) (\TEXTGETEOFPTR 96413 . 96627) (\TEXTGETFILEPTR 96629 . 98800) (\TEXTOPENF 98802 . 
-99628) (\TEXTSETEOF 99630 . 100145) (\TEXTSETFILEPTR 100147 . 101761) (\TEXTDSPXPOSITION 101763 . 
-102623) (\TEXTDSPYPOSITION 102625 . 103172) (\TEXTLEFTMARGIN 103174 . 103596) (\TEXTRIGHTMARGIN 103598
- . 104346) (\TEXTDSPCHARWIDTH 104348 . 104525) (\TEXTDSPSTRINGWIDTH 104527 . 104706) (\TEXTDSPLINEFEED
- 104708 . 104810)) (106196 125428 (\TEDIT.DELETE.SELPIECES 106206 . 109208) (\SETUPGETCH 109210 . 
-110470) (\INSERTCH 110472 . 116580) (\INSERTCH.HISTORY 116582 . 119662) (\INSERTEOL 119664 . 121624) (
-\INSERTCH.INSERTION 121626 . 124466) (\INSERTCH.EXTEND 124468 . 125426)) (125480 136711 (\DELETEPIECES
- 125490 . 127991) (\INSERTPIECES 127993 . 129710) (\ALIGNEDPIECE 129712 . 131470) (\INSTALL.PIECE 
-131472 . 136709)) (137894 144011 (CGETTEXTPROP 137904 . 138364) (CTEXTPROP 138366 . 140714) (
-GETTEXTPROP 140716 . 141738) (PUTTEXTPROP 141740 . 143545) (TEXTPROP 143547 . 144009)))))
+  (FILEMAP (NIL (35596 58945 (\TEXTBIN 35606 . 43115) (\TEXTBIN.NEXT.PIECE 43117 . 43652) (\TEXTPEEKBIN 
+43654 . 48307) (\TEXTBACKFILEPTR 48309 . 52385) (\TEXTOUTCHARFN 52387 . 52678) (\INSTALL.FILEBUFFER 
+52680 . 56886) (\TEXTBOUT 56888 . 58943)) (63278 68281 (\TEXTSTREAM.OUTCHARFN 63288 . 64932) (
+\TEXTSTREAM.INCCCODEFN 64934 . 65617) (\TEXTSTREAM.PEEKCCODEFN 65619 . 65904) (\TEXTSTREAM.BACKCCODEFN
+ 65906 . 66384) (\TEXTSTREAM.OUTCHARFN 66386 . 68030) (\TEXTSTREAM.FORMATBYTESTREAM 68032 . 68279)) (
+68328 98749 (COPYTEXTSTREAM 68338 . 71196) (OPENTEXTSTREAM 71198 . 72796) (OPENTEXTSTREAM.GET.FILE 
+72798 . 75168) (OPENTEXTSTREAM.PIECES 75170 . 76610) (OPENTEXTSTREAM.REUSE 76612 . 80473) (
+OPENTEXTSTREAM.SETUP.SEL 80475 . 83014) (OPENTEXTSTREAM.WINDOW 83016 . 85088) (\TEDIT.OPENTEXTFILE 
+85090 . 86532) (OPENTEXTSTREAM.DEFAULTLOOKS 86534 . 88105) (REOPENTEXTSTREAM 88107 . 88533) (
+TEDIT.STREAMCHANGEDP 88535 . 88837) (TEXTSTREAMP 88839 . 89253) (TXTFILE 89255 . 89724) (
+\TEDIT.REOPEN.STREAM 89726 . 91380) (\TEXTINIT 91382 . 97430) (\TEXTTTYBOUT 97432 . 98747)) (98803 
+110946 (\TEXTCLOSEF 98813 . 100004) (\TEXTDSPFONT 100006 . 101088) (\TEXTEOFP 101090 . 102545) (
+\TEXTGETEOFPTR 102547 . 102761) (\TEXTGETFILEPTR 102763 . 104934) (\TEXTOPENF 104936 . 105762) (
+\TEXTSETEOF 105764 . 106279) (\TEXTSETFILEPTR 106281 . 107895) (\TEXTDSPXPOSITION 107897 . 108757) (
+\TEXTDSPYPOSITION 108759 . 109306) (\TEXTLEFTMARGIN 109308 . 109730) (\TEXTRIGHTMARGIN 109732 . 110480
+) (\TEXTDSPCHARWIDTH 110482 . 110659) (\TEXTDSPSTRINGWIDTH 110661 . 110840) (\TEXTDSPLINEFEED 110842
+ . 110944)) (112330 132500 (\TEDIT.DELETE.SELPIECES 112340 . 115342) (\INSERTSELPIECES 115344 . 116280
+) (\SETUPGETCH 116282 . 117542) (\INSERTCH 117544 . 123652) (\INSERTCH.HISTORY 123654 . 126734) (
+\INSERTEOL 126736 . 128696) (\INSERTCH.INSERTION 128698 . 131538) (\INSERTCH.EXTEND 131540 . 132498)) 
+(132552 142753 (\DELETEPIECES 132562 . 135752) (\ALIGNEDPIECE 135754 . 137512) (\INSTALL.PIECE 137514
+ . 142751)) (143936 150559 (CGETTEXTPROP 143946 . 144406) (CTEXTPROP 144408 . 146756) (GETTEXTPROP 
+146758 . 147756) (PUTTEXTPROP 147758 . 150093) (TEXTPROP 150095 . 150557)))))
 STOP

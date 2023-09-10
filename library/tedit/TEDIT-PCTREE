@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "27-Jul-2023 08:39:49" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;171 53957  
+(FILECREATED " 8-Sep-2023 16:32:44" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;179 56002  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \SPLITPIECE)
+      :CHANGES-TO (FNS \MAKEPCTB)
 
-      :PREVIOUS-DATE "12-Jun-2023 10:27:04" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;169)
+      :PREVIOUS-DATE " 5-Sep-2023 22:37:38" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;177)
 
 
 (PRETTYCOMPRINT TEDIT-PCTREECOMS)
@@ -32,7 +32,7 @@
         (INITRECORDS BTREENODE SELPIECES)
         (FNS \MAKEPCTB \UPDATEPCNODES \FIRSTPIECE \DELETETREE \INSERTTREE \LASTPIECE \MATCHPCS 
              \PCTOCH \CHTOPC \TEDIT.SET-TOTLEN \SELPIECES \MAKE.VACANT.BTREESLOT \LINKNEWPIECE 
-             \UNLINKPIECE \SPLITPIECE \INSERTPIECE)
+             \UNLINKPIECE \SPLITPIECE \INSERTPIECE \INSERTPIECES)
         (COMS                                                (* ; "Debugging ")
               (FNS BTVALIDATE BTVALIDATE.PRINT CHECK-BTREE CHECK-BTREE1 BTFAIL)
               (INITVARS (BTVALIDATETAGS 'DONT))
@@ -234,7 +234,9 @@
 (DEFINEQ
 
 (\MAKEPCTB
-  [LAMBDA (TEXTOBJ FIRSTPIECE)                               (* ; "Edited 26-Apr-2023 14:03 by rmk")
+  [LAMBDA (TEXTOBJ)                                          (* ; "Edited  8-Sep-2023 16:30 by rmk")
+                                                             (* ; "Edited  1-Sep-2023 14:05 by rmk")
+                                                             (* ; "Edited 26-Apr-2023 14:03 by rmk")
                                                              (* ; "Edited 12-Apr-2023 19:37 by rmk")
                                                              (* ; "Edited  3-Oct-2022 20:40 by rmk")
                                                              (* ; "Edited 15-Apr-93 15:48 by jds")
@@ -242,20 +244,19 @@
                        COUNT _ 1
                        TOTLEN _ 0
                        DLEN1 _ 0)))
-         (replace (BTREENODE DOWN1) of PCTB with (create PIECE
-                                                        PTYPE _ THINSTRING.PTYPE
-                                                        PCONTENTS _ (CONCAT "")
-                                                        PLEN _ 0
-                                                        PTREENODE _ PCTB
-                                                        PLOOKS _ (fetch (TEXTOBJ DEFAULTCHARLOOKS)
-                                                                    of TEXTOBJ)
-                                                        PPARALOOKS _ (fetch (TEXTOBJ FMTSPEC)
-                                                                        of TEXTOBJ)))
-         (freplace (TEXTOBJ LASTPIECE) of TEXTOBJ with (ffetch (BTREENODE DOWN1) of PCTB))
-         (freplace (TEXTOBJ PCTB) of TEXTOBJ with PCTB)
-         (CL:WHEN FIRSTPIECE                                 (* ; 
-                                                          "Convenient for a few initialization calls")
-             (\INSERTPIECE FIRSTPIECE NIL TEXTOBJ))
+         (replace (BTREENODE DOWN1) of PCTB
+            with (create PIECE
+                        PTYPE _ THINSTRING.PTYPE
+                        PCONTENTS _ (CONCAT "")
+                        PBYTESPERCHAR _ 1
+                        PLEN _ 0
+                        PTREENODE _ PCTB
+                        PLOOKS _ (GETTOBJ TEXTOBJ DEFAULTCHARLOOKS)
+                        PPARALOOKS _ (GETTOBJ TEXTOBJ FMTSPEC)))
+         (FSETTOBJ TEXTOBJ LASTPIECE (ffetch (BTREENODE DOWN1) of PCTB))
+         (FSETTOBJ TEXTOBJ HINTPC NIL)
+         (FSETTOBJ TEXTOBJ PCTB PCTB)
+         (FSETTOBJ TEXTOBJ TEXTLEN 0)
          PCTB])
 
 (\UPDATEPCNODES
@@ -745,6 +746,41 @@
                TEXTOBJ))
     (BTVALIDATE '\INSERTPIECE 'END TEXTOBJ)
     NEWPC])
+
+(\INSERTPIECES
+  [LAMBDA (PIECES NEXTPC TEXTOBJ)                            (* ; "Edited  5-Sep-2023 21:36 by rmk")
+                                                             (* ; "Edited 29-Aug-2023 11:09 by rmk")
+                                                             (* ; "Edited  2-Jul-2023 16:35 by rmk")
+                                                             (* ; "Edited  3-Jun-2023 20:53 by rmk")
+                                                             (* ; "Edited 21-May-2023 21:00 by rmk")
+
+    (* ;; "Inserts the piece-chain PIECES in front of existing NEXTPC in TEXTOBJ.  This assumes that the piece-chain is already linked, that the nextpiece of the final piece in the chain is initially NIL but ends up pointing to NEXTPC (or NIL if it is the last piece).")
+
+    (CL:WHEN PIECES
+        (SETTOBJ TEXTOBJ \DIRTY T)
+        (CL:UNLESS NEXTPC
+            (SETQ NEXTPC (FGETTOBJ TEXTOBJ LASTPIECE)))
+        (for PC (PREVPC _ (PREVPIECE NEXTPC)) inpieces PIECES
+           do 
+              (* ;; "This is a variant of \INSERTPIECE specialized for filling in an empty TEXTOBJ from a piece chain.  Insertion always happens before NEXTPC,  and the chain-links are not smashed. ")
+
+              (* ;; "This may not be safe against interruptions, for a TEXTOBJ that the user already has (called from \INSERTSELPIECES).  The pieces that are inserted into the tree have links do so far uninserted pieces.  Maybe the loop itself should be uninterruptable.")
+
+              (UNINTERRUPTABLY
+                  (\INSURE.VACANT.BTREESLOT (FGETPC NEXTPC PTREENODE)
+                         TEXTOBJ)
+                  (\INSERTTREE PC NEXTPC)
+                  (\UPDATEPCNODES PC (PLEN PC)
+                         TEXTOBJ)) finally 
+
+                                         (* ;; "PC is the final piece of the chain")
+
+                                         (CL:UNLESS (EQ NEXTPC (FGETTOBJ TEXTOBJ LASTPIECE))
+                                                (FSETPC PC NEXTPIECE NEXTPC))
+                                         (FSETPC NEXTPC PREVPIECE PC)
+                                         (CL:WHEN PREVPC (FSETPC PREVPC NEXTPIECE PIECES))
+                                         (FSETPC PIECES PREVPIECE PREVPC)))
+    PIECES])
 )
 
 
@@ -935,11 +971,11 @@
 (GLOBALVARS BTVALIDATETAGS)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (9418 41984 (\MAKEPCTB 9428 . 11195) (\UPDATEPCNODES 11197 . 13364) (\FIRSTPIECE 13366
- . 14377) (\DELETETREE 14379 . 17174) (\INSERTTREE 17176 . 19624) (\LASTPIECE 19626 . 20713) (
-\MATCHPCS 20715 . 21584) (\PCTOCH 21586 . 22844) (\CHTOPC 22846 . 25914) (\TEDIT.SET-TOTLEN 25916 . 
-26456) (\SELPIECES 26458 . 28777) (\MAKE.VACANT.BTREESLOT 28779 . 34926) (\LINKNEWPIECE 34928 . 36415)
- (\UNLINKPIECE 36417 . 36890) (\SPLITPIECE 36892 . 40621) (\INSERTPIECE 40623 . 41982)) (42012 53834 (
-BTVALIDATE 42022 . 43472) (BTVALIDATE.PRINT 43474 . 44832) (CHECK-BTREE 44834 . 48304) (CHECK-BTREE1 
-48306 . 53557) (BTFAIL 53559 . 53832)))))
+  (FILEMAP (NIL (9430 44029 (\MAKEPCTB 9440 . 10896) (\UPDATEPCNODES 10898 . 13065) (\FIRSTPIECE 13067
+ . 14078) (\DELETETREE 14080 . 16875) (\INSERTTREE 16877 . 19325) (\LASTPIECE 19327 . 20414) (
+\MATCHPCS 20416 . 21285) (\PCTOCH 21287 . 22545) (\CHTOPC 22547 . 25615) (\TEDIT.SET-TOTLEN 25617 . 
+26157) (\SELPIECES 26159 . 28478) (\MAKE.VACANT.BTREESLOT 28480 . 34627) (\LINKNEWPIECE 34629 . 36116)
+ (\UNLINKPIECE 36118 . 36591) (\SPLITPIECE 36593 . 40322) (\INSERTPIECE 40324 . 41683) (\INSERTPIECES 
+41685 . 44027)) (44057 55879 (BTVALIDATE 44067 . 45517) (BTVALIDATE.PRINT 45519 . 46877) (CHECK-BTREE 
+46879 . 50349) (CHECK-BTREE1 50351 . 55602) (BTFAIL 55604 . 55877)))))
 STOP

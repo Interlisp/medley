@@ -158,7 +158,7 @@ do
         if [[ $# -eq 1 || "$2" = "--" ]];
         then
           sysout_flag=true
-          sysout_arg="$2"
+          sysout_arg="$1"
         else
           err_msg=(
             "ERROR: sysout argument must be last argument"

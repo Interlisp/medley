@@ -1,25 +1,33 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
 if [ ! -x run-medley ] ; then
     echo must run from MEDLEYDIR ;
     exit 1 ;
 fi
-scr="-sc 1024x768 -g 1042x790"
 
-touch tmp/loadup.timestamp
+. scripts/loadup-setup.sh
 
-./run-medley $scr -loadup "$MEDLEYDIR/sources/LOADUP-FULL.CM" "$MEDLEYDIR/tmp/lisp.sysout"
+loadup_start
 
-if [ tmp/full.sysout -nt tmp/loadup.timestamp ]; then
-    
-    echo ---- made ----
-    ls -l tmp/full.*
-    echo --------------
+cat >"${cmfile}" <<"EOF"
+"
 
-else
-    echo XXXXX FAILURE XXXXX
-    ls -l tmp/full.*
-    exit 1
-fi
+(PROGN
+  (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR))(QUOTE /LOADUP-FULL.LCOM)))
+  (IL:LOADUP-FULL (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.dribble))))
+  (IL:HARDRESET)
+)
+SHH
+(PROGN
+  (IL:ENDLOADUP)
+  (IL:MAKESYS (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.sysout))) :FULL))
+  (IL:LOGOUT T)
+)
+
+"
+EOF
+
+./run-medley ${scr} -loadup "${cmfile}" "${LOADUP_WORKDIR}/lisp.sysout"
+
+loadup_finish "full.sysout" "full.*"
+

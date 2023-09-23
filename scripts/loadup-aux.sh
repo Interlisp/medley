@@ -1,28 +1,31 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
 if [ ! -f run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi
 
-mkdir -p tmp
-touch tmp/loadup.timestamp
+. scripts/loadup-setup.sh
 
-scr="-sc 1024x768 -g 1042x790"
+loadup_start
 
-echo '" (IL:MEDLEY-INIT-VARS)(IL:LOAD(QUOTE MEDLEY-UTILS))(IL:MAKE-EXPORTS-ALL)(IL:MAKE-WHEREIS-HASH)(IL:LOGOUT T)"' > tmp/loadup-aux.cm
-./run-medley $scr -loadup "$MEDLEYDIR"/tmp/loadup-aux.cm tmp/full.sysout
+cat >"${cmfile}" <<"EOF"
+"
+(PROG
+  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
+  (IL:MEDLEY-INIT-VARS)
+  (IL:LOAD(QUOTE MEDLEY-UTILS))
+  (IL:MAKE-EXPORTS-ALL (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.all))))
+  (IL:MAKE-WHEREIS-HASH
+    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.dribble)))
+    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash-tmp)))
+    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash)))
+  )
+  (IL:LOGOUT T)
+)
+"
+EOF
 
-if [ tmp/whereis.hash -nt tmp/loadup.timestamp ]; then
-    
-    echo ---- made ----
-    ls -l tmp/whereis.hash tmp/exports.all
-    echo --------------
+./run-medley ${scr} -loadup "${cmfile}" "${LOADUP_WORKDIR}"/full.sysout
 
-else
-    echo XXXXX FAILURE XXXXX
-    ls -l tmp/whereis.hash tmp/exports.all
-    exit 1
-fi
+loadup_finish "whereis.hash" "whereis.hash" "exports.all"

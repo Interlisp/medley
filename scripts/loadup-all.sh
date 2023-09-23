@@ -1,11 +1,11 @@
 #!/bin/sh
 
-export MEDLEYDIR=`pwd`
-
 if [ ! -x run-medley ] ; then
     echo run from MEDLEYDIR
     exit 1
 fi
+
+. scripts/loadup-setup.sh
 
 if [ "$1" = "-apps" ]; then
     apps="./scripts/loadup-apps-from-full.sh"
@@ -21,7 +21,13 @@ fi
     ./scripts/loadup-aux.sh && \
     ./scripts/copy-all.sh $1
 
-echo "**** DONE ****"
+if [ $? -eq 0 ];
+then
+  echo "+++++ loadup-all.sh: SUCCESS +++++"
+else
+  echo "----- loadup-all.sh: FAILURE -----"
+fi
+
 
 
 

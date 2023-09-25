@@ -140,7 +140,12 @@ do
         shift
         ;;
       -z | --man)
-        /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
+        if [ ${darwin} = true ];
+        then
+          /usr/bin/man "${MEDLEYDIR}/docs/man-page/medley.1.gz"
+        else
+          /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
+        fi
         exit 0
         ;;
       --windows)
@@ -155,16 +160,20 @@ do
         usage "${err_msg[@]}"
         ;;
       *)
-        if [[ $# -eq 1 || "$2" = "--" ]];
+        # if matched the empty string, just ignore
+        if [ -n "$1" ];
         then
-          sysout_flag=true
-          sysout_arg="$2"
-        else
-          err_msg=(
-            "ERROR: sysout argument must be last argument"
-            "or last argument before the \"--\" flag"
-          )
-          usage "${err_msg[@]}"
+          if [[ $# -eq 1 || "$2" = "--" ]];
+          then
+            sysout_flag=true
+            sysout_arg="$1"
+          else
+            err_msg=(
+              "ERROR: sysout argument must be last argument"
+              "or last argument before the \"--\" flag"
+            )
+            usage "${err_msg[@]}"
+          fi
         fi
         ;;
     esac

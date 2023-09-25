@@ -1,34 +1,36 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "14-Jul-2022 16:55:51" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-PAGE.;1 119264 
+(FILECREATED "22-Sep-2023 20:38:53" {WMEDLEY}<library>tedit>TEDIT-PAGE.;110 109598 
 
-      :PREVIOUS-DATE "14-Jul-2022 12:45:04" 
-{DSK}<users>kaplan>local>medley3.5>working-medley>library>tedit>TEDIT-PAGE.;4)
+      :EDIT-BY rmk
+
+      :CHANGES-TO (FNS TEDIT.FORMATPAGE TEDIT.FORMAT.HARDCOPY)
+
+      :PREVIOUS-DATE " 9-Sep-2023 22:18:49" {WMEDLEY}<library>tedit>TEDIT-PAGE.;109)
 
 
 (PRETTYCOMPRINT TEDIT-PAGECOMS)
 
 (RPAQQ TEDIT-PAGECOMS
-       ((FILES TEDIT-DCL)
-        (DECLARE%: EVAL@COMPILE DONTCOPY (CONSTANTS (\SCRATCHLEN 64))
-               (FILES (LOADCOMP)
-                      TEDIT-DCL))
-        (COMS 
+       ((DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS TEDITPAPERSIZE)
+               (EXPORT (RECORDS PAGEFORMATTINGSTATE PAGEREGION))
+               (MACROS \FIRST-COLUMN-START)
+               
+               (* ;; "Replaces CL:MULTIPLE-VALUE-SETQ, to avoid CL:VALUES")
+
+               (MACROS TEDIT.SETQS TEDIT.VALUES))
+        (INITRECORDS PAGEREGION)
+        [COMS 
               (* ;; "Page-numbering font specification/default")
 
               
               (* ;; "(Must come before calls to TEDIT.SINGLE.PAGEFORMAT below.)")
 
               (GLOBALVARS TEDIT.DEFAULT.FOLIO.LOOKS)
-              [INITVARS (TEDIT.DEFAULT.FOLIO.LOOKS (\TEDIT.PARSE.CHARLOOKS.LIST '(FAMILY MODERN SIZE
+              (INITVARS (TEDIT.DEFAULT.FOLIO.LOOKS (\TEDIT.PARSE.CHARLOOKS.LIST '(FAMILY MODERN SIZE
                                                                                         10 WEIGHT 
                                                                                         MEDIUM SLOPE
                                                                                         REGULAR]
-              
-              (* ;; "If non-nil, TEdit appends the start & end fileptrs for pages here.")
-
-              (INITVARS (*TEDIT-PAGE-BREAKS* NIL)))
         [VARS (MAXPAGE# 65535)
               (MINPAGE# 1)
               (TEDIT.PAGE.FRAMES (LIST (TEDIT.SINGLE.PAGEFORMAT NIL NIL NIL NIL NIL 72 72 72 72 NIL 1
@@ -39,8 +41,7 @@
         (COMS 
               (* ;; "Creation, GET, and PUT of page frames.")
 
-              (FNS TEDIT.GET.PAGEFRAMES TEDIT.PARSE.PAGEFRAMES TEDIT.PUT.PAGEFRAMES 
-                   TEDIT.UNPARSE.PAGEFRAMES))
+              (FNS TEDIT.PARSE.PAGEFRAMES TEDIT.PUT.PAGEFRAMES TEDIT.UNPARSE.PAGEFRAMES))
         (COMS 
               (* ;; "For setting up page layouts")
 
@@ -54,7 +55,7 @@
               
               (* ;; "Aux function to capture page headings during line formatting:")
 
-              (FNS TEDIT.HARDCOPY.PAGEHEADING)
+              (FNS TEDIT.HARDCOPY.PAGEHEADINGS)
               
               (* ;; 
          " Aux function to handle end-of-column processing (paragraph keep, widow elimination, etc):")
@@ -84,21 +85,118 @@
               (* ;; "Foot note support")
 
               (FNS \TEDIT.FORMAT.FOOTNOTE))))
-
-(FILESLOAD TEDIT-DCL)
 (DECLARE%: EVAL@COMPILE DONTCOPY 
+(DECLARE%: EVAL@COMPILE
+
+(RECORD TEDITPAPERSIZE (
+                        (* ;; 
+                        "Describe the size of a sheet of paper (in points), given a paper size-name.")
+
+                        TPSNAME                              (* ; "The name, as a litatom")
+                        TPSWIDTH                             (* ; "Paper width, in points")
+                        TPSHEIGHT                            (* ; "Paper Height, in points")
+                        TPSLANDSCAPE?                        (* ; 
+                                         "T if we have to rotate things to print them on this paper.")
+                        ))
+)
+
+(* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE
+
+(RECORD PAGEFORMATTINGSTATE (
+                             (* ;; "Contains the state for a TEdit page-formatting job.")
+
+                             PAGE#                           (* ; 
+                                                           "The current page number.  Counted from 1")
+                             FIRSTPAGE
+
+                             (* ;; "T if the current page is the 'first page' .  Is set initially, and can be set again by the user at will.  Gets reset after each page image is printed.")
+
+                             MINPAGE#                        (* ; 
+                                                 "The page # of the first page to be printed, or NIL")
+                             MAXPAGE#                        (* ; 
+                                                  "The page # of the last page to be printed, or NIL")
+                             STATE                           (* ; "One of FORMATTING or SEARCHING.")
+                             REQUIREDREGIONTYPE              (* ; "If STATE is SEARCHING, the kind of box we're looking for.  If STATE is :SEARCHING-FOR-EQUIVALENT-PAGE, this is the page count for the matching page.")
+                             MAINSTREAM                      (* ; 
+                                                             "The principal textobj/stream source")
+                             CHNO                            (* ; "Our position in that stream")
+                             PRESSREGION                     (* ; "The press code's REGION info.")
+                             PAGEHEADINGS                    (* ; 
+                                  "The list of current values to be printed, indexed by heading type")
+                             PAGE#GENERATOR                  (* ; "List of page numbers;  later, maybe, a function to generate page numbers.  Used to fill in PAGE#TEXT, below")
+                             PAGE#TEXT                       (* ; "If special page numbers are in use, this is the place to take them from.  PAGE# is still used for recto/verso decisions &c")
+                             PAGEISRECTO                     (* ; 
+                                               "T if this is a recto page, NIL if it's a VERSO page.")
+                             PAGEFOOTNOTELINES               (* ; 
+                         "A list of extant footnote lines that should appear at the next opportunity")
+                             PAGEFLOATINGTOPLINES            (* ; 
+                           "A list of lines that should float to the top of the next available place")
+                             PAGECOUNT                       (* ; 
+                                                        "The number of pages we've formatted so far.")
+                             PAGELINECACHE                   (* ; "A cache for pre-created LINEDESCRIPTOR/THISLINE sets, to avoid the overhead of re-allocating them all the time")
+                             NEWPAGELAYOUT                   (* ; "If we switch page layouts in mid-document, this is where the new layout gets cached until we get started again.")
+                             )
+                            PAGECOUNT _ 0)
+
+(DATATYPE PAGEREGION (
+                      (* ;; 
+            "Describe a part of a page for page formatting.  Can be made into compound descriptions.")
+
+                      REGIONFILLMETHOD                       (* ; 
+                                    "What kind of a region this is -- TEXT, FOLIO, PAGEHEADING, etc.")
+                      REGIONSPEC                             (* ; 
+                                                             "The page-relative region this occupies")
+                      REGIONLOCALINFO                        (* ; "A PLIST for local information")
+                      (REGIONPARENT FULLXPOINTER)            (* ; 
+                                                        "The parent node for this box, for sub-boxes")
+                      REGIONSUBBOXES                         (* ; "The sub-regions of this region")
+                      REGIONTYPE                             (* ; "A user-settable region type")
+                      ))
+)
+
+(/DECLAREDATATYPE 'PAGEREGION '(POINTER POINTER POINTER FULLXPOINTER POINTER POINTER)
+       '((PAGEREGION 0 POINTER)
+         (PAGEREGION 2 POINTER)
+         (PAGEREGION 4 POINTER)
+         (PAGEREGION 6 FULLXPOINTER)
+         (PAGEREGION 8 POINTER)
+         (PAGEREGION 10 POINTER))
+       '12)
+
+(* "END EXPORTED DEFINITIONS")
+
+
 (DECLARE%: EVAL@COMPILE 
 
-(RPAQQ \SCRATCHLEN 64)
-
-
-(CONSTANTS (\SCRATCHLEN 64))
+(PUTPROPS \FIRST-COLUMN-START MACRO [(LINE FMTSPEC)
+                                     (AND (FGETLD LINE 1STLN)
+                                          (EQ (FFETCH (FMTSPEC FMTCOLUMN) OF FMTSPEC)
+                                              'FIRST])
 )
 
+(DECLARE%: EVAL@COMPILE 
 
-(FILESLOAD (LOADCOMP)
-       TEDIT-DCL)
+(PUTPROPS TEDIT.SETQS MACRO
+          [ARGS `(LET (($$VALUES ,(CADR ARGS))
+                       ($$PRIMARY))
+                      (DECLARE (LOCALVARS $$VALUES))
+                      (PROG1 (CAR $$VALUES)
+                          ,@[FOR V IN (CAR ARGS) collect (COND
+                                                            [V `(SETQ ,V (POP $$VALUES]
+                                                            (T `(SETQ $$VALUES (CDR $$VALUES])])
+
+(PUTPROPS TEDIT.VALUES MACRO [ARGS `(LIST ,@ARGS])
 )
+)
+
+(/DECLAREDATATYPE 'PAGEREGION '(POINTER POINTER POINTER FULLXPOINTER POINTER POINTER)
+       '((PAGEREGION 0 POINTER)
+         (PAGEREGION 2 POINTER)
+         (PAGEREGION 4 POINTER)
+         (PAGEREGION 6 FULLXPOINTER)
+         (PAGEREGION 8 POINTER)
+         (PAGEREGION 10 POINTER))
+       '12)
 
 
 
@@ -117,13 +215,6 @@
 (RPAQ? TEDIT.DEFAULT.FOLIO.LOOKS (\TEDIT.PARSE.CHARLOOKS.LIST '(FAMILY MODERN SIZE 10 WEIGHT MEDIUM 
                                                                       SLOPE REGULAR)))
 
-
-
-(* ;; "If non-nil, TEdit appends the start & end fileptrs for pages here.")
-
-
-(RPAQ? *TEDIT-PAGE-BREAKS* NIL)
-
 (RPAQQ MAXPAGE# 65535)
 
 (RPAQQ MINPAGE# 1)
@@ -139,43 +230,42 @@
 
 (DEFINEQ
 
-(TEDIT.GET.PAGEFRAMES
-  [LAMBDA (FILE)                                             (* jds "18-Jun-84 02:55")
-                                                             (* Read a bunch of page frames from 
-                                                             the file, and return it.)
-    (TEDIT.PARSE.PAGEFRAMES (READ FILE])
-
 (TEDIT.PARSE.PAGEFRAMES
-  [LAMBDA (PAGELIST PARENT)                                  (* jds "31-Jul-84 15:30")
+  [LAMBDA (PAGELIST PARENT)                                  (* ; "Edited  4-Oct-2022 16:57 by rmk")
+                                                             (* jds "31-Jul-84 15:30")
+
+    (* ;; "Internalize an external pageframe.")
+
+    (* ;; "Exactly like TEDIT.PARSE.PAGEFRAMES1, except this doesn't scale the region specs")
                                                              (* Take an external pageframe and 
                                                              internalize it.)
-    (PROG (FRAMETYPE PAGEFRAME)
-          (COND
-             ((type? PAGEREGION PAGELIST)
-              (RETURN PAGELIST))
-             ((NEQ 'LIST (SETQ FRAMETYPE (pop PAGELIST)))
-              [SETQ PAGEFRAME (create PAGEREGION
-                                     REGIONFILLMETHOD _ FRAMETYPE
-                                     REGIONTYPE _ (pop PAGELIST)
-                                     REGIONLOCALINFO _ (pop PAGELIST)
-                                     REGIONSPEC _ (OR (pop PAGELIST)
-                                                      (LIST 0 0 0 0]
-              (replace REGIONSUBBOXES of PAGEFRAME with (for ALIST in (pop PAGELIST)
-                                                           collect (TEDIT.PARSE.PAGEFRAMES ALIST 
-                                                                          PAGEFRAME)))
-              (RETURN PAGEFRAME))
-             (T (RETURN (for FRAMESPEC in (CAR PAGELIST) collect (TEDIT.PARSE.PAGEFRAMES FRAMESPEC 
-                                                                        NIL])
+    (LET (FRAMETYPE PAGEFRAME)
+         (COND
+            ((type? PAGEREGION PAGELIST)
+             PAGELIST)
+            ((NEQ 'LIST (SETQ FRAMETYPE (pop PAGELIST)))
+             [SETQ PAGEFRAME (create PAGEREGION
+                                    REGIONFILLMETHOD _ FRAMETYPE
+                                    REGIONTYPE _ (pop PAGELIST)
+                                    REGIONLOCALINFO _ (pop PAGELIST)
+                                    REGIONSPEC _ (OR (pop PAGELIST)
+                                                     (LIST 0 0 0 0]
+             (replace REGIONSUBBOXES of PAGEFRAME with (for ALIST in (pop PAGELIST)
+                                                          collect (TEDIT.PARSE.PAGEFRAMES ALIST 
+                                                                         PAGEFRAME)))
+             PAGEFRAME)
+            (T (for FRAMESPEC in (CAR PAGELIST) collect (TEDIT.PARSE.PAGEFRAMES FRAMESPEC NIL])
 
 (TEDIT.PUT.PAGEFRAMES
-  [LAMBDA (FILE PAGEFRAMES)                                  (* jds "13-Nov-86 20:10")
-                                                             (* Put out a description of a set of 
-                                                             page-layout frames)
-    (PROG (STR)
-          (\DWOUT FILE 0)                                    (* The length of this run of looks)
-          (\SMALLPOUT FILE \PieceDescriptorPAGEFRAME)        (* Mark this as a set of page frames)
-          (PRIN2 (TEDIT.UNPARSE.PAGEFRAMES PAGEFRAMES)
-                 FILE *TEDIT-FILE-READTABLE*])
+  [LAMBDA (LOOKSFILE PAGEFRAMES)                             (* ; "Edited 26-Aug-2023 08:29 by rmk")
+                                                             (* jds "13-Nov-86 20:10")
+
+    (* ;; "Put out a description of a set of page-layout frames")
+
+    (\DWOUT LOOKSFILE 0)                                     (* ; "The length of this run of looks")
+    (\SMALLPOUT LOOKSFILE \PieceDescriptorPAGEFRAME)         (* ; "Mark this as a set of page frames")
+    (PRIN4 (TEDIT.UNPARSE.PAGEFRAMES PAGEFRAMES)
+           LOOKSFILE *TEDIT-FILE-READTABLE*])
 
 (TEDIT.UNPARSE.PAGEFRAMES
   [LAMBDA (PAGEFRAME)                                        (* jds "31-Jul-84 15:00")
@@ -201,7 +291,8 @@
 
 (TEDIT.SINGLE.PAGEFORMAT
   [LAMBDA (PAGE#S? PX PY PFONT PQUAD LEFT RIGHT TOP BOTTOM COLS COLWIDTH INTERCOL HEADINGS UNITS 
-                 PAGEPROPS PAPERSIZE)                        (* ; "Edited 17-Dec-87 14:54 by jds")
+                 PAGEPROPS PAPERSIZE)                        (* ; "Edited 10-Aug-2023 08:14 by rmk")
+                                                             (* ; "Edited 17-Dec-87 14:54 by jds")
 
     (* ;; "Given a description in the args, create a pageframe to describe a single kind of page.")
 
@@ -237,12 +328,12 @@
                (\ILLEGAL.ARG UNITS))                         (* ; "We need to do the scaling.")
            (SETQ PX (SCALEPAGEXUNITS PX SCALEFACTOR PAPERSIZE LANDSCAPE?))
            (SETQ PY (SCALEPAGEYUNITS PY SCALEFACTOR PAPERSIZE LANDSCAPE?))
-           [AND LEFT (SETQ LEFT (FIXR (FTIMES LEFT SCALEFACTOR]
-           [AND RIGHT (SETQ RIGHT (FIXR (FTIMES RIGHT SCALEFACTOR]
-           [AND TOP (SETQ TOP (FIXR (FTIMES TOP SCALEFACTOR]
-           [AND BOTTOM (SETQ BOTTOM (FIXR (FTIMES BOTTOM SCALEFACTOR]
-           [AND COLWIDTH (SETQ COLWIDTH (FIXR (FTIMES COLWIDTH SCALEFACTOR]
-           [AND INTERCOL (SETQ INTERCOL (FIXR (FTIMES INTERCOL SCALEFACTOR]
+           (AND LEFT (SETQ LEFT (HCSCALE SCALEFACTOR LEFT)))
+           (AND RIGHT (SETQ RIGHT (HCSCALE SCALEFACTOR RIGHT)))
+           (AND TOP (SETQ TOP (HCSCALE SCALEFACTOR TOP)))
+           (AND BOTTOM (SETQ BOTTOM (HCSCALE SCALEFACTOR BOTTOM)))
+           (AND COLWIDTH (SETQ COLWIDTH (HCSCALE SCALEFACTOR COLWIDTH)))
+           (AND INTERCOL (SETQ INTERCOL (HCSCALE SCALEFACTOR INTERCOL)))
            [SETQ HEADINGS (for HDG in HEADINGS collect (LIST (CAR HDG)
                                                              (SCALEPAGEXUNITS (CADR HDG)
                                                                     SCALEFACTOR PAPERSIZE LANDSCAPE?)
@@ -395,7 +486,12 @@
 (DEFINEQ
 
 (TEDIT.FORMAT.HARDCOPY
-  [LAMBDA (STREAM FILE DONTSEND BREAKPAGETITLE SERVER PRINTOPTIONS IMAGETYPE FIRSTPG# STARTPG ENDPG)
+  [LAMBDA (STREAM FILE DONTSEND BREAKPAGETITLE SERVER PRINTOPTIONS IMAGETYPE FIRSTPG# STARTPG ENDPG)
+                                                             (* ; "Edited 22-Sep-2023 20:38 by rmk")
+                                                             (* ; "Edited  4-Jul-2023 11:16 by rmk")
+                                                             (* ; "Edited  9-Oct-2022 20:33 by rmk")
+                                                             (* ; "Edited  3-Oct-2022 15:55 by rmk")
+                                                             (* ; "Edited  2-Oct-2022 00:00 by rmk")
                                                              (* ; 
                                                         "Edited 25-May-93 13:06 by sybalsky:mv:envos")
 
@@ -408,11 +504,8 @@
     (RESETLST
         (PROG ((TEXTOBJ (TEXTOBJ STREAM))
                (TEXTSTREAM (TEXTSTREAM STREAM))
-               (FORCENEXTPAGE NIL)
                [FORMATTINGSTATE (create PAGEFORMATTINGSTATE
-                                       PAGE# _ (COND
-                                                  ((NUMBERP FIRSTPG#))
-                                                  (T NIL))
+                                       PAGE# _ (FIXP FIRSTPG#)
                                        FIRSTPAGE _ T
                                        STATE _ FIRSTPG#
                                        MINPAGE# _ STARTPG
@@ -423,8 +516,12 @@
                                                              (CDR FIRSTPG#))
                                        PAGE#TEXT _ (AND (LISTP FIRSTPG#)
                                                         (CAR FIRSTPG#]
-               TEXTLEN THISLINE LINE REGION LINES NCHNO PRSTREAM PAGEFRAMES SCRATCHFILE WASOPEN 
-               BEFOREFN AFTERFN)
+               TEXTLEN PRSTREAM PAGEFRAMES SCRATCHFILE BEFOREFN AFTERFN NPAGES WASOPEN)
+              (CL:WHEN (AND (SETQ BEFOREFN (GETTEXTPROP TEXTOBJ 'BEFOREHARDCOPYFN))
+                            (EQ 'DON'T (APPLY* BEFOREFN TEXTSTREAM TEXTOBJ)))
+                                                             (* ; 
+                                                 "Do pre-hardcopy processing as indicated, or refuse")
+                  (RETURN))
               (SETQ PAGEFRAMES (OR (fetch (TEXTOBJ TXTPAGEFRAMES) of TEXTOBJ)
                                    TEDIT.PAGE.FRAMES))
               [COND
@@ -433,7 +530,6 @@
                   (SETQ PAGEFRAMES (TEDIT.COMPOUND.PAGEFORMAT (CAR PAGEFRAMES)
                                           (CADR PAGEFRAMES)
                                           (CADDR PAGEFRAMES]
-              (SETQ THISLINE (fetch (TEXTOBJ THISLINE) of TEXTOBJ))
               (replace PRESSREGION of FORMATTINGSTATE with TEDIT.DEFAULTPAGEREGION)
                                                              (* ; 
                                                              "Print in the usual region on the page")
@@ -453,18 +549,9 @@
                                           "It's a real file, so use the file name on the break page.")
                                          (fetch (STREAM FULLNAME) of (fetch (TEXTOBJ TXTFILE)
                                                                         of TEXTOBJ]
-              (SETQ BEFOREFN (TEXTPROP TEXTOBJ 'BEFOREHARDCOPYFN))
-              [COND
-                 (BEFOREFN                                   (* ; 
-                                          "Let the guy do any pre-hardcopy processing he wants to do")
-                        (COND
-                           ((EQ 'DON'T (APPLY* BEFOREFN TEXTSTREAM TEXTOBJ))
-                                                             (* ; 
-                                                     "If it says not to do the hardcopy, then don't.")
-                            (RETURN]
               [SETQ SCRATCHFILE (OR FILE (PRINTER.SCRATCH.FILE (TEXTSTREAM STREAM]
               (RESETLST
-                  (SETQ AFTERFN (TEXTPROP TEXTOBJ 'AFTERHARDCOPYFN))
+                  (SETQ AFTERFN (GETTEXTPROP TEXTOBJ 'AFTERHARDCOPYFN))
                   (AND AFTERFN (RESETSAVE NIL (LIST AFTERFN TEXTSTREAM TEXTOBJ)))
                                                              (* ; 
                                            "Set up to do the user's cleanup on the way out, as well.")
@@ -483,14 +570,11 @@
                                                                   (CAR (PRINTERPROP (PRINTERTYPE
                                                                                      SERVER)
                                                                               'CANPRINT]
-                                                   (LIST 'FONT (FONTCREATE 'GACHA 10)
+                                                   (LIST 'FONT (FONTCREATE 'TERMINAL 10)
                                                          'BREAKPAGEFILENAME BREAKPAGETITLE)))
                                '(AND RESETSTATE (DELFILE (CLOSEF? OLDVALUE]
                                                              (* ; 
                                                 "So we close and delete the file in case of trouble.")
-                  (STREAMPROP PRSTREAM 'FORMATTINGSTATE FORMATTINGSTATE)
-                                                             (* ; 
-                                "So that subsidiary people can find out the state of the formatting.")
 
                   (* ;; "The right margin must be big enough to prevent line wrap on landscaped 14 inch paper, with Postscript's scaling of .01-point increments. (~ 101,000).  Thiss will cause a performance hit.  Sigh.  JDS 9/5/89")
 
@@ -502,12 +586,12 @@
 
                         (* ;; "Format pages according to the existing layout:")
 
-                        (for REGION inside PAGEFRAMES do (TEDIT.FORMATBOX TEXTOBJ PRSTREAM
-                                                                (fetch CHNO of FORMATTINGSTATE)
-                                                                REGION FORMATTINGSTATE IMAGETYPE))
-                        (COND
-                           ((EQ (fetch (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE)
-                                :NEW-PAGE-LAYOUT)
+                        (for PAGEREGION inside PAGEFRAMES do (TEDIT.FORMATBOX TEXTOBJ PRSTREAM
+                                                                    (fetch CHNO of FORMATTINGSTATE)
+                                                                    PAGEREGION FORMATTINGSTATE 
+                                                                    IMAGETYPE))
+                        (CL:WHEN (EQ (fetch (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE)
+                                     :NEW-PAGE-LAYOUT)
 
                             (* ;; "New page layout got specified.  Prepare to re-enter the formatting code and skip to the equivalent page in the new format.")
 
@@ -524,284 +608,256 @@
                             (replace (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE with 
                                                                        :SEARCHING-FOR-EQUIVALENT-PAGE
                                    )
-                            (COND
-                               ((LISTP PAGEFRAMES)           (* ; 
+                            (CL:WHEN (LISTP PAGEFRAMES)      (* ; 
                                                   "If it's a list, pack it into a real set of specs.")
                                 (SETQ PAGEFRAMES (TEDIT.COMPOUND.PAGEFORMAT (CAR PAGEFRAMES)
                                                         (CADR PAGEFRAMES)
-                                                        (CADDR PAGEFRAMES]
-                  [COND
-                     ((NOT WASOPEN)                          (* ; 
+                                                        (CADDR PAGEFRAMES)))))]
+                  (CL:UNLESS WASOPEN                         (* ; 
                                             "Only if we created the image stream should we close it.")
                       (SETQ PRSTREAM (CLOSEF PRSTREAM))
-                      (OR DONTSEND (SEND.FILE.TO.PRINTER PRSTREAM SERVER (APPEND PRINTOPTIONS
+                      [OR DONTSEND (SEND.FILE.TO.PRINTER PRSTREAM SERVER (APPEND PRINTOPTIONS
                                                                                 (LIST 'DOCUMENT.NAME
-                                                                                      BREAKPAGETITLE]
+                                                                                      BREAKPAGETITLE])
                   (OR FILE (DELFILE SCRATCHFILE)))
-              (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT (MKSTRING (fetch (PAGEFORMATTINGSTATE PAGECOUNT)
-                                                              of FORMATTINGSTATE))
-                                                "pg done."))
-              (RETURN (fetch (PAGEFORMATTINGSTATE PAGECOUNT) of FORMATTINGSTATE))))])
+              (SETQ NPAGES (fetch (PAGEFORMATTINGSTATE PAGECOUNT) of FORMATTINGSTATE))
+              (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT NPAGES " page" (CL:IF (EQ 1 NPAGES)
+                                                                    ""
+                                                                    "s")
+                                                " printed"
+                                                (CL:IF (EQ FILE SCRATCHFILE)
+                                                    (CONCAT " to " (FULLNAME FILE))
+                                                    ""))
+                     T)
+              (RETURN NPAGES)))])
 
 (TEDIT.FORMATBOX
-  [LAMBDA (TEXTOBJ PRSTREAM CH# REGION FORMATTINGSTATE SERVERTYPE)
+  [LAMBDA (TEXTOBJ PRSTREAM CH# PAGEREGION FORMATTINGSTATE)  (* ; "Edited 28-Jun-2023 15:54 by rmk")
+                                                             (* ; "Edited 22-Jun-2023 21:50 by rmk")
+                                                             (* ; "Edited  9-May-2023 18:22 by rmk")
+                                                             (* ; "Edited 15-Feb-2023 23:47 by rmk")
                                                              (* ; "Edited 30-May-91 12:51 by jds")
 
     (* ;; "Grab text from the TEXTOBJ, starting with CH#, and use it to fill REGION on a page.  Return a list of line descriptors which, taken together, fill the region.")
 
-    (PROG ((REGIONSPEC (fetch (PAGEREGION REGIONSPEC) of REGION))
-           CHNO NCHNO LINES LAST-CHNO SUBREGIONSPEC)
-          (SETQ LINES NIL)
-          (SELECTQ (fetch REGIONFILLMETHOD of REGION)
-              (TEXT                                          (* ; 
-                                  "A normal text region.  Fill it with text formatted the usual way.")
-                    [COND
-                       ((\TEDIT.FORMAT.FOUNDBOX? REGION FORMATTINGSTATE)
-                                                             (* ; 
-                                               "Only format if we're not looking for something else.")
-                        (CL:MULTIPLE-VALUE-SETQ (LINES NIL LAST-CHNO)
-                               (TEDIT.FORMATTEXTBOX TEXTOBJ PRSTREAM CH# REGION FORMATTINGSTATE])
-              (FOLIO                                         (* ; 
-                                           "A Page Number.  Fill it in according to the instructions")
-                     [COND
-                        ((\TEDIT.FORMAT.FOUNDBOX? REGION FORMATTINGSTATE)
-                                                             (* ; 
-                                               "Only format if we're not looking for something else.")
-                         (SETQ LINES (TEDIT.FORMATFOLIO TEXTOBJ PRSTREAM FORMATTINGSTATE REGION])
-              (HEADING                                       (* ; 
-                          "A Page heading.  Fill it in from a text source we saved for the occasion.")
-                       [COND
-                          ((\TEDIT.FORMAT.FOUNDBOX? REGION FORMATTINGSTATE)
-                                                             (* ; 
-                                               "Only format if we're not looking for something else.")
-                           (SETQ LINES (TEDIT.FORMATHEADING TEXTOBJ PRSTREAM FORMATTINGSTATE REGION])
-              (PAGE 
-                    (* ;; "This box is really a PAGE FRAME.  Fill it in and do whatever other processing is needful for end of page.")
+    (* ;; "This updates the CHNO field of the  PAGEFORMATTINGSTATE")
 
-                    (SETQ LINES NIL)                         (* ; 
-                                                 "This will send along its own lines to the printer.")
-                    (\TEDIT.FORMAT.FOUNDBOX? REGION FORMATTINGSTATE)
+    (LET ((REGION (fetch (PAGEREGION REGIONSPEC) of PAGEREGION))
+          CHNO LINES LAST-CHNO SUBREGIONSPEC)
+         (SELECTQ (fetch REGIONFILLMETHOD of PAGEREGION)
+             (TEXT                                           (* ; 
+                                  "A normal text region.  Fill it with text formatted the usual way.")
+                   (CL:WHEN (\TEDIT.FORMAT.FOUNDBOX? PAGEREGION FORMATTINGSTATE)
+                                                             (* ; 
+                                               "Only format if we're not looking for something else.")
+                       (TEDIT.SETQS (LINES NIL LAST-CHNO)
+                              (TEDIT.FORMATTEXTBOX TEXTOBJ PRSTREAM CH# PAGEREGION FORMATTINGSTATE))))
+             (FOLIO                                          (* ; 
+                                           "A Page Number.  Fill it in according to the instructions")
+                    (CL:WHEN (\TEDIT.FORMAT.FOUNDBOX? PAGEREGION FORMATTINGSTATE)
+                                                             (* ; 
+                                               "Only format if we're not looking for something else.")
+                        (SETQ LINES (TEDIT.FORMATFOLIO TEXTOBJ PRSTREAM FORMATTINGSTATE PAGEREGION))))
+             (HEADING                                        (* ; 
+                          "A Page heading.  Fill it in from a text source we saved for the occasion.")
+                      (CL:WHEN (\TEDIT.FORMAT.FOUNDBOX? PAGEREGION FORMATTINGSTATE)
+                                                             (* ; 
+                                               "Only format if we're not looking for something else.")
+                          (SETQ LINES (TEDIT.FORMATHEADING TEXTOBJ PRSTREAM FORMATTINGSTATE 
+                                             PAGEREGION))))
+             (PAGE 
+                   (* ;; "This box is really a PAGE FRAME, no lines here.  Fill it in and do whatever other processing is needful for end of page.")
+
+                   (\TEDIT.FORMAT.FOUNDBOX? PAGEREGION FORMATTINGSTATE)
                                                              (* ; 
                       "So that if this is the box he's looking for, we'll spot it and stop searching")
-                    (TEDIT.FORMATPAGE TEXTOBJ PRSTREAM CH# REGION FORMATTINGSTATE))
-              ((RECURSIVE SEQUENCE ALTERNATE SELECTION REPEAT) 
+                   (TEDIT.FORMATPAGE TEXTOBJ PRSTREAM CH# PAGEREGION FORMATTINGSTATE))
+             ((RECURSIVE SEQUENCE ALTERNATE SELECTION REPEAT) 
                                                              (* ; 
                                                     "This box is really a list of boxes.  Fill them.")
-                   (\TEDIT.FORMAT.FOUNDBOX? REGION FORMATTINGSTATE)
+                  (\TEDIT.FORMAT.FOUNDBOX? PAGEREGION FORMATTINGSTATE)
                                                              (* ; 
                       "So that if this is the box he's looking for, we'll spot it and stop searching")
-                   (SELECTQ (fetch REGIONFILLMETHOD of REGION)
-                       ((SEQUENCE RECURSIVE)                 (* ; 
+                  (SELECTQ (fetch REGIONFILLMETHOD of PAGEREGION)
+                      ((SEQUENCE RECURSIVE)                  (* ; 
                                                    "Just run thru filling in the sub-boxes in order.")
-                            (bind SUBREGIONSPEC for SUBREGION in (fetch (PAGEREGION REGIONSUBBOXES)
-                                                                    of REGION)
-                               while (AND (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE)
-                                                (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                                          (OR (NOT (fetch (PAGEFORMATTINGSTATE PAGE#) of 
+                           (bind SUBREGIONSPEC for SUBREGION in (fetch (PAGEREGION REGIONSUBBOXES)
+                                                                   of PAGEREGION)
+                              while (AND (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE)
+                                               (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
+                                         (OR (NOT (fetch (PAGEFORMATTINGSTATE PAGE#) of 
                                                                                       FORMATTINGSTATE
-                                                          ))
-                                              (NOT (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of 
+                                                         ))
+                                             (NOT (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of 
                                                                                       FORMATTINGSTATE
-                                                          ))
-                                              (ILEQ (fetch (PAGEFORMATTINGSTATE PAGE#) of 
-                                                                                      FORMATTINGSTATE
-                                                           )
-                                                    (fetch (PAGEFORMATTINGSTATE MAXPAGE#)
-                                                       of FORMATTINGSTATE)))
-                                          (NEQ (fetch (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE)
-                                               :NEW-PAGE-LAYOUT))
-                               do [SETQ SUBREGIONSPEC (create REGION
-                                                         using (fetch REGIONSPEC of SUBREGION)
-                                                               LEFT _
-                                                               (IPLUS (fetch (REGION LEFT)
-                                                                         of (fetch REGIONSPEC
-                                                                               of SUBREGION))
-                                                                      (fetch (REGION LEFT)
-                                                                         of REGIONSPEC))
-                                                               BOTTOM _
-                                                               (IPLUS (fetch (REGION BOTTOM)
-                                                                         of (fetch REGIONSPEC
-                                                                               of SUBREGION))
-                                                                      (fetch (REGION BOTTOM)
-                                                                         of REGIONSPEC]
-                                  (TEDIT.FORMATBOX TEXTOBJ PRSTREAM (fetch (PAGEFORMATTINGSTATE
-                                                                            CHNO) of FORMATTINGSTATE)
-                                         (create PAGEREGION using SUBREGION REGIONSPEC _ 
-                                                                  SUBREGIONSPEC)
-                                         FORMATTINGSTATE)))
-                       (ALTERNATE                            (* ; 
-                                                  "Run through the sub-boxes repeatedly in sequence.")
-                                  (while (AND (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO) of 
-                                                                                      FORMATTINGSTATE
-                                                           )
-                                                    (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                                              (NEQ (fetch (PAGEFORMATTINGSTATE STATE) of 
+                                                         ))
+                                             (ILEQ (fetch (PAGEFORMATTINGSTATE PAGE#) of 
                                                                                       FORMATTINGSTATE
                                                           )
-                                                   :NEW-PAGE-LAYOUT))
-                                     do (bind SUBREGIONSPEC for SUBREGION
-                                           in (fetch (PAGEREGION REGIONSUBBOXES) of REGION)
-                                           while (AND (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO)
-                                                               of FORMATTINGSTATE)
-                                                            (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                                                      (NEQ (fetch (PAGEFORMATTINGSTATE STATE)
+                                                   (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of 
+                                                                                      FORMATTINGSTATE
+                                                          )))
+                                         (NEQ (fetch (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE)
+                                              :NEW-PAGE-LAYOUT))
+                              do [SETQ SUBREGIONSPEC (create REGION
+                                                        using (fetch REGIONSPEC of SUBREGION)
+                                                              LEFT _
+                                                              (IPLUS (fetch (REGION LEFT)
+                                                                        of (fetch REGIONSPEC
+                                                                              of SUBREGION))
+                                                                     (fetch (REGION LEFT)
+                                                                        of REGION))
+                                                              BOTTOM _
+                                                              (IPLUS (fetch (REGION BOTTOM)
+                                                                        of (fetch REGIONSPEC
+                                                                              of SUBREGION))
+                                                                     (fetch (REGION BOTTOM)
+                                                                        of REGION]
+                                 (TEDIT.FORMATBOX TEXTOBJ PRSTREAM (fetch (PAGEFORMATTINGSTATE CHNO)
+                                                                      of FORMATTINGSTATE)
+                                        (create PAGEREGION using SUBREGION REGIONSPEC _ SUBREGIONSPEC
+                                               )
+                                        FORMATTINGSTATE)))
+                      (ALTERNATE                             (* ; 
+                                                  "Run through the sub-boxes repeatedly in sequence.")
+                                 (while (AND (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO) of 
+                                                                                      FORMATTINGSTATE
+                                                          )
+                                                   (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
+                                             (NEQ :NEW-PAGE-LAYOUT (fetch (PAGEFORMATTINGSTATE STATE)
+                                                                      of FORMATTINGSTATE)))
+                                    do (bind SUBREGIONSPEC for SUBREGION
+                                          in (fetch (PAGEREGION REGIONSUBBOXES) of PAGEREGION)
+                                          while (AND (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO)
                                                               of FORMATTINGSTATE)
-                                                           :NEW-PAGE-LAYOUT))
-                                           do [SETQ SUBREGIONSPEC
-                                               (create REGION
-                                                  using (fetch REGIONSPEC of SUBREGION)
-                                                        LEFT _ (IPLUS (fetch (REGION LEFT)
-                                                                         of (fetch REGIONSPEC
-                                                                               of SUBREGION))
-                                                                      (fetch (REGION LEFT)
-                                                                         of REGIONSPEC))
-                                                        BOTTOM _ (IPLUS (fetch (REGION BOTTOM)
-                                                                           of (fetch REGIONSPEC
-                                                                                 of SUBREGION))
-                                                                        (fetch (REGION BOTTOM)
-                                                                           of REGIONSPEC]
-                                              (TEDIT.FORMATBOX TEXTOBJ PRSTREAM (fetch (
+                                                           (TEXTLEN TEXTOBJ))
+                                                     (NEQ (fetch (PAGEFORMATTINGSTATE STATE)
+                                                             of FORMATTINGSTATE)
+                                                          :NEW-PAGE-LAYOUT))
+                                          do [SETQ SUBREGIONSPEC
+                                              (create REGION
+                                                 using (fetch REGIONSPEC of SUBREGION)
+                                                       LEFT _ (IPLUS (fetch (REGION LEFT)
+                                                                        of (fetch REGIONSPEC
+                                                                              of SUBREGION))
+                                                                     (fetch (REGION LEFT)
+                                                                        of REGION))
+                                                       BOTTOM _ (IPLUS (fetch (REGION BOTTOM)
+                                                                          of (fetch REGIONSPEC
+                                                                                of SUBREGION))
+                                                                       (fetch (REGION BOTTOM)
+                                                                          of REGION]
+                                             (TEDIT.FORMATBOX TEXTOBJ PRSTREAM (fetch (
                                                                                   PAGEFORMATTINGSTATE
-                                                                                        CHNO)
-                                                                                   of FORMATTINGSTATE
-                                                                                       )
-                                                     (create PAGEREGION using SUBREGION REGIONSPEC _
-                                                                              SUBREGIONSPEC)
-                                                     FORMATTINGSTATE))))
-                       (SELECTION                            (* ; 
+                                                                                       CHNO)
+                                                                                  of FORMATTINGSTATE)
+                                                    (create PAGEREGION using SUBREGION REGIONSPEC _ 
+                                                                             SUBREGIONSPEC)
+                                                    FORMATTINGSTATE))))
+                      (SELECTION                             (* ; 
                                                 "Do one or another box, depending on some criterion."))
-                       (SHOULDNT))                           (* ; 
+                      (SHOULDNT))                            (* ; 
                                                              "For now, draw a box around it, too.")
-                   )
-              NIL)
-          (for LINE in LINES when LINE do                    (* ; 
+                  )
+             NIL)
+         (for LINE in LINES when LINE do                     (* ; 
                                                             "Run thru the lines displaying them all.")
-                                          (BLOCK)
-                                          (COND
-                                             ((OR (NOT (fetch (PAGEFORMATTINGSTATE MINPAGE#)
-                                                          of FORMATTINGSTATE))
-                                                  (IGEQ (fetch (PAGEFORMATTINGSTATE PAGE#)
-                                                           of FORMATTINGSTATE)
-                                                        (fetch (PAGEFORMATTINGSTATE MINPAGE#)
-                                                           of FORMATTINGSTATE)))
+                                         (BLOCK)
+                                         (CL:WHEN (OR (NOT (fetch (PAGEFORMATTINGSTATE MINPAGE#)
+                                                              of FORMATTINGSTATE))
+                                                      (IGEQ (fetch (PAGEFORMATTINGSTATE PAGE#)
+                                                               of FORMATTINGSTATE)
+                                                            (fetch (PAGEFORMATTINGSTATE MINPAGE#)
+                                                               of FORMATTINGSTATE)))
                                                              (* ; 
                                     "We're beyond the min page number -- go ahead and print the line")
-                                              (\TEDIT.HARDCOPY.DISPLAYLINE (fetch (TEXTSTREAM TEXTOBJ
-                                                                                         )
-                                                                              of (fetch (
-                                                                                       LINEDESCRIPTOR
-                                                                                         LTEXTOBJ)
-                                                                                    of LINE))
-                                                     LINE
-                                                     (fetch (LINEDESCRIPTOR CACHE) of LINE)
-                                                     REGION PRSTREAM)))
-                                          [COND
-                                             ((EQ TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ)
-                                                             of (fetch (LINEDESCRIPTOR LTEXTOBJ)
-                                                                   of LINE)))
+                                             (\TEDIT.HARDCOPY.DISPLAYLINE (GETLD LINE LTEXTOBJ)
+                                                    LINE
+                                                    (SCALEREGION (DSPSCALE NIL PRSTREAM)
+                                                           REGION)
+                                                    PRSTREAM FORMATTINGSTATE))
+                                         (CL:WHEN (EQ TEXTOBJ (GETLD LINE LTEXTOBJ))
 
-                                              (* ;; 
+                                             (* ;; 
                         "This line refers back to the main text, so update the current-char pointer.")
 
-                                              (* ;; 
+                                             (* ;; 
                      "[NB that footnotes could cause the count to be non-monotonic; hence the IMAX.]")
 
-                                              (SETQ CHNO (IMAX (OR CHNO 0)
-                                                               (ADD1 (fetch (LINEDESCRIPTOR CHARLIM)
-                                                                        of LINE]
-                                          (push (fetch (PAGEFORMATTINGSTATE PAGELINECACHE)
-                                                   of FORMATTINGSTATE)
-                                                LINE)
-                                          (replace (LINEDESCRIPTOR LTEXTOBJ) of LINE with NIL))
-          (COND
-             (LAST-CHNO                                      (* ; 
-                                         "We got a definite last chno from FORMATTEXTBOX, so use it.")
-                    (replace (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE with LAST-CHNO))
-             (CHNO                                           (* ; 
+                                             [SETQ CHNO (IMAX (OR CHNO 0)
+                                                              (ADD1 (GETLD LINE LCHARLIM])
+                                         (push (fetch (PAGEFORMATTINGSTATE PAGELINECACHE)
+                                                  of FORMATTINGSTATE)
+                                               LINE)
+                                         (SETLD LINE LTEXTOBJ NIL))
+         (COND
+            (LAST-CHNO                                       (* ; 
+                                                    "We got a definite last chno from FORMATTEXTBOX.")
+                   (replace (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE with LAST-CHNO))
+            (CHNO                                            (* ; 
                                                  "Otherwise, use the new char no if we computed one.")
-                   (replace (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE with CHNO])
+                  (replace (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE with CHNO])
 
 (TEDIT.FORMATHEADING
-  [LAMBDA (TEXTOBJ PRSTREAM FORMATTINGSTATE PAGEREGION)      (* ; "Edited 31-Jan-2022 23:30 by rmk")
+  [LAMBDA (TEXTOBJ PRSTREAM FORMATTINGSTATE PAGEREGION)      (* ; "Edited  9-Sep-2023 22:17 by rmk")
+                                                             (* ; "Edited 19-May-2023 21:15 by rmk")
+                                                             (* ; "Edited  9-May-2023 20:30 by rmk")
                                                              (* ; "Edited  9-Oct-90 13:24 by jds")
 
-    (* ;; "Grab text from the TEXTOBJ, starting with CH#, and use it to fill REGION on a page.  Return a list of line descriptors which, taken together, fill the region.")
+    (* ;; "Grab heading pieces from the FORMATTINGSTATE and use them to fill REGION on a page.  Return a list of line descriptors which fill the region.")
 
-    (PROG ((CHNO 1)
-           [REGION (for VALUE in (fetch (PAGEREGION REGIONSPEC) of PAGEREGION)
-                      collect (FIXR (FTIMES (DSPSCALE NIL PRSTREAM)
-                                           VALUE]
-           (LOCALINFO (fetch (PAGEREGION REGIONLOCALINFO) of PAGEREGION))
-           HEADINGSTREAM HEADINGTEXTOBJ PRECONDITIONS THISLINE LINE YBOT (FORCENEXTPAGE NIL)
-           LINES HEADING)
-          [COND
-             ((SETQ PRECONDITIONS (LISTGET LOCALINFO 'PRECONDITIONS))
-                                                             (* ; 
-                                   "There are preconditions for this heading to appear.  Check them.")
-              (COND
-                 ((for FORM inside PRECONDITIONS thereis (NOT (EVAL FORM)))
-                                                             (* ; 
-                                 "One of the predicates returned NIL, so don't display this heading.")
-                  (RETURN]
-          (COND
-             ([NOT (SETQ HEADING (LISTGET (fetch (PAGEFORMATTINGSTATE PAGEHEADINGS) of 
+    (LET ((REGION (SCALEREGION (DSPSCALE NIL PRSTREAM)
+                         (fetch (PAGEREGION REGIONSPEC) of PAGEREGION)))
+          (LOCALINFO (fetch (PAGEREGION REGIONLOCALINFO) of PAGEREGION))
+          HEADINGTEXTOBJ FORCENEXTPAGE HEADING)
+         (CL:WHEN [AND (for FORM inside (LISTGET LOCALINFO 'PRECONDITIONS) always (EVAL FORM))
+                       (SETQ HEADING (LISTGET (fetch (PAGEFORMATTINGSTATE PAGEHEADINGS) of 
                                                                                       FORMATTINGSTATE
-                                                 )
-                                        (LISTGET LOCALINFO 'HEADINGTYPE]
-                                                             (* ; 
-                                                           "There's no text for this heading.  Punt.")
-              (RETURN)))
-          [SETQ HEADINGTEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of (SETQ HEADINGSTREAM
-                                                               (OPENTEXTSTREAM
-                                                                NIL NIL NIL NIL
-                                                                (LIST 'PARALOOKS (fetch (PIECE 
-                                                                                           PPARALOOKS
-                                                                                               )
-                                                                                    of (CAR HEADING]
-          (\TEDIT.INSERT.PIECES HEADINGTEXTOBJ 1 HEADING)
-          (for PC in HEADING do (add (fetch (TEXTOBJ TEXTLEN) of HEADINGTEXTOBJ)
-                                     (fetch (PIECE PLEN) of PC)))
-          (SETQ LINES (while (AND (ILESSP CHNO (fetch (TEXTOBJ TEXTLEN) of HEADINGTEXTOBJ))
-                                  (NOT FORCENEXTPAGE))
-                         collect (SETQ THISLINE (create THISLINE))
-                               (SETQ FORCENEXTPAGE (\TEDIT.HARDCOPY.FORMATLINE HEADINGTEXTOBJ
-                                                          (fetch (REGION WIDTH) of REGION)
-                                                          CHNO THISLINE (SETQ LINE (create 
-                                                                                       LINEDESCRIPTOR
-                                                                                          ))
-                                                          PRSTREAM T))
-                               (replace (LINEDESCRIPTOR CACHE) of LINE with THISLINE) 
-                                                             (* ; 
-                                                        "Mark this line as having cached print info.")
-                               (replace (LINEDESCRIPTOR LTEXTOBJ) of LINE with HEADINGSTREAM) 
-                                                             (* ; 
-                                                            "And remember the document it came from.")
-                               (add (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE)
-                                    (fetch (REGION LEFT) of REGION))
-                               (add (fetch (LINEDESCRIPTOR RIGHTMARGIN) of LINE)
-                                    (fetch (REGION LEFT) of REGION)) 
-                                                             (* ; "Format the next possible line")
-                               [COND
-                                  [YBOT                      (* ; 
-                                                 "We're into it;  take account of this line's height")
-                                        (SETQ YBOT (IDIFFERENCE YBOT (fetch (LINEDESCRIPTOR LHEIGHT)
-                                                                        of LINE]
-                                  (T                         (* ; 
-   "Just starting out;  find the line's position with respect to the top of the region to be filled.")
-                                     (SETQ YBOT (IDIFFERENCE (fetch (REGION BOTTOM) of REGION)
-                                                       (fetch (LINEDESCRIPTOR DESCENT) of LINE] 
-                                                             (* ; "This line is good;  use it.")
-                               (replace (LINEDESCRIPTOR YBOT) of LINE with YBOT)
-                               (replace (LINEDESCRIPTOR YBASE) of LINE
-                                  with (IPLUS YBOT (fetch (LINEDESCRIPTOR DESCENT) of LINE)))
-                               (SETQ CHNO (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE))) 
-                                                             (* ; 
-                                                             "Keep track of the next character...")
-                               LINE))
-          (RETURN LINES])
+                                                     )
+                                            (LISTGET LOCALINFO 'HEADINGTYPE]
+             [SETQ HEADINGTEXTOBJ (fetch (TEXTSTREAM TEXTOBJ)
+                                     of (OPENTEXTSTREAM
+                                         NIL NIL NIL NIL
+                                         `(PARALOOKS ,(PPARALOOKS (fetch (SELPIECES SPFIRST)
+                                                                     of HEADING]
+             (\INSERTSELPIECES HEADING HEADINGTEXTOBJ 1)     (* ; 
+                                                      "Insert the heading pieces into HEADINGTEXTOBJ")
+
+             (* ;; "")
+
+             (* ;; "Why is BOTTOM said to be the %"top%" of the region to be filled?")
+
+             (bind LINE YBOT (BOTTOM _ (fetch (REGION BOTTOM) of REGION))
+                   (LEN _ (TEXTLEN HEADINGTEXTOBJ))
+                   (CHNO _ 1) while (ILESSP CHNO LEN) until FORCENEXTPAGE
+                collect 
+
+                      (* ;; "Format the next line from HEADINGTEXTOBJ pieces")
+
+                      (SETQ LINE (\FORMATLINE HEADINGTEXTOBJ CHNO NIL REGION PRSTREAM FORMATTINGSTATE
+                                        ))
+                      (SETQ FORCENEXTPAGE (EQ (CHARCODE FORM)
+                                              (GETLD LINE FORCED-END)))
+                      [SETQ YBOT (COND
+                                    (YBOT                    (* ; 
+                                                             "Take account of this line's height")
+                                          (IDIFFERENCE YBOT (FGETLD LINE LHEIGHT)))
+                                    (T                       (* ; 
+                                                 "First line:  position it at the top of the region.")
+                                       (IDIFFERENCE BOTTOM (FGETLD LINE DESCENT]
+                      (SETYPOS LINE YBOT)
+                      (SETQ CHNO (ADD1 (FGETLD LINE LCHARLIM))) 
+                                                             (* ; "Set the start of the next line")
+                      LINE))])
 
 (TEDIT.FORMATPAGE
-  [LAMBDA (TEXTOBJ PRSTREAM CH# REGION FORMATTINGSTATE)      (* ; 
+  [LAMBDA (TEXTOBJ PRSTREAM CHNO PAGEREGION FORMATTINGSTATE) (* ; "Edited 22-Sep-2023 20:37 by rmk")
+                                                             (* ; "Edited 15-Jul-2023 22:22 by rmk")
+                                                             (* ; "Edited  5-Jul-2023 12:49 by rmk")
+                                                             (* ; "Edited  8-Mar-2023 18:20 by rmk")
+                                                             (* ; "Edited  4-Mar-2023 22:10 by rmk")
+                                                             (* ; "Edited  9-Oct-2022 17:24 by rmk")
+                                                             (* ; 
                                                         "Edited  4-Jul-93 00:29 by sybalskY:MV:ENVOS")
 
     (* ;; "Format a whole page -- run thru the page's sub-boxes filling them in by type:")
@@ -812,38 +868,31 @@
 
     (* ;; "   TEXT -- plain running text.")
 
-    [COND
-       ((NOT (EQ (fetch (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE)
-                 :SEARCHING-FOR-EQUIVALENT-PAGE))
+    (CL:UNLESS (EQ :SEARCHING-FOR-EQUIVALENT-PAGE (fetch (PAGEFORMATTINGSTATE STATE) of 
+                                                                                      FORMATTINGSTATE
+                                                         ))
 
         (* ;; "Only do real page formatting work if we're not trying to get ourselves to an equivalent page frame spec (having switched page layouts in mid-document).")
 
-        (PROG ((FORCENEXTPAGE NIL)
-               (CHNO CH#)
-               (PAGE# (fetch (PAGEFORMATTINGSTATE PAGE#) of FORMATTINGSTATE))
-               (PAGEPROPS (fetch (PAGEREGION REGIONLOCALINFO) of REGION))
-               (PAGEREGION (\TEDIT.SCALEREGION (fetch (PAGEREGION REGIONSPEC) of REGION)
-                                  (DSPSCALE NIL PRSTREAM)))
-               (END-OF-PAGE-FN (TEXTPROP TEXTOBJ 'END-OF-PAGE-FN))
+        [PROG ((PAGE# (fetch (PAGEFORMATTINGSTATE PAGE#) of FORMATTINGSTATE))
+               (PAGEPROPS (fetch (PAGEREGION REGIONLOCALINFO) of PAGEREGION))
+               (REGION (\TEDIT.SCALEREGION (DSPSCALE NIL PRSTREAM)
+                              (fetch (PAGEREGION REGIONSPEC) of PAGEREGION)))
+               (END-OF-PAGE-FN (GETTEXTPROP TEXTOBJ 'END-OF-PAGE-FN))
                (PRE-EXISTING-FONT (DSPFONT NIL PRSTREAM))
-               TEXTLEN THISLINE LINE LINES NCHNO TPAGE END-OF-PAGE-MARKER STARTING-FILEPTR PC 
-               NEWPARALOOKS)
+               (TEXTLEN (TEXTLEN TEXTOBJ))
+               END-OF-PAGE-MARKER STARTING-FILEPTR PC NEWPARALOOKS)
 
          (* ;; "For real page independence, we need to reset the font to where it was as of the beginning of the page before calling DSPNEWPAGE.  This avoids font creation in a page prolog, which might get missed otherwise.")
-
-              (SETQ TEXTLEN (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-              (SETQ THISLINE (fetch (TEXTOBJ THISLINE) of TEXTOBJ))
                                                              (* ; 
                                                              "Print in the usual region on the page")
-              (COND
-                 ([AND (ILEQ CHNO TEXTLEN)
-                       (EQ 'NEWPAGELAYOUT (fetch FMTPARATYPE
-                                             of (SETQ NEWPARALOOKS
-                                                 (\TEDIT.APPLY.PARASTYLES
-                                                  [fetch (PIECE PPARALOOKS)
-                                                     of (SETQ PC (\CHTOPC CHNO (fetch (TEXTOBJ PCTB)
-                                                                                  of TEXTOBJ]
-                                                  PC TEXTOBJ]
+              (CL:UNLESS (ILEQ CHNO TEXTLEN)
+                     (RETURN))
+              (SETQ PC (\ALIGNEDPIECE CHNO TEXTOBJ))
+              (SETQ NEWPARALOOKS (\TEDIT.APPLY.PARASTYLES (PPARALOOKS PC)
+                                        PC TEXTOBJ))         (* ; 
+                                                "RMK: Why both 'NEWPAGELAYOUT and :NEW-PAGE-LAYOUT ?")
+              (CL:WHEN (EQ 'NEWPAGELAYOUT (fetch (FMTSPEC FMTPARATYPE) of NEWPARALOOKS))
 
                   (* ;; "The first paragraph on this page starts a new page layout.")
 
@@ -855,94 +904,74 @@
                                                                                          NEWPARALOOKS
                                                                   )
                                                          'NEWPAGELAYOUT]
-                  (RETURN)))
-              (COND
-                 (PAGE#                                      (* ; 
-                                 "If we've already got a starting page number, don't set another one")
-                        )
-                 ((SETQ TPAGE (LISTGET PAGEPROPS 'STARTINGPAGE#))
-                                                             (* ; 
-                                    "If this page template specifies a starting page number, use it.")
-                  (SETQ PAGE# TPAGE)
-                  (replace (PAGEFORMATTINGSTATE PAGE#) of FORMATTINGSTATE with TPAGE))
-                 (T (SETQ PAGE# 1)
-                    (replace (PAGEFORMATTINGSTATE PAGE#) of FORMATTINGSTATE with PAGE#)))
-              (COND
-                 ((LISTGET PAGEPROPS 'LANDSCAPE?)            (* ; "This is a landscape page.")
-                  [COND
-                     ((fetch (STREAM OTHERPROPS) of PRSTREAM)
-                      (LISTPUT (fetch (STREAM OTHERPROPS) of PRSTREAM)
-                             'PRINTERMODE
-                             'LANDSCAPE))
-                     (T (NCONC (fetch (STREAM OTHERPROPS) of PRSTREAM)
-                               (LIST 'PRINTERMODE 'LANDSCAPE](* ; 
-                                                    "Puts the info. into stream , IP creater may use")
+                  (RETURN))
+
+         (* ;; "")
+
+              (CL:UNLESS PAGE#
+
+                  (* ;; "If this page template specifies a starting page number, use it.")
+
+                  (SETQ PAGE# (OR (LISTGET PAGEPROPS 'STARTINGPAGE#)
+                                  1))
+                  (replace (PAGEFORMATTINGSTATE PAGE#) of FORMATTINGSTATE with PAGE#))
+              (CL:WHEN (LISTGET PAGEPROPS 'LANDSCAPE?)       (* ; "This is a landscape page.")
+                  (STREAMPROP PRSTREAM 'PRINTERMODE 'LANDSCAPE)
+                                                             (* ; "Put the info. into stream ")
                   (DSPPUSHSTATE PRSTREAM)
                   (DSPROTATE 90 PRSTREAM)
-                  (DSPTRANSLATE 0 (- (ffetch (REGION HEIGHT) of PAGEREGION))
-                         PRSTREAM)))
-              [COND
-                 (*TEDIT-PAGE-BREAKS* 
-
-                        (* ;; "Only save the starting fileptr if we're making signatures, since we could be paginating to the screen as well.")
-
-                        (SETQ STARTING-FILEPTR (GETFILEPTR PRSTREAM]
-              (DSPCLIPPINGREGION PAGEREGION PRSTREAM)        (* ; 
-                                               "Set the clipping region to the whole sheet of paper.")
-              (DSPRIGHTMARGIN (fetch (REGION WIDTH) of PAGEREGION)
+                  (DSPTRANSLATE 0 (IMINUS (ffetch (REGION HEIGHT) of REGION))
+                         PRSTREAM))
+              (DSPCLIPPINGREGION REGION PRSTREAM)            (* ; "Clip to the whole sheet.")
+              (DSPRIGHTMARGIN (fetch (REGION WIDTH) of REGION)
                      PRSTREAM)
-              [while [AND (ILEQ CHNO TEXTLEN)
-                          (EQ 'PAGEHEADING (fetch FMTPARATYPE
-                                              of (fetch (PIECE PPARALOOKS)
-                                                    of (\CHTOPC CHNO (fetch (TEXTOBJ PCTB)
-                                                                        of TEXTOBJ]
-                 do                                          (* ; 
-                                                "Go thru any leading page heading paras on the page.")
-                    (\TEDIT.HARDCOPY.FORMATLINE TEXTOBJ 1 CHNO THISLINE (SETQ LINE (create 
-                                                                                       LINEDESCRIPTOR
-                                                                                          ))
-                           PRSTREAM)
-                    (SETQ CHNO (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE]
+
+         (* ;; "Go thru any leading page heading paras on the page, collecting copies of those pieces in the FORMATTINGSTATE. The value is the first CHNO of the start of the first non-heading piece.")
+
+              (SETQ CHNO (TEDIT.HARDCOPY.PAGEHEADINGS TEXTOBJ CHNO FORMATTINGSTATE))
+
+         (* ;; "")
+
+         (* ;; "We now fill up the next complete page. Afterwards, we either continue to the next page (DPSNEWPAGE) or finish up.  TEDIT.FORMATBOX is responsible for setting up NEWPAGEBEFORFE and NEWPAGEAFTER")
+
               (replace (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE with CHNO)
-              (for SUBREGION in (fetch (PAGEREGION REGIONSUBBOXES) of REGION)
+              (for SUBREGION in (fetch (PAGEREGION REGIONSUBBOXES) of PAGEREGION)
                  while (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE)
-                             TEXTLEN) do                     (* ; 
-                                                             "Now format the subregions of the page.")
+                             TEXTLEN) do 
+                                         (* ;; 
+                 "Now format the subregions of the page. The CHNO field may be updated by each call.")
+
                                          (TEDIT.FORMATBOX TEXTOBJ PRSTREAM (fetch (
                                                                                   PAGEFORMATTINGSTATE
                                                                                    CHNO) of 
                                                                                       FORMATTINGSTATE
                                                                                   )
                                                 SUBREGION FORMATTINGSTATE))
+
+         (* ;; "")
+
               (DSPFONT PRE-EXISTING-FONT PRSTREAM)
-              [COND
-                 (*TEDIT-PAGE-BREAKS* (SHOW.IP PRSTREAM)
-                        (SETQ *TEDIT-PAGE-BREAKS* (NCONC1 *TEDIT-PAGE-BREAKS* (CONS STARTING-FILEPTR
-                                                                                    (GETFILEPTR
-                                                                                     PRSTREAM]
-              (COND
-                 ((LISTGET PAGEPROPS 'LANDSCAPE?)            (* ; "This is a landscape page.")
-                  (AND (fetch (STREAM OTHERPROPS) of PRSTREAM)
-                       (LISTPUT (fetch (STREAM OTHERPROPS) of PRSTREAM)
-                              'PRINTERMODE NIL))
-                  (DSPTRANSLATE 0 (ffetch (REGION HEIGHT) of PAGEREGION)
+              (CL:WHEN (LISTGET PAGEPROPS 'LANDSCAPE?)       (* ; "This is a landscape page.")
+                  (STREAMPROP PRSTREAM 'PRINTERMODE NIL)
+                  (DSPTRANSLATE 0 (ffetch (REGION HEIGHT) of REGION)
                          PRSTREAM)
                   (DSPROTATE 0 PRSTREAM)
-                  (DSPPOPSTATE PRSTREAM)))
+                  (DSPPOPSTATE PRSTREAM))
               [COND
                  ([AND (ILEQ (fetch (PAGEFORMATTINGSTATE CHNO) of FORMATTINGSTATE)
                              TEXTLEN)
-                       (OR (NOT END-OF-PAGE-FN)
-                           (NEQ (SETQ END-OF-PAGE-MARKER (APPLY* END-OF-PAGE-FN TEXTOBJ 
-                                                                FORMATTINGSTATE))
-                                'DON'T))
-                       (OR (NOT (fetch (PAGEFORMATTINGSTATE MINPAGE#) of FORMATTINGSTATE))
-                           (IGEQ PAGE# (fetch (PAGEFORMATTINGSTATE MINPAGE#) of FORMATTINGSTATE)))
-                       (OR (NOT (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of FORMATTINGSTATE))
-                           (ILESSP PAGE# (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of FORMATTINGSTATE]
+                       [NOT (AND END-OF-PAGE-FN (EQ 'DON'T (SETQ END-OF-PAGE-MARKER
+                                                            (APPLY* END-OF-PAGE-FN TEXTOBJ 
+                                                                   FORMATTINGSTATE]
+                       [NOT (AND (fetch (PAGEFORMATTINGSTATE MINPAGE#) of FORMATTINGSTATE)
+                                 (ILESSP PAGE# (fetch (PAGEFORMATTINGSTATE MINPAGE#) of 
+                                                                                      FORMATTINGSTATE
+                                                      ]
+                       (NOT (AND (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of FORMATTINGSTATE)
+                                 (IEQ PAGE# (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of FORMATTINGSTATE]
                                                              (* ; "There is more to print....")
-                  (DSPNEWPAGE PRSTREAM)                      (* ; "Force the new page")
-                  )
+                                                             (* ; "Force the new page")
+                  (DSPNEWPAGE PRSTREAM))
                  ((AND (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of FORMATTINGSTATE)
                        (IGEQ PAGE# (fetch (PAGEFORMATTINGSTATE MAXPAGE#) of FORMATTINGSTATE)))
                                                              (* ; 
@@ -955,7 +984,7 @@
                    1)
               (replace (PAGEFORMATTINGSTATE FIRSTPAGE) of FORMATTINGSTATE with NIL)
               (replace (PAGEFORMATTINGSTATE PAGE#TEXT) of FORMATTINGSTATE
-                 with (pop (fetch (PAGEFORMATTINGSTATE PAGE#GENERATOR) of FORMATTINGSTATE]
+                 with (pop (fetch (PAGEFORMATTINGSTATE PAGE#GENERATOR) of FORMATTINGSTATE])
 
     (* ;; "Some things happen regardless of whether we're searching or not:  Need to count pages we pass over to find an equivalent page in the new layout:")
 
@@ -963,102 +992,90 @@
          1])
 
 (TEDIT.FORMATTEXTBOX
-  [LAMBDA (TEXTOBJ PRSTREAM CH# PAGEREGION FORMATTINGSTATE)  (* ; 
+  [LAMBDA (TEXTOBJ PRSTREAM CHNO PAGEREGION FORMATTINGSTATE) (* ; "Edited  4-Jul-2023 08:02 by rmk")
+                                                             (* ; "Edited  2-Jul-2023 20:49 by rmk")
+                                                             (* ; "Edited  1-Jun-2023 15:32 by rmk")
+                                                             (* ; "Edited 27-May-2023 12:19 by rmk")
+                                                             (* ; "Edited 30-Sep-2022 10:06 by rmk")
+                                                             (* ; "Edited 24-Aug-2022 11:45 by rmk")
+                                                             (* ; 
                                                         "Edited  3-Jul-93 22:14 by sybalskY:MV:ENVOS")
 
     (* ;; "Grab text from the TEXTOBJ, starting with CH#, and use it to fill REGION on a page.  Return a list of line descriptors which, taken together, fill the region.")
 
-    (COND
-       ((NEQ (fetch (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE)
-             'SEARCHING)
+    (CL:UNLESS (EQ (fetch (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE)
+                   'SEARCHING)
 
         (* ;; "Only format text if we're really formatting.")
 
         (LET*
-         ((CHNO CH#)
-          [REGION (for VALUE in (ffetch (PAGEREGION REGIONSPEC) of PAGEREGION)
-                     collect (FIXR (FTIMES (DSPSCALE NIL PRSTREAM)
-                                          VALUE]
+         ((REGION (SCALEREGION (DSPSCALE NIL PRSTREAM)
+                         (ffetch (PAGEREGION REGIONSPEC) of PAGEREGION)))
           (COLUMNBOTTOM (fetch (REGION BOTTOM) of REGION))
+          (RTOP (fetch (REGION TOP) of REGION))
           (FIRSTLINE T)
-          (BREAKAFTERLASTPARA NIL)
-          (STREAMSCALE (DSPSCALE NIL PRSTREAM))
-          (FORCENEXTPAGE NIL)
           (FOOTNOTELINES (ffetch PAGEFOOTNOTELINES of FORMATTINGSTATE))
-          (PAGEFOOTNOTES NIL)
-          COLUMN-YBASE PRIOR-COLUMN-YBOT THISLINE LINE YBOT LINES ORPHAN LASTLINE PREVLINE LHEIGHT 
-          FMTSPEC SPECIALYPOS NEWPAGETYPE FINAL-CHNO FOOTNOTE-REMNANTS KEPT-ONE-LINE)
+          FORCENEXTPAGE PAGEFOOTNOTES PRIOR-COLUMN-YBOT LINES ORPHAN FINAL-CHNO FOOTNOTE-REMNANTS)
 
          (* ;; "Account for lines carried over from prior columns:")
 
-         [while (AND (ILEQ COLUMNBOTTOM (fetch (REGION TOP) of REGION))
-                     (SETQ LINE (pop FOOTNOTELINES)))
+         (bind LINE KEPT-ONE-LINE while (AND (ILEQ COLUMNBOTTOM RTOP)
+                                             (SETQ LINE (pop FOOTNOTELINES)))
             do 
-               (* ;; "Move as many potential footnote lines into this column as will fit.")
-                                                             (* ; 
-                                           "And move the bottom of the column up to account for them")
-               (COND
-                  ((IGREATERP (+ COLUMNBOTTOM (fetch (LINEDESCRIPTOR LHEIGHT) of LINE))
-                          (fetch (REGION TOP) of REGION))    (* ; 
-                               "If we ran out of room for footnotes, put this line back on the queue")
-                   (CL:MULTIPLE-VALUE-SETQ (PAGEFOOTNOTES FOOTNOTE-REMNANTS IGNORE KEPT-ONE-LINE)
+               (* ;; "Move as many potential footnote lines into this column as will fit. And move the bottom of the column up to account for them.")
+
+               (CL:WHEN (IGREATERP (+ COLUMNBOTTOM (FGETLD LINE LHEIGHT))
+                               RTOP)
+
+                   (* ;; "If we ran out of room for footnotes, put this line back on the queue")
+
+                   (TEDIT.SETQS (PAGEFOOTNOTES FOOTNOTE-REMNANTS KEPT-ONE-LINE)
                           (TEDIT.HARDCOPY-COLUMN-END PAGEFOOTNOTES LINE NIL 1 NIL REGION TEXTOBJ 
                                  FORMATTINGSTATE))
-                   [COND
-                      (KEPT-ONE-LINE (add COLUMNBOTTOM (ffetch (LINEDESCRIPTOR LHEIGHT) of LINE]
+                   (CL:WHEN KEPT-ONE-LINE
+                       (add COLUMNBOTTOM (FGETLD LINE LHEIGHT)))
                    (SETQ FOOTNOTELINES (APPEND FOOTNOTE-REMNANTS FOOTNOTELINES))
                    (RETURN))
-                  (T (SETQ PAGEFOOTNOTES (NCONC1 PAGEFOOTNOTES LINE))
-                     (add COLUMNBOTTOM (ffetch (LINEDESCRIPTOR LHEIGHT) of LINE]
+               (SETQ PAGEFOOTNOTES (NCONC1 PAGEFOOTNOTES LINE))
+               (add COLUMNBOTTOM (FGETLD LINE LHEIGHT)))
          (freplace (PAGEFORMATTINGSTATE PAGEFOOTNOTELINES) of FORMATTINGSTATE with FOOTNOTELINES)
                                                              (* ; "Remember any remaining footnotes")
          [SETQ LINES
-          (while (AND (ILEQ CHNO (ffetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                      (NOT FORCENEXTPAGE))
-             collect (SETQ LINE (OR (pop (fetch (PAGEFORMATTINGSTATE PAGELINECACHE) of 
-                                                                                      FORMATTINGSTATE
-                                                ))
-                                    (create LINEDESCRIPTOR))) 
-                                                             (* ; 
-                               "Grab a line descriptor from the recycling list, or create a new one.")
-                   (SETQ THISLINE (OR (fetch (LINEDESCRIPTOR CACHE) of LINE)
-                                      (create THISLINE)))    (* ; 
-                                            "And a recycled or new THISLINE cache for char widths &c")
-                   (BLOCK)                                   (* ; 
-                                                   "Allow other things to happen while we format....")
-                   (SETQ FORCENEXTPAGE (\TEDIT.HARDCOPY.FORMATLINE TEXTOBJ (fetch (REGION WIDTH)
-                                                                              of REGION)
-                                              CHNO THISLINE LINE PRSTREAM)) 
+          (bind LINE FMTSPEC LHEIGHT PREVLINE SPECIALYPOS BREAKAFTERLASTPARA YBOT NEWPAGETYPE 
+                COLUMN-YBASE (TEXTLEN _ (TEXTLEN TEXTOBJ)) while (AND (ILEQ CHNO TEXTLEN)
+                                                                      (NOT FORCENEXTPAGE))
+             collect (BLOCK) 
+
+                   (* ;; "Grab a line descriptor from the recycling list, or create a new one.")
+
+                   (SETQ LINE (pop (fetch (PAGEFORMATTINGSTATE PAGELINECACHE) of FORMATTINGSTATE))) 
                                                              (* ; 
                                                              "Format the line, noting any form-feeds")
-                   (replace (LINEDESCRIPTOR CACHE) of LINE with THISLINE) 
-                                                             (* ; 
-                                                        "Mark this line as having cached print info.")
-                   (replace (LINEDESCRIPTOR LTEXTOBJ) of LINE with (fetch (TEXTOBJ STREAMHINT)
-                                                                      of TEXTOBJ)) 
-                                                             (* ; 
-                                                            "And remember the document it came from.")
+                   (SETQ LINE (\FORMATLINE TEXTOBJ CHNO LINE REGION PRSTREAM FORMATTINGSTATE))
+                   (SETQ FORCENEXTPAGE (AND (EQ (CHARCODE FORM)
+                                                (FGETLD LINE FORCED-END))
+                                            'USERBREAK))
+                   (SETQ LHEIGHT (FGETLD LINE LHEIGHT))
+                   (SETQ FMTSPEC (FGETLD LINE LFMTSPEC))
                    (COND
-                      ((fetch (LINEDESCRIPTOR LMARK) of LINE)
+                      ((FGETLD LINE LMARK)
 
-                       (* ;; "This line is a placeholder for a page heading, OR for a conditional line that is to be skipped (e.g., and EVEN text para on an odd page).  All it tells us is what character to skip to so we can continue.")
+                       (* ;; "This line is a placeholder for a page heading, OR for a conditional line that is to be skipped (e.g., an EVEN text para on an odd page).  All it tells us is what character to skip to so we can continue.")
 
-                       (SETQ CHNO (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE)))
+                       (SETQ CHNO (ADD1 (FGETLD LINE LCHARLIM)))
                        LINE)
-                      ((LISTGET (fetch (FMTSPEC FMTUSERINFO) of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                   of LINE))
+                      ((LISTGET (fetch (FMTSPEC FMTUSERINFO) of FMTSPEC)
                               'FOOTNOTE)
 
                        (* ;; "This paragraph is a footnote para.")
 
-                       (COND
-                          (FORCENEXTPAGE (HELP)))
+                       (CL:WHEN FORCENEXTPAGE                (* ; 
+                                                             "HELP in original code.  SHOULDNT ?")
+                           (SHOULDNT))
                        (SETQ FOOTNOTELINES (\TEDIT.FORMAT.FOOTNOTE TEXTOBJ PRSTREAM LINE REGION 
-                                                  PAGEREGION FORMATTINGSTATE))
-                       [SETQ CHNO (PLUS 1 (fetch (LINEDESCRIPTOR CHARLIM) of (CAR (FLAST 
-                                                                                        FOOTNOTELINES
-                                                                                         ]
-                                                             (* ; "Grab the lines of this footnote")
+                                                  FORMATTINGSTATE))
+                       (SETQ CHNO (ADD1 (FGETLD (CAR (FLAST FOOTNOTELINES))
+                                               LCHARLIM)))   (* ; "Grab the lines of this footnote")
                        [COND
                           [(fetch (PAGEFORMATTINGSTATE PAGEFOOTNOTELINES) of FORMATTINGSTATE)
 
@@ -1073,92 +1090,78 @@
                              (* ;; 
                    "No overflow footnote lines yet.   Try adding more footnotes to this page/column.")
 
-                             (for LINE in FOOTNOTELINES as REST on FOOTNOTELINES
-                                do (COND
-                                      ((IGREATERP (+ COLUMNBOTTOM (fetch (LINEDESCRIPTOR LHEIGHT)
-                                                                     of LINE))
-                                              (OR YBOT (fetch (REGION TOP) of REGION)))
-                                       (CL:MULTIPLE-VALUE-SETQ (PAGEFOOTNOTES FOOTNOTE-REMNANTS 
-                                                                      IGNORE)
+                             (for LTAIL LINE on FOOTNOTELINES
+                                do (SETQ LINE (CAR LTAIL))
+                                   (add COLUMNBOTTOM LHEIGHT)
+                                   (CL:WHEN (IGREATERP COLUMNBOTTOM (OR YBOT RTOP))
+
+                                       (* ;; "This one overflows")
+
+                                       (TEDIT.SETQS (PAGEFOOTNOTES FOOTNOTE-REMNANTS)
                                               (TEDIT.HARDCOPY-COLUMN-END PAGEFOOTNOTES LINE NIL 1 NIL
                                                      REGION TEXTOBJ FORMATTINGSTATE 3 (NOT FIRSTLINE)
                                                      ))
                                        [replace (PAGEFORMATTINGSTATE PAGEFOOTNOTELINES) of 
                                                                                       FORMATTINGSTATE
-                                          with (COPY (APPEND FOOTNOTE-REMNANTS (CDR REST]
-                                       [SETQ FINAL-CHNO (IMAX CHNO (ADD1 (fetch (LINEDESCRIPTOR
-                                                                                 CHARLIM)
-                                                                            of (CAR (FLAST REST]
-                                       [COND
-                                          (FIRSTLINE         (* ; "If this overflowing footnote line happens before any real text line, go ahead and update the colbottom, because we want to stop here anyhow.")
-                                                 (add COLUMNBOTTOM (fetch (LINEDESCRIPTOR LHEIGHT)
-                                                                      of LINE]
+                                          with (COPY (APPEND FOOTNOTE-REMNANTS (CDR LTAIL]
+                                       [SETQ FINAL-CHNO (IMAX CHNO (ADD1 (GETLD (CAR (FLAST LTAIL))
+                                                                                LCHARLIM]
                                        (RETURN))
-                                      (T (SETQ PAGEFOOTNOTES (NCONC1 PAGEFOOTNOTES LINE))
-                                         (add COLUMNBOTTOM (fetch (LINEDESCRIPTOR LHEIGHT)
-                                                              of LINE]
+                                   (SETQ PAGEFOOTNOTES (NCONC1 PAGEFOOTNOTES LINE]
+
+                       (* ;; "Don't accumulate footnote lines.")
+
                        NIL)
-                      (T                                     (* ; 
-         "This line must not represent a special item, e.g.  a page heading.  If it does, ignore it.")
-                         (SETQ FMTSPEC (fetch (LINEDESCRIPTOR LFMTSPEC) of LINE))
-                         (add (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE)
-                              (OR (AND (fetch (FMTSPEC FMTSPECIALX) of FMTSPEC)
-                                       (NOT (ZEROP (fetch (FMTSPEC FMTSPECIALX) of FMTSPEC)))
-                                       (fetch (FMTSPEC FMTSPECIALX) of FMTSPEC))
-                                  (fetch (REGION LEFT) of REGION)))
-                         (add (fetch (LINEDESCRIPTOR RIGHTMARGIN) of LINE)
-                              (OR (AND (fetch (FMTSPEC FMTSPECIALX) of FMTSPEC)
-                                       (NOT (ZEROP (fetch (FMTSPEC FMTSPECIALX) of FMTSPEC)))
-                                       (fetch (FMTSPEC FMTSPECIALX) of FMTSPEC))
-                                  (fetch (REGION LEFT) of REGION)))
-                                                             (* ; "Format the next possible line")
+                      (T 
+                         (* ;; "This line is not a page heading or a footnote, format it.")
+
                          (SETQ SPECIALYPOS NIL)
 
                          (* ;; "So that only the first line of a specially-placed paragraph is guaranteed to appear in the current box.")
 
-                         [COND
-                            [(AND (fetch (FMTSPEC FMTSPECIALY) of FMTSPEC)
-                                  (NOT (ZEROP (fetch (FMTSPEC FMTSPECIALY) of FMTSPEC)))
-                                  (fetch (LINEDESCRIPTOR 1STLN) of LINE))
-                                                             (* ; 
+                         [SETQ YBOT
+                          (COND
+                             ((AND (fetch (FMTSPEC FMTSPECIALY) of FMTSPEC)
+                                   (NOT (ZEROP (fetch (FMTSPEC FMTSPECIALY) of FMTSPEC)))
+                                   (FGETLD LINE 1STLN))      (* ; 
                                       "There is a special Y location for this paragraph.  Move there")
-                             (SETQ SPECIALYPOS (SETQ YBOT (fetch (FMTSPEC FMTSPECIALY) of FMTSPEC]
-                            [(AND COLUMN-YBASE (\NEW-COLUMN-START LINE FMTSPEC))
+                              (SETQ SPECIALYPOS (ffetch (FMTSPEC FMTSPECIALY) of FMTSPEC)))
+                             ((AND COLUMN-YBASE (FGETLD LINE 1STLN)
+                                   (EQ (ffetch (FMTSPEC FMTCOLUMN) OF FMTSPEC)
+                                       'NEXT))
 
-                             (* ;; 
+                              (* ;; 
              "This is the first line of a new column; back YBOT back down to match the prior column.")
 
-                             (SETQ YBOT (- COLUMN-YBASE (fetch (LINEDESCRIPTOR DESCENT) of LINE]
-                            [YBOT                            (* ; 
-                                                 "We're into it;  take account of this line's height")
-                                  (COND
-                                     [(fetch (FMTSPEC FMTBASETOBASE) of FMTSPEC)
-                                      (SETQ LHEIGHT
-                                       (IPLUS (fetch (LINEDESCRIPTOR DESCENT) of LINE)
-                                              (fetch (FMTSPEC FMTBASETOBASE) of FMTSPEC)
-                                              (COND
-                                                 ((fetch (LINEDESCRIPTOR 1STLN) of LINE)
-                                                  (IPLUS (OR (fetch (FMTSPEC LEADBEFORE) of FMTSPEC)
-                                                             0)
-                                                         (OR (fetch (FMTSPEC LEADAFTER)
-                                                                of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                      of PREVLINE))
-                                                             0)))
-                                                 (T 0]
-                                     (T (COND
-                                           [(\FIRST-COLUMN-START LINE FMTSPEC)
-                                            (SETQ YBOT (IDIFFERENCE (IMIN PRIOR-COLUMN-YBOT YBOT)
-                                                              (fetch (LINEDESCRIPTOR LHEIGHT)
-                                                                 of LINE]
-                                           (T (SETQ YBOT (IDIFFERENCE YBOT (fetch (LINEDESCRIPTOR
-                                                                                   LHEIGHT)
-                                                                              of LINE]
-                            (T                               (* ; 
+                              (- COLUMN-YBASE (FGETLD LINE DESCENT)))
+                             [YBOT 
+
+                                 (* ;; "We're into it;  take account of this line's height. Original code did the complicated LHEIGHT calculation and threw it away.  I assume that that was an error, that the new setting of LHEIGHT is for the benefit of the new YBOT value (which I pulled out of an alternative branch of a COND.")
+
+                                   (CL:WHEN (fetch (FMTSPEC FMTBASETOBASE) of FMTSPEC)
+                                       [SETQ LHEIGHT (IPLUS (FGETLD LINE DESCENT)
+                                                            (fetch (FMTSPEC FMTBASETOBASE)
+                                                               of FMTSPEC)
+                                                            (COND
+                                                               ((FGETLD LINE 1STLN)
+                                                                (IPLUS (OR (fetch (FMTSPEC LEADBEFORE
+                                                                                         )
+                                                                              of FMTSPEC)
+                                                                           0)
+                                                                       (OR (fetch (FMTSPEC LEADAFTER)
+                                                                              of (GETLD PREVLINE 
+                                                                                        LFMTSPEC))
+                                                                           0)))
+                                                               (T 0])
+                                   (COND
+                                      ((\FIRST-COLUMN-START LINE FMTSPEC)
+                                       (IDIFFERENCE (IMIN PRIOR-COLUMN-YBOT YBOT)
+                                              LHEIGHT))
+                                      (T (IDIFFERENCE YBOT LHEIGHT]
+                             (T                              (* ; 
    "Just starting out;  find the line's position with respect to the top of the region to be filled.")
-                               (SETQ YBOT (IDIFFERENCE (fetch (REGION TOP) of REGION)
-                                                 (IPLUS (fetch (LINEDESCRIPTOR LTRUEASCENT)
-                                                           of LINE)
-                                                        (fetch (LINEDESCRIPTOR DESCENT) of LINE]
+                                (IDIFFERENCE RTOP (IPLUS (FGETLD LINE LTRUEASCENT)
+                                                         (FGETLD LINE DESCENT]
                          (COND
                             ((AND (ILESSP YBOT COLUMNBOTTOM)
                                   (NOT SPECIALYPOS))
@@ -1166,54 +1169,45 @@
                              (* ;; "This line hangs off the bottom;  (and isn't the first line of a specially-placed paragraph) punt it.")
 
                              (SETQ FORCENEXTPAGE T)
-                             (SETQ FINAL-CHNO (fetch (LINEDESCRIPTOR CHAR1) of LINE))
+                             (SETQ FINAL-CHNO (FGETLD LINE LCHAR1))
                              (SETQ ORPHAN LINE)              (* ; "Remember this potential orphan")
                              NIL)
                             ((AND (NOT FIRSTLINE)
-                                  (fetch (LINEDESCRIPTOR 1STLN) of LINE)
+                                  (FGETLD LINE 1STLN)
                                   (SETQ NEWPAGETYPE (OR (fetch (FMTSPEC FMTNEWPAGEBEFORE)
-                                                           of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                 of LINE))
+                                                           of (FGETLD LINE LFMTSPEC))
                                                         BREAKAFTERLASTPARA)))
 
                              (* ;; 
                  "We're supposed to put this line at the start of a new page/column (any box, later)")
 
                              (SETQ FORCENEXTPAGE 'USERBREAK)
-                             (SETQ FINAL-CHNO (fetch (LINEDESCRIPTOR CHAR1) of LINE))
+                             (SETQ FINAL-CHNO (FGETLD LINE LCHAR1))
                              (SETQ ORPHAN NIL)
-                             (COND
-                                ((NEQ NEWPAGETYPE T)         (* ; 
+                             (CL:UNLESS (EQ NEWPAGETYPE T)   (* ; 
                            "This isn't simply go to a new box;  we need to set up the search for it.")
                                  (replace (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE
                                     with 'SEARCHING)
                                  (replace (PAGEFORMATTINGSTATE REQUIREDREGIONTYPE) of FORMATTINGSTATE
-                                    with NEWPAGETYPE)))
+                                    with NEWPAGETYPE))
                              NIL)
                             (T                               (* ; "This line is good;  use it.")
-                               (COND
-                                  ((AND (fetch (FMTSPEC FMTNEWPAGEAFTER) of (fetch (LINEDESCRIPTOR
-                                                                                    LFMTSPEC)
-                                                                               of LINE)))
+                               (CL:WHEN (AND (fetch (FMTSPEC FMTNEWPAGEAFTER) of FMTSPEC))
                                                              (* ; 
    "We're supposed to put the line after this one at the start of a new page/column (any box, later)")
-                                   (SETQ BREAKAFTERLASTPARA T)))
-                               (replace (LINEDESCRIPTOR YBOT) of LINE with YBOT)
-                               (COND
-                                  (PRIOR-COLUMN-YBOT (SETQ PRIOR-COLUMN-YBOT (IMIN PRIOR-COLUMN-YBOT
-                                                                                   YBOT)))
-                                  (T (SETQ PRIOR-COLUMN-YBOT YBOT)))
-                               (replace (LINEDESCRIPTOR YBASE) of LINE
-                                  with (IPLUS YBOT (fetch (LINEDESCRIPTOR DESCENT) of LINE)))
-                               [COND
-                                  ((\FIRST-COLUMN-START LINE FMTSPEC)
+                                   (SETQ BREAKAFTERLASTPARA T))
+                               (SETQ PRIOR-COLUMN-YBOT (CL:IF PRIOR-COLUMN-YBOT
+                                                           (IMIN PRIOR-COLUMN-YBOT YBOT)
+                                                           YBOT))
+                               (SETYPOS LINE YBOT)
+                               (CL:WHEN (\FIRST-COLUMN-START LINE FMTSPEC)
 
                                    (* ;; "This is the start of a new group of paragraphs to be lined up in columns.  Save the YBASE for these guys for the other columns.")
 
-                                   (SETQ COLUMN-YBASE (fetch (LINEDESCRIPTOR YBASE) of LINE]
+                                   (SETQ COLUMN-YBASE (GETLD LINE YBASE)))
                                (SETQ FIRSTLINE NIL)          (* ; 
                    "Note that we have put text out on this page/column/box, for first line checking.")
-                               (SETQ CHNO (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE)))
+                               (SETQ CHNO (ADD1 (GETLD LINE LCHARLIM)))
                                                              (* ; 
                                                              "Keep track of the next character...")
                                (SETQ PREVLINE LINE)
@@ -1221,96 +1215,74 @@
          (SETQ LINES (DREMOVE NIL LINES))                    (* ; 
    "Remove any NILs from the line list;  they're artifacts of running across page headings in-stream")
          (TEDIT.HARDCOPY-COLUMN-END LINES ORPHAN FORCENEXTPAGE CHNO PAGEFOOTNOTES REGION TEXTOBJ 
-                FORMATTINGSTATE FINAL-CHNO])
+                FORMATTINGSTATE FINAL-CHNO)))])
 
 (TEDIT.FORMATFOLIO
-  [LAMBDA (TEXTOBJ PRSTREAM FORMATTINGSTATE REGIONSPEC)      (* ; "Edited 31-Jan-2022 23:33 by rmk")
+  [LAMBDA (TEXTOBJ PRSTREAM FORMATTINGSTATE PAGEREGION)      (* ; "Edited  1-Jun-2023 00:12 by rmk")
+                                                             (* ; "Edited  9-May-2023 21:39 by rmk")
                                                              (* ; "Edited 30-May-91 12:51 by jds")
 
     (* ;; "Print a page number (called a %"folio%" in the biz) at the location and with the alignment specified in the REGIONSPEC.")
 
-    (PROG ([REGION (for VALUE in (fetch (PAGEREGION REGIONSPEC) of REGIONSPEC)
-                      collect (FIXR (FTIMES (DSPSCALE NIL PRSTREAM)
-                                           VALUE]
-           (FOLIOINFO (fetch (PAGEREGION REGIONLOCALINFO) of REGIONSPEC))
-           (FORCENEXTPAGE NIL)
-           (CHNO 1)
-           FOLIOTEXTOBJ FOLIOSTREAM THISLINE LINE YBOT PARALOOKS CHARLOOKS NOFIRSTPAGE PAGE# 
-           FOLIOFORMAT PRETEXT POSTTEXT INFOLIST)
-          (SETQ PARALOOKS (LISTGET FOLIOINFO 'PARALOOKS))
-          (SETQ CHARLOOKS (OR (LISTGET FOLIOINFO 'CHARLOOKS)
-                              TEDIT.DEFAULT.FOLIO.LOOKS))
-          (SETQ NOFIRSTPAGE (LISTGET FOLIOINFO 'NOFIRSTPAGE))
-          (SETQ INFOLIST (LISTGET FOLIOINFO 'FORMATINFO))    (* ; 
-                                                             "A LIST OF (FORMAT PRETEXT POSTTEXT)")
-          (SETQ FOLIOFORMAT (CAR INFOLIST))
-          (SETQ PRETEXT (CADR INFOLIST))
-          (SETQ POSTTEXT (CADDR INFOLIST))
-          [SETQ PAGE# (COND
-                         ((fetch (PAGEFORMATTINGSTATE PAGE#TEXT) of FORMATTINGSTATE)
-                          (MKSTRING (fetch (PAGEFORMATTINGSTATE PAGE#TEXT) of FORMATTINGSTATE)))
-                         (T (SELECTQ FOLIOFORMAT
-                                (LOWERROMAN (ROMANNUMERALS (fetch (PAGEFORMATTINGSTATE PAGE#)
-                                                              of FORMATTINGSTATE)))
-                                (UPPERROMAN (ROMANNUMERALS (fetch (PAGEFORMATTINGSTATE PAGE#)
-                                                              of FORMATTINGSTATE)
-                                                   T))
-                                (MKSTRING (fetch (PAGEFORMATTINGSTATE PAGE#) of FORMATTINGSTATE]
-          [COND
-             (PRETEXT (SETQ PAGE# (CONCAT PRETEXT PAGE#]
-          [COND
-             (POSTTEXT (SETQ PAGE# (CONCAT PAGE# POSTTEXT]
-          [SETQ FOLIOTEXTOBJ (TEXTOBJ (SETQ FOLIOSTREAM (OPENTEXTSTREAM (OPENSTRINGSTREAM PAGE#)
-                                                               NIL NIL NIL (LIST 'PARALOOKS PARALOOKS
-                                                                                 'LOOKS CHARLOOKS]
-          (COND
-             ((OR (NOT (fetch (PAGEFORMATTINGSTATE FIRSTPAGE) of FORMATTINGSTATE))
-                  (NOT NOFIRSTPAGE))                         (* ; 
+    (LET ((REGION (SCALEREGION (DSPSCALE NIL PRSTREAM)
+                         (fetch (PAGEREGION REGIONSPEC) of PAGEREGION)))
+          (FOLIOINFO (fetch (PAGEREGION REGIONLOCALINFO) of PAGEREGION))
+          FOLIOTEXTOBJ PAGE# FOLIOFORMAT PRETEXT POSTTEXT INFOLIST)
+         (CL:UNLESS (AND (fetch (PAGEFORMATTINGSTATE FIRSTPAGE) of FORMATTINGSTATE)
+                         (LISTGET FOLIOINFO 'NOFIRSTPAGE))   (* ; 
        "If this isn't the first page, OR we want a page # on the first page, go ahead and format it.")
-              (RETURN (while (AND (ILEQ CHNO (fetch (TEXTOBJ TEXTLEN) of FOLIOTEXTOBJ))
-                                  (NOT FORCENEXTPAGE))
-                         collect (SETQ THISLINE (create THISLINE))
-                               (SETQ FORCENEXTPAGE (\TEDIT.HARDCOPY.FORMATLINE FOLIOTEXTOBJ
-                                                          (fetch (REGION WIDTH) of REGION)
-                                                          CHNO THISLINE (SETQ LINE (create 
-                                                                                       LINEDESCRIPTOR
-                                                                                          ))
-                                                          PRSTREAM))
-                               (replace (LINEDESCRIPTOR CACHE) of LINE with THISLINE)
-                               (replace (LINEDESCRIPTOR LTEXTOBJ) of LINE with FOLIOSTREAM)
-                               (add (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE)
-                                    (fetch (REGION LEFT) of REGION))
-                               (add (fetch (LINEDESCRIPTOR RIGHTMARGIN) of LINE)
-                                    (fetch (REGION LEFT) of REGION)) 
+             (SETQ INFOLIST (LISTGET FOLIOINFO 'FORMATINFO)) (* ; 
+                                                             "A LIST OF (FORMAT PRETEXT POSTTEXT)")
+             (SETQ FOLIOFORMAT (CAR INFOLIST))
+             (SETQ PRETEXT (OR (CADR INFOLIST)
+                               ""))
+             (SETQ POSTTEXT (OR (CADDR INFOLIST)
+                                ""))
+             [SETQ PAGE# (COND
+                            ((fetch (PAGEFORMATTINGSTATE PAGE#TEXT) of FORMATTINGSTATE)
+                             (MKSTRING (fetch (PAGEFORMATTINGSTATE PAGE#TEXT) of FORMATTINGSTATE)))
+                            (T (SELECTQ FOLIOFORMAT
+                                   (LOWERROMAN (ROMANNUMERALS (fetch (PAGEFORMATTINGSTATE PAGE#)
+                                                                 of FORMATTINGSTATE)))
+                                   (UPPERROMAN (ROMANNUMERALS (fetch (PAGEFORMATTINGSTATE PAGE#)
+                                                                 of FORMATTINGSTATE)
+                                                      T))
+                                   (MKSTRING (fetch (PAGEFORMATTINGSTATE PAGE#) of FORMATTINGSTATE]
+             [SETQ FOLIOTEXTOBJ (TEXTOBJ (OPENTEXTSTREAM NIL NIL NIL NIL
+                                                (LIST 'PARALOOKS (LISTGET FOLIOINFO 'PARALOOKS)
+                                                      'LOOKS
+                                                      (OR (LISTGET FOLIOINFO 'CHARLOOKS)
+                                                          TEDIT.DEFAULT.FOLIO.LOOKS]
+             (TEDIT.INSERT FOLIOTEXTOBJ (CONCAT PRETEXT PAGE# POSTTEXT)
+                    1 NIL T)
+             (bind LINE YBOT FORCENEXTPAGE (TEXTLEN _ (TEXTLEN FOLIOTEXTOBJ))
+                   (BOTTOM _ (fetch (REGION BOTTOM) of REGION))
+                   (CHNO _ 1) while (ILEQ CHNO TEXTLEN) until FORCENEXTPAGE
+                collect (SETQ LINE (\FORMATLINE FOLIOTEXTOBJ CHNO NIL REGION PRSTREAM FORMATTINGSTATE
+                                          ))
+                      (SETQ FORCENEXTPAGE (EQ (CHARCODE FORM)
+                                              (GETLD LINE FORCED-END))) 
                                                              (* ; "Format the next possible line")
-                               (SETQ CHNO (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE))) 
+                      (SETQ CHNO (ADD1 (FGETLD LINE LCHARLIM))) 
                                                              (* ; 
                                                              "Keep track of the next character...")
-                               [COND
-                                  [YBOT                      (* ; 
+                      [SETQ YBOT (COND
+                                    (YBOT                    (* ; 
                                                  "We're into it;  take account of this line's height")
-                                        (SETQ YBOT (IDIFFERENCE YBOT (fetch (LINEDESCRIPTOR LHEIGHT)
-                                                                        of LINE]
-                                  (T                         (* ; 
+                                          (IDIFFERENCE YBOT (FGETLD LINE LHEIGHT)))
+                                    (T                       (* ; 
    "Just starting out;  find the line's position with respect to the top of the region to be filled.")
-                                     (SETQ YBOT (SETQ YBOT (IDIFFERENCE (fetch (REGION BOTTOM)
-                                                                           of REGION)
-                                                                  (fetch (LINEDESCRIPTOR DESCENT)
-                                                                     of LINE]
-                               (COND
-                                  ((ILESSP YBOT (IDIFFERENCE (fetch (REGION BOTTOM) of REGION)
-                                                       (fetch (LINEDESCRIPTOR DESCENT) of LINE)))
-                                                             (* ; 
-                                                          "This line hangs off the bottom;  punt it.")
-                                   NIL)
-                                  (T                         (* ; "This line is good;  use it.")
-                                     (replace (LINEDESCRIPTOR YBOT) of LINE with YBOT)
-                                     (replace (LINEDESCRIPTOR YBASE) of LINE
-                                        with (IPLUS YBOT (fetch (LINEDESCRIPTOR DESCENT) of LINE)))
-                                     LINE])
+                                       (IDIFFERENCE BOTTOM (FGETLD LINE DESCENT] 
+
+                      (* ;; "Why are we collecting NILs?")
+
+                      (CL:UNLESS (ILESSP YBOT (IDIFFERENCE BOTTOM (FGETLD LINE DESCENT)))
+                          (SETYPOS LINE YBOT)                (* ; "This line is still good")
+                          LINE)))])
 
 (\TEDIT.FORMAT.FOUNDBOX?
-  [LAMBDA (PAGEREGION FORMATTINGSTATE)                       (* ; "Edited 19-Apr-88 17:35 by jds")
+  [LAMBDA (PAGEREGION FORMATTINGSTATE)                       (* ; "Edited  2-Jul-2023 19:07 by rmk")
+                                                             (* ; "Edited 19-Apr-88 17:35 by jds")
 
 (* ;;; "Return T if we're either not looking to begin in a new box, or we are and we've found it.")
 
@@ -1322,65 +1294,50 @@
                     T)
         (SEARCHING                                           (* ; 
                     "We're searching for a page box of the right type.  Decide if this is it or not.")
-                   (COND
-                      ((EQ (fetch (PAGEFORMATTINGSTATE REQUIREDREGIONTYPE) of FORMATTINGSTATE)
-                           (fetch (PAGEREGION REGIONTYPE) of PAGEREGION))
+                   (CL:WHEN (EQ (fetch (PAGEFORMATTINGSTATE REQUIREDREGIONTYPE) of FORMATTINGSTATE)
+                                (fetch (PAGEREGION REGIONTYPE) of PAGEREGION))
                                                              (* ; 
                    "What we're looking for matches what we've got.  Turn off the search and return T")
                        (replace (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE with 'FORMATTING)
-                       T)))
+                       T))
         (:SEARCHING-FOR-EQUIVALENT-PAGE 
                                         (* ;; "We've switched document formats in mid-document, and need to find the corresponding page frame to continue properly.")
 
-             [COND
-                ((IEQP (fetch (PAGEFORMATTINGSTATE REQUIREDREGIONTYPE) of FORMATTINGSTATE)
-                       (fetch (PAGEFORMATTINGSTATE PAGECOUNT) of FORMATTINGSTATE))
+             (CL:WHEN (IEQP (fetch (PAGEFORMATTINGSTATE REQUIREDREGIONTYPE) of FORMATTINGSTATE)
+                            (fetch (PAGEFORMATTINGSTATE PAGECOUNT) of FORMATTINGSTATE))
                                                              (* ; 
                                                             "We've formatted enough pages up to now.")
-                 (replace (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE with 'FORMATTING])
+                 (replace (PAGEFORMATTINGSTATE STATE) of FORMATTINGSTATE with 'FORMATTING)))
         T])
 
 (TEDIT.SKIP.SPECIALCOND
-  [LAMBDA (TEXTOBJ TEXTSTREAM LINE PARALOOKS CHNO IMAGESTREAM)
+  [LAMBDA (TSTREAM LINE PARALOOKS CHNO)                      (* ; "Edited  5-Jul-2023 14:19 by rmk")
+                                                             (* ; "Edited 15-May-2023 22:36 by rmk")
+                                                             (* ; "Edited 16-Feb-2023 00:08 by rmk")
                                                              (* ; 
                                                         "Edited 25-May-93 13:44 by sybalsky:mv:envos")
 
-    (* ;; "This is a special-paragraph that should be skipped in this context (e.g. an EVEN para on an odd page).  Then set LINE:CHARLIM so it will move the document ahead to the next real text.")
+    (* ;; "This is a special-paragraph that should be skipped in this context (e.g. an EVEN para on an odd page).  This is done by setting LINE:LCHARLIM to the last character of the heading so it will move the document ahead to the next real text.")
 
-    (PROG ((PC (fetch (TEXTSTREAM PIECE) of TEXTSTREAM))
-           (LEN 0)
-           (FORMATTINGSTATE (STREAMPROP IMAGESTREAM 'FORMATTINGSTATE))
-           (HEADINGTYPE (fetch FMTPARASUBTYPE of PARALOOKS))
-           NPC PIECES)
-          (SETQ NPC PC)
-          (SETQ PIECES (repeatuntil [OR (NOT PC)
-                                        (AND (fetch (PIECE PPARALAST) of PC)
-                                             (OR (NOT NPC)
-                                                 (NEQ (fetch FMTPARATYPE of (fetch (PIECE PPARALOOKS)
-                                                                               of NPC))
-                                                      'PAGEHEADING)
-                                                 (NEQ HEADINGTYPE (fetch FMTPARASUBTYPE
-                                                                     of (fetch (PIECE PPARALOOKS)
-                                                                           of NPC]
-                          collect                            (* ; "GRAB THE PIECES FOR THIS HEADING.")
-                                (SETQ PC NPC)
-                                (AND PC (add LEN (fetch (PIECE PLEN) of PC))
-                                     (SETQ NPC (fetch (PIECE NEXTPIECE) of PC)))
-                                NIL))
-          (replace (LINEDESCRIPTOR LMARK) of LINE with 'SPECIAL)
-                                                             (* ; 
-                               "Mark this as text to skip, as far as the main formatter's concerned.")
-          (replace (LINEDESCRIPTOR 1STLN) of LINE with T)
-          (replace (LINEDESCRIPTOR LSTLN) of LINE with T)
-          (replace (LINEDESCRIPTOR LHEIGHT) of LINE with 0)
-          (replace (LINEDESCRIPTOR ASCENT) of LINE with 0)
-          (replace (LINEDESCRIPTOR DESCENT) of LINE with 0)
-          (replace (LINEDESCRIPTOR LTRUEASCENT) of LINE with 0)
-          (replace (LINEDESCRIPTOR LTRUEDESCENT) of LINE with 0)
-          (replace (LINEDESCRIPTOR CHARLIM) of LINE with (SUB1 (IPLUS CHNO LEN)))
-                                                             (* ; 
-                               "Set the line's CHARLIM to be the last character in the page heading.")
-      ])
+    (SETLD LINE LMARK 'SPECIAL)
+    (SETLD LINE 1STLN T)
+    (SETLD LINE LSTLN T)
+    (SETLD LINE LHEIGHT 0)
+    (SETLD LINE ASCENT 0)
+    (SETLD LINE DESCENT 0)
+    (SETLD LINE LTRUEASCENT 0)
+    (SETLD LINE LTRUEDESCENT 0)
+    (SETLD LINE LCHARLIM (SUB1 (IPLUS CHNO (for PC (HEADINGTYPE _ (fetch (FMTSPEC FMTPARASUBTYPE)
+                                                                     of PARALOOKS))
+                                              inpieces (fetch (TEXTSTREAM PIECE) of TSTREAM)
+                                              while [AND (EQ 'PAGEHEADING (fetch (FMTSPEC FMTPARATYPE
+                                                                                        )
+                                                                             of (PPARALOOKS PC)))
+                                                         (EQ HEADINGTYPE (fetch (FMTSPEC 
+                                                                                       FMTPARASUBTYPE
+                                                                                       )
+                                                                            of (PPARALOOKS PC]
+                                              sum (PLEN PC])
 )
 
 
@@ -1389,49 +1346,36 @@
 
 (DEFINEQ
 
-(TEDIT.HARDCOPY.PAGEHEADING
-  [LAMBDA (TEXTOBJ TEXTSTREAM LINE PARALOOKS CHNO IMAGESTREAM)
-                                                             (* ; "Edited 18-Mar-93 13:07 by jds")
+(TEDIT.HARDCOPY.PAGEHEADINGS
+  [LAMBDA (TEXTOBJ CHNO FORMATTINGSTATE)                     (* ; "Edited  9-May-2023 17:46 by rmk")
+                                                             (* ; "Edited  7-May-2023 23:45 by rmk")
+                                                             (* ; "Edited  9-Oct-2022 17:12 by rmk")
 
-    (* ;; "Capture the text for this page heading.  Then set LINE:CHARLIM so it will move the document ahead to the next real text.")
+    (* ;; "This runs thru all the headings starting at CHNO, copying the pieces of the different heading types into FORMATTINGSTATE, and returning the  starting CHNO of the first non-heading piece.  ")
 
-    (PROG ((PC (fetch (TEXTSTREAM PIECE) of TEXTSTREAM))
-           (LEN 0)
-           (FORMATTINGSTATE (STREAMPROP IMAGESTREAM 'FORMATTINGSTATE))
-           (HEADINGTYPE (fetch FMTPARASUBTYPE of PARALOOKS))
-           NPC PIECES)
-          (SETQ NPC PC)
-          [SETQ PIECES (repeatuntil [OR (NOT PC)
-                                        (NOT (type? PIECE PC))
-                                        (AND (fetch (PIECE PPARALAST) of PC)
-                                             (OR (NOT NPC)
-                                                 (NEQ (fetch FMTPARATYPE of (fetch (PIECE PPARALOOKS)
-                                                                               of NPC))
-                                                      'PAGEHEADING)
-                                                 (NEQ HEADINGTYPE (fetch FMTPARASUBTYPE
-                                                                     of (fetch (PIECE PPARALOOKS)
-                                                                           of NPC]
-                          collect                            (* ; "GRAB THE PIECES FOR THIS HEADING.")
-                                (SETQ PC NPC)
-                                (COND
-                                   ((type? PIECE PC)
-                                    (add LEN (fetch (PIECE PLEN) of PC))
-                                    (SETQ NPC (fetch (PIECE NEXTPIECE) of PC))
-                                    (\TEDIT.COPYTEXTSTREAM.PIECEMAPFN PC TEXTOBJ TEXTOBJ TEXTOBJ]
-          (replace (LINEDESCRIPTOR LMARK) of LINE with T)
-          (replace (LINEDESCRIPTOR CHARLIM) of LINE with (SUB1 (IPLUS CHNO LEN)))
-                                                             (* ; 
-                               "Set the line's CHARLIM to be the last character in the page heading.")
-          (replace (LINEDESCRIPTOR 1STLN) of LINE with T)
-          (replace (LINEDESCRIPTOR LSTLN) of LINE with T)
-          (replace (LINEDESCRIPTOR LHEIGHT) of LINE with 0)
-          (replace (LINEDESCRIPTOR ASCENT) of LINE with 0)
-          (replace (LINEDESCRIPTOR DESCENT) of LINE with 0)
-          (replace (LINEDESCRIPTOR LTRUEASCENT) of LINE with 0)
-          (replace (LINEDESCRIPTOR LTRUEDESCENT) of LINE with 0)
-          (LISTPUT (fetch PAGEHEADINGS of FORMATTINGSTATE)
-                 (fetch FMTPARASUBTYPE of PARALOOKS)
-                 PIECES])
+    (CL:UNLESS FORMATTINGSTATE                               (* ; 
+                                                     "If it isn't there, we would loose the headings")
+        (SHOULDNT "NIL FORMATTINGSTATE"))
+    (bind HEADINGSUBTYPE (PC _ (\CHTOPC CHNO TEXTOBJ)) while [AND PC (EQ 'PAGEHEADING
+                                                                         (fetch FMTPARATYPE
+                                                                            of (PPARALOOKS PC]
+       do (SETQ HEADINGSUBTYPE (fetch FMTPARASUBTYPE of (PPARALOOKS PC)))
+          (for P (START _ CHNO) inpieces PC while [AND (EQ 'PAGEHEADING (fetch FMTPARATYPE
+                                                                           of (PPARALOOKS P)))
+                                                       (EQ HEADINGSUBTYPE (fetch FMTPARASUBTYPE
+                                                                             of (PPARALOOKS P]
+             do 
+                (* ;; "We loop at least once, because P=PC satisfies the while. We need the CHNO, not the piece for the piecerange")
+
+                (add CHNO (PLEN P)) finally (LISTPUT (fetch PAGEHEADINGS of FORMATTINGSTATE)
+                                                   HEADINGSUBTYPE
+                                                   (\SELPIECES.COPY (\SELPIECES START CHNO TEXTOBJ)))
+                                          
+                                          (* ;; 
+                                          "Set PC to continue looking for the next headingtype.")
+
+                                          (SETQ PC P)))
+    CHNO])
 )
 
 
@@ -1442,7 +1386,10 @@
 
 (TEDIT.HARDCOPY-COLUMN-END
   [LAMBDA (ORIGINAL-LINES ORPHAN FORCENEXTPAGE CHNO FOOTNOTELINES REGION TEXTOBJ FORMATTINGSTATE 
-                 FINAL-CHNO DONT-KEEP-SINGLE-LINE)           (* ; "Edited 11-May-93 01:21 by jds")
+                 FINAL-CHNO DONT-KEEP-SINGLE-LINE)           (* ; "Edited  4-Jul-2023 21:00 by rmk")
+                                                             (* ; "Edited 15-Feb-2023 23:45 by rmk")
+                                                             (* ; "Edited  3-Oct-2022 18:08 by rmk")
+                                                             (* ; "Edited 11-May-93 01:21 by jds")
 
     (* ;; "Do column-end processing for TEdit hardcopy -- widow elimination, respect keep-together specifications, etc.")
 
@@ -1452,124 +1399,108 @@
 
     (* ;; "    -- List of line descriptors removed from the end of the column.")
 
-    (* ;; "    -- ?? CHNO for start of next line in sequence??")
+    (* ;; "    -- Flag to say that it kept one line")
 
     (SETQ ORIGINAL-LINES (DREMOVE NIL ORIGINAL-LINES))       (* ; "Remove any NILs from the list of lines; they're artifacts of running into page headings in mid-page.")
     (LET ((LINES (COPY ORIGINAL-LINES))
           LASTLINE
           (REMOVED-LINES (LIST ORPHAN)))
-         [COND
-            (LINES                                           (* ; 
+         (CL:WHEN LINES                                      (* ; 
                        "Only worry about widows and orphans if there are really lines to worry about")
-                   [for LINE in LINES when (fetch (LINEDESCRIPTOR LMARK) of LINE)
-                      do (DREMOVE LINE LINES)
-                         (SETQ FINAL-CHNO (AND FINAL-CHNO (IMAX FINAL-CHNO (ADD1 (fetch (
-                                                                                       LINEDESCRIPTOR
-                                                                                         CHARLIM)
-                                                                                    of LINE]
-                   (SETQ LASTLINE (CAR (FLAST LINES)))       (* ; 
+             [for LINE in LINES when (GETLD LINE LMARK LINE)
+                do (DREMOVE LINE LINES)
+                   (SETQ FINAL-CHNO (AND FINAL-CHNO (IMAX FINAL-CHNO (ADD1 (GETLD LINE LCHARLIM]
+             (SETQ LASTLINE (CAR (FLAST LINES)))             (* ; 
                                                     "Find the last line in this box (column or page)")
-                   [COND
-                      ((AND ORPHAN (fetch (LINEDESCRIPTOR LSTLN) of ORPHAN)
-                            (NOT (fetch (LINEDESCRIPTOR 1STLN) of ORPHAN)))
+             (CL:WHEN (AND ORPHAN (GETLD ORPHAN LSTLN)
+                           (NOT (GETLD ORPHAN 1STLN)))
 
-                       (* ;; "There was an overhanging line, and it was the last line of the paragraph.  Remove the penultimate line.")
+                 (* ;; "There was an overhanging line, and it was the last line of the paragraph.  Remove the penultimate line.")
 
-                       (SETQ LINES (DREMOVE LASTLINE LINES))
-                       (CL:PUSH LASTLINE REMOVED-LINES)
-                       (SETQ FINAL-CHNO (fetch (LINEDESCRIPTOR CHAR1) of LASTLINE))
-                       (SETQ LASTLINE (CAR (FLAST LINES]
-                   [COND
-                      ((AND LASTLINE (fetch (LINEDESCRIPTOR 1STLN) of LASTLINE)
-                            (NOT (fetch (LINEDESCRIPTOR LSTLN) of LASTLINE))
-                            (ILESSP (fetch (LINEDESCRIPTOR CHARLIM) of LASTLINE)
-                                   (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ)))
-                                                             (* ; 
+                 (SETQ LINES (DREMOVE LASTLINE LINES))
+                 (PUSH REMOVED-LINES LASTLINE)
+                 (SETQ FINAL-CHNO (GETLD LASTLINE LCHAR1))
+                 (SETQ LASTLINE (CAR (FLAST LINES))))
+             (CL:WHEN (AND LASTLINE (GETLD LASTLINE 1STLN)
+                           (NOT (GETLD LASTLINE LSTLN))
+                           (ILESSP (GETLD LASTLINE LCHARLIM)
+                                  (TEXTLEN TEXTOBJ)))        (* ; 
                                              "The last line on the page is a widow.  Remove it, too.")
-                       (SETQ LINES (DREMOVE LASTLINE LINES))
-                       (CL:PUSH LASTLINE REMOVED-LINES)
-                       (SETQ FINAL-CHNO (fetch (LINEDESCRIPTOR CHAR1) of LASTLINE))
-                       (SETQ LASTLINE (CAR (FLAST LINES]
-                   (COND
-                      [(NOT LINES)
+                 (SETQ LINES (DREMOVE LASTLINE LINES))
+                 (PUSH REMOVED-LINES LASTLINE)
+                 (SETQ FINAL-CHNO (GETLD LASTLINE LCHAR1))
+                 (SETQ LASTLINE (CAR (FLAST LINES))))
+             [COND
+                [(NOT LINES)
 
-                       (* ;; "This is a 2- or 3-line paragraph, with only the first 1 or 2 lines fitting on ANY page.  Just return the first 1 or two lines, and we'll have to eat the widow.")
+                 (* ;; "This is a 2- or 3-line paragraph, with only the first 1 or 2 lines fitting on ANY page.  Just return the first 1 or two lines, and we'll have to eat the widow.")
 
-                       (SETQ LINES ORIGINAL-LINES)
-                       (SETQ FINAL-CHNO (COND
-                                           (ORPHAN (fetch (LINEDESCRIPTOR CHAR1) of ORPHAN))
-                                           (T (ADD1 (fetch (LINEDESCRIPTOR CHARLIM)
-                                                       of (CAR (FLAST ORIGINAL-LINES]
-                      ([AND (NEQ FORCENEXTPAGE 'USERBREAK)
-                            (ILEQ CHNO (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                            (OR (fetch FMTHEADINGKEEP of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                            of LASTLINE))
-                                (AND (fetch (FMTSPEC FMTKEEP) of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                    of LASTLINE))
-                                     (NOT (FETCH (LINEDESCRIPTOR LSTLN) OF LASTLINE]
+                 (SETQ LINES ORIGINAL-LINES)
+                 (SETQ FINAL-CHNO (COND
+                                     (ORPHAN (GETLD ORPHAN LCHAR1))
+                                     (T (ADD1 (GETLD (CAR (FLAST ORIGINAL-LINES))
+                                                     LCHARLIM]
+                ([AND (NEQ FORCENEXTPAGE 'USERBREAK)
+                      (ILEQ CHNO (TEXTLEN TEXTOBJ))
+                      (OR (fetch (FMTSPEC FMTHEADINGKEEP) of (GETLD LASTLINE LFMTSPEC))
+                          (AND (fetch (FMTSPEC FMTKEEP) of (GETLD LASTLINE LFMTSPEC))
+                               (NOT (GETLD LASTLINE LSTLN]
 
-                       (* ;; "Only do widow/orphan detection if this is NOT a page break the user asked for.  And this isn't the end of the document.")
+                 (* ;; "Only do widow/orphan detection if this is NOT a page break the user asked for.  And this isn't the end of the document.")
 
-                       (for LASTLINE in (REVERSE LINES)
-                          while [OR (fetch FMTHEADINGKEEP of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                of LASTLINE))
-                                    (AND (fetch (FMTSPEC FMTKEEP) of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                        of LASTLINE))
-                                         (NOT (fetch (LINEDESCRIPTOR LSTLN) of LASTLINE] do 
-
-                                                 (* ;; "Run thru, removing any trailing headings.  However, assure that there's at least one line on a page.")
+                 (for LASTLINE in (REVERSE LINES) while [OR (fetch (FMTSPEC FMTHEADINGKEEP)
+                                                               of (GETLD LASTLINE LFMTSPEC))
+                                                            (AND (fetch (FMTSPEC FMTKEEP)
+                                                                    of (GETLD LASTLINE LFMTSPEC))
+                                                                 (NOT (GETLD LASTLINE LSTLN]
+                    do 
+                       (* ;; "Run thru, removing any trailing headings.  However, assure that there's at least one line on a page.")
  finally (COND
-            [(AND LASTLINE (AND (NOT (fetch FMTHEADINGKEEP of (fetch (LINEDESCRIPTOR LFMTSPEC)
-                                                                 of LASTLINE)))
-                                (fetch (LINEDESCRIPTOR LSTLN) of LASTLINE)))
+            ((AND LASTLINE (AND (NOT (fetch (FMTSPEC FMTHEADINGKEEP) of (GETLD LASTLINE LFMTSPEC)))
+                                (GETLD LASTLINE LSTLN)))
 
              (* ;; "OK we found a line that DOESN'T need to be kept with the other paragraphs.  Chop off the list starting AFTER it.")
 
-             [SETQ LINES (LDIFF LINES (SETQ LASTLINE (CDR (MEMB LASTLINE LINES]
+             (SETQ LASTLINE (CDR (MEMB LASTLINE LINES)))
+             (SETQ LINES (LDIFF LINES LASTLINE))
              (SETQ REMOVED-LINES (APPEND LASTLINE REMOVED-LINES))
-             (SETQ FINAL-CHNO (fetch (LINEDESCRIPTOR CHAR1) of (CAR LASTLINE]
-            (T (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "WARNING:  Page full of headings on page "
-                                                 (fetch (PAGEFORMATTINGSTATE PAGE#) of 
-                                                                                      FORMATTINGSTATE
-                                                        ]
-         [COND
-            (FOOTNOTELINES 
+             (SETQ FINAL-CHNO (GETLD (CAR LASTLINE)
+                                     LCHAR1)))
+            (T (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "WARNING: Page " (fetch (PAGEFORMATTINGSTATE PAGE#)
+                                                                          )
+                                                 " is  completely full of headings"])
+         (CL:WHEN FOOTNOTELINES
 
-                   (* ;; "There are footnotes--fix up their vertical locations, so they're aligned on the botton of the column.")
+             (* ;; "There are footnotes--fix up their vertical locations, so they're aligned on the botton of the column.")
 
-                   (bind [YBOT _ (IDIFFERENCE (fetch (REGION BOTTOM) of REGION)
-                                        (fetch (LINEDESCRIPTOR DESCENT) of (CAR (FLAST FOOTNOTELINES]
-                      for LINE in (REVERSE FOOTNOTELINES)
-                      do (replace (LINEDESCRIPTOR YBOT) of LINE with YBOT)
-                         (replace (LINEDESCRIPTOR YBASE) of LINE with (IPLUS YBOT (fetch (
-                                                                                       LINEDESCRIPTOR
-                                                                                          DESCENT)
-                                                                                     of LINE)))
-                         (add YBOT (fetch (LINEDESCRIPTOR LHEIGHT) of LINE]
+             (bind (YBOT _ (IDIFFERENCE (fetch (REGION BOTTOM) of REGION)
+                                  (GETLD (CAR (FLAST FOOTNOTELINES))
+                                         DESCENT))) for LINE in (REVERSE FOOTNOTELINES)
+                do (SETYPOS LINE YBOT)
+                   (add YBOT (FGETLD LINE LHEIGHT))))
          (COND
             ((OR LINES FOOTNOTELINES)                        (* ; 
                                           "There really ARE lines in this column; take care of them.")
-             (CL:VALUES (APPEND LINES FOOTNOTELINES)
-                    REMOVED-LINES FINAL-CHNO NIL))
-            ((AND ORPHAN (NOT ORIGINAL-LINES)
+             (TEDIT.VALUES (APPEND LINES FOOTNOTELINES)
+                    REMOVED-LINES NIL))
+            [(AND ORPHAN (NOT ORIGINAL-LINES)
                   (NOT DONT-KEEP-SINGLE-LINE))               (* ; 
                                       "If there's only one line left for this box, return it anyhow.")
-             (CL:VALUES (CONS ORPHAN FOOTNOTELINES)
+             (TEDIT.VALUES (CONS ORPHAN FOOTNOTELINES)
                     NIL
-                    (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of ORPHAN))
-                    T))
-            ((AND (NOT DONT-KEEP-SINGLE-LINE)
+                    (ADD1 (GETLD ORPHAN LCHARLIM]
+            [(AND (NOT DONT-KEEP-SINGLE-LINE)
                   REMOVED-LINES)
-             (CL:VALUES (LIST (SETQ LASTLINE (CAR REMOVED-LINES)))
+             (SETQ LASTLINE (CAR REMOVED-LINES))
+             (TEDIT.VALUES (LIST LASTLINE)
                     (CDR REMOVED-LINES)
-                    (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LASTLINE))
-                    NIL))
-            (ORPHAN                                          (* ; "WAS ORPHAN.")
+                    (AND LASTLINE (ADD1 (GETLD LASTLINE LCHARLIM]
+            (ORPHAN 
 
                    (* ;; "There's only the one line, so let's go back and try again.")
 
-                   (CL:VALUES NIL (LIST ORPHAN)
-                          FINAL-CHNO NIL])
+                   (TEDIT.VALUES NIL (LIST ORPHAN)
+                          FINAL-CHNO])
 )
 
 
@@ -1762,66 +1693,49 @@
 (DEFINEQ
 
 (\TEDIT.FORMAT.FOOTNOTE
-  [LAMBDA (TEXTOBJ PRSTREAM LINE REGION PAGEREGION FORMATTINGSTATE)
+  [LAMBDA (TEXTOBJ PRSTREAM LINE REGION FORMATTINGSTATE)     (* ; "Edited  6-May-2023 20:38 by rmk")
+                                                             (* ; "Edited  7-Mar-2023 13:11 by rmk")
                                                              (* ; "Edited 30-May-91 12:52 by jds")
 
-    (* ;; "Grab text from the TEXTOBJ, starting with CH#, and use it to fill REGION on a page.  Return a list of line descriptors which, taken together, fill the region.")
+    (* ;; "Grab text from the TEXTOBJ, starting with CHNO, and use it to fill REGION on a page.  Return a list of line descriptors which, taken together, fill the region.")
 
-    (LET* ((CHNO (fetch (LINEDESCRIPTOR CHAR1) of LINE))
-           (STREAMSCALE (DSPSCALE NIL PRSTREAM))
-           THISLINE LINE YBOT LINES ORPHAN LASTLINE PREVLINE LHEIGHT FMTSPEC SPECIALYPOS NEWPAGETYPE)
-          (SETQ LINES (while [AND (ILEQ CHNO (fetch (TEXTOBJ TEXTLEN) of TEXTOBJ))
-                                  (OR (NOT PREVLINE)
-                                      (NOT (fetch (LINEDESCRIPTOR LSTLN) of PREVLINE]
-                         collect (SETQ LINE (OR (pop (fetch (PAGEFORMATTINGSTATE PAGELINECACHE)
-                                                        of FORMATTINGSTATE))
-                                                (create LINEDESCRIPTOR))) 
-                                                             (* ; 
-                               "Grab a line descriptor from the recycling list, or create a new one.")
-                               (SETQ THISLINE (OR (fetch (LINEDESCRIPTOR CACHE) of LINE)
-                                                  (create THISLINE))) 
-                                                             (* ; 
-                                            "And a recycled or new THISLINE cache for char widths &c")
-                               (BLOCK)                       (* ; 
-                                                   "Allow other things to happen while we format....")
-                               (\TEDIT.HARDCOPY.FORMATLINE TEXTOBJ (fetch (REGION WIDTH) of REGION)
-                                      CHNO THISLINE LINE PRSTREAM) 
+    (BLOCK)                                                  (* ; 
+                                                             "Footnotes aren't so long, but why not?")
+    (bind PREVLINE (LEFT _ (fetch (REGION LEFT) of REGION))
+          (TEXTLEN _ (TEXTLEN TEXTOBJ))
+          (CHNO _ (GETLD LINE LCHAR1)) while (ILEQ CHNO TEXTLEN) until (AND PREVLINE (GETLD PREVLINE
+                                                                                            LSTLN))
+       collect 
+
+             (* ;; "Grab a line descriptor from the formatting list, or create a new one.")
+
+             (SETQ LINE (\FORMATLINE TEXTOBJ CHNO (fetch (PAGEFORMATTINGSTATE PAGELINECACHE)
+                                                     of FORMATTINGSTATE)
+                               REGION PRSTREAM FORMATTINGSTATE)) 
                                                              (* ; 
                                                              "Format the line, noting any form-feeds")
-                               (replace (LINEDESCRIPTOR CACHE) of LINE with THISLINE) 
-                                                             (* ; 
-                                                        "Mark this line as having cached print info.")
-                               (replace (LINEDESCRIPTOR LTEXTOBJ) of LINE with (fetch (TEXTOBJ 
-                                                                                           STREAMHINT
-                                                                                             )
-                                                                                  of TEXTOBJ)) 
-                                                             (* ; 
+             (SETLD LINE LTEXTOBJ TEXTOBJ)                   (* ; 
                                                             "And remember the document it came from.")
-                               (SETQ FMTSPEC (fetch (LINEDESCRIPTOR LFMTSPEC) of LINE))
-                               (add (fetch (LINEDESCRIPTOR LEFTMARGIN) of LINE)
-                                    (fetch (REGION LEFT) of REGION))
-                               (add (fetch (LINEDESCRIPTOR RIGHTMARGIN) of LINE)
-                                    (fetch (REGION LEFT) of REGION)) 
-                                                             (* ; "Format the next possible line")
-                               (SETQ CHNO (ADD1 (fetch (LINEDESCRIPTOR CHARLIM) of LINE))) 
-                                                             (* ; 
+             (add (FGETLD LINE LEFTMARGIN)
+                  LEFT)
+             (add (FGETLD LINE RIGHTMARGIN)
+                  LEFT)                                      (* ; "Format the next possible line")
+             (SETQ CHNO (ADD1 (FGETLD LINE LCHARLIM)))       (* ; 
                                                              "Keep track of the next character...")
-                               (SETQ PREVLINE LINE)
-                               LINE))
-          (SETQ LINES (DREMOVE NIL LINES))                   (* ; 
+             (SETQ PREVLINE LINE)
+             LINE finally                                    (* ; 
    "Remove any NILs from the line list;  they're artifacts of running across page headings in-stream")
-          LINES])
+                        (RETURN (DREMOVE NIL $$VAL])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (5090 8513 (TEDIT.GET.PAGEFRAMES 5100 . 5454) (TEDIT.PARSE.PAGEFRAMES 5456 . 6879) (
-TEDIT.PUT.PAGEFRAMES 6881 . 7511) (TEDIT.UNPARSE.PAGEFRAMES 7513 . 8511)) (8559 21110 (
-TEDIT.SINGLE.PAGEFORMAT 8569 . 18906) (TEDIT.COMPOUND.PAGEFORMAT 18908 . 19538) (TEDIT.PAGEFORMAT 
-19540 . 21108)) (21197 94262 (TEDIT.FORMAT.HARDCOPY 21207 . 31947) (TEDIT.FORMATBOX 31949 . 46666) (
-TEDIT.FORMATHEADING 46668 . 52835) (TEDIT.FORMATPAGE 52837 . 63761) (TEDIT.FORMATTEXTBOX 63763 . 82761
-) (TEDIT.FORMATFOLIO 82763 . 89282) (\TEDIT.FORMAT.FOUNDBOX? 89284 . 91343) (TEDIT.SKIP.SPECIALCOND 
-91345 . 94260)) (94342 97315 (TEDIT.HARDCOPY.PAGEHEADING 94352 . 97313)) (97424 106093 (
-TEDIT.HARDCOPY-COLUMN-END 97434 . 106091)) (106138 111079 (SCALEPAGEUNITS 106148 . 107289) (
-SCALEPAGEXUNITS 107291 . 108061) (SCALEPAGEYUNITS 108063 . 108834) (\TEDIT.PAPERHEIGHT 108836 . 109771
-) (\TEDIT.PAPERWIDTH 109773 . 111077)) (111495 115063 (ROMANNUMERALS 111505 . 115061)) (115099 119241 
-(\TEDIT.FORMAT.FOOTNOTE 115109 . 119239)))))
+  (FILEMAP (NIL (11422 14613 (TEDIT.PARSE.PAGEFRAMES 11432 . 13001) (TEDIT.PUT.PAGEFRAMES 13003 . 13611)
+ (TEDIT.UNPARSE.PAGEFRAMES 13613 . 14611)) (14659 27301 (TEDIT.SINGLE.PAGEFORMAT 14669 . 25097) (
+TEDIT.COMPOUND.PAGEFORMAT 25099 . 25729) (TEDIT.PAGEFORMAT 25731 . 27299)) (27388 88653 (
+TEDIT.FORMAT.HARDCOPY 27398 . 38274) (TEDIT.FORMATBOX 38276 . 52146) (TEDIT.FORMATHEADING 52148 . 
+55548) (TEDIT.FORMATPAGE 55550 . 65010) (TEDIT.FORMATTEXTBOX 65012 . 79942) (TEDIT.FORMATFOLIO 79944
+ . 84440) (\TEDIT.FORMAT.FOUNDBOX? 84442 . 86586) (TEDIT.SKIP.SPECIALCOND 86588 . 88651)) (88733 91014
+ (TEDIT.HARDCOPY.PAGEHEADINGS 88743 . 91012)) (91123 98147 (TEDIT.HARDCOPY-COLUMN-END 91133 . 98145)) 
+(98192 103133 (SCALEPAGEUNITS 98202 . 99343) (SCALEPAGEXUNITS 99345 . 100115) (SCALEPAGEYUNITS 100117
+ . 100888) (\TEDIT.PAPERHEIGHT 100890 . 101825) (\TEDIT.PAPERWIDTH 101827 . 103131)) (103549 107117 (
+ROMANNUMERALS 103559 . 107115)) (107153 109575 (\TEDIT.FORMAT.FOOTNOTE 107163 . 109573)))))
 STOP

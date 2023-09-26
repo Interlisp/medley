@@ -36,7 +36,7 @@
 
      *    ## WINDOWS 10/11 (Single install based on cygwin - Docker install deprecated)
 
-     [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for Windows x64 machines](@@@DOWNLOAD_URL@@@/@@@WINDOWS.INSTALLER.FILENAME@@@)
+     [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for Windows x64 machines](@@@DOWNLOAD_URL@@@/@@@CYGWIN.INSTALLER@@@)
 
      *    ## macOS 11 (Big Sur) and later - for both Intel and Apple Silicon
 

@@ -384,8 +384,7 @@ jobs:
           echo "MACOS_DIR=${MACOS_DIR}" >>${GITHUB_ENV}
           echo "ARTIFACTS_DIR=${MACOS_DIR}/artifacts" >>${GITHUB_ENV}
           echo "TARBALL_DIR=${MACOS_DIR}/tmp/tarballs" >>${GITHUB_ENV}
-          echo "MEDLEY_RELEASE_TAG=${{ needs.loadup.outputs.medley_release_tag }}" \
-                >>${GITHUB_ENV}
+          echo "MEDLEY_RELEASE_TAG=${{ needs.loadup.outputs.medley_release_tag }}" >>${GITHUB_ENV}
           echo "ARTIFACTS_FILENAME_TEMPLATE=${{ needs.loadup.outputs.artifacts_filename_template }}" >>${GITHUB_ENV}
 
       # Create tarball dir
@@ -439,7 +438,7 @@ jobs:
       || needs.inputs.outputs.force == 'true'
 
     outputs:
-      windows_installer_filename: ${{ steps.jobout.outputs.INSTALLER_FILENAME }}
+      cygwin_installer: ${{ steps.compile_iss.outputs.CYGWIN_INSTALLER }}
 
     steps:
 
@@ -502,11 +501,13 @@ jobs:
 
       # Run iscc.exe to compile the installer
       - name: Compile cygwin_medley.iss
+        id: compile_iss
         shell: powershell
         run: |
+           $CYGWIN_INSTALLER="medley-full-cygwin-x86_64-${env:COMBINED_RELEASE_TAG}.exe"
+           echo "CYGWIN_INSTALLER=$CYGWIN_INSTALLER" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+           echo "CYGWIN_INSTALLER=$CYGWIN_INSTALLER" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
            iscc installers\cygwin\medley.iss
-           $filename="medley-full-cygwin-x86_64-${env:COMBINED_RELEASE_TAG}.exe"
-           echo "INSTALLER_FILENAME=$filename" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       # Upload windows installer to release
       - name: Upload windows installer to release
@@ -514,7 +515,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: installers/cygwin/${{ env.INSTALLER_FILENAME }}
+          artifacts: installers/cygwin/${{ env.CYGWIN_INSTALLER }}
           tag: ${{ env.MEDLEY_RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           omitBodyDuringUpdate: true
@@ -549,6 +550,8 @@ jobs:
           echo "MEDLEY_RELEASE_TAG=${mrt}" >>${GITHUB_ENV}
           msrt="${{ needs.loadup.outputs.medley_short_release_tag }}"
           echo "MEDLEY_SHORT_RELEASE_TAG=${msrt}" >>${GITHUB_ENV}
+          cyginst="${{ needs.windows_installer.outputs.cygwin_installer }}"
+          echo "CYGWIN_INSTALLER=${cyginst}" >>${GITHUB_ENV}
 
       # Checkout latest commit
       - name: Checkout Medley
@@ -598,6 +601,7 @@ jobs:
                -e "s/@@@MEDLEY.SHORT.RELEASE.TAG@@@/${MEDLEY_SHORT_RELEASE_TAG}/g" \
                -e "s/@@@COMBINED.RELEASE.TAG@@@/${COMBINED_RELEASE_TAG}/g" \
                -e "s~@@@DOWNLOAD_URL@@@~${download_url}~g" \
+               -e "s~@@@CYGWIN.INSTALLER@@@~${CYGWIN_INSTALLER}~g" \
                < "${local_template}" > "${local_filename}"
             # Create sftp instruction file
             echo "-rm ${remote_filepath}.oldold" > batch
@@ -611,6 +615,11 @@ jobs:
             sftp -o StrictHostKeyChecking=no -b batch ubuntu@online.interlisp.org
         env:
             SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
+
+      # Remove placeholder.txt
+      - name: Remove placeholder.txt
+        run: |
+          gh release delete-asset ${{ env.MEDLEY_RELEASE_TAG }} placeholder.txt --yes
 
 
 

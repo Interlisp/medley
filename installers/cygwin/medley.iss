@@ -33,7 +33,7 @@ SolidCompression=yes
 ; 64-bit Program Files directory and the 64-bit view of the registry.
 ArchitecturesInstallIn64BitMode=x64
 OutputDir="."
-OutputBaseFilename="medley-full-{#version}-cygwin-x86_64"
+OutputBaseFilename=GetEnv('CYGWIN_INSTALLER')
 SetupIconFile="Medley.ico"
 DisableWelcomePage=no
 MissingRunOnceIdsWarning=no

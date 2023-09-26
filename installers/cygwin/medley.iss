@@ -16,6 +16,12 @@
 #define VERSION="local"
 #endif
 
+#if GetEnv('CYGWIN_INSTALLER_BASE') != ""
+#define OUTFILE=GetEnv('CYGWIN_INSTALLER_BASE')
+#else
+#define OUTFILE="medley-full-cygwin-x86_64-local"
+#endif
+
 [Setup]
 PrivilegesRequired=lowest
 ArchitecturesAllowed={#x86_or_x64}
@@ -33,7 +39,7 @@ SolidCompression=yes
 ; 64-bit Program Files directory and the 64-bit view of the registry.
 ArchitecturesInstallIn64BitMode=x64
 OutputDir="."
-OutputBaseFilename=GetEnv('CYGWIN_INSTALLER')
+OutputBaseFilename={#OUTFILE}
 SetupIconFile="Medley.ico"
 DisableWelcomePage=no
 MissingRunOnceIdsWarning=no

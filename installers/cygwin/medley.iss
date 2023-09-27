@@ -73,6 +73,8 @@ Filename: "{app}\bin\bash"; Parameters: "-login -c 'sed -i -e s/^none/#none/ /et
 Filename: "tar"; Parameters: "-x -z -C {app} -f {app}\install\medley.tgz"; Flags: runhidden; StatusMsg: "Installing Medley ..."
 Filename: "powershell"; Parameters: "remove-item -force -recurse {app}\maiko"; Flags: runhidden; StatusMsg: "Installing Maiko ..."
 Filename: "tar"; Parameters: "-x -z -C {app} -f {app}\install\maiko-cygwin.x86_64.tgz"; Flags: runhidden; StatusMsg: "Installing Maiko ..."
+; Recreate medley symbolic links (lost in tars)
+Filename: "{app}\bin\bash"; Parameters: "-login -c 'cd /medley/scripts/medley && ln -s medley.command medley.sh && cd ../.. && ln -s /medley/scripts/medley/medley.sh medley'"; Flags: runhidden
 ; Create medley.bat
 Filename: "powershell"; Parameters: "write-output \""{app}\bin\bash -login -c '/medley/scripts/medley/medley.sh %*'\""  | out-file medley.bat -Encoding ascii"; WorkingDir: "{app}"; Flags: runhidden; StatusMsg: "Creating medley.bat ..."
 Filename: "{app}\uninstall\EditPath.exe"; Parameters: "--user --add {app}"; Flags: runhidden; StatusMsg: "Adding to PATH ..."

@@ -57,8 +57,7 @@ export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ../..; pwd)
 IL_DIR=$(cd ${MEDLEYDIR}; cd ..; pwd)
 export LOGINDIR=${HOME}/il
 
-# Are we running under Docker or if not under WSL
-# or under Darwin?
+# Are we running under Docker or WSL or Darwin or Cygwin?
 #
 docker=false
 wsl=false
@@ -70,7 +69,7 @@ then
 elif [ -n "${MEDLEY_DOCKER_BUILD_DATE}" ];
 then
   docker='true'
-else
+elif [ ${$(uname -s):0:6} != "CYGWIN" ];
   wsl_ver=0
   # WSL2
   grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
@@ -92,9 +91,6 @@ else
         echo "This is not an x86_64-based PC."
         echo "Exiting"
         exit 23
-      fi
-    else
-      wsl='false'
     fi
   fi
 fi

@@ -69,7 +69,8 @@ then
 elif [ -n "${MEDLEY_DOCKER_BUILD_DATE}" ];
 then
   docker='true'
-elif [ ${$(uname -s):0:6} != "CYGWIN" ];
+elif [ $(uname -s | head --bytes 6) != "CYGWIN" ];
+then
   wsl_ver=0
   # WSL2
   grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
@@ -91,6 +92,7 @@ elif [ ${$(uname -s):0:6} != "CYGWIN" ];
         echo "This is not an x86_64-based PC."
         echo "Exiting"
         exit 23
+      fi
     fi
   fi
 fi

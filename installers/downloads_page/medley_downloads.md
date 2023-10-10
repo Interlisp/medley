@@ -34,6 +34,10 @@
 
              [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl-aarch64-@@@COMBINED.RELEASE.TAG@@@.tgz)
 
+     *    ## WINDOWS 10/11 (Single install based on cygwin - Docker install deprecated)
+
+     [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for Windows x64 machines](@@@DOWNLOAD_URL@@@/@@@CYGWIN.INSTALLER@@@)
+
      *    ## macOS 11 (Big Sur) and later - for both Intel and Apple Silicon
 
          *    ### DMG Installer
@@ -43,12 +47,3 @@
          *    ### ZIP Installer
 
               [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@](@@@DOWNLOAD_URL@@@/medley-full-macos-universal-@@@COMBINED.RELEASE.TAG@@@.zip)
-
-     *    ## WINDOWS 10/11 (Medley running within Cygwin)
-
-          Not available
-
-
-
-
-

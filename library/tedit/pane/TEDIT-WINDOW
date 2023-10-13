@@ -1,12 +1,15 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "13-Oct-2023 00:51:11" {WMEDLEY}<library>TEDIT>TEDIT-WINDOW.;226 170849 
+(FILECREATED "11-Oct-2023 23:36:08" {WMEDLEY}<library>tedit>pane>TEDIT-WINDOW.;1 168894 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.CREATEW \TEDIT.WINDOW.SETUP \TEDIT.FLASHCARET \TEDIT.BUTTONEVENTFN)
+      :CHANGES-TO (FNS \TEDIT.PANEWITHINSCREEN? \TEDIT.WINDOW2PANE \TEDIT.SCROLLFN \TEDIT.SETCARET)
+                  (VARS TEDIT-WINDOWCOMS)
+                  (RECORDS PANE)
+                  (MACROS FGETPANE GETPANE SETPANE FSETPANE)
 
-      :PREVIOUS-DATE "12-Oct-2023 15:24:49" {WMEDLEY}<library>tedit>TEDIT-WINDOW.;222)
+      :PREVIOUS-DATE "10-Oct-2023 10:27:03" {WMEDLEY}<library>tedit>TEDIT-WINDOW.;215)
 
 
 (PRETTYCOMPRINT TEDIT-WINDOWCOMS)
@@ -18,11 +21,11 @@
         (INITRECORDS TEDITCARET PANE)
         (FILES ATTACHEDWINDOW)
         (FNS \TEDIT.CREATEW \TEDIT.WINDOW.SETUP \TEDIT.SPLITW \TEDIT.MINIMAL.WINDOW.SETUP 
-             \TEDIT.ADD.CARET)
+             \TEDIT.ADD.CARET \TEDIT.WINDOW2PANE)
         (FNS TEDIT.CURSORMOVEDFN TEDIT.CURSOROUTFN \TEDIT.ACTIVE.WINDOWP \TEDIT.BUTTONEVENTFN 
              \TEDIT.WINDOW.OPS \TEDIT.EXPANDFN \TEDIT.MAINW \TEDIT.PRIMARYW \TEDIT.COPYINSERTFN 
              \TEDIT.NEWREGIONFN \TEDIT.SET.WINDOW.EXTENT \TEDIT.SHRINK.ICONCREATE \TEDIT.SHRINKFN 
-             \TEDIT.SPLITW \TEDIT.UNSPLITW \PANEREGION)
+             \TEDIT.SPLITW \TEDIT.UNSPLITW)
         (P (MOVD? 'NILL 'GRAB-TYPED-REGION)
            (MOVD? 'NILL 'REGISTER-TYPED-REGION))
         (INITVARS (\TEDIT.OP.WIDTH 12)
@@ -146,7 +149,10 @@
 
 (DATATYPE PANE ((XPWINDOW FULLXPOINTER)
                 PLINES PCARET HOLDDUMMYFIRSTLINE NEXTPANE (PREVPANE XPOINTER))
-               (ACCESSFNS (PWINDOW (PROGN DATUM))))
+               [ACCESSFNS ((PWINDOW (PROGN DATUM))
+                           (PTEXTOBJ (fetch (TEXTWINDOW PTEXTOBJ) of (FGETPANE DATUM PWINDOW))
+                                  (replace (TEXTWINDOW PTEXTOBJ) of (FGETPANE DATUM PWINDOW)
+                                     with NEWVALUE])
 )
 
 (/DECLAREDATATYPE 'TEDITCARET '(POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER 
@@ -227,8 +233,7 @@
 (DEFINEQ
 
 (\TEDIT.CREATEW
-  [LAMBDA (WINDOW TSTREAM PROPS)                             (* ; "Edited 13-Oct-2023 00:49 by rmk")
-                                                             (* ; "Edited 10-Oct-2023 10:21 by rmk")
+  [LAMBDA (WINDOW TSTREAM PROPS)                             (* ; "Edited 10-Oct-2023 10:21 by rmk")
                                                              (* ; "Edited  1-Oct-2023 14:57 by rmk")
                                                              (* ; "Edited 30-Sep-2023 00:04 by rmk")
                                                              (* ; "Edited 24-Sep-2023 20:38 by rmk")
@@ -236,14 +241,17 @@
                                                              (* ; "Edited  1-Jan-2022 23:54 by rmk")
                                                              (* ; "Edited 30-Dec-2021 23:00 by rmk")
                                                              (* ; "Edited 29-Dec-2021 16:35 by rmk")
-                                                             (* ; "Edited 24-Dec-2021 19:21 by rmk")
-                                                             (* jds "23-May-85 15:19")
-                                                             (* ; "Edited 27-Oct-2021 12:25 by rmk:")
+                                                             (* ; "Edited 24-Dec-2021 19:21 by rmk")
+                                                            (* ; "Edited 27-Oct-2021 12:25 by rmk:")
+
+    (* ;; "RMK: PROPS is passed to CREATEW.")
 
     (* ;; 
    "Don't set the global TEDIT default window if we have a REGIONTYPE, that must be special purpose.")
 
-    (* ;; "If the region/window is typed, we grab (or create) a region of that type.  The usual entry (TEDIT) defaults to type Tedit, giving a stack of regions in TYPED-REGIONS.  The effect is that the next (Tedit) window will open where the last Tedit window closed.   It's a little tricky for REGIONMANAGER  to compensate for the prompt window, but it means that the user can reshape what is initially offered.")
+    (* ;; "If it isn't typed and TEDIT.DEFAULT.REGION is available, we reuse it.  Otherwise we ask for a region for this window that will become the default region when this window is closed.  The effect is that the next (untyped) window will open where the last closed window opened.   A little tricky if we want to open in place of the last closed window, we would have to compensate for the prompt window.")
+
+    (* ;; "Add a promptwindow unless the prop says DON'T")
                                                              (* jds "23-May-85 15:19")
     (LET ((TEXTOBJ (TEXTOBJ TSTREAM))
           [TITLE (AND (WINDOWP WINDOW)
@@ -252,7 +260,9 @@
           REGIONTYPE PROMPTPROP REGION FILE PWINDOW PREPROMPT)
          (SETQ REGIONTYPE (OR (GETTEXTPROP TEXTOBJ 'REGION-TYPE)
                               (AND (LITATOM WINDOW)
-                                   WINDOW)))
+                                   (NEQ T WINDOW)
+                                   WINDOW)
+                              'Tedit))
          (SETQ FILE (GETTOBJ TEXTOBJ TXTFILE))
          (CL:UNLESS TITLE
              (SETQ TITLE (\TEDIT.ORIGINAL.WINDOW.TITLE FILE NIL PROPS)))
@@ -312,8 +322,7 @@
          WINDOW])
 
 (\TEDIT.WINDOW.SETUP
-  [LAMBDA (PANE TSTREAM PROPS AFTERPANE FIRSTLINE)           (* ; "Edited 12-Oct-2023 23:41 by rmk")
-                                                             (* ; "Edited 10-Oct-2023 00:30 by rmk")
+  [LAMBDA (PANE TSTREAM PROPS AFTERPANE FIRSTLINE)           (* ; "Edited 10-Oct-2023 00:30 by rmk")
                                                              (* ; "Edited  4-Oct-2023 22:59 by rmk")
                                                              (* ; "Edited 10-May-2023 23:47 by rmk")
                                                              (* ; "Edited  5-Nov-2022 23:13 by rmk")
@@ -352,8 +361,7 @@
          (SETQ SEL (TEXTSEL TEXTOBJ))
          (\TEDIT.ADD.CARET TEXTOBJ)
          (\SHOWSEL SEL NIL (AND AFTERPANE PANE))
-         (\FIXSEL SEL TEXTOBJ NIL (AND AFTERPANE PANE))      (* ; "Don't flash readonly")
-         (FSETSEL SEL HASCARET (NOT (FGETTOBJ TEXTOBJ TXTREADONLY)))
+         (\FIXSEL SEL TEXTOBJ NIL (AND AFTERPANE PANE))
          (\SHOWSEL SEL T (AND AFTERPANE PANE))
          (\TEDIT.SET.WINDOW.EXTENT TEXTOBJ PANE)
          (\COPYSEL SEL TEDIT.SELECTION])
@@ -450,8 +458,8 @@
     (LET ((TEXTOBJ (TEXTOBJ TSTREAM))
           DS PROP OLDPANES)                                  (* ; 
                                                            "The displaystream for flashing the caret")
-         (FSETTOBJ TEXTOBJ PANES (CONS (create PANE
-                                              XPWINDOW _ WINDOW)))
+         (SETTOBJ TEXTOBJ PANES (CONS (create PANE
+                                             PWINDOW _ WINDOW)))
          (FSETTOBJ TEXTOBJ SELWINDOW WINDOW)
          (WINDOWPROP WINDOW 'PROCESS NIL)                    (* ; 
                                                            "For the moment, this pane has no process")
@@ -538,6 +546,13 @@
                                    (create TEDITCARET
                                           TCFORCEUP _ T
                                           TCCARETDS _ (WINDOWPROP PANE 'DSP])
+
+(\TEDIT.WINDOW2PANE
+  [LAMBDA (WINDOW TEXTOBJ)                                   (* ; "Edited 11-Oct-2023 21:28 by rmk")
+                                                             (* (find P inpanes (PROGN TEXTOBJ) 
+                                                             suchthat (EQ WINDOW (FGETPANE P 
+                                                             PWINDOW))))
+    WINDOW])
 )
 (DEFINEQ
 
@@ -658,8 +673,7 @@
                           (PROCESSP (WINDOWPROP W 'PROCESS])
 
 (\TEDIT.BUTTONEVENTFN
-  [LAMBDA (PANE)                                             (* ; "Edited 12-Oct-2023 22:35 by rmk")
-                                                             (* ; "Edited  1-Oct-2023 23:25 by rmk")
+  [LAMBDA (PANE)                                             (* ; "Edited  1-Oct-2023 23:25 by rmk")
                                                              (* ; "Edited 30-Sep-2023 16:54 by rmk")
                                                              (* ; "Edited 22-Sep-2023 20:12 by rmk")
                                                              (* ; "Edited 19-Sep-2023 15:21 by rmk")
@@ -805,27 +819,25 @@
                            (NOT (GETTOBJ TEXTOBJ TXTREADONLY)))
                                                              (* ; 
                                                        "Note that he's holding the control key down.")
-                      (\SHOWSEL (FGETTOBJ TEXTOBJ SEL)
+                      (\SHOWSEL (GETTOBJ TEXTOBJ SEL)
                              NIL)
                       (SETQ GLOBALSEL TEDIT.DELETESELECTION)
-                      (SETQ OSEL (FGETTOBJ TEXTOBJ DELETESEL))
-                      (CL:UNLESS (FGETSEL OSEL SET)          (* ; 
-        "If there is a pending delete selection, use it, and turn off the existing normal selection.")
-                          (\COPYSEL (FGETTOBJ TEXTOBJ SEL)
-                                 (FGETTOBJ TEXTOBJ DELETESEL)))
-                      (SETSEL (FGETTOBJ TEXTOBJ SEL)
+                      (CL:UNLESS (GETSEL (GETTOBJ TEXTOBJ DELETESEL)
+                                        SET)                 (* ; 
+         "If there is a pending delete selectio, use it, and turn off the existing normal selection.")
+                          (\COPYSEL (GETTOBJ TEXTOBJ SEL)
+                                 (GETTOBJ TEXTOBJ DELETESEL)))
+                      (SETSEL (GETTOBJ TEXTOBJ SEL)
                              SET NIL)
 
                       (* ;; "Remember to turn off the normal selection, since we'll be moving it to a new spot after the deletion.")
 
+                      (SETQ OSEL (GETTOBJ TEXTOBJ DELETESEL))
                       (SETQ SELOPERATION 'DELETE)
-                      (LET ((WASON (FGETSEL OSEL ONFLG)))
-                           (\SHOWSEL OSEL NIL)
-                           (\TEDIT.SET.SEL.LOOKS OSEL 'DELETE)
-                           (\SHOWSEL OSEL WASON))
-                      (FSETTOBJ TEXTOBJ BLUEPENDINGDELETE NIL))
-                     (T (SETQ OSEL (FGETTOBJ TEXTOBJ SEL))
-                        (FSETTOBJ TEXTOBJ BLUEPENDINGDELETE NIL)))
+                      (TEDIT.SET.SEL.LOOKS OSEL 'DELETE)
+                      (SETTOBJ TEXTOBJ BLUEPENDINGDELETE NIL))
+                     (T (SETQ OSEL (GETTOBJ TEXTOBJ SEL))
+                        (SETTOBJ TEXTOBJ BLUEPENDINGDELETE NIL)))
                   (\COPYSEL OSEL GLOBALSEL)
 
                   (* ;; "")
@@ -1404,41 +1416,6 @@
                (ATTACHWINDOW NEXTPANE PRIORPANE 'BOTTOM 'JUSTIFY 'MAIN))
            (CLOSEW PANE)
            (\TEDIT.SHOWSELS TEXTOBJ T])
-
-(\PANEREGION
-  [LAMBDA (PANE)                                             (* ; "Edited 10-May-2023 23:15 by rmk")
-
-    (* ;; "Value may be a shrunken version of PANE's clipping region, reduced to the subregion that is visible on the screen in its original coordinates.  That is, if the bottom is now 100 points below the screen, then 100 is added to BOTTOM and taken away from HEIGHT.")
-
-    (LET [(PREG (DSPCLIPPINGREGION NIL PANE))
-          (WREG (WINDOWPROP PANE 'REGION]
-         (if (OR (ILESSP (fetch (REGION LEFT) of WREG)
-                        0)
-                 (ILESSP (fetch (REGION BOTTOM) of WREG)
-                        0)
-                 (IGREATERP (fetch (REGION PRIGHT) of WREG)
-                        SCREENWIDTH)
-                 (IGREATERP (fetch (REGION PTOP) of WREG)
-                        SCREENHEIGHT))
-             then [LET [[LDIFF (IMAX 0 (IDIFFERENCE 0 (fetch (REGION LEFT) of WREG]
-                        [BDIFF (IMAX 0 (IDIFFERENCE 0 (fetch (REGION BOTTOM) of WREG]
-                        (RDIFF (IMAX 0 (IDIFFERENCE (fetch (REGION RIGHT) of WREG)
-                                              SCREENWIDTH)))
-                        (TDIFF (IMAX 0 (IDIFFERENCE (fetch (REGION HEIGHT) of WREG)
-                                              SCREENHEIGHT]
-
-                       (* ;; 
-      "The diffs are positive or 0--how much is outside the screen and needs to be added/subtracted.")
-
-                       (CREATEREGION (IPLUS (fetch (REGION LEFT) of PREG)
-                                            LDIFF)
-                              (IPLUS (fetch (REGION BOTTOM) of PREG)
-                                     BDIFF)
-                              (IDIFFERENCE (fetch (REGION WIDTH) of PREG)
-                                     (IPLUS LDIFF RDIFF))
-                              (IDIFFERENCE (fetch (REGION HEIGHT) of PREG)
-                                     (IPLUS BDIFF TDIFF]
-           else PREG])
 )
 
 (MOVD? 'NILL 'GRAB-TYPED-REGION)
@@ -1971,13 +1948,15 @@
                  T])
 
 (\TEDIT.PANEWITHINSCREEN?
-  [LAMBDA (PANE)                                             (* ; "Edited 10-May-2023 23:37 by rmk")
+  [LAMBDA (PANE)                                             (* ; "Edited 11-Oct-2023 11:50 by rmk")
+                                                             (* ; "Edited 10-May-2023 23:37 by rmk")
 
     (* ;; "True if PANE is completely within the screen and therefore that it is safe to reuse image-bits that were previously displayed anywhere within PANE's clipping region.")
 
     (* ;; " \TEDIT.AFTERMOVEFN records this as a property on the PANE.  Also, if this is false after a move, then the aftermovefn forces a redisplay.  ")
 
-    (LET [(PANEREG (WINDOWPROP PANE 'REGION]
+    (LET [(PANEREG (WINDOWPROP (FGETPANE PANE PWINDOW)
+                          'REGION]
          (AND (IGEQ (fetch (REGION BOTTOM) of PANEREG)
                     0)
               (IGEQ (fetch (REGION LEFT) of PANEREG)
@@ -1990,7 +1969,9 @@
 (DEFINEQ
 
 (\TEDIT.SCROLLFN
-  [LAMBDA (PANE DX DY)
+  [LAMBDA (WINDOW DX DY)
+
+    (* ;; "Edited 11-Oct-2023 23:08 by rmk")
 
     (* ;; "Edited  9-Oct-2023 23:23 by rmk")
 
@@ -2001,12 +1982,12 @@
     (* ;; "Edited 11-May-2023 12:03 by rmk")
 
     (* ;; 
-   "Edited 18-Feb-2022 14:53 by rmk: Repaint after scrolling for panes that are partially off-screen")
+    "Edited 18-Feb-2022 14:53 by rmk: WINDOW is the PWINDOW of a pane.  This scrolls just that pane.")
 
-    (TOTOPW PANE)
-    (PROG ((TEXTOBJ (fetch (TEXTWINDOW PTEXTOBJ) of PANE))
-           SEL ON)
-          (\DTEST TEXTOBJ 'TEXTOBJ)
+    (TOTOPW WINDOW)
+    (PROG ((TEXTOBJ (\DTEST (fetch (TEXTWINDOW PTEXTOBJ) of WINDOW)
+                           'TEXTOBJ))
+           PANE SEL ON)
           (COND
              ((ZEROP (TEXTLEN TEXTOBJ))                      (* ; "Don't scroll a zero-length file")
               (RETURN))
@@ -2016,9 +1997,10 @@
               (RETURN)))
           (CL:WHEN (GETTEXTPROP TEXTOBJ 'PRESCROLLFN)
               (DOUSERFNS (GETTEXTPROP TEXTOBJ 'PRESCROLLFN)
-                     PANE))                                  (* ; 
+                     WINDOW))                                (* ; 
                                                              "Turn off selections during the scroll.")
           (SETQ SEL (TEXTSEL TEXTOBJ))
+          (SETQ PANE (\TEDIT.WINDOW2PANE WINDOW TEXTOBJ))
           (CL:WHEN (AND (FGETSEL SEL SET)
                         (FGETSEL SEL ONFLG))
               (SETQ ON T)
@@ -2342,34 +2324,29 @@
                  10 NIL X Y])
 
 (\TEDIT.FLASHCARET
-  [LAMBDA (TEXTOBJ)                                          (* ; "Edited 12-Oct-2023 23:31 by rmk")
-                                                             (* ; "Edited 16-Sep-2023 22:51 by rmk")
+  [LAMBDA (CARETS)                                           (* ; "Edited 16-Sep-2023 22:51 by rmk")
                                                              (* jds "16-Jul-85 12:35")
 
     (* ;; "Unless the caret is constrained to be INVISIBLE, give it a chance to flash.")
 
-    (CL:UNLESS (FGETTOBJ TEXTOBJ TXTREADONLY)
-        [bind (FIRSTTIME _ T) for CARET in (FGETTOBJ TEXTOBJ CARET) unless (fetch (TEDITCARET 
-                                                                                         TCFORCEUP)
-                                                                              of CARET)
-           do                                                (* ; 
+    (bind (FIRSTTIME _ T) for CARET inside CARETS unless (fetch (TEDITCARET TCFORCEUP) of CARET)
+       do                                                    (* ; 
                                                              "The caret need not stay invisible.")
-              (COND
-                 (FIRSTTIME (SETQ FIRSTTIME NIL)
-                        (\CARET.FLASH? (fetch (TEDITCARET TCCARETDS) of CARET)
-                               (fetch (TEDITCARET TCCARET) of CARET)
-                               NIL NIL (fetch (TEDITCARET TCCARETX) of CARET)
-                               (fetch (TEDITCARET TCCARETY) of CARET)))
-                 (T (\CARET.FLASH.AGAIN (fetch (TEDITCARET TCCARET) of CARET)
-                           (fetch (TEDITCARET TCCARETDS) of CARET)
-                           (fetch (TEDITCARET TCCARETX) of CARET)
-                           (fetch (TEDITCARET TCCARETY) of CARET])])
+          (COND
+             (FIRSTTIME (SETQ FIRSTTIME NIL)
+                    (\CARET.FLASH? (fetch (TEDITCARET TCCARETDS) of CARET)
+                           (fetch (TEDITCARET TCCARET) of CARET)
+                           NIL NIL (fetch (TEDITCARET TCCARETX) of CARET)
+                           (fetch (TEDITCARET TCCARETY) of CARET)))
+             (T (\CARET.FLASH.AGAIN (fetch (TEDITCARET TCCARET) of CARET)
+                       (fetch (TEDITCARET TCCARETDS) of CARET)
+                       (fetch (TEDITCARET TCCARETX) of CARET)
+                       (fetch (TEDITCARET TCCARETY) of CARET])
 
 (\TEDIT.UPCARET
-  [LAMBDA (CARET)                                            (* ; "Edited 12-Oct-2023 00:06 by rmk")
-                                                             (* ; "Edited 13-Nov-87 08:27 by jds")
+  [LAMBDA (CARET)                                            (* ; "Edited 13-Nov-87 08:27 by jds")
 
-    (* ;; "Take the caret up -- i.e., MAKE IT INVISIBLE -- and keep it up.  Tedit and the system seem to have opposite notions of up and down.  System thinks that caret is %"down%" when it is off the screen, Tedit thinks it is up.")
+    (* ;; "Take the caret up -- i.e., MAKE IT INVISIBLE -- and keep it up")
 
     (\CARET.DOWN (fetch (TEDITCARET TCCARETDS) of CARET))
 
@@ -2452,33 +2429,36 @@
                   (RETURN))))])
 
 (\TEDIT.SETCARET
-  [LAMBDA (LINE SEL PANE TEXTOBJ CARET ON)                   (* ; "Edited 12-Oct-2023 11:31 by rmk")
-                                                             (* ; "Edited 10-Oct-2023 17:00 by rmk")
+  [LAMBDA (LINE SEL PANE TEXTOBJ CARET ON)                   (* ; "Edited 10-Oct-2023 17:00 by rmk")
                                                              (* ; "Edited  5-Oct-2023 00:35 by rmk")
                                                              (* ; "Edited 16-Sep-2023 23:09 by rmk")
                                                              (* ; "Edited 20-Apr-2023 09:26 by rmk")
                                                              (* ; "Edited 30-May-91 23:35 by jds")
     (CL:WHEN (AND LINE (FGETSEL SEL HASCARET))
-        [LET ((X (CL:IF (EQ (FGETSEL SEL POINT)
+        (LET ((X (CL:IF (EQ (FGETSEL SEL POINT)
                             'LEFT)
                      (FGETSEL SEL X0)
                      (FGETSEL SEL XLIM)))
-              (Y (FGETLD LINE YBASE))
-              (CLIPREGION (DSPCLIPPINGREGION NIL PANE)))
-             (COND
-                ((AND (ILESSP Y (fetch PTOP of CLIPREGION))
-                      (IGEQ (FGETLD LINE YBOT)
-                            (fetch BOTTOM of CLIPREGION)))
-                 (MOVETO X Y PANE)                           (* ; 
-                                                        "Move to right position even if not flashing")
-                 (CL:IF (AND ON (NOT (FGETTOBJ TEXTOBJ TXTREADONLY)))
-                     (\TEDIT.DOWNCARET CARET)
-                     (\TEDIT.UPCARET CARET)))
-                (T 
-                   (* ;; 
-                   "Caret line is not in PANE. Move the caret location out of the clipping region")
+              (Y (FGETLD LINE YBASE)))
+             (if ON
+                 then [LET ((CLIPREGION (DSPCLIPPINGREGION NIL PANE)))
+                           (COND
+                              ((AND (ILESSP Y (fetch PTOP of CLIPREGION))
+                                    (IGEQ (FGETLD LINE YBOT)
+                                          (fetch BOTTOM of CLIPREGION)))
+                               (MOVETO X Y PANE)
+                               (CL:UNLESS (FGETTOBJ TEXTOBJ TXTREADONLY)
+                                      (\TEDIT.DOWNCARET CARET)))
+                              (T 
+                                 (* ;; 
+                      "Caret line is not in PANE. Move the caret location out of the clipping region")
 
-                   (MOVETO -10 -10 PANE])
+                                 (MOVETO -10 -10 PANE]
+               else 
+                    (* ;; "Don't want it to flash, but at least move it to the right position")
+
+                    (MOVETO X Y PANE)
+                    (\TEDIT.UPCARET CARET))))
     CARET])
 
 (\TEDIT.CARET
@@ -2747,27 +2727,27 @@
 (RPAQ? TEDIT.TITLED.ICON.TEMPLATE (create TITLEDICON ICON _ TEDITICON MASK _ TEDITMASK TITLEREG _ 
                                          TEDIT.ICON.TITLE.REGION))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (12451 34059 (\TEDIT.CREATEW 12461 . 18317) (\TEDIT.WINDOW.SETUP 18319 . 21245) (
-\TEDIT.SPLITW 21247 . 26408) (\TEDIT.MINIMAL.WINDOW.SETUP 26410 . 33262) (\TEDIT.ADD.CARET 33264 . 
-34057)) (34060 92679 (TEDIT.CURSORMOVEDFN 34070 . 40144) (TEDIT.CURSOROUTFN 40146 . 40590) (
-\TEDIT.ACTIVE.WINDOWP 40592 . 41718) (\TEDIT.BUTTONEVENTFN 41720 . 64041) (\TEDIT.WINDOW.OPS 64043 . 
-67364) (\TEDIT.EXPANDFN 67366 . 67929) (\TEDIT.MAINW 67931 . 70071) (\TEDIT.PRIMARYW 70073 . 70713) (
-\TEDIT.COPYINSERTFN 70715 . 71922) (\TEDIT.NEWREGIONFN 71924 . 74440) (\TEDIT.SET.WINDOW.EXTENT 74442
- . 78967) (\TEDIT.SHRINK.ICONCREATE 78969 . 81279) (\TEDIT.SHRINKFN 81281 . 81690) (\TEDIT.SPLITW 
-81692 . 86853) (\TEDIT.UNSPLITW 86855 . 90590) (\PANEREGION 90592 . 92677)) (93971 94851 (TEDITWINDOWP
- 93981 . 94849)) (94888 97953 (TEDIT.GETINPUT 94898 . 97189) (\TEDIT.MAKEFILENAME 97191 . 97951)) (
-98002 105775 (TEDIT.PROMPTPRINT 98012 . 100571) (TEDIT.PROMPTCLEAR 100573 . 102292) (TEDIT.PROMPTFLASH
- 102294 . 104203) (\TEDIT.PROMPT.PAGEFULLFN 104205 . 105773)) (106013 111643 (TEXTSTREAM.TITLE 106023
- . 106648) (\TEDIT.ORIGINAL.WINDOW.TITLE 106650 . 108990) (\TEDIT.WINDOW.TITLE 108992 . 110046) (
-\TEXTSTREAM.FILENAME 110048 . 110801) (\TEDIT.UPDATE.TITLE 110803 . 111641)) (111686 124242 (
-TEDIT.DEACTIVATE.WINDOW 111696 . 118009) (\TEDIT.REPAINTFN 118011 . 119905) (\TEDIT.RESHAPEFN 119907
- . 123349) (\TEDIT.PANEWITHINSCREEN? 123351 . 124240)) (124243 139872 (\TEDIT.SCROLLFN 124253 . 126456
-) (\TEDIT.SCROLLFLOAT 126458 . 130413) (\TEDIT.SCROLLUP 130415 . 134554) (\TEDIT.SCROLLDOWN 134556 . 
-139870)) (139914 142159 (\TEDIT.PROCIDLEFN 139924 . 141333) (\TEDIT.PROCENTRYFN 141335 . 141780) (
-\TEDIT.PROCEXITFN 141782 . 142157)) (142238 151776 (\TEDIT.DOWNCARET 142248 . 142918) (
-\TEDIT.FLASHCARET 142920 . 144588) (\TEDIT.UPCARET 144590 . 145282) (TEDIT.NORMALIZECARET 145284 . 
-149612) (\TEDIT.SETCARET 149614 . 151349) (\TEDIT.CARET 151351 . 151774)) (151810 164819 (
-TEDIT.ADD.MENUITEM 151820 . 154111) (TEDIT.DEFAULT.MENUFN 154113 . 162159) (TEDIT.REMOVE.MENUITEM 
-162161 . 163158) (\TEDIT.CREATEMENU 163160 . 163597) (\TEDIT.MENU.WHENHELDFN 163599 . 164504) (
-\TEDIT.MENU.WHENSELECTEDFN 164506 . 164817)))))
+  (FILEMAP (NIL (12859 34672 (\TEDIT.CREATEW 12869 . 18726) (\TEDIT.WINDOW.SETUP 18728 . 21438) (
+\TEDIT.SPLITW 21440 . 26601) (\TEDIT.MINIMAL.WINDOW.SETUP 26603 . 33452) (\TEDIT.ADD.CARET 33454 . 
+34247) (\TEDIT.WINDOW2PANE 34249 . 34670)) (34673 90996 (TEDIT.CURSORMOVEDFN 34683 . 40757) (
+TEDIT.CURSOROUTFN 40759 . 41203) (\TEDIT.ACTIVE.WINDOWP 41205 . 42331) (\TEDIT.BUTTONEVENTFN 42333 . 
+64445) (\TEDIT.WINDOW.OPS 64447 . 67768) (\TEDIT.EXPANDFN 67770 . 68333) (\TEDIT.MAINW 68335 . 70475) 
+(\TEDIT.PRIMARYW 70477 . 71117) (\TEDIT.COPYINSERTFN 71119 . 72326) (\TEDIT.NEWREGIONFN 72328 . 74844)
+ (\TEDIT.SET.WINDOW.EXTENT 74846 . 79371) (\TEDIT.SHRINK.ICONCREATE 79373 . 81683) (\TEDIT.SHRINKFN 
+81685 . 82094) (\TEDIT.SPLITW 82096 . 87257) (\TEDIT.UNSPLITW 87259 . 90994)) (92288 93168 (
+TEDITWINDOWP 92298 . 93166)) (93205 96270 (TEDIT.GETINPUT 93215 . 95506) (\TEDIT.MAKEFILENAME 95508 . 
+96268)) (96319 104092 (TEDIT.PROMPTPRINT 96329 . 98888) (TEDIT.PROMPTCLEAR 98890 . 100609) (
+TEDIT.PROMPTFLASH 100611 . 102520) (\TEDIT.PROMPT.PAGEFULLFN 102522 . 104090)) (104330 109960 (
+TEXTSTREAM.TITLE 104340 . 104965) (\TEDIT.ORIGINAL.WINDOW.TITLE 104967 . 107307) (\TEDIT.WINDOW.TITLE 
+107309 . 108363) (\TEXTSTREAM.FILENAME 108365 . 109118) (\TEDIT.UPDATE.TITLE 109120 . 109958)) (110003
+ 122713 (TEDIT.DEACTIVATE.WINDOW 110013 . 116326) (\TEDIT.REPAINTFN 116328 . 118222) (\TEDIT.RESHAPEFN
+ 118224 . 121666) (\TEDIT.PANEWITHINSCREEN? 121668 . 122711)) (122714 138475 (\TEDIT.SCROLLFN 122724
+ . 125059) (\TEDIT.SCROLLFLOAT 125061 . 129016) (\TEDIT.SCROLLUP 129018 . 133157) (\TEDIT.SCROLLDOWN 
+133159 . 138473)) (138517 140762 (\TEDIT.PROCIDLEFN 138527 . 139936) (\TEDIT.PROCENTRYFN 139938 . 
+140383) (\TEDIT.PROCEXITFN 140385 . 140760)) (140841 149821 (\TEDIT.DOWNCARET 140851 . 141521) (
+\TEDIT.FLASHCARET 141523 . 142808) (\TEDIT.UPCARET 142810 . 143236) (TEDIT.NORMALIZECARET 143238 . 
+147566) (\TEDIT.SETCARET 147568 . 149394) (\TEDIT.CARET 149396 . 149819)) (149855 162864 (
+TEDIT.ADD.MENUITEM 149865 . 152156) (TEDIT.DEFAULT.MENUFN 152158 . 160204) (TEDIT.REMOVE.MENUITEM 
+160206 . 161203) (\TEDIT.CREATEMENU 161205 . 161642) (\TEDIT.MENU.WHENHELDFN 161644 . 162549) (
+\TEDIT.MENU.WHENSELECTEDFN 162551 . 162862)))))
 STOP

@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "14-Oct-2023 13:42:15" {WMEDLEY}<library>tedit>TEDIT-SELECTION.;343 109780 
+(FILECREATED "15-Oct-2023 10:39:55" {WMEDLEY}<library>tedit>TEDIT-SELECTION.;345 110126 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS TEDIT-SELECTIONCOMS)
-                  (RECORDS SELECTION)
+      :CHANGES-TO (FNS TEDIT.EXTEND.SEL TEDIT.SELECT.LINE.SCANNER)
 
-      :PREVIOUS-DATE "14-Oct-2023 12:34:37" {WMEDLEY}<library>tedit>TEDIT-SELECTION.;342)
+      :PREVIOUS-DATE "14-Oct-2023 13:42:15" {WMEDLEY}<library>tedit>TEDIT-SELECTION.;343)
 
 
 (PRETTYCOMPRINT TEDIT-SELECTIONCOMS)
@@ -471,50 +470,54 @@
 (DEFINEQ
 
 (TEDIT.EXTEND.SEL
-  [LAMBDA (X Y OSEL TEXTOBJ SELOPERATION PANE)               (* ; "Edited 14-Oct-2023 11:26 by rmk")
+  [LAMBDA (X Y OSEL TEXTOBJ SELOPERATION PANE)               (* ; "Edited 15-Oct-2023 10:39 by rmk")
                                                              (* ; "Edited  5-Oct-2023 22:08 by rmk")
                                                              (* ; "Edited 19-Apr-2023 17:36 by rmk")
                                                              (* ; "Edited 19-Apr-93 13:49 by jds")
 
     (* ;; "Note:  CHLIM is one past the last character, hence ADD1/SUB1 in some places below.")
 
-    (* ;; 
-    "Gather a new selected character, and extend OSEL to include it.  Return the extended selection.")
+    (* ;; "Obtain a new selection for the character/line that covers X,Y, and extend OSEL to include the additional characters.  Return the extended selection.")
+
+    (* ;; "NEWSEL will be a paragraph selection if OSEL was.")
+
+    (* ;; "The paragraph behavior feels a little odd.  If you have 4 highlighted paragraphs and click on the 2nd one, the first paragraph is deselected, because the CH# has moved in to the second.  If you click on the 3rd paragraph, the last one is deselected (the CHLIM has moved in).")
+
+    (* ;; "Same behavior if you drag from the top or bottom.  If you drag from the bottom, the bottom disappears when you enter the 3rd.  But as you continue from 3rd to 2nd, the upper deselects.  But you might think that dragging behavior would be consistent--as you keep going up (or down), the paragraph you are leaving goes away.")
 
     (CL:UNLESS (ZEROP (TEXTLEN TEXTOBJ))
-        (PROG (NPOINT SETOSELFLG (NEWSEL (TEDIT.SELECT X Y TEXTOBJ (SELECTQ (GETSEL OSEL SELKIND)
-                                                                       ((LINE PARA) 
-                                                                            'LINE)
-                                                                       ((WORD CHAR) 
-                                                                            'TEXT)
-                                                                       'TEXT)
-                                                (OR (EQ (GETSEL OSEL SELKIND)
-                                                        'WORD)
-                                                    (EQ (GETSEL OSEL SELKIND)
-                                                        'PARA))
-                                                SELOPERATION PANE T)))
+        (PROG (NPOINT NEWSEL OCH# OCHLIM NCH# NCHLIM SETOSELFLG (SELKIND (GETSEL OSEL SELKIND)))
+
+         (* ;; "LINE+WORDSELFLG iff PARA")
+
+              (SETQ NEWSEL (TEDIT.SELECT X Y TEXTOBJ (SELECTQ SELKIND
+                                                         ((LINE PARA) 
+                                                              'LINE)
+                                                         ((WORD CHAR) 
+                                                              'TEXT)
+                                                         'TEXT)
+                                  (OR (EQ SELKIND 'WORD)
+                                      (EQ SELKIND 'PARA))
+                                  SELOPERATION PANE T))
               (CL:UNLESS (AND NEWSEL (GETSEL NEWSEL SET))    (* ; "No new selection, return OSEL")
                   (RETURN OSEL))
-              (\TEDIT.SET.SEL.LOOKS NEWSEL SELOPERATION)
-
-         (* ;; "Make the new selection be the same kind as the original, as to what it's for -- regular, copy-source, etc.")
-
+              (\TEDIT.SET.SEL.LOOKS NEWSEL SELOPERATION)     (* ; 
+                                            "NEWSEL is the same as OSEL:  regular, copy-source, etc.")
+              (SETQ OCH# (FGETSEL OSEL CH#))
+              (SETQ OCHLIM (FGETSEL OSEL CHLIM))
+              (SETQ NCH# (FGETSEL NEWSEL CH#))
+              (SETQ NCHLIM (FGETSEL NEWSEL CHLIM))
               [SETQ NPOINT (COND
-                              ((IGEQ (GETSEL NEWSEL CHLIM)
-                                     (GETSEL OSEL CHLIM))    (* ; 
-                               "The new selection ends to the right of the old one.  Move this edge.")
+                              ((IGEQ NCHLIM OCHLIM)          (* ; 
+                                             "NEWSEL ends to the right of OSEL: adding on the right ")
                                'RIGHT)
-                              ((ILEQ (GETSEL NEWSEL CH#)
-                                     (GETSEL OSEL CH#))      (* ; 
-                             "If the new selection starts to left of old one, caret goes at the LEFT")
+                              ((ILEQ NCH# OCH#)              (* ; 
+                                              "NEWSEL starts to the left of OSEL: adding on the left")
                                'LEFT)
-                              ([IGREATERP (IABS (IDIFFERENCE (GETSEL NEWSEL CHLIM)
-                                                       (GETSEL OSEL CHLIM)))
-                                      (IABS (IDIFFERENCE (GETSEL NEWSEL CH#)
-                                                   (GETSEL OSEL CH#]
+                              ((IGREATERP (IABS (IDIFFERENCE NCHLIM OCHLIM))
+                                      (IABS (IDIFFERENCE NCH# OCH#)))
 
-                               (* ;; 
-      "New X (right click) is in the middle of an old selection.  Bump OLDSEL's left end to NEWSEL's")
+                               (* ;; "New X (right click) is in the middle of an old selection.  Must be shrinking from the left. This determines the relationships based on character positions.  It might be more intuitive in PARA mode if this is based on paragraphs--if there are fewer *paragraphs* in front than behind, of any length.")
 
                                (SETQ SETOSELFLG T)
                                'LEFT)
@@ -526,47 +529,41 @@
                                  'RIGHT]
               (SELECTQ NPOINT
                   (LEFT                                      (* ; 
-                                                          "Caret's to the new left, copy old right  ")
-                        (SETSEL NEWSEL CHLIM (IMAX (GETSEL NEWSEL CHLIM)
-                                                   (GETSEL OSEL CHLIM)))
-                        (SETSEL NEWSEL XLIM (GETSEL OSEL XLIM))
-                        (SETSEL NEWSEL LN (COPY (GETSEL OSEL LN)))
+                                                          "Caret's to the new left, keep old right  ")
+                        (SETQ NCHLIM (IMAX NCHLIM OCHLIM))
+                        (FSETSEL NEWSEL CHLIM NCHLIM)
+                        (FSETSEL NEWSEL XLIM (FGETSEL OSEL XLIM))
+                        (FSETSEL NEWSEL LN (COPY (FGETSEL OSEL LN)))
 
-                        (* ;; "Only copying is allowed from a protected area (menu).  Otherwise, only extend to its start. If CH# changes, L1 may also change, so need to fixup")
+                        (* ;; "Only copying is allowed from a protected area (menu).  Otherwise, only extend to its start. If CH# changes, L1 may also change (\FIXSEL)")
 
                         (CL:UNLESS (EQ SELOPERATION 'COPY)
-                            [SETSEL NEWSEL CH# (IMAX (GETSEL NEWSEL CH#)
-                                                     (\TEDIT.FIND.PROTECTED.START TEXTOBJ
-                                                            (SUB1 (GETSEL OSEL CHLIM))
-                                                            (GETSEL NEWSEL CH#]))
+                            (SETQ NCH# (IMAX NCH# (\TEDIT.FIND.PROTECTED.START TEXTOBJ (SUB1 OCHLIM)
+                                                         NCH#)))))
                   (RIGHT                                     (* ; 
-                                                           "Caret's to the new right, copy old left.")
-                         (SETSEL NEWSEL CH# (IMIN (GETSEL NEWSEL CH#)
-                                                  (GETSEL OSEL CH#)))
-                         (SETSEL NEWSEL X0 (GETSEL OSEL X0))
-                         (SETSEL NEWSEL L1 (COPY (GETSEL OSEL L1)))
+                                                            "Caret's to the new right, keep old left")
+                         (SETQ NCH# (IMIN NCH# OCH#))
+                         (FSETSEL NEWSEL X0 (FGETSEL OSEL X0))
+                         (FSETSEL NEWSEL L1 (COPY (FGETSEL OSEL L1)))
 
-                         (* ;; "Only copying is allowed from a protected area (menu).  Otherwise, only extend to its end. If CHLIM changes, LN may also change, so need to fixup")
+                         (* ;; "Only copying is allowed from a protected area (menu).  Otherwise, only extend to its end. If CHLIM changes, LN may also change (\FIXSEL)")
 
                          (CL:UNLESS (EQ SELOPERATION 'COPY)
-                             [SETSEL NEWSEL CHLIM
-                                    (IMIN (GETSEL NEWSEL CHLIM)
-                                          (ADD1 (\TEDIT.FIND.PROTECTED.END
-                                                 TEXTOBJ
-                                                 (GETSEL OSEL CH#)
-                                                 (ADD1 (\TEDIT.FIND.PROTECTED.END TEXTOBJ
-                                                              (GETSEL OSEL CH#)
-                                                              (SUB1 (GETSEL NEWSEL CHLIM]
-                             (SETSEL NEWSEL CH# (IMIN (SUB1 (GETSEL NEWSEL CHLIM))
-                                                      (GETSEL NEWSEL CH#)))))
-                  NIL)
-              (SETSEL NEWSEL DCH (IDIFFERENCE (GETSEL NEWSEL CHLIM)
-                                        (GETSEL NEWSEL CH#)))
-              (SETSEL NEWSEL POINT NPOINT)
-              (CL:UNLESS (EQ (GETSEL OSEL SELOBJ)
-                             (GETSEL NEWSEL SELOBJ))         (* ; 
+                             [SETQ NCHLIM (IMIN NCHLIM (ADD1 (\TEDIT.FIND.PROTECTED.END
+                                                              TEXTOBJ OCH# (ADD1 (
+                                                                            \TEDIT.FIND.PROTECTED.END
+                                                                                  TEXTOBJ OCH#
+                                                                                  (SUB1 NCHLIM]
+                             (SETQ NCH# (IMIN NCH# (SUB1 NCHLIM)))))
+                  (SHOULDNT))
+              (FSETSEL NEWSEL CH# NCH#)
+              (FSETSEL NEWSEL CHLIM NCHLIM)
+              (FSETSEL NEWSEL DCH (IDIFFERENCE NCHLIM (FGETSEL NEWSEL CH#)))
+              (FSETSEL NEWSEL POINT NPOINT)
+              (CL:UNLESS (EQ (FGETSEL OSEL SELOBJ)
+                             (FGETSEL NEWSEL SELOBJ))        (* ; 
                                                           "Keep object if it is in overlapping part?")
-                  (SETSEL NEWSEL SELOBJ NIL))
+                  (FSETSEL NEWSEL SELOBJ NIL))
               (\FIXSEL NEWSEL TEXTOBJ)
               (CL:WHEN SETOSELFLG                            (* ; 
                                                    "It is wise to copy the new sel into the old one.")
@@ -804,7 +801,7 @@
 
 (TEDIT.SELECT.LINE.SCANNER
   [LAMBDA (X Y TEXTOBJ LINES REGION WORDSELFLG SELOPERATION PANE EXTENDING)
-                                                             (* ; "Edited 14-Oct-2023 10:54 by rmk")
+                                                             (* ; "Edited 14-Oct-2023 22:43 by rmk")
                                                              (* ; "Edited 20-Jul-2023 20:38 by rmk")
                                                              (* ; "Edited 30-May-2023 14:17 by rmk")
                                                              (* ; "Edited 27-May-2023 15:18 by rmk")
@@ -855,46 +852,48 @@
 
                         (for P inpanes TEXTOBJ as PL1 on (FGETSEL SCRSEL L1) as PLN
                            on (FGETSEL SCRSEL LN) when (EQ P PANE)
-                           do (COND
-                                 [WORDSELFLG                 (* ; 
-                                                          "Select a paragraph: find first/last lines")
-                                        (FSETSEL SCRSEL SELKIND 'PARA)
-                                        (SETQ PARALINES (\PARALINES LINE TEXTOBJ))
-                                        (SETQ PARAFIRSTLINE (CAR PARALINES))
-                                        (SETQ PARALASTLINE (CADR PARALINES))
-                                        (RPLACA PL1 PARAFIRSTLINE)
-                                        (RPLACA PLN PARALASTLINE)
+                           do 
+                              (* ;; "A word selection in the line region means paragraph")
 
-                                        (* ;; 
-                                        "Put the caret at one end of the actually selected line")
+                              (if WORDSELFLG
+                                  then                       (* ; 
+                                                      "Eextend to the first/last lines for paragraph")
+                                       (FSETSEL SCRSEL SELKIND 'PARA)
+                                       (SETQ PARALINES (\PARALINES LINE TEXTOBJ))
+                                       (SETQ PARAFIRSTLINE (CAR PARALINES))
+                                       (SETQ PARALASTLINE (CADR PARALINES))
+                                       (RPLACA PL1 PARAFIRSTLINE)
+                                       (RPLACA PLN PARALASTLINE) 
 
-                                        (\TEDIT.UPDATE.SEL SCRSEL (GETLD PARAFIRSTLINE LCHAR1)
-                                               (IDIFFERENCE (ADD1 (GETLD PARALASTLINE LCHARLIM))
-                                                      (GETLD PARAFIRSTLINE LCHAR1))
-                                               (COND
-                                                  ((ILEQ (IDIFFERENCE (GETLD LINE LCHAR1)
-                                                                (GETLD PARAFIRSTLINE LCHAR1))
-                                                         (IDIFFERENCE (ADD1 (GETLD PARALASTLINE 
-                                                                                   LCHARLIM))
-                                                                (GETLD LINE LCHARLIM)))
-                                                   'LEFT)
-                                                  (T 'RIGHT]
-                                 (T                          (* ; 
+                                       (* ;; "Put the caret at one end of the actually selected line")
+
+                                       [\TEDIT.UPDATE.SEL SCRSEL (GETLD PARAFIRSTLINE LCHAR1)
+                                              (IDIFFERENCE (ADD1 (GETLD PARALASTLINE LCHARLIM))
+                                                     (GETLD PARAFIRSTLINE LCHAR1))
+                                              (COND
+                                                 ((ILEQ (IDIFFERENCE (GETLD LINE LCHAR1)
+                                                               (GETLD PARAFIRSTLINE LCHAR1))
+                                                        (IDIFFERENCE (ADD1 (GETLD PARALASTLINE 
+                                                                                  LCHARLIM))
+                                                               (GETLD LINE LCHARLIM)))
+                                                  'LEFT)
+                                                 (T 'RIGHT]
+                                else                         (* ; 
                                                             "Select just the line we're pointing at.")
-                                    (RPLACA PL1 LINE)
-                                    (RPLACA PLN LINE)
-                                    (FSETSEL SCRSEL SELKIND 'LINE)
-                                    (FSETSEL SCRSEL CH# (FGETLD LINE LCHAR1))
-                                    (FSETSEL SCRSEL CHLIM (ADD1 (FGETLD LINE LCHARLIM)))
-                                    (FSETSEL SCRSEL DCH (IDIFFERENCE (FGETSEL SCRSEL CHLIM)
-                                                               (FGETSEL SCRSEL CH#)))
+                                     (RPLACA PL1 LINE)
+                                     (RPLACA PLN LINE)
+                                     (FSETSEL SCRSEL SELKIND 'LINE)
+                                     (FSETSEL SCRSEL CH# (FGETLD LINE LCHAR1))
+                                     (FSETSEL SCRSEL CHLIM (ADD1 (FGETLD LINE LCHARLIM)))
+                                     (FSETSEL SCRSEL DCH (IDIFFERENCE (FGETSEL SCRSEL CHLIM)
+                                                                (FGETSEL SCRSEL CH#))) 
 
-                                    (* ;; "In the line-selection region, we know that the selection's X0 and XLIM are inherited from the LINE.")
+                                     (* ;; "In the line-selection region, we know that the selection's X0 and XLIM are inherited from the LINE.")
 
-                                    (FSETSEL SCRSEL X0 (FGETLD LINE LX1))
-                                    (FSETSEL SCRSEL XLIM (FGETLD LINE LXLIM))
-                                    (FSETSEL SCRSEL POINT 'LEFT)
-                                    (FSETSEL SCRSEL SET T))) finally (RETURN))
+                                     (FSETSEL SCRSEL X0 (FGETLD LINE LX1))
+                                     (FSETSEL SCRSEL XLIM (FGETLD LINE LXLIM))
+                                     (FSETSEL SCRSEL POINT 'LEFT)
+                                     (FSETSEL SCRSEL SET T)) finally (RETURN))
                         (RETURN SCRSEL))
                   (SHOULDNT "Unknown text/line-bar region?"))))])
 
@@ -1897,23 +1896,23 @@
              (\SHOWSEL SEL ONFLG))])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (11234 13155 (\TEDIT.SELECTION.DEFPRINT 11244 . 13153)) (13156 22584 (
-TEDIT.SEL.AS.STRING 13166 . 14638) (TEDIT.SEL.AS.SEXPR 14640 . 15723) (TEDIT.SELECTED.PIECES 15725 . 
-16581) (\TEDIT.FIND.FIRST.LINE 16583 . 18357) (\TEDIT.FIND.OVERLAPPING.LINE 18359 . 18721) (
-\TEDIT.FIND.PROTECTED.END 18723 . 20212) (\TEDIT.FIND.PROTECTED.START 20214 . 21919) (
-\TEDIT.WORD.BOUND 21921 . 22582)) (22674 23153 (\CREATE.TEDIT.SELECTION 22684 . 22754) (
-\CREATE.TEDIT.SHIFTEDSELECTION 22756 . 22859) (\CREATE.TEDIT.MOVESELECTION 22861 . 22990) (
-\CREATE.TEDIT.DELETESELECTION 22992 . 23151)) (23905 56681 (TEDIT.EXTEND.SEL 23915 . 30511) (
-TEDIT.SELECT 30513 . 31663) (TEDIT.SCAN.LINE 31665 . 39088) (\TEDIT.SCAN.LINE.WORD 39090 . 43290) (
-TEDIT.SELECT.LINE.SCANNER 43292 . 49694) (\TEDIT.SELECT.OBJECT 49696 . 53368) (\PARALINES 53370 . 
-56679)) (56682 73415 (\FIXSEL 56692 . 66360) (\TEDIT.ADJUST.SELS 66362 . 69274) (\CHTOX 69276 . 72139)
- (\TEDIT.COLLECTSELS 72141 . 73095) (\TEDIT.SELECTION.UNSET 73097 . 73413)) (73416 76360 (
-TEDIT.RESET.EXTEND.PENDING.DELETE 73426 . 74068) (\TEDIT.SET.SEL.LOOKS 74070 . 76358)) (76361 96112 (
-\SHOWSEL 76371 . 80260) (\SHOWSEL.HILIGHT 80262 . 83214) (\TEDIT.UPDATE.SHOWSEL 83216 . 89183) (
-\TEDIT.SHOWSELS 89185 . 89866) (\TEDIT.REFRESH.SHOWSEL 89868 . 93565) (\TEDIT.UPDATE.SEL 93567 . 96110
-)) (96113 99139 (\COPYSEL 96123 . 97749) (\TEDIT.SEL.CHANGED? 97751 . 99137)) (99140 99482 (
-TEDIT.SELECTALL 99150 . 99480)) (99535 109757 (TEDIT.GETPOINT 99545 . 100494) (TEDIT.MAKEPOINT 100496
- . 101055) (TEDIT.GETSEL 101057 . 101377) (TEDIT.MAKESEL 101379 . 102405) (TEDIT.SCANSEL 102407 . 
-103081) (TEDIT.SET.SEL.LOOKS 103083 . 103964) (TEDIT.SETSEL 103966 . 108932) (TEDIT.SHOWSEL 108934 . 
-109755)))))
+  (FILEMAP (NIL (11218 13139 (\TEDIT.SELECTION.DEFPRINT 11228 . 13137)) (13140 22568 (
+TEDIT.SEL.AS.STRING 13150 . 14622) (TEDIT.SEL.AS.SEXPR 14624 . 15707) (TEDIT.SELECTED.PIECES 15709 . 
+16565) (\TEDIT.FIND.FIRST.LINE 16567 . 18341) (\TEDIT.FIND.OVERLAPPING.LINE 18343 . 18705) (
+\TEDIT.FIND.PROTECTED.END 18707 . 20196) (\TEDIT.FIND.PROTECTED.START 20198 . 21903) (
+\TEDIT.WORD.BOUND 21905 . 22566)) (22658 23137 (\CREATE.TEDIT.SELECTION 22668 . 22738) (
+\CREATE.TEDIT.SHIFTEDSELECTION 22740 . 22843) (\CREATE.TEDIT.MOVESELECTION 22845 . 22974) (
+\CREATE.TEDIT.DELETESELECTION 22976 . 23135)) (23889 57027 (TEDIT.EXTEND.SEL 23899 . 30759) (
+TEDIT.SELECT 30761 . 31911) (TEDIT.SCAN.LINE 31913 . 39336) (\TEDIT.SCAN.LINE.WORD 39338 . 43538) (
+TEDIT.SELECT.LINE.SCANNER 43540 . 50040) (\TEDIT.SELECT.OBJECT 50042 . 53714) (\PARALINES 53716 . 
+57025)) (57028 73761 (\FIXSEL 57038 . 66706) (\TEDIT.ADJUST.SELS 66708 . 69620) (\CHTOX 69622 . 72485)
+ (\TEDIT.COLLECTSELS 72487 . 73441) (\TEDIT.SELECTION.UNSET 73443 . 73759)) (73762 76706 (
+TEDIT.RESET.EXTEND.PENDING.DELETE 73772 . 74414) (\TEDIT.SET.SEL.LOOKS 74416 . 76704)) (76707 96458 (
+\SHOWSEL 76717 . 80606) (\SHOWSEL.HILIGHT 80608 . 83560) (\TEDIT.UPDATE.SHOWSEL 83562 . 89529) (
+\TEDIT.SHOWSELS 89531 . 90212) (\TEDIT.REFRESH.SHOWSEL 90214 . 93911) (\TEDIT.UPDATE.SEL 93913 . 96456
+)) (96459 99485 (\COPYSEL 96469 . 98095) (\TEDIT.SEL.CHANGED? 98097 . 99483)) (99486 99828 (
+TEDIT.SELECTALL 99496 . 99826)) (99881 110103 (TEDIT.GETPOINT 99891 . 100840) (TEDIT.MAKEPOINT 100842
+ . 101401) (TEDIT.GETSEL 101403 . 101723) (TEDIT.MAKESEL 101725 . 102751) (TEDIT.SCANSEL 102753 . 
+103427) (TEDIT.SET.SEL.LOOKS 103429 . 104310) (TEDIT.SETSEL 104312 . 109278) (TEDIT.SHOWSEL 109280 . 
+110101)))))
 STOP

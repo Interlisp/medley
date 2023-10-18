@@ -1,12 +1,10 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "27-Feb-2022 08:48:09" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>REGIONMANAGER.;116 37561  
+(FILECREATED "10-Oct-2023 22:19:05" {WMEDLEY}<lispusers>REGIONMANAGER.;129 40525  
 
-      :CHANGES-TO (FNS \RELCREATEREGION.REF \RELCREATEREGION.SIZE)
+      :EDIT-BY rmk
 
-      :PREVIOUS-DATE "28-Jan-2022 23:52:21" 
-{DSK}<Users>kaplan>Local>medley3.5>my-medley>lispusers>REGIONMANAGER.;113)
+      :PREVIOUS-DATE "10-Oct-2023 22:17:47" {MEDLEY}<lispusers>REGIONMANAGER.;9)
 
 
 (PRETTYCOMPRINT REGIONMANAGERCOMS)
@@ -15,12 +13,12 @@
        [
         (* ;; "Typed regions")
 
-        [COMS (FNS SET-TYPED-REGIONS)
+        [COMS (FNS SET-TYPED-REGIONS GRAB-TYPED-REGION REGISTER-TYPED-REGION REGION-TYPE)
               (FNS RM-CREATEW RM-CLOSEW RM-GETREGION CLOSE-TYPED-W)
               (INITVARS (TYPED-REGIONS))
               (GLOBALVARS TYPED-REGIONS)
-              (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS TYPED-REGION REGION-SOURCE))
-              (INITRECORDS TYPED-REGION REGION-SOURCE)
+              (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS TYPED-REGION))
+              (INITRECORDS TYPED-REGION)
               (P (MOVD? 'CREATEW 'CREATEW.ORIG)
                  (MOVD? 'CLOSEW 'CLOSEW.ORIG)
                  (MOVD? 'GETREGION 'GETREGION.ORIG)
@@ -86,120 +84,170 @@
                                     REGIONS
                                     (NCONC REGIONS (CDR PREV)))]
             else (push TYPED-REGIONS (CONS TYPE REGIONS])
+
+(GRAB-TYPED-REGION
+  [LAMBDA (REGION-TYPE MINWIDTH MINHEIGHT)                   (* ; "Edited 10-Oct-2023 13:41 by rmk")
+                                                             (* ; "Edited 14-Sep-2023 07:30 by rmk")
+
+    (* ;; "Returns a REGIONTYPE region that satisfies MINWIDTH and MINHEIGHT, if specified")
+
+    (for R in (CDR (ASSOC REGION-TYPE TYPED-REGIONS)) unless (fetch REGION-INUSE of R)
+       when [AND (OR (NULL MINWIDTH)
+                     (ILEQ MINWIDTH (fetch WIDTH of R)))
+                 (OR (NULL MINHEIGHT)
+                     (ILEQ MINHEIGHT (fetch HEIGHT of R] do 
+
+                                 (* ;; "We don't mark it as inuse here, leave that gets done by INSTALL-TYPED-REGION when ownership is given to a window. The only downside is that the region could be reallocated before that happens, and 2 window would come up in the same place.")
+
+                                                            (RETURN R])
+
+(REGISTER-TYPED-REGION
+  [LAMBDA (REGION REGION-TYPE WINDOW)                        (* ; "Edited 10-Oct-2023 13:30 by rmk")
+                                                             (* ; "Edited 29-Sep-2023 13:33 by rmk")
+                                                             (* ; "Edited 14-Sep-2023 10:03 by rmk")
+
+    (* ;; "REGION was passed as the REGION argument to the original CREATEW.  If that was NIL, CREATEW created its own region, but it didn't do it through GETREGION (=RM.GETREGION) so it hasn't been registered according to the specified type.  We set up the arrangements here.   ")
+
+    (CL:WHEN REGION-TYPE
+        (CL:UNLESS REGION
+            (SETQ REGION (WINDOWREGION WINDOW)))
+        (LET [(TREGIONLIST (OR (ASSOC REGION-TYPE TYPED-REGIONS)
+                               (CAR (PUSH TYPED-REGIONS (CONS REGION-TYPE]
+             (CL:UNLESS (MEMB REGION (CDR TREGIONLIST))
+                    (NCONC1 TREGIONLIST REGION))
+             (replace REGION-INUSE of REGION with T)
+
+             (* ;; "We keep the original separate from the window's region WINDOWPROP so that RM-CLOSEW can update if the user reshapes.")
+
+             (WINDOWPROP WINDOW 'TYPED-REGION (CONS REGION-TYPE REGION))
+             REGION))])
+
+(REGION-TYPE
+  [LAMBDA (X TYPE)                                           (* ; "Edited 10-Oct-2023 14:30 by rmk")
+                                                             (* ; "Edited 16-Sep-2023 08:41 by rmk")
+
+    (* ;; 
+    "Value is the type of X if it is a region of type TYPE or a region of any type if TYPE is NIL.")
+
+    (CL:WHEN (REGIONP X)
+        [if TYPE
+            then (CL:WHEN (MEMB X (CDR (ASSOC TYPE TYPED-REGIONS)))
+                        TYPE)
+          else (CAR (find TYPELIST in TYPED-REGIONS suchthat (MEMB X TYPELIST])])
 )
 (DEFINEQ
 
 (RM-CREATEW
-  [LAMBDA (REGION TITLE BORDERSIZE NOOPENFLG PROPS)          (* ; "Edited  1-Jan-2022 23:12 by rmk")
+  [LAMBDA (REGION TITLE BORDERSIZE NOOPENFLG PROPS)          (* ; "Edited 24-Sep-2023 20:38 by rmk")
+                                                             (* ; "Edited 14-Sep-2023 22:23 by rmk")
+                                                             (* ; "Edited  1-Jan-2022 23:12 by rmk")
                                                              (* ; "Edited 29-Dec-2021 19:25 by rmk")
 
-    (* ;; "Generic CREATEW function for managed regions.  If REGIONTYPE is specified (as REGION or in PROPS), then we try to find a previous region for that type that is currently unused, create one if needed.")
+    (* ;; "Generic CREATEW function for managed regions.  If REGION-TYPE is specified (as REGION or in PROPS), then we try to find a previous region for that type that is currently unused, create one if needed.")
 
     (* ;; "We have to bracket the original window creation because the we have to mark that the window uses that region, to put it back in the pool when the window is closed.")
 
-    (LET (WINDOW REGIONTYPE TYPEDREGION TYPELIST)
-         [SETQ REGIONTYPE (if (AND REGION (LITATOM REGION))
-                              then (PROG1 REGION (SETQ REGION NIL))
-                            else (LISTGET PROPS 'REGION-TYPE]
-         (SETQ TYPELIST (ASSOC REGIONTYPE TYPED-REGIONS))
+    (LET [WINDOW (REGION-TYPE (if (AND (LITATOM REGION)
+                                       REGION)
+                                  then (PROG1 REGION (SETQ REGION NIL))
+                                else (LISTGET PROPS 'REGION-TYPE]
 
-         (* ;; "We have REGIONTYPE, but maybe also a region that already has a source. Maybe we should make sure that the source is of that type?")
+         (* ;; "We have REGION-TYPE, but maybe also a region that already has a source. Maybe we should make sure that the source is of that type?")
 
          (* ;; "Note: REGION can also be a screenregion, that falls through.")
 
-         (IF (REGIONP REGION)
-             THEN (SETQ TYPEDREGION (FETCH REGION-SOURCE OF REGION))
-           ELSEIF TYPELIST
-             THEN 
-                  (* ;; 
- "If we don't find an unused region, CREATEW will create one in the ordinary way.  We type it below.")
-
-                  [SETQ TYPEDREGION (FIND R FOUND in (CDR TYPELIST)
-                                       SUCHTHAT (NOT (fetch REGION-INUSE of R]
-                  (SETQ REGION TYPEDREGION))
+         (CL:WHEN REGION-TYPE
+             (SETQ REGION (GRAB-TYPED-REGION REGION-TYPE)))
          (SETQ WINDOW (CREATEW.ORIG REGION TITLE BORDERSIZE NOOPENFLG PROPS))
-
-         (* ;; "CREATEW doesn't call the user-entry GETREGION, so we have to trap and install its return region here.")
-
-         (CL:WHEN (AND TYPELIST (NULL TYPEDREGION))          (* ; 
-                                                        "If not, we don't record this even if typed.")
-             (SETQ TYPEDREGION (OR (FETCH REGION-SOURCE OF (SETQ REGION (WINDOWREGION WINDOW)))
-                                   (COPY REGION)))
-             (NCONC1 TYPELIST TYPEDREGION))
-         (CL:WHEN TYPEDREGION
-             (replace REGION-INUSE of TYPEDREGION with T)
-             (WINDOWPROP WINDOW 'TYPED-REGION TYPEDREGION)
-             (WINDOWPROP WINDOW 'REGION-TYPE REGIONTYPE))
+         (CL:WHEN REGION-TYPE (REGISTER-TYPED-REGION REGION REGION-TYPE WINDOW))
          WINDOW])
 
 (RM-CLOSEW
-  [LAMBDA (WINDOW)                                           (* ; "Edited 29-Dec-2021 15:44 by rmk")
-                                                             (* ; "Edited 28-Dec-2021 11:02 by rmk")
-                                                             (* ; "Edited 27-Nov-2021 10:00 by rmk:")
-                                                             (* ; "Edited 26-Oct-2021 21:54 by rmk:")
-                                                             (* ; 
-                                                             "Edited 25-Apr-94 10:08 by sybalsky")
-                                                             (* ; "")
+  [LAMBDA (WINDOW)                                           (* ; "Edited 10-Oct-2023 22:11 by rmk")
 
     (* ;; 
    "Makes the window's typed region available for reuse, if the window is marked with a TYPEDREGION.")
 
     (* ;; "It's possible that the window exists and can be reopened after it has been closed.  The glitch in that case is that we may have decided to make the window's region available to another window, and if this window is opened again it will come on top of that other one (if it hasn't moved). Oh well.")
 
-    (LET [(TYPEDREGION (WINDOWPROP WINDOW 'TYPED-REGION]
-         (CL:WHEN (AND (CLOSEW.ORIG WINDOW)
-                       TYPEDREGION)
-             (REPLACE REGION-INUSE OF TYPEDREGION WITH NIL)
-             (WINDOWPROP WINDOW 'TYPED-REGION NIL)
-             T)])
+    (* ;; "This replaces the particular typed-region in TYPED-REGIONS with the region that the window ended up with, perhaps after the user reshaped it.  But (WINDOWPROP WINDOW 'REGION) doesn't include the prompt window, if it's there, and (WINDOWREGION WINDOW) would union in all of the attached windows (menus etc.)  This code assumes that the promptwindow was taken out of the original region (lots of funky code does that), so it unions it back in to the REGION property to reconstruct the original typed-region.  The alternative would be to have the windows region copy the original grabbed region and restore only that.  But then we would be ignoring any reshaping adjustments.")
+
+    (LET* [CLOSEVAL (TYPEDREGION (WINDOWPROP WINDOW 'TYPED-REGION))
+                 (REGIONTYPE (CAR TYPEDREGION))
+                 (TREGION (CDR TYPEDREGION))
+                 [PWINDOW (WINDOWP (CAR (MKLIST (WINDOWPROP WINDOW 'PROMPTWINDOW]
+                 [WREGION (CL:IF PWINDOW
+                              (UNIONREGIONS (WINDOWPROP WINDOW 'REGION)
+                                     (WINDOWPROP PWINDOW 'REGION))
+                              (WINDOWPROP WINDOW 'REGION))]
+                 (TREGIONLIST (AND REGIONTYPE (OR (ASSOC REGIONTYPE TYPED-REGIONS)
+                                                  (CAR (PUSH TYPED-REGIONS (CONS REGIONTYPE]
+          (CL:WHEN (AND (SETQ CLOSEVAL (CLOSEW.ORIG WINDOW))
+                        TYPEDREGION)
+              (CL:UNLESS (EQUAL TREGION WREGION)
+
+                  (* ;; "The user reshaped the window after the region was taken from TYPED-REGIONS.  Assume that the new shape is what should be offered when this is recycled. Important to keep the same structure")
+
+                  (with REGION TREGION (SETQ LEFT (fetch (REGION LEFT) of WREGION))
+                        (SETQ BOTTOM (fetch (REGION BOTTOM) of WREGION))
+                        (SETQ WIDTH (fetch (REGION WIDTH) of WREGION))
+                        (SETQ HEIGHT (fetch (REGION HEIGHT) of WREGION))))
+
+              (* ;; "Move TREGION to the front so most recently closed will be recycled first")
+
+              (CL:WHEN TREGIONLIST
+                  (change (CDR TREGIONLIST)
+                         (CONS TREGION (DREMOVE TREGION DATUM))))
+              (replace REGION-INUSE of TREGION with NIL)
+              (WINDOWPROP WINDOW 'TYPED-REGION NIL))
+          CLOSEVAL])
 
 (RM-GETREGION
-  [LAMBDA (MINWIDTH MINHEIGHT INITREGION NEWREGIONFN NEWREGIONFNARG INITCORNERS)
+  [LAMBDA (MINWIDTH MINHEIGHT INITREGION NEWREGIONFN NEWREGIONFNARG INITCORNERS)
+                                                             (* ; "Edited 10-Oct-2023 12:39 by rmk")
+                                                             (* ; "Edited 14-Sep-2023 07:50 by rmk")
                                                              (* ; "Edited  1-Jan-2022 21:49 by rmk")
 
-    (* ;; "If INITREGION is a type atom and a region of that type is available, then use it as the INITREGION.  Otherwise, add a copy of the new region to the available list, and assert that the new region has the copy as its source.")
+    (* ;; "If INITREGION is a type atom:")
 
-    (* ;; "We don't know what will happen to the new region, but if it ends up as a region for CREATEW, the source information enables us to mark its source as inuse.")
+    (* ;; "   If a region of that type is available, then a (copy) is returned.")
 
-    (* ;; "This allows for the possibility that the application is actually asking the user for a constellation region that will be shrunk in anticipation of future satellite attachments.  A future retrieval will return the original size and position, and it will then presumably be shrunk in the same way.")
+    (* ;; "   Otherwise, the user is asked for a new region, that is added to the type list, and again a copy is returned.")
 
-    (LET (REGION (TYPELIST (ASSOC (CL:WHEN (AND INITREGION (LITATOM INITREGION))
-                                         INITREGION)
-                                  TYPED-REGIONS)))
-         (FOR R in (CDR TYPELIST) UNLESS (fetch REGION-INUSE of R)
-            WHEN [AND (OR (NULL MINWIDTH)
-                          (ILEQ MINWIDTH (FETCH WIDTH OF R)))
-                      (OR (NULL MINHEIGHT)
-                          (ILEQ MINHEIGHT (FETCH HEIGHT OF R]
-            DO 
-               (* ;; "Copy so the caller can update the region without affecting the recyclable source, but remember what it is based on.  We don't mark it as used here, maybe a window won't be built around it and it will fade away.  However, there is the risk that another GETREGION will find the same source before it is given to a window, in which case 2 windows might open up in the same place.")
+    (* ;; "We return a copy because we don't know what will happen to this region, whether it will be changed by future operations (e.g. by a constellation operation).  A future retrieval will return the original size and position, and it will then presumably be shrunk in the same way.")
 
-               (SETQ REGION (COPY R))
-               (REPLACE REGION-SOURCE OF REGION WITH R)
-               (RETURN))
+    (* ;; " If INITREGION is not a typeatom, it is passed through to the original GETREGION, and the new region will not be managed.")
 
-         (* ;; "If we found a good one, we're done.  Otherwise, run the normal code, but save the new region if it is typed.")
-
+    (LET (REGION TYPELIST (REGION-TYPE (AND (LITATOM INITREGION)
+                                            INITREGION)))
+         (SETQ REGION (GRAB-TYPED-REGION REGION-TYPE MINWIDTH MINHEIGHT))
          (CL:UNLESS REGION
-             (SETQ REGION (GETREGION.ORIG MINWIDTH MINHEIGHT INITREGION NEWREGIONFN NEWREGIONFNARG 
-                                 INITCORNERS))
-             (CL:WHEN TYPELIST
 
-                 (* ;; 
-          "The new region is based on a typed region.  The saved source is a copy of what we return.")
+             (* ;; "If we found a good one, INITREGIONS must have been a type, and we're done.  Otherwise, run the normal code, but save the new region as a new instance if its typed.")
 
-                 (NCONC1 TYPELIST (REPLACE REGION-SOURCE OF REGION WITH (COPY REGION)))))
+             (SETQ REGION (GETREGION.ORIG MINWIDTH MINHEIGHT (CL:IF REGION-TYPE
+                                                                 NIL
+                                                                 INITREGION)
+                                 NEWREGIONFN NEWREGIONFNARG INITCORNERS))
+             (CL:WHEN REGION-TYPE
+
+                 (* ;; "A new typed region to add to the list .  ")
+
+                 (NCONC1 [OR (ASSOC REGION-TYPE TYPED-REGIONS)
+                             (CAR (PUSH TYPED-REGIONS (CONS REGION-TYPE]
+                        REGION)))
          REGION])
 
 (CLOSE-TYPED-W
-  [LAMBDA (TYPE)                                             (* ; "Edited 29-Dec-2021 15:58 by rmk")
-                                                             (* ; "Edited 27-Nov-2021 11:50 by rmk:")
+  [LAMBDA (TYPE)                                             (* ; "Edited 14-Sep-2023 07:39 by rmk")
+                                                             (* ; "Edited 29-Dec-2021 15:58 by rmk")
+                                                            (* ; "Edited 27-Nov-2021 11:50 by rmk:")
 
-    (* ;; "Closes all windows of REGIONTYPE inside TYPE")
+    (* ;; "Closes all windows whose regions are of type TYPE")
 
     (CL:WHEN TYPE
-        (for W R in (OPENWINDOWS) when (AND (SETQ WT (WINDOWPROP W 'REGION-TYPE))
-                                            (EQMEMB WT TYPE)) do (CLOSEW W)))])
+        (for W R in (OPENWINDOWS) eachtime [SETQ WT (CAR (WINDOWPROP W 'TYPED-REGION]
+           when (AND WT (EQMEMB WT TYPE)) do (CLOSEW W)))])
 )
 
 (RPAQ? TYPED-REGIONS )
@@ -211,26 +259,16 @@
 (DECLARE%: EVAL@COMPILE
 
 (HASHLINK TYPED-REGION (REGION-INUSE REGION-INUSE-HASH))
-
-(HASHLINK REGION-SOURCE (REGION-SOURCE REGION-SOURCE-HASH))
 )
 
 (DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-INUSE-HASH))
 
 (SETUPHASHARRAY 'REGION-INUSE-HASH NIL)
-
-(DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-SOURCE-HASH))
-
-(SETUPHASHARRAY 'REGION-SOURCE-HASH NIL)
 )
 
 (DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-INUSE-HASH))
 
 (SETUPHASHARRAY 'REGION-INUSE-HASH NIL)
-
-(DECLARE%: EVAL@COMPILE (GLOBALVARS REGION-SOURCE-HASH))
-
-(SETUPHASHARRAY 'REGION-SOURCE-HASH NIL)
 
 (MOVD? 'CREATEW 'CREATEW.ORIG)
 
@@ -683,10 +721,11 @@
 )
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1672 3859 (SET-TYPED-REGIONS 1682 . 3857)) (3860 10861 (RM-CREATEW 3870 . 6377) (
-RM-CLOSEW 6379 . 7780) (RM-GETREGION 7782 . 10368) (CLOSE-TYPED-W 10370 . 10859)) (11777 19256 (
-RELCREATEREGION 11787 . 16410) (RELGETREGION 16412 . 19019) (RELCREATEPOSITION 19021 . 19254)) (19257 
-26061 (\RELCREATEREGION.REF 19267 . 23018) (\RELCREATEREGION.SIZE 23020 . 26059)) (26114 35456 (
-RM-ATTACHWINDOW 26124 . 35454)) (35457 37191 (CLOSEWITH 35467 . 35994) (CLOSEWITH.DOIT 35996 . 36276) 
-(MOVEWITH 36278 . 36801) (MOVEWITH.DOIT 36803 . 37189)))))
+  (FILEMAP (NIL (1573 6691 (SET-TYPED-REGIONS 1583 . 3758) (GRAB-TYPED-REGION 3760 . 4786) (
+REGISTER-TYPED-REGION 4788 . 6085) (REGION-TYPE 6087 . 6689)) (6692 14098 (RM-CREATEW 6702 . 8325) (
+RM-CLOSEW 8327 . 11345) (RM-GETREGION 11347 . 13496) (CLOSE-TYPED-W 13498 . 14096)) (14741 22220 (
+RELCREATEREGION 14751 . 19374) (RELGETREGION 19376 . 21983) (RELCREATEPOSITION 21985 . 22218)) (22221 
+29025 (\RELCREATEREGION.REF 22231 . 25982) (\RELCREATEREGION.SIZE 25984 . 29023)) (29078 38420 (
+RM-ATTACHWINDOW 29088 . 38418)) (38421 40155 (CLOSEWITH 38431 . 38958) (CLOSEWITH.DOIT 38960 . 39240) 
+(MOVEWITH 39242 . 39765) (MOVEWITH.DOIT 39767 . 40153)))))
 STOP

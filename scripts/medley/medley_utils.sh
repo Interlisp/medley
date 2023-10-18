@@ -97,7 +97,7 @@ check_file_readable() {
 
 check_dir_writeable_or_creatable() {
   local msg_core="\"$2\" given as the value of the \"$1\" flag"
-  if [[ -e "$%2" ]];
+  if [[ -e "$2" ]];
   then
     if [[ ! -d "$2" ]];
     then

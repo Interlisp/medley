@@ -139,7 +139,7 @@ mkdir -p ${LOGINDIR}/vmem
 if [[ ( ${darwin} = true ) || (( ${wsl} = false || ${use_vnc} = false ) && ${docker} = false) ]];
 then
   # If not using vnc, just call run-medley
-  ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} ${run_args[@]}
+  ${MEDLEYDIR}/run-medley -id "${run_id}" -title "${title}" ${geometry} ${screensize} ${run_args[@]}
 else
   # do the vnc thing on wsl or docker
   source ${SCRIPTDIR}/medley_vnc.sh

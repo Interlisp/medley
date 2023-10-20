@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "15-Oct-2023 18:50:35" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;180 56045  
+(FILECREATED "19-Oct-2023 09:38:38" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;181 61019  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \UPDATEPCNODES)
-                  (MACROS \LASTSLOT)
+      :CHANGES-TO (VARS TEDIT-PCTREECOMS)
 
-      :PREVIOUS-DATE " 8-Sep-2023 16:32:44" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;179)
+      :PREVIOUS-DATE "15-Oct-2023 18:50:35" {WMEDLEY}<library>tedit>TEDIT-PCTREE.;180)
 
 
 (PRETTYCOMPRINT TEDIT-PCTREECOMS)
@@ -33,7 +32,7 @@
         (INITRECORDS BTREENODE SELPIECES)
         (FNS \MAKEPCTB \UPDATEPCNODES \FIRSTPIECE \DELETETREE \INSERTTREE \LASTPIECE \MATCHPCS 
              \PCTOCH \CHTOPC \TEDIT.SET-TOTLEN \SELPIECES \MAKE.VACANT.BTREESLOT \LINKNEWPIECE 
-             \UNLINKPIECE \SPLITPIECE \INSERTPIECE \INSERTPIECES)
+             \UNLINKPIECE \SPLITPIECE \INSERTPIECE \INSERTPIECES \DELETEPIECES \ALIGNEDPIECE)
         (COMS                                                (* ; "Debugging ")
               (FNS BTVALIDATE BTVALIDATE.PRINT CHECK-BTREE CHECK-BTREE1 BTFAIL)
               (INITVARS (BTVALIDATETAGS 'DONT))
@@ -782,6 +781,68 @@
                                          (CL:WHEN PREVPC (FSETPC PREVPC NEXTPIECE PIECES))
                                          (FSETPC PIECES PREVPIECE PREVPC)))
     PIECES])
+
+(\DELETEPIECES
+  [LAMBDA (SELPIECES TEXTOBJ)                                (* ; "Edited  5-Sep-2023 22:32 by rmk")
+                                                             (* ; "Edited  8-Jun-2023 23:12 by rmk")
+                                                             (* ; "Edited  3-Jun-2023 22:44 by rmk")
+                                                             (* ; "Edited 30-May-2023 08:57 by rmk")
+                                                             (* ; "Edited 20-Apr-93 19:06 by jds")
+
+    (* ;; "As the PC is deleted from the tree on each iteration, the original previous PREV piece is linked to PC's next, and the next PREVPIECE is linked to PREV so that the tree and the links are uninterruptably consistent.")
+
+    (* ;; "PREV is NIL if SPFIRST=\FIRSTPIECE; in that case the tree itself manages the connection.  If SPLAST is the final actual piece (its NEXTPIECE is NIL), then LASTPIECE's PREVPIECE will be updated.")
+
+    (* ;; " Since the pieces are not unlinked on the fly, the tree may be invalid until all the pieces are gone.")
+
+    (* ;; "This may not be entirely safe against an interrupt, which only matters on the call from \INSERTSELPIECES (otherwise the data isn't yet visible).  Although the tree is consistent  with the remaining pieces after each deletion, the fact that we keep the SELPIECE links intact means that the remaining pieces point to pieces that are no longer in the tree.  We could do a little more work to collect the incrementally chain the deleted pieces together, one by one, as they are deleted--in the end they would all be out of the tree, and the deletion chain would have been reconnected.  Alternatively, we can make the whole loop be uninterruptable. ")
+
+    (BTVALIDATE '\DELETEPIECES 'BEFORE TEXTOBJ)
+    (for PC PREV NEXT first (SETQ PREV (PREVPIECE (fetch (SELPIECES SPFIRST) of SELPIECES))) 
+                                                             (* ; "For incremental chain-update")
+                            (SETQ NEXT (OR (NEXTPIECE (fetch (SELPIECES SPLAST) of SELPIECES))
+                                           (FGETTOBJ TEXTOBJ LASTPIECE))) inselpieces SELPIECES
+       do (UNINTERRUPTABLY
+              (\DELETETREE PC (ffetch (PIECE PTREENODE) of PC)
+                     TEXTOBJ)
+
+              (* ;; "This piece is gone but its links are still there. To keep the tree valid at each point, we incrementally splice it out.")
+
+              (CL:WHEN PREV                                  (* ; "Not at the very beginning")
+                  (FSETPC PREV NEXTPIECE (NEXTPIECE PC)))
+              (FSETPC NEXT PREVPIECE PREV)
+              (\UPDATEPCNODES PC (IMINUS (PLEN PC))
+                     TEXTOBJ)) finally (FSETPC (fetch (SELPIECES SPFIRST) of SELPIECES)
+                                              PREVPIECE NIL) (* ; "Disconnect the SELPIECE chain")
+                                     (FSETPC (fetch (SELPIECES SPLAST) of SELPIECES)
+                                            NEXTPIECE NIL))
+    (BTVALIDATE '\DELETEPIECES 'AFTER TEXTOBJ])
+
+(\ALIGNEDPIECE
+  [LAMBDA (CHNO TEXTOBJ)                                     (* ; "Edited 29-May-2023 23:48 by rmk")
+                                                             (* ; "Edited 20-May-2023 13:53 by rmk")
+                                                             (* ; "Edited  3-May-2023 18:47 by rmk")
+                                                             (* ; "Edited 21-Apr-93 17:49 by jds")
+
+    (* ;; "CHNO is a character offset in the text.  If CHNO is not the beginning of a piece, this modifies the piecetable so that it is. If  the piece table is modified, a new piece is created for the characters  before CHNO  (characters from original 0 to original (SUB1 CHNO)), and the original piece is shortened so that it no longer includes those characters.   The new piece is linked into the piece sequence. ")
+
+    (* ;; "The return is the (possibly shortened) original piece with character CHNO now at offset 0. Its PREVPIECE may or may not be new.   ")
+
+    (if (IGREATERP CHNO (TEXTLEN TEXTOBJ))
+        then 
+             (* ;; "Doesn't return NIL in this case, returns the last piece.")
+
+             (ffetch (TEXTOBJ LASTPIECE) of TEXTOBJ)
+      elseif (ILEQ CHNO 1)
+        then (\FIRSTPIECE TEXTOBJ)
+      else (LET (PC START-OF-PIECE)
+                (DECLARE (SPECVARS START-OF-PIECE))
+                (SETQ PC (\CHTOPC CHNO TEXTOBJ T))
+                (CL:UNLESS (IEQP CHNO START-OF-PIECE)        (* ; 
+                                   "There can be no para break before the split, as things now work.")
+                    (\SPLITPIECE PC (IDIFFERENCE CHNO START-OF-PIECE)
+                           TEXTOBJ))
+                PC])
 )
 
 
@@ -972,11 +1033,12 @@
 (GLOBALVARS BTVALIDATETAGS)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (9473 44072 (\MAKEPCTB 9483 . 10939) (\UPDATEPCNODES 10941 . 13108) (\FIRSTPIECE 13110
- . 14121) (\DELETETREE 14123 . 16918) (\INSERTTREE 16920 . 19368) (\LASTPIECE 19370 . 20457) (
-\MATCHPCS 20459 . 21328) (\PCTOCH 21330 . 22588) (\CHTOPC 22590 . 25658) (\TEDIT.SET-TOTLEN 25660 . 
-26200) (\SELPIECES 26202 . 28521) (\MAKE.VACANT.BTREESLOT 28523 . 34670) (\LINKNEWPIECE 34672 . 36159)
- (\UNLINKPIECE 36161 . 36634) (\SPLITPIECE 36636 . 40365) (\INSERTPIECE 40367 . 41726) (\INSERTPIECES 
-41728 . 44070)) (44100 55922 (BTVALIDATE 44110 . 45560) (BTVALIDATE.PRINT 45562 . 46920) (CHECK-BTREE 
-46922 . 50392) (CHECK-BTREE1 50394 . 55645) (BTFAIL 55647 . 55920)))))
+  (FILEMAP (NIL (9467 49046 (\MAKEPCTB 9477 . 10933) (\UPDATEPCNODES 10935 . 13102) (\FIRSTPIECE 13104
+ . 14115) (\DELETETREE 14117 . 16912) (\INSERTTREE 16914 . 19362) (\LASTPIECE 19364 . 20451) (
+\MATCHPCS 20453 . 21322) (\PCTOCH 21324 . 22582) (\CHTOPC 22584 . 25652) (\TEDIT.SET-TOTLEN 25654 . 
+26194) (\SELPIECES 26196 . 28515) (\MAKE.VACANT.BTREESLOT 28517 . 34664) (\LINKNEWPIECE 34666 . 36153)
+ (\UNLINKPIECE 36155 . 36628) (\SPLITPIECE 36630 . 40359) (\INSERTPIECE 40361 . 41720) (\INSERTPIECES 
+41722 . 44064) (\DELETEPIECES 44066 . 47272) (\ALIGNEDPIECE 47274 . 49044)) (49074 60896 (BTVALIDATE 
+49084 . 50534) (BTVALIDATE.PRINT 50536 . 51894) (CHECK-BTREE 51896 . 55366) (CHECK-BTREE1 55368 . 
+60619) (BTFAIL 60621 . 60894)))))
 STOP

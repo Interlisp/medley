@@ -28,7 +28,7 @@ run_id="default"
 screensize=""
 sysout_flag=false
 sysout_arg=""
-title=""
+title="Medley Interlisp"
 use_vnc=false
 windows=false
 
@@ -113,8 +113,7 @@ do
         ;;
       -t | --title)
         check_for_dash_or_end "$1" "$2"
-        #run_args+=(-title $2)
-        title="$2"
+        if [ -n "$2" ]; then title="$2"; fi
         shift
         ;;
       -v | --vnc)

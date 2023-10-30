@@ -57,8 +57,7 @@ export MEDLEYDIR=$(cd ${SCRIPTDIR}; cd ../..; pwd)
 IL_DIR=$(cd ${MEDLEYDIR}; cd ..; pwd)
 export LOGINDIR=${HOME}/il
 
-# Are we running under Docker or if not under WSL
-# or under Darwin?
+# Are we running under Docker or WSL or Darwin or Cygwin?
 #
 docker=false
 wsl=false
@@ -70,7 +69,8 @@ then
 elif [ -n "${MEDLEY_DOCKER_BUILD_DATE}" ];
 then
   docker='true'
-else
+elif [ $(uname -s | head --bytes 6) != "CYGWIN" ];
+then
   wsl_ver=0
   # WSL2
   grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
@@ -93,8 +93,6 @@ else
         echo "Exiting"
         exit 23
       fi
-    else
-      wsl='false'
     fi
   fi
 fi
@@ -141,7 +139,7 @@ mkdir -p ${LOGINDIR}/vmem
 if [[ ( ${darwin} = true ) || (( ${wsl} = false || ${use_vnc} = false ) && ${docker} = false) ]];
 then
   # If not using vnc, just call run-medley
-  ${MEDLEYDIR}/run-medley -id "${run_id}" ${geometry} ${screensize} ${run_args[@]}
+  ${MEDLEYDIR}/run-medley -id "${run_id}" -title "${title}" ${geometry} ${screensize} ${run_args[@]}
 else
   # do the vnc thing on wsl or docker
   source ${SCRIPTDIR}/medley_vnc.sh

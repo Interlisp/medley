@@ -22,6 +22,10 @@ fi
 ./scripts/cpv "${LOADUP_WORKDIR}"/lisp.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
 ./scripts/cpv "${LOADUP_WORKDIR}"/full.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
 ./scripts/cpv "${LOADUP_WORKDIR}"/whereis.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+if [ "${1}" = "-apps" ]; then
+    ./scripts/cpv "${LOADUP_WORKDIR}"/apps.dribble "${LOADUP_OUTDIR}" | sed -e "s#${MEDLEYDIR}/##g"
+fi
+
 
 ./scripts/cpv "${LOADUP_WORKDIR}"/RDSYS library | sed -e "s#${MEDLEYDIR}/##g"
 ./scripts/cpv "${LOADUP_WORKDIR}"/RDSYS.LCOM library | sed -e "s#${MEDLEYDIR}/##g"

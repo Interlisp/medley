@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "31-Oct-2023 19:41:06" {WMEDLEY}<library>tedit>TEDIT-LOOKS.;153 136161 
+(FILECREATED " 5-Nov-2023 11:22:54" {WMEDLEY}<library>tedit>TEDIT-LOOKS.;158 137699 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.CHANGE.LOOKS)
+      :CHANGES-TO (FNS \TEDIT.CONVERT.TO.FORMATTED)
 
-      :PREVIOUS-DATE "21-Oct-2023 09:01:58" {WMEDLEY}<library>tedit>TEDIT-LOOKS.;151)
+      :PREVIOUS-DATE " 4-Nov-2023 23:02:05" {WMEDLEY}<library>tedit>TEDIT-LOOKS.;157)
 
 
 (PRETTYCOMPRINT TEDIT-LOOKSCOMS)
@@ -354,6 +354,15 @@
        '46)
 
 (DEFPRINT 'FMTSPEC (FUNCTION \TEDIT.FMTSPEC.DEFPRINT))
+
+(/DECLAREDATATYPE 'PENDINGTAB '(POINTER POINTER POINTER POINTER FULLXPOINTER POINTER)
+       '((PENDINGTAB 0 POINTER)
+         (PENDINGTAB 2 POINTER)
+         (PENDINGTAB 4 POINTER)
+         (PENDINGTAB 6 POINTER)
+         (PENDINGTAB 8 FULLXPOINTER)
+         (PENDINGTAB 10 POINTER))
+       '12)
 (DEFINEQ
 
 (\TEDIT.CHARLOOKS.DEFPRINT
@@ -1724,40 +1733,63 @@ CONS pair of default width and LIST of TAB record instances")
           (TEDIT.PARALOOKS TEXTOBJ LOOKS DEST LEN])
 
 (\TEDIT.CONVERT.TO.FORMATTED
-  [LAMBDA (TEXTOBJ START END)                                (* ; "Edited 24-Sep-2023 23:30 by rmk")
+  [LAMBDA (TEXTOBJ START END)                                (* ; "Edited  5-Nov-2023 11:22 by rmk")
+                                                             (* ; "Edited 24-Sep-2023 23:30 by rmk")
                                                              (* ; "Edited 22-May-2023 22:50 by rmk")
                                                              (* ; "Edited 20-May-2023 16:44 by rmk")
                                                              (* ; "Edited  8-May-2023 08:44 by rmk")
                                                              (* ; "Edited 29-Apr-93 19:47 by jds")
 
-    (* ;; "Turn an unformatted TEdit file into a formatted TEdit file. The pieces are split so that CR, LF, and CRLF are always at piece-end, and the pieces containing them are marked as paragraph ending. Perhaps the terminating sequences should be changed to EOL ?  Except, this could happen under an insert where character switching CRLF to EOL would screw up established positions.")
+    (* ;; "Turn an unformatted TEdit file into a formatted TEdit file, essentially simulating ANY.EOLC by ensuring that end-of-line indicators (CR, CRLF, LF) are canonicalized as EOL's and then interpreted as paragraph ends. Pieces are split so that EOLs are always at piece-end.  If it wasn't formatted before, it presumably didn't have any looks to worry about, just the defaults.")
 
-    (* ;; "Note that a plain-text file comes with its last piece already marked as PPARALAST, no need to look at it.")
-
-    (CL:UNLESS (OR (fetch (TEXTOBJ FORMATTEDP) of TEXTOBJ)
-                   (ZEROP (TEXTLEN TEXTOBJ)))
+    (\DTEST TEXTOBJ 'TEXTOBJ)
+    (CL:UNLESS (OR (FGETTOBJ TEXTOBJ FORMATTEDP)
+                   (ZEROP (FGETTOBJ TEXTOBJ TEXTLEN)))
         (CL:UNLESS START (SETQ START 1))
         (CL:UNLESS END
-            (SETQ END (TEXTLEN TEXTOBJ)))
-        (replace (TEXTOBJ \DIRTY) of TEXTOBJ with T)
-        (for CHNO PREVEOL (TSTR _ (TEXTSTREAM TEXTOBJ)) from START to (SUB1 END)
-           first (\TEXTSETFILEPTR TSTR (SUB1 START))         (* ; "CHNO runs in character positions")
-           do (CL:WHEN PREVEOL
+            (SETQ END (FGETTOBJ TEXTOBJ TEXTLEN)))
+        (FSETTOBJ TEXTOBJ \DIRTY T)
+        (CL:WHEN (IGEQ END START)
+            (for CHNO (TSTREAM _ (FGETTOBJ TEXTOBJ STREAMHINT)) from START
+               first 
+                     (* ;; "CHNO is in characters, one more than stream positions")
 
-                  (* ;; 
-          "The EOL was the previous character, we now include it in the previous piece, and mark it.")
+                     (\TEXTSETFILEPTR TSTREAM (SUB1 START))
+               do (SELCHARQ (BIN TSTREAM)
+                       (LF 
+                           (* ;; "Linefeed not preceded by CR. Isolate it into its own unit-length piece, and then smash that with an EOL string piece.")
 
-                  (replace (PIECE PPARALAST) of (PREVPIECE (\ALIGNEDPIECE (ADD1 CHNO)
-                                                                  TEXTOBJ)) with T))
-              (SETQ PREVEOL (SELCHARQ (BIN TSTR)
-                                 (LF T)
-                                 (CR (CL:WHEN (EQ (CHARCODE LF)
-                                                  (\PEEKBIN TSTR T))
-                                         (BIN TSTR)
-                                         (add CHNO 1))
-                                     T)
-                                 NIL)) finally (replace (TEXTOBJ FORMATTEDP) of TEXTOBJ with T)
-                                             (\TEDIT.MARK.LINES.DIRTY TEXTOBJ START END)))])
+                           (with PIECE (ffetch (SELPIECES SPFIRST) of (\SELPIECES CHNO (ADD1 CHNO)
+                                                                             TEXTOBJ))
+                                 (SETQ PTYPE THINSTRING.PTYPE)
+                                 [SETQ PCONTENTS (MKSTRING (CHARACTER (CHARCODE EOL]
+                                 (SETQ PBYTELEN 1)
+                                 (SETQ PBINABLE T)
+                                 (SETQ PBYTESPERCHAR 1)
+                                 (SETQ PEXTERNALFORMAT NIL)
+                                 (SETQ PINCCODEFN NIL)
+                                 (SETQ PPARALAST T)
+                                 NIL))
+                       (CR 
+                           (* ;; 
+                    "Post-CR characters go to a separate piece, the CR piece is then paragraph-final")
+
+                           (FSETPC (PREVPIECE (\ALIGNEDPIECE (ADD1 CHNO)
+                                                     TEXTOBJ))
+                                  PPARALAST T)
+                           (CL:WHEN (EQ (CHARCODE LF (\TEXTPEEKBIN TSTREAM T)))
+
+                               (* ;; 
+                     "Linefeed following CR.  Chop it off from whatever follows, and then delete it.")
+
+                               (add END -1)                  (* ; "One less char to do")
+                               (\DELETEPIECES (\SELPIECES (ADD1 CHNO)
+                                                     (IPLUS CHNO 2))
+                                      TEXTOBJ)))
+                       NIL) repeatuntil (IGEQ CHNO END)))    (* ; 
+                                                    "Test END explicitly, because it may get reduced")
+        (FSETTOBJ TEXTOBJ FORMATTEDP T)
+        (\TEDIT.MARK.LINES.DIRTY TEXTOBJ START END))])
 
 (\TEDIT.PARABOUNDS
   [LAMBDA (TEXTOBJ CH#)                                      (* ; "Edited 26-Mar-2023 12:54 by rmk")
@@ -2177,24 +2209,24 @@ CONS pair of default width and LIST of TAB record instances")
 (GLOBALVARS *TEDIT-PARASTYLE-CACHE* *TEDIT-CURRENTPARA-CACHE* *TEDIT-STYLESHEET-SAVE-LIST*)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (20618 22379 (\TEDIT.CHARLOOKS.DEFPRINT 20628 . 21759) (\TEDIT.FMTSPEC.DEFPRINT 21761 . 
-22377)) (23557 51158 (CHARLOOKS.FROM.FONT 23567 . 24935) (EQCLOOKS 24937 . 27602) (SAMECLOOKS 27604 . 
-31756) (TEDIT.CARETLOOKS 31758 . 32800) (TEDIT.COPY.LOOKS 32802 . 34856) (
-\TEDIT.UNPARSE.CHARLOOKS.LIST 34858 . 37461) (TEDIT.MODIFYLOOKS 37463 . 39386) (TEDIT.NEW.FONT 39388
- . 39808) (\TEDIT.CARETLOOKS.VERIFY 39810 . 40647) (\TEDIT.CARETPIECE 40649 . 40839) (
-\TEDIT.GET.INSERT.CHARLOOKS 40841 . 42795) (\TEDIT.GET.TERMSA.WIDTHS 42797 . 43213) (
-\TEDIT.PARSE.CHARLOOKS.LIST 43215 . 51156)) (51159 57679 (\TEDIT.UNIQUIFY.CHARLOOKS 51169 . 52713) (
-\TEDIT.UNIQUIFY.PARALOOKS 52715 . 53866) (\TEDIT.UNIQUIFY.ALL 53868 . 55375) (
-\TEDIT.FLUSH.UNUSED.LOOKS 55377 . 57677)) (57727 60269 (TEDIT.SUBLOOKS 57737 . 60267)) (60270 80739 (
-\TEDIT.CHANGE.LOOKS 60280 . 72878) (TEDIT.LOOKS 72880 . 74420) (\TEDIT.LOOKS 74422 . 77320) (
-\TEDIT.FONTCOPY 77322 . 78688) (TEDIT.GET.LOOKS 78690 . 80737)) (80782 114668 (EQFMTSPEC 80792 . 84293
-) (TEDIT.GET.PARALOOKS 84295 . 87556) (\TEDIT.PARSE.PARALOOKS.LIST 87558 . 95476) (TEDIT.PARALOOKS 
-95478 . 108510) (TEDIT.COPY.PARALOOKS 108512 . 110602) (\TEDIT.CONVERT.TO.FORMATTED 110604 . 113117) (
-\TEDIT.PARABOUNDS 113119 . 114666)) (114728 120771 (TEDIT.SUBPARALOOKS 114738 . 117372) (SAMEPARALOOKS
- 117374 . 120769)) (120814 124463 (TEDIT.UNDO.LOOKS 120824 . 122854) (TEDIT.UNDO.PARALOOKS 122856 . 
-124461)) (124502 125080 (\TEDIT.MARK.REVISION 124512 . 125078)) (125142 125967 (
-\CREATE.TEDIT.DEFAULT.FMTSPEC 125152 . 125589) (\CREATE.TEDIT.FACE.MENU 125591 . 125763) (
-\CREATE.TEDIT.SIZE.MENU 125765 . 125965)) (126004 134857 (\TEDIT.APPLY.STYLES 126014 . 129527) (
-\TEDIT.APPLY.PARASTYLES 129529 . 131731) (TEDIT.STYLESHEET 131733 . 132800) (TEDIT.POP.STYLESHEET 
-132802 . 133470) (TEDIT.PUSH.STYLESHEET 133472 . 134212) (TEDIT.ADD.STYLESHEET 134214 . 134855)))))
+  (FILEMAP (NIL (20924 22685 (\TEDIT.CHARLOOKS.DEFPRINT 20934 . 22065) (\TEDIT.FMTSPEC.DEFPRINT 22067 . 
+22683)) (23863 51464 (CHARLOOKS.FROM.FONT 23873 . 25241) (EQCLOOKS 25243 . 27908) (SAMECLOOKS 27910 . 
+32062) (TEDIT.CARETLOOKS 32064 . 33106) (TEDIT.COPY.LOOKS 33108 . 35162) (
+\TEDIT.UNPARSE.CHARLOOKS.LIST 35164 . 37767) (TEDIT.MODIFYLOOKS 37769 . 39692) (TEDIT.NEW.FONT 39694
+ . 40114) (\TEDIT.CARETLOOKS.VERIFY 40116 . 40953) (\TEDIT.CARETPIECE 40955 . 41145) (
+\TEDIT.GET.INSERT.CHARLOOKS 41147 . 43101) (\TEDIT.GET.TERMSA.WIDTHS 43103 . 43519) (
+\TEDIT.PARSE.CHARLOOKS.LIST 43521 . 51462)) (51465 57985 (\TEDIT.UNIQUIFY.CHARLOOKS 51475 . 53019) (
+\TEDIT.UNIQUIFY.PARALOOKS 53021 . 54172) (\TEDIT.UNIQUIFY.ALL 54174 . 55681) (
+\TEDIT.FLUSH.UNUSED.LOOKS 55683 . 57983)) (58033 60575 (TEDIT.SUBLOOKS 58043 . 60573)) (60576 81045 (
+\TEDIT.CHANGE.LOOKS 60586 . 73184) (TEDIT.LOOKS 73186 . 74726) (\TEDIT.LOOKS 74728 . 77626) (
+\TEDIT.FONTCOPY 77628 . 78994) (TEDIT.GET.LOOKS 78996 . 81043)) (81088 116206 (EQFMTSPEC 81098 . 84599
+) (TEDIT.GET.PARALOOKS 84601 . 87862) (\TEDIT.PARSE.PARALOOKS.LIST 87864 . 95782) (TEDIT.PARALOOKS 
+95784 . 108816) (TEDIT.COPY.PARALOOKS 108818 . 110908) (\TEDIT.CONVERT.TO.FORMATTED 110910 . 114655) (
+\TEDIT.PARABOUNDS 114657 . 116204)) (116266 122309 (TEDIT.SUBPARALOOKS 116276 . 118910) (SAMEPARALOOKS
+ 118912 . 122307)) (122352 126001 (TEDIT.UNDO.LOOKS 122362 . 124392) (TEDIT.UNDO.PARALOOKS 124394 . 
+125999)) (126040 126618 (\TEDIT.MARK.REVISION 126050 . 126616)) (126680 127505 (
+\CREATE.TEDIT.DEFAULT.FMTSPEC 126690 . 127127) (\CREATE.TEDIT.FACE.MENU 127129 . 127301) (
+\CREATE.TEDIT.SIZE.MENU 127303 . 127503)) (127542 136395 (\TEDIT.APPLY.STYLES 127552 . 131065) (
+\TEDIT.APPLY.PARASTYLES 131067 . 133269) (TEDIT.STYLESHEET 133271 . 134338) (TEDIT.POP.STYLESHEET 
+134340 . 135008) (TEDIT.PUSH.STYLESHEET 135010 . 135750) (TEDIT.ADD.STYLESHEET 135752 . 136393)))))
 STOP

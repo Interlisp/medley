@@ -164,6 +164,7 @@
                 -SecurityTypes None \
                 -NeverShared \
                 -DisconnectClients=0 \
+                -desktop "${title}" \
                 --MaxDisconnectionTime=10 \
                 >> ${LOG} 2>&1 &
 

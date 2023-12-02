@@ -23,6 +23,14 @@ if [ ! -e ${NOTECARDSDIR} ]; then
     fi
 fi
 
+if [ -z "${NOTECARDSDIR}" ]; then
+    echo "Error: Cannot find the Notecards directory"
+    echo "It should be located at ${MEDLEYDIR}/../notecards or"
+    echo "${MEDLEYDIR}/../../notecards.  But its not."
+    echo "Exiting"
+    exit 1
+fi
+
 cat >"${cmfile}" <<"EOF"
 "
 

@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 1-Dec-2023 22:14:38" {WMEDLEY}<library>tedit>TEDIT-FILE.;352 194538 
+(FILECREATED " 9-Dec-2023 13:15:10" {WMEDLEY}<library>tedit>TEDIT-FILE.;364 198527 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.GET.FORMATTED.FILE)
+      :CHANGES-TO (FNS \TEDIT.MAKE.SAFE.PIECES \TEDIT.MAKE.SAFE.BUFFERS \TEDIT.GET.PIECES3 
+                       \TEDIT.PUT.PCTB \TEDIT.GET.UNFORMATTED.FILE.XCCS)
 
-      :PREVIOUS-DATE "30-Nov-2023 00:02:40" {WMEDLEY}<library>tedit>TEDIT-FILE.;350)
+      :PREVIOUS-DATE " 7-Dec-2023 22:04:18" {WMEDLEY}<library>tedit>TEDIT-FILE.;362)
 
 
 (PRETTYCOMPRINT TEDIT-FILECOMS)
@@ -24,8 +25,8 @@
         (COMS 
               (* ;; "Public entries ")
 
-              (FNS TEDIT.GET TEDIT.FORMATTEDFILEP TEDIT.FILEDATE TEDIT.INCLUDE TEDIT.RAW.INCLUDE 
-                   TEDIT.PUT)
+              (FNS TEDIT.GET TEDIT.FORMATTEDFILEP TEDIT.FILEDATE \TEDIT.GET.IDATE3 TEDIT.INCLUDE 
+                   TEDIT.RAW.INCLUDE TEDIT.PUT)
               
               (* ;; "Getting")
 
@@ -217,49 +218,62 @@
                     (\TEDIT.FORMATTEDP1 STREAM))))])
 
 (TEDIT.FILEDATE
-  [LAMBDA (FILE INTEGER)                                     (* ; "Edited 28-Sep-2023 22:47 by rmk")
+  [LAMBDA (FILE INTEGER)                                     (* ; "Edited  6-Dec-2023 20:11 by rmk")
+                                                             (* ; "Edited 28-Sep-2023 22:47 by rmk")
 
     (* ;; "If FILE is a Tedit-format file, returns its save date if it is stamped in the file, otherwise its file-system creation date as an integer or string.  NIL if not a Tedit file.")
 
     (* ;; "FILE must be random access.  If not, then presumably we first have to fetch the last 5+4+8 bytes to someplace else.")
 
-    (RESETLST
-        [PROG ((STREAM (\GETSTREAM FILE 'INPUT T))
-               END IDATE)
-              [if STREAM
-                  then [RESETSAVE (GETFILEPTR STREAM)
-                              `(PROGN (SETFILEPTR ,STREAM OLDVALUE]
-                else (RESETSAVE (SETQ STREAM (OPENSTREAM FILE 'INPUT))
-                            `(PROGN (CLOSEF? OLDVALUE]
-              (SETQ END (GETEOFPTR STREAM))
-              (CL:WHEN (IGREATERP END 8)
-                  (SETFILEPTR STREAM (IDIFFERENCE END 2))    (* ; "Check the password")
-                  (SELECTQ (IDIFFERENCE (\SMALLPIN STREAM)
-                                  31415)
-                      (3 (CL:WHEN (IGREATERP END (IPLUS 5 4 8))
-                             (SETFILEPTR STREAM (IDIFFERENCE END (IPLUS 5 4 8)))
+    (CL:WHEN FILE
+        (RESETLST
+            [PROG ((STREAM (\GETSTREAM FILE 'INPUT T))
+                   END IDATE)
+                  [if STREAM
+                      then [RESETSAVE (GETFILEPTR STREAM)
+                                  `(PROGN (SETFILEPTR ,STREAM OLDVALUE]
+                    else (RESETSAVE (SETQ STREAM (OPENSTREAM FILE 'INPUT))
+                                `(PROGN (CLOSEF? OLDVALUE]
+                  (SETQ END (GETEOFPTR STREAM))
+                  (CL:WHEN (IGREATERP END 8)
+                      (SETFILEPTR STREAM (IDIFFERENCE END 2))(* ; "Check the password")
+                      (SELECTQ (IDIFFERENCE (\SMALLPIN STREAM)
+                                      31415)
+                          (3 (SETQ IDATE (\TEDIT.GET.IDATE3 STREAM END)))
+                          ((0 1 2))
+                          (RETURN NIL))                      (* ; "Return if not recognized")
+                      (CL:UNLESS IDATE
+                          (SETQ IDATE (GETFILEINFO STREAM 'ICREATIONDATE)))
+                      (RETURN (CL:IF INTEGER
+                                  IDATE
+                                  (GDATE IDATE))))]))])
 
-                             (* ;; 
-      "DATE: is the marker for this extension to version 3 (could be removed if version is update.  ")
+(\TEDIT.GET.IDATE3
+  [LAMBDA (STREAM END)                                       (* ; "Edited  6-Dec-2023 16:55 by rmk")
 
-                             (CL:WHEN (AND (EQ (CHARCODE D)
-                                               (BIN STREAM))
-                                           (EQ (CHARCODE A)
-                                               (BIN STREAM))
-                                           (EQ (CHARCODE T)
-                                               (BIN STREAM))
-                                           (EQ (CHARCODE E)
-                                               (BIN STREAM))
-                                           (EQ (CHARCODE %:)
-                                               (BIN STREAM)))
-                                 (SETQ IDATE (\DWIN STREAM)))))
-                      ((0 1 2))
-                      (RETURN NIL))                          (* ; "Return if not recognized")
-                  (CL:UNLESS IDATE
-                      (SETQ IDATE (GETFILEINFO STREAM 'ICREATIONDATE)))
-                  (RETURN (CL:IF INTEGER
-                              IDATE
-                              (GDATE IDATE))))])])
+    (* ;; "Returns the integer IDATE for slightly updated version 3 files, otherwise NIL.  4 for the bytes of the IDATE, 8 for the header. Leaves resets to starting position (assumes an error wouldn't matter).")
+
+    (CL:WHEN (IGREATERP END (IPLUS (CONSTANT (NCHARS "DATE:"))
+                                   4 8))
+        (LET ((FILEPTR (GETFILEPTR STREAM)))
+             (SETFILEPTR STREAM (IDIFFERENCE END (IPLUS (CONSTANT (NCHARS "DATE:"))
+                                                        4 8)))
+
+             (* ;; 
+     "DATE: is the marker for this extension to version 3 (could be removed if version is update).  ")
+
+             (PROG1 (CL:WHEN (AND (EQ (CHARCODE D)
+                                      (BIN STREAM))
+                                  (EQ (CHARCODE A)
+                                      (BIN STREAM))
+                                  (EQ (CHARCODE T)
+                                      (BIN STREAM))
+                                  (EQ (CHARCODE E)
+                                      (BIN STREAM))
+                                  (EQ (CHARCODE %:)
+                                      (BIN STREAM)))
+                           (\DWIN STREAM))
+                    (SETFILEPTR STREAM FILEPTR))))])
 
 (TEDIT.INCLUDE
   [LAMBDA (TSTREAM FILE START END SAFE PLAINTEXT)            (* ; "Edited 12-Nov-2023 12:29 by rmk")
@@ -604,7 +618,8 @@
                     NIL TEXTOBJ)))])
 
 (\TEDIT.GET.FORMATTED.FILE
-  [LAMBDA (TEXT TSTREAM START END PROPS)                     (* ; "Edited  1-Dec-2023 22:14 by rmk")
+  [LAMBDA (TEXT TSTREAM START END PROPS)                     (* ; "Edited  6-Dec-2023 19:57 by rmk")
+                                                             (* ; "Edited  1-Dec-2023 22:14 by rmk")
                                                              (* ; "Edited 30-Nov-2023 00:02 by rmk")
                                                              (* ; "Edited 26-Nov-2023 00:37 by rmk")
                                                              (* ; "Edited 27-Oct-2023 13:48 by rmk")
@@ -618,10 +633,10 @@
 
     (LET ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
           (PCCOUNT (\TEDIT.FORMATTEDP1 TEXT END))
-          PC)
+          IDATE PC)
          (CL:WHEN PCCOUNT
              (SETTOBJ TEXTOBJ TXTPAGEFRAMES NIL)
-             (if (OR (GETTEXTPROP TEXTOBJ 'CACHE)
+             [if (OR (GETTEXTPROP TEXTOBJ 'CACHE)
                      (NOT (RANDACCESSP TEXT)))
                  then                                        (* ; 
                                     "If the file device isn't random access, cache the file locally.")
@@ -635,9 +650,13 @@
                       (SETQ START 0)
                       (SETQ END (GETEOFPTR TEXT))
                else (CL:UNLESS START (SETQ START 0))
-                    (CL:UNLESS END (GETEOFPTR TEXT)))
+                    (CL:UNLESS END
+                        (SETQ END (GETEOFPTR TEXT)))]
              (SELECTQ (CAR PCCOUNT)
-                 (3                                          (* ; "Current version")
+                 (3                                          (* ; "Version 3")
+                    (CL:WHEN (\TEDIT.GET.IDATE3 TEXT END)    (* ; 
+                                                           "IDATE means 3.1, LINELEADING above-hack.")
+                        (FSETTOBJ TEXTOBJ TXTLINELEADINGABOVE T))
                     (\INSERTPIECES (\TEDIT.MAKE.SAFE.PIECES (\TEDIT.GET.PIECES3 TEXT TEXTOBJ
                                                                    (CADR PCCOUNT)
                                                                    START END))
@@ -819,7 +838,8 @@
 (DEFINEQ
 
 (\TEDIT.GET.PIECES3
-  [LAMBDA (TEXT TEXTOBJ PCCOUNT CURFILEBYTE# END)            (* ; "Edited  7-Nov-2023 13:10 by rmk")
+  [LAMBDA (TEXT TEXTOBJ PCCOUNT CURFILEBYTE# END)            (* ; "Edited  8-Dec-2023 22:49 by rmk")
+                                                             (* ; "Edited  7-Nov-2023 13:10 by rmk")
                                                              (* ; "Edited 24-Sep-2023 22:00 by rmk")
                                                              (* ; "Edited  2-Sep-2023 11:12 by rmk")
                                                              (* ; "Edited 29-Aug-2023 00:18 by rmk")
@@ -850,6 +870,7 @@
                            PBYTELEN _ BYTELEN
                            PPARALOOKS _ OLDPARALOOKS
                            PTYPE _ THINFILE.PTYPE
+                           PCHARSET _ 0
                            PBYTESPERCHAR _ 1
                            PREVPIECE _ PREVPC))
                    (\TEDIT.GET.CHARLOOKS PC TEXT LOOKSMAP)   (* ; 
@@ -928,7 +949,8 @@
                                       (RETURN PC])
 
 (\TEDIT.MAKE.SAFE.BUFFERS
-  [LAMBDA (PC ONECHARFN)                                     (* ; "Edited 23-Sep-2023 00:19 by rmk")
+  [LAMBDA (PC ONECHARFN)                                     (* ; "Edited  9-Dec-2023 13:13 by rmk")
+                                                             (* ; "Edited 23-Sep-2023 00:19 by rmk")
                                                              (* ; "Edited 16-Sep-2023 12:32 by rmk")
                                                              (* ; "Edited  5-Sep-2023 00:00 by rmk")
                                                              (* ; "Edited 30-Aug-2023 19:09 by rmk")
@@ -1047,10 +1069,12 @@
                        (SETQ PLEN 1)
                        (if (ILEQ CROSSCHAR 255)
                            then (SETQ PTYPE THINSTRING.PTYPE)
+                                (SETQ PCHARSET 0)
                                 (SETQ PBYTESPERCHAR 1)
                                 (SETQ PBYTELEN 1)
                                 (SETQ PBINABLE T)
                          else (SETQ PTYPE FATSTRING.PTYPE)
+                              (SETQ PCHARSET \NORUNCODE)
                               (SETQ PBYTESPERCHAR 2)
                               (SETQ PBYTELEN 2)
                               (SETQ PBINABLE NIL)))
@@ -1062,7 +1086,9 @@
                      (RETURN STRINGPC))])
 
 (\TEDIT.MAKE.SAFE.PIECES
-  [LAMBDA (PIECES)                                           (* ; "Edited 25-Nov-2023 17:39 by rmk")
+  [LAMBDA (PIECES)                                           (* ; "Edited  9-Dec-2023 13:12 by rmk")
+                                                             (* ; "Edited  7-Dec-2023 22:03 by rmk")
+                                                             (* ; "Edited 25-Nov-2023 17:39 by rmk")
                                                              (* ; "Edited 23-Sep-2023 00:28 by rmk")
                                                              (* ; "Edited 16-Sep-2023 12:32 by rmk")
                                                              (* ; "Edited  9-Sep-2023 22:59 by rmk")
@@ -1086,62 +1112,73 @@
           "We have to strip shifting bytes for text, but object bytes have already been interpreted.")
 
                         (for PC BYTE inpieces PIECES unless (EQ OBJECT.PTYPE (PTYPE PC))
-                           do (SETFILEPTR PFILE (PFPOS PC))
-                              (if (EQ NSCHARSETSHIFT (BIN PFILE))
-                                  then [SELECTC (SETQ BYTE (BIN PFILE))
-                                           (0 (FSETPC PC PTYPE THINFILE.PTYPE)
-                                              (FSETPC PC PBINABLE T)
-                                              (add (PFPOS PC)
-                                                   2)
-                                              (add (PBYTELEN PC)
-                                                   -2)       (* ; 
+                           do
+                           (SETFILEPTR PFILE (PFPOS PC))
+                           (if (EQ NSCHARSETSHIFT (BIN PFILE))
+                               then
+                               [SELECTC (SETQ BYTE (BIN PFILE))
+                                   (0 (FSETPC PC PTYPE THINFILE.PTYPE)
+                                      (FSETPC PC PBINABLE T)
+                                      (FSETPC PC PCHARSET 0)
+                                      (add (PFPOS PC)
+                                           2)
+                                      (add (PBYTELEN PC)
+                                           -2)               (* ; 
                                                              "The shift characters really disappear")
-                                              (FSETPC PC PLEN (PBYTELEN PC)))
-                                           (\NORUNCODE (CL:UNLESS (EQ 0 (BIN PFILE))
-                                                              (SHOULDNT 
-                                                                     "XCCS CHARACTER NOT IN PLANE 0")
-                                                              )
-                                                       (FSETPC PC PTYPE FATFILE2.PTYPE)
-                                                       (FSETPC PC PBYTESPERCHAR 2)
-                                                       (add (PFPOS PC)
-                                                            3)
-                                                       (add (PBYTELEN PC)
-                                                            -3)
-                                                       (FSETPC PC PLEN (FOLDLO (PBYTELEN PC)
-                                                                              2))
-                                                       [SETQ PC (\TEDIT.MAKE.SAFE.BUFFERS
-                                                                 PC
-                                                                 (FUNCTION (LAMBDA (PFILE)
-                                                                             (\WIN PFILE])
-                                           (PROGN 
+                                      (FSETPC PC PLEN (PBYTELEN PC)))
+                                   (\NORUNCODE (CL:UNLESS (EQ 0 (BIN PFILE))
+                                                      (SHOULDNT "XCCS CHARACTER NOT IN PLANE 0"))
+                                               (FSETPC PC PTYPE FATFILE2.PTYPE)
+                                               (FSETPC PC PBYTESPERCHAR 2)
+                                               (add (PFPOS PC)
+                                                    3)
+                                               (add (PBYTELEN PC)
+                                                    -3)
+                                               (FSETPC PC PLEN (FOLDLO (PBYTELEN PC)
+                                                                      2))
+                                               [SETQ PC (\TEDIT.MAKE.SAFE.BUFFERS
+                                                         PC
+                                                         (FUNCTION (LAMBDA (PFILE)
+                                                                     (\WIN PFILE])
+                                   (PROGN 
+                                          (* ;; "A run in a non-zero charset.    ")
 
-                                 (* ;; "A run in a non-zero charset.  It's not worth dealing with the complexity of maintaining that storage efficiency, here we convert it to a fat-string piece.")
+                                          (add (PBYTELEN PC)
+                                               -2)
+                                          (FSETPC PC PLEN (PBYTELEN PC))
+                                          (FSETPC PC PBINABLE NIL)
+                                          (if T
+                                              then (FSETPC PC PTYPE FATFILE1.PTYPE) 
+                                                             (* ; "Convert it to FATFILE1.")
+                                                   (FSETPC PC PBYTESPERCHAR 1)
+                                                   (FSETPC PC PCHARSET BYTE)
+                                            else 
 
-                                                  (add (PBYTELEN PC)
-                                                       -2)
-                                                  (FSETPC PC PLEN (PBYTELEN PC))
-                                                  (FSETPC PC PTYPE FATSTRING.PTYPE)
-                                                  (FSETPC PC PBYTESPERCHAR 2)
-                                                  (FSETPC PC PBINABLE NIL)
-                                                  (for I (CHARSET _ (LLSH BYTE 8))
-                                                       (STRING _ (ALLOCSTRING (PLEN PC)
-                                                                        NIL NIL T)) from 1
-                                                     to (PLEN PC) first (FSETPC PC PCONTENTS STRING)
-                                                     do (RPLCHARCODE STRING I (LOGOR CHARSET
-                                                                                     (BIN PFILE]
-                                elseif (EQ 2 (PBYTESPERCHAR PC))
-                                  then (FSETPC PC PTYPE FATFILE2.PTYPE) 
+                                 (* ;; "Could also read into a FATSTRING instead, get rid of on-file FATFILE1. A string piece could hold adjacent  substrings in different charsets.")
+
+                                                 (FSETPC PC PTYPE FATSTRING.PTYPE)
+                                                 (FSETPC PC PTYPE \NORUNCODE)
+                                                 (FSETPC PC PBYTESPERCHAR 2)
+                                                 (for I (CHARSET _ (LLSH BYTE 8))
+                                                      (STRING _ (ALLOCSTRING (PLEN PC)
+                                                                       NIL NIL T)) from 1
+                                                    to (PLEN PC) first (FSETPC PC PCONTENTS STRING)
+                                                    do (RPLCHARCODE STRING I (LOGOR CHARSET
+                                                                                    (BIN PFILE]
+                             elseif (EQ 2 (PBYTESPERCHAR PC))
+                               then (FSETPC PC PTYPE FATFILE2.PTYPE) 
                                                              (* ; "This is the continuation of an XCCS 2-byte run that was broken up presumably for looks or paragraphs")
-                                       (FSETPC PC PLEN (FOLDLO (PBYTELEN PC)
-                                                              2))
-                                       [SETQ PC (\TEDIT.MAKE.SAFE.BUFFERS PC (FUNCTION (LAMBDA (PFILE
-                                                                                                )
-                                                                                         (\WIN PFILE]
-                                else (FSETPC PC PTYPE THINFILE.PTYPE) 
+                                    (FSETPC PC PCHARSET \NORUNCODE)
+                                    (FSETPC PC PLEN (FOLDLO (PBYTELEN PC)
+                                                           2))
+                                    [SETQ PC (\TEDIT.MAKE.SAFE.BUFFERS PC (FUNCTION (LAMBDA (PFILE)
+                                                                                      (\WIN PFILE]
+                             else (FSETPC PC PTYPE THINFILE.PTYPE) 
                                                              (* ; "A charset 0 1-byte run")
-                                     (FSETPC PC PBINABLE T)
-                                     (FSETPC PC PLEN (PBYTELEN PC))
-                                     (FSETPC PC PBYTESPERCHAR 1))))
+                                  (FSETPC PC PCHARSET 0)
+                                  (FSETPC PC PBINABLE T)
+                                  (FSETPC PC PLEN (PBYTELEN PC))
+                                  (FSETPC PC PBYTESPERCHAR 1))))
                  (:UTF-8 (HELP 'UTF8))
                  (for PC inpieces PC unless (EQ OBJECT.PTYPE (PTYPE PC))
                     do (FSETPC PC PTYPE THINFILE.PTYPE)      (* ; "Default:  assume :THROUGH ?")
@@ -1153,6 +1190,7 @@
 
 (\TEDIT.GET.UNFORMATTED.FILE.XCCS
   [LAMBDA (STREAM START END DEFAULTCHARLOOKS DEFAULTPARALOOKS)
+                                                             (* ; "Edited  8-Dec-2023 23:01 by rmk")
                                                              (* ; "Edited 25-Nov-2023 17:39 by rmk")
                                                              (* ; "Edited 31-Aug-2023 00:22 by rmk")
                                                              (* ; "Edited 29-Aug-2023 22:06 by rmk")
@@ -1186,6 +1224,7 @@
                       PPARALOOKS _ DEFAULTPARALOOKS
                       PEXTERNALFORMAT _ EXTFORMAT
                       PTYPE _ THINFILE.PTYPE
+                      PCHARSET _ 0
                       PBYTESPERCHAR _ 1
                       PBYTELEN _ BYTELEN
                       PREVPIECE _ PREVPC))
@@ -1247,7 +1286,7 @@
 (DEFINEQ
 
 (\TEDIT.PUT.PCTB
-  [LAMBDA (TEXTOBJ OFILE LOOKSFILE)                          (* ; "Edited 21-Nov-2023 00:10 by rmk")
+  [LAMBDA (TEXTOBJ OFILE LOOKSFILE)                          (* ; "Edited  9-Dec-2023 11:13 by rmk")
                                                              (* ; "Edited 27-Sep-2023 23:50 by rmk")
                                                              (* ; "Edited  7-Sep-2023 23:43 by rmk")
                                                             (* ; "Edited 30-Apr-2021 14:46 by rmk:")
@@ -1307,18 +1346,26 @@
              (STREAMPROP OFILE :EXTERNAL-FORMAT :XCCS)
              (SETQ CURBYTE# (ADD1 (GETFILEPTR OFILE)))       (* ; 
                                                    "Why ADD1 ? Always pointing at the %"next%" byte?")
-             (SETQ OLDBYTE# CURBYTE#) unless (ZEROP (PLEN PC))
+             (SETQ OLDBYTE# CURBYTE#)
+             (CHARSET OFILE 0 T) unless (ZEROP (PLEN PC))
        do 
           (* ;; "If there are undescribed characters and PC can't be merged with PREVPC, then finish off PREVPC by writing its character looks.  And if PREVPC was the last of a pargraph, put out its PARALOOKS.  ")
 
           (CL:UNLESS (OR (IEQP CURBYTE# OLDBYTE#)
                          (\TEDIT.PUT.PCTB.MERGEABLE PREVPC PC EDITSTENTATIVE))
               (\TEDIT.PUT.CHARLOOKS LOOKSFILE OLDBYTE# CURBYTE# PREVPC EDITSTENTATIVE LOOKSHASH)
-              (add PCCOUNT 1)                                (* ; 
-                                                            "We've decribed all preceding characters")
-              (FSETPC NEXTNEW NEXTPIECE (SETQ NEXTNEW (create PIECE using PREVPC PFPOS _ (SUB1 
-                                                                                             OLDBYTE#
-                                                                                               )
+              (add PCCOUNT 1)
+
+              (* ;; "We've put out all the preceding characters in a sequence of mergeable pieces.  Make a new piece that describes how they reside on OFILE, effectively a compacting garbage collector for continued editing.")
+
+              (FSETPC NEXTNEW NEXTPIECE (SETQ NEXTNEW (create PIECE using PREVPC PTYPE _
+                                                                          (SELECTQ (PTYPE PREVPC)
+                                                                              (THINSTRING.PTYPE 
+                                                                                   THINFILE.PTYPE)
+                                                                              (FATSTRING.PTYPE 
+                                                                                   FATFILE2.PTYPE)
+                                                                              (PTYPE PREVPC))
+                                                                          PFPOS _ (SUB1 OLDBYTE#)
                                                                           PBYTELEN _ (IDIFFERENCE
                                                                                       CURBYTE# 
                                                                                       OLDBYTE#)
@@ -1329,20 +1376,32 @@
                                             "Last piece of a paragraph terminates with its paralooks")
               (\TEDIT.PUT.PARALOOKS LOOKSFILE PC PARAHASH)
               (add PCCOUNT 1))
+          (CL:WHEN (MEMB (PTYPE PC)
+                         FILE.PTYPES)
+              (SETQ PFILE (PCONTENTS PC))
+              (CL:UNLESS (\GETSTREAM PFILE 'INPUT T)         (* ; "Make sure the input file is open.")
+                  (SETQ PFILE (\TEDIT.REOPEN.STREAM TEXTOBJ PFILE)))
+              (SETFILEPTR PFILE (PFPOS PC)))
           (SELECTC (PTYPE PC)
-              (FILE.PTYPES                                   (* ; 
+              ((LIST THINFILE.PTYPE FATFILE1.PTYPE) 
+                   [for I (CSET _ (PCHARSET PC)) from 1 to (PLEN PC) first (CHARSET OFILE CSET)
+                      do (\OUTCHAR OFILE (LOGOR CSET (BIN PFILE])
+              (FATFILE2.PTYPE                                (* ; 
                                              "COPYCHARS automatically deals with external formats.  ")
-                           (SETQ PFILE (PCONTENTS PC))
-                           (CL:UNLESS (\GETSTREAM PFILE 'INPUT T)
-                                                             (* ; "Make sure the input file is open.")
-                               (SETQ PFILE (\TEDIT.REOPEN.STREAM TEXTOBJ PFILE)))
-                           [COPYCHARS PFILE OFILE (PFPOS PC)
-                                  (IPLUS (PFPOS PC)
-                                         (ITIMES (PLEN PC)
-                                                (PBYTESPERCHAR PC])
-              (STRING.PTYPES                                 (* ; 
+                   (CHARSET OFILE T)
+                   (for I from 1 to (PLEN PC) do (\OUTCHAR OFILE (\WIN PFILE)))
+                                                             (* (COPYCHARS PFILE OFILE
+                                                             (PFPOS PC) (IPLUS (PFPOS PC)
+                                                             (ITIMES (PLEN PC) (PBYTESPERCHAR PC)))))
+                   )
+              (THINSTRING.PTYPE                              (* ; 
                                                              "\OUTCHAR deals with external format")
-                             (for CH instring (PCONTENTS PC) do (\OUTCHAR OFILE CH)))
+                   (CHARSET OFILE 0)
+                   (for CH instring (PCONTENTS PC) do (\OUTCHAR OFILE CH)))
+              (FATSTRING.PTYPE                               (* ; 
+                                                             "\OUTCHAR deals with external format")
+                   (CHARSET OFILE T)
+                   (for CH instring (PCONTENTS PC) do (\OUTCHAR OFILE CH)))
               (OBJECT.PTYPE                                  (* ; 
                   "It's an object, use its PUTFN. Byte positions don't matter for continued editing.")
                             (TEDIT.PUT.OBJECT PC OFILE LOOKSFILE CURBYTE#)
@@ -1956,7 +2015,8 @@
 (DEFINEQ
 
 (TEDIT.GET.OBJECT
-  [LAMBDA (TSTREAM PIECE FILE CURFILEBYTE# BYTELEN)          (* ; "Edited 26-Nov-2023 10:22 by rmk")
+  [LAMBDA (TSTREAM PIECE FILE CURFILEBYTE# BYTELEN)          (* ; "Edited  5-Dec-2023 12:28 by rmk")
+                                                             (* ; "Edited 26-Nov-2023 10:22 by rmk")
                                                              (* ; "Edited 21-Nov-2023 17:53 by rmk")
                                                              (* ; "Edited 25-Aug-2023 23:07 by rmk")
                                                              (* ; "Edited 12-Oct-2022 14:10 by rmk")
@@ -1984,7 +2044,7 @@
          (CL:WHEN (IMAGEOBJPROP OBJ 'UNKNOWNGETFN)           (* ; 
       "If the object has an unknown getfn property, then it's an encapsulated object.  Warn the user")
              (TEDIT.PROMPTPRINT TSTREAM (CONCAT (CL:IF (GETD (IMAGEOBJPROP OBJ 'UNKNOWNGETFN))
-                                                    "Error in reading image object with GETFN "
+                                                    "Cannot read image object with GETFN "
                                                     "Image object with unknown GETFN ")
                                                (IMAGEOBJPROP OBJ 'UNKNOWNGETFN))
                     T))
@@ -2038,7 +2098,8 @@
 (DEFINEQ
 
 (TEDITFROMLISPSOURCE
-  [LAMBDA (SOURCEFILE TSTREAM PROPS USERTEMP START END)      (* ; "Edited 26-Oct-2023 11:22 by rmk")
+  [LAMBDA (SOURCEFILE TSTREAM PROPS USERTEMP START END)      (* ; "Edited  5-Dec-2023 23:46 by rmk")
+                                                             (* ; "Edited 26-Oct-2023 11:22 by rmk")
                                                              (* ; "Edited 22-Oct-2023 22:55 by rmk")
                                                              (* ; "Edited 22-Sep-2023 09:07 by rmk")
 
@@ -2057,6 +2118,7 @@
            T)
     (COPY.TEXT.TO.IMAGE SOURCEFILE TSTREAM)
     (TEDIT.PROMPTCLEAR TSTREAM)
+    (TEXTPROP TSTREAM 'BOUNDTABLE TEDIT.ATOMBOUND.READTABLE)
     TSTREAM])
 )
 
@@ -3060,32 +3122,32 @@
               (RPLACD TABSPEC TABS])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (5025 26656 (TEDIT.GET 5035 . 9606) (TEDIT.FORMATTEDFILEP 9608 . 10351) (TEDIT.FILEDATE 
-10353 . 12796) (TEDIT.INCLUDE 12798 . 19430) (TEDIT.RAW.INCLUDE 19432 . 20240) (TEDIT.PUT 20242 . 
-26654)) (26682 44960 (\TEDIT.GET.FOREIGN.FILE 26692 . 29756) (\TEDIT.GET.UNFORMATTED.FILE 29758 . 
-33399) (\TEDIT.GET.FORMATTED.FILE 33401 . 36990) (\TEDIT.FORMATTEDSTREAMP 36992 . 39679) (\ARBIN 39681
- . 40297) (\ATMIN 40299 . 40732) (\DWIN 40734 . 41113) (\STRINGIN 41115 . 41719) (\TEDIT.FORMATTEDP1 
-41721 . 43429) (\TEDIT.CACHEFILE 43431 . 44958)) (44961 69131 (\TEDIT.GET.PIECES3 44971 . 52858) (
-\TEDIT.MAKE.SAFE.BUFFERS 52860 . 62050) (\TEDIT.MAKE.SAFE.PIECES 62052 . 69129)) (69132 74322 (
-\TEDIT.GET.UNFORMATTED.FILE.XCCS 69142 . 72135) (\TEDIT.GET.UNFORMATTED.FILE.UTF8 72137 . 74320)) (
-74356 92440 (\TEDIT.PUT.PCTB 74366 . 86839) (\TEDIT.PUT.PCTB.MERGEABLE 86841 . 88335) (
-\TEDIT.PUT.NEWPIECES 88337 . 90340) (\TEDIT.PUTRESET 90342 . 90584) (\ARBOUT 90586 . 91206) (\ATMOUT 
-91208 . 91719) (\DWOUT 91721 . 92000) (\STRINGOUT 92002 . 92438)) (92441 106348 (
-\TEDIT.GET.CHARLOOKS.LIST 92451 . 92852) (\TEDIT.GET.SINGLE.CHARLOOKS 92854 . 96709) (
-\TEDIT.PUT.CHARLOOKS.LIST 96711 . 98279) (\TEDIT.PUT.SINGLE.CHARLOOKS 98281 . 103027) (
-\TEDIT.PUT.CHARLOOKS 103029 . 104708) (\TEDIT.GET.CHARLOOKS 104710 . 106346)) (106349 121763 (
-\TEDIT.GET.PARALOOKS.LIST 106359 . 106768) (\TEDIT.GET.SINGLE.PARALOOKS 106770 . 113658) (
-\TEDIT.PUT.PARALOOKS.LIST 113660 . 114463) (\TEDIT.PUT.SINGLE.PARALOOKS 114465 . 120296) (
-\TEDIT.PUT.PARALOOKS 120298 . 121275) (\TEDIT.GET.PARALOOKS 121277 . 121761)) (121764 127006 (
-TEDIT.GET.OBJECT 121774 . 125056) (TEDIT.PUT.OBJECT 125058 . 127004)) (127101 128296 (
-TEDITFROMLISPSOURCE 127111 . 128294)) (128547 161765 (\TEDIT.GET.PCTB2 128557 . 137855) (
-\TEDIT.PARSE.PAGEFRAMES2 137857 . 140596) (\TEDIT.GET.CHARLOOKS.LIST2 140598 . 141001) (
-\TEDIT.GET.SINGLE.CHARLOOKS2 141003 . 144519) (\TEDIT.PUT.SINGLE.PARALOOKS2 144521 . 149082) (
-\TEDIT.PUT.SINGLE.CHARLOOKS2 149084 . 153600) (\TEDIT.GET.PARALOOKS.LIST2 153602 . 154005) (
-\TEDIT.GET.SINGLE.PARALOOKS2 154007 . 158826) (\TEDIT.PUT.CHARLOOKS.LIST2 158828 . 160767) (
-\TEDIT.PUT.PARALOOKS.LIST2 160769 . 161763)) (161842 181126 (\TEDIT.GET.PCTB1 161852 . 167727) (
-\TEDIT.GET.PAGEFRAMES1 167729 . 168181) (\TEDIT.PARSE.PAGEFRAMES1 168183 . 170559) (
-\TEDIT.GET.CHARLOOKS1 170561 . 174732) (\TEDIT.GET.PARALOOKS1 174734 . 179576) (TEDIT.GET.OBJECT1 
-179578 . 181124)) (181186 194515 (TEDIT.GET.PCTB0 181196 . 184366) (TEDIT.GET.CHARLOOKS0 184368 . 
-188904) (TEDIT.GET.OBJECT0 188906 . 190859) (TEDIT.GET.PARALOOKS0 190861 . 194513)))))
+  (FILEMAP (NIL (5158 27495 (TEDIT.GET 5168 . 9739) (TEDIT.FORMATTEDFILEP 9741 . 10484) (TEDIT.FILEDATE 
+10486 . 12238) (\TEDIT.GET.IDATE3 12240 . 13635) (TEDIT.INCLUDE 13637 . 20269) (TEDIT.RAW.INCLUDE 
+20271 . 21079) (TEDIT.PUT 21081 . 27493)) (27521 46191 (\TEDIT.GET.FOREIGN.FILE 27531 . 30595) (
+\TEDIT.GET.UNFORMATTED.FILE 30597 . 34238) (\TEDIT.GET.FORMATTED.FILE 34240 . 38221) (
+\TEDIT.FORMATTEDSTREAMP 38223 . 40910) (\ARBIN 40912 . 41528) (\ATMIN 41530 . 41963) (\DWIN 41965 . 
+42344) (\STRINGIN 42346 . 42950) (\TEDIT.FORMATTEDP1 42952 . 44660) (\TEDIT.CACHEFILE 44662 . 46189)) 
+(46192 71316 (\TEDIT.GET.PIECES3 46202 . 54238) (\TEDIT.MAKE.SAFE.BUFFERS 54240 . 63646) (
+\TEDIT.MAKE.SAFE.PIECES 63648 . 71314)) (71317 76651 (\TEDIT.GET.UNFORMATTED.FILE.XCCS 71327 . 74464) 
+(\TEDIT.GET.UNFORMATTED.FILE.UTF8 74466 . 76649)) (76685 96155 (\TEDIT.PUT.PCTB 76695 . 90554) (
+\TEDIT.PUT.PCTB.MERGEABLE 90556 . 92050) (\TEDIT.PUT.NEWPIECES 92052 . 94055) (\TEDIT.PUTRESET 94057
+ . 94299) (\ARBOUT 94301 . 94921) (\ATMOUT 94923 . 95434) (\DWOUT 95436 . 95715) (\STRINGOUT 95717 . 
+96153)) (96156 110063 (\TEDIT.GET.CHARLOOKS.LIST 96166 . 96567) (\TEDIT.GET.SINGLE.CHARLOOKS 96569 . 
+100424) (\TEDIT.PUT.CHARLOOKS.LIST 100426 . 101994) (\TEDIT.PUT.SINGLE.CHARLOOKS 101996 . 106742) (
+\TEDIT.PUT.CHARLOOKS 106744 . 108423) (\TEDIT.GET.CHARLOOKS 108425 . 110061)) (110064 125478 (
+\TEDIT.GET.PARALOOKS.LIST 110074 . 110483) (\TEDIT.GET.SINGLE.PARALOOKS 110485 . 117373) (
+\TEDIT.PUT.PARALOOKS.LIST 117375 . 118178) (\TEDIT.PUT.SINGLE.PARALOOKS 118180 . 124011) (
+\TEDIT.PUT.PARALOOKS 124013 . 124990) (\TEDIT.GET.PARALOOKS 124992 . 125476)) (125479 130825 (
+TEDIT.GET.OBJECT 125489 . 128875) (TEDIT.PUT.OBJECT 128877 . 130823)) (130920 132285 (
+TEDITFROMLISPSOURCE 130930 . 132283)) (132536 165754 (\TEDIT.GET.PCTB2 132546 . 141844) (
+\TEDIT.PARSE.PAGEFRAMES2 141846 . 144585) (\TEDIT.GET.CHARLOOKS.LIST2 144587 . 144990) (
+\TEDIT.GET.SINGLE.CHARLOOKS2 144992 . 148508) (\TEDIT.PUT.SINGLE.PARALOOKS2 148510 . 153071) (
+\TEDIT.PUT.SINGLE.CHARLOOKS2 153073 . 157589) (\TEDIT.GET.PARALOOKS.LIST2 157591 . 157994) (
+\TEDIT.GET.SINGLE.PARALOOKS2 157996 . 162815) (\TEDIT.PUT.CHARLOOKS.LIST2 162817 . 164756) (
+\TEDIT.PUT.PARALOOKS.LIST2 164758 . 165752)) (165831 185115 (\TEDIT.GET.PCTB1 165841 . 171716) (
+\TEDIT.GET.PAGEFRAMES1 171718 . 172170) (\TEDIT.PARSE.PAGEFRAMES1 172172 . 174548) (
+\TEDIT.GET.CHARLOOKS1 174550 . 178721) (\TEDIT.GET.PARALOOKS1 178723 . 183565) (TEDIT.GET.OBJECT1 
+183567 . 185113)) (185175 198504 (TEDIT.GET.PCTB0 185185 . 188355) (TEDIT.GET.CHARLOOKS0 188357 . 
+192893) (TEDIT.GET.OBJECT0 192895 . 194848) (TEDIT.GET.PARALOOKS0 194850 . 198502)))))
 STOP

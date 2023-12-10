@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "26-Nov-2023 23:16:21" {WMEDLEY}<library>tedit>TEDIT-STREAM.;550 139651 
+(FILECREATED " 9-Dec-2023 13:14:59" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;559 143102 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEXTBACKFILEPTR \INSTALL.PIECE)
+      :CHANGES-TO (FNS \INSERTCH \TEXTBIN \TEXTPEEKBIN \TEXTBACKFILEPTR)
+                  (RECORDS PIECE)
 
-      :PREVIOUS-DATE "26-Nov-2023 18:00:30" {WMEDLEY}<library>tedit>TEDIT-STREAM.;549)
+      :PREVIOUS-DATE " 7-Dec-2023 21:06:47" {WMEDLEY}<library>tedit>TEDIT-STREAM.;556)
 
 
 (PRETTYCOMPRINT TEDIT-STREAMCOMS)
@@ -14,10 +15,11 @@
 (RPAQQ TEDIT-STREAMCOMS
        [(DECLARE%: EVAL@COMPILE DONTCOPY
                (EXPORT (RECORDS PIECE TEXTOBJ TEXTSTREAM)
-                      (MACROS NEXTPIECE PREVPIECE PLEN PTYPE PCONTENTS PLOOKS PPARALOOKS PPARALAST 
-                             PFPOS PBYTELEN PNEW PBYTESPERCHAR SETPC FSETPC GETPC FGETPC)
+                      (MACROS NEXTPIECE PREVPIECE PLEN PTYPE PCONTENTS PLOOKS PCHARSET PPARALOOKS 
+                             PPARALAST PFPOS PBYTELEN PNEW PBYTESPERCHAR SETPC FSETPC GETPC FGETPC)
                       (MACROS GETTOBJ SETTOBJ FGETTOBJ FSETTOBJ TEXTLEN TEXTSEL)
                       (CONSTANTS (THINFILE.PTYPE 0)
+                             (FATFILE1.PTYPE 1)
                              (FATFILE2.PTYPE 2)
                              (THINSTRING.PTYPE 3)
                              (FATSTRING.PTYPE 4)
@@ -28,10 +30,12 @@
                              (UTF8-3.PTYPE 9)
                              (UTF8-4.PTYPE 10)
                              (UTF8.PTYPES (LIST UTF8-2.PTYPE UTF8-3.PTYPE UTF8-4.PTYPE))
-                             (FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE2.PTYPE)
+                             (FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE)
                                                  UTF8.PTYPES))
                              (STRING.PTYPES (LIST THINSTRING.PTYPE FATSTRING.PTYPE))
-                             (BINABLE.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE)))
+                             (BINABLE.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE))
+                             (THIN.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE))
+                             (FAT.PTYPES (LIST FATFILE2.PTYPE FATSTRING.PTYPE)))
                       (GLOBALVARS \TEXTIMAGEOPS \TEXTFDEV)))
         (INITRECORDS PIECE TEXTOBJ TEXTSTREAM)
         (COMS 
@@ -112,6 +116,8 @@
                                                  "8-bit bytes are binable (THINSTRING and THINFILE) ")
                  (PTREENODE XPOINTER)                        (* ; 
                                              "Points to the PCTB tree-node that contains this piece.")
+                 (PCHARSET WORD)                             (* ; 
+                                                             "High-order charset for FATFILE1 pieces")
                  PEXTERNALFORMAT                             (* ; 
                                                              "The external format of a file piece")
                  PINCCODEFN                                  (* ; "An INCCODEFN derived from the EXTERNALFORMAT but perhaps more specialized to the specify PTYPE (e.g. runs of different UTF8 byte lengths.")
@@ -138,7 +144,7 @@
            INSERTSTRING                                      (* ; 
                                          "A substring of storage that is available for an insertion.")
            TXTHISTORYUNDONE                                  (* ; "Events that result from undoing other events, for revoking the UNDO. Was: CH# of first char in the piece.")
-           (NIL FLAG)                                        (* ; "Was \INSERTPCVALID. T if it's OK to use the cached piece.  Set to NIL by people who require that the next insertion/deletion use a different piece. Now just set HINTPC to NIL.")
+           (TXTLINELEADINGABOVE FLAG)                        (* ; "NIL for old/existing Tedit files whose lines are formatted with leading below, T for newer files. Was \INSERTPCVALID. T if it's OK to use the cached piece.  Set to NIL by people who require that the next insertion/deletion use a different piece. Now just set HINTPC to NIL.")
            \WINDOW                                           (* ; 
                                                  "The window-pane<s> where this textobj is displayed")
            MOUSEREGION                                       (* ; 
@@ -292,7 +298,7 @@
 (/DECLAREDATATYPE 'PIECE
        '(POINTER (BITS 4)
                POINTER POINTER POINTER POINTER FULLXPOINTER POINTER POINTER FLAG POINTER FLAG FLAG 
-               FLAG XPOINTER POINTER POINTER)
+               FLAG XPOINTER WORD POINTER POINTER)
        '((PIECE 0 POINTER)
          (PIECE 0 (BITS . 3))
          (PIECE 2 POINTER)
@@ -308,9 +314,10 @@
          (PIECE 16 (FLAGBITS . 16))
          (PIECE 16 (FLAGBITS . 32))
          (PIECE 18 XPOINTER)
-         (PIECE 20 POINTER)
-         (PIECE 22 POINTER))
-       '24)
+         (PIECE 20 (BITS . 15))
+         (PIECE 22 POINTER)
+         (PIECE 24 POINTER))
+       '26)
 
 (/DECLAREDATATYPE 'TEXTOBJ
        '(POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER FLAG POINTER POINTER
@@ -398,6 +405,9 @@
 (PUTPROPS PLOOKS MACRO ((PC)
                         (ffetch (PIECE PLOOKS) of PC)))
 
+(PUTPROPS PCHARSET MACRO ((PC)
+                          (ffetch (PIECE PCHARSET) of PC)))
+
 (PUTPROPS PPARALOOKS MACRO ((PC)
                             (ffetch (PIECE PPARALOOKS) of PC)))
 
@@ -452,6 +462,8 @@
 
 (RPAQQ THINFILE.PTYPE 0)
 
+(RPAQQ FATFILE1.PTYPE 1)
+
 (RPAQQ FATFILE2.PTYPE 2)
 
 (RPAQQ THINSTRING.PTYPE 3)
@@ -472,15 +484,20 @@
 
 (RPAQ UTF8.PTYPES (LIST UTF8-2.PTYPE UTF8-3.PTYPE UTF8-4.PTYPE))
 
-(RPAQ FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE2.PTYPE)
+(RPAQ FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE)
                          UTF8.PTYPES))
 
 (RPAQ STRING.PTYPES (LIST THINSTRING.PTYPE FATSTRING.PTYPE))
 
 (RPAQ BINABLE.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE))
 
+(RPAQ THIN.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE))
+
+(RPAQ FAT.PTYPES (LIST FATFILE2.PTYPE FATSTRING.PTYPE))
+
 
 (CONSTANTS (THINFILE.PTYPE 0)
+       (FATFILE1.PTYPE 1)
        (FATFILE2.PTYPE 2)
        (THINSTRING.PTYPE 3)
        (FATSTRING.PTYPE 4)
@@ -491,10 +508,12 @@
        (UTF8-3.PTYPE 9)
        (UTF8-4.PTYPE 10)
        (UTF8.PTYPES (LIST UTF8-2.PTYPE UTF8-3.PTYPE UTF8-4.PTYPE))
-       (FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE2.PTYPE)
+       (FILE.PTYPES (APPEND (LIST THINFILE.PTYPE FATFILE1.PTYPE FATFILE2.PTYPE)
                            UTF8.PTYPES))
        (STRING.PTYPES (LIST THINSTRING.PTYPE FATSTRING.PTYPE))
-       (BINABLE.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE)))
+       (BINABLE.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE))
+       (THIN.PTYPES (LIST THINFILE.PTYPE THINSTRING.PTYPE))
+       (FAT.PTYPES (LIST FATFILE2.PTYPE FATSTRING.PTYPE)))
 )
 (DECLARE%: DOEVAL@COMPILE DONTCOPY
 
@@ -508,7 +527,7 @@
 (/DECLAREDATATYPE 'PIECE
        '(POINTER (BITS 4)
                POINTER POINTER POINTER POINTER FULLXPOINTER POINTER POINTER FLAG POINTER FLAG FLAG 
-               FLAG XPOINTER POINTER POINTER)
+               FLAG XPOINTER WORD POINTER POINTER)
        '((PIECE 0 POINTER)
          (PIECE 0 (BITS . 3))
          (PIECE 2 POINTER)
@@ -524,9 +543,10 @@
          (PIECE 16 (FLAGBITS . 16))
          (PIECE 16 (FLAGBITS . 32))
          (PIECE 18 XPOINTER)
-         (PIECE 20 POINTER)
-         (PIECE 22 POINTER))
-       '24)
+         (PIECE 20 (BITS . 15))
+         (PIECE 22 POINTER)
+         (PIECE 24 POINTER))
+       '26)
 
 (/DECLAREDATATYPE 'TEXTOBJ
        '(POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER POINTER FLAG POINTER POINTER
@@ -603,6 +623,10 @@
 
 (\TEXTBIN
   [LAMBDA (TSTREAM)
+
+    (* ;; "Edited  8-Dec-2023 22:54 by rmk")
+
+    (* ;; "Edited  7-Dec-2023 15:38 by rmk")
 
     (* ;; "Edited 15-Oct-2023 11:55 by rmk")
 
@@ -700,15 +724,22 @@
                                                     (PCONTENTS PC))
                                              (ADD (ffetch (STREAM COFFSET) of TSTREAM)
                                                   1)))
-                           (SUBSTREAM.PTYPE                  (* ; "A substream stored as an object")
-                                (BIN (IMAGEOBJPROP (PCONTENTS PC)
-                                            'SUBSTREAM)))
+                           (FATFILE1.PTYPE 
+                                (PROG1 (LOGOR (LLSH (PCHARSET PC)
+                                                    8)
+                                              (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                                     (ffetch (STREAM COFFSET) of TSTREAM)))
+                                    (ADD (ffetch (STREAM COFFSET) of TSTREAM)
+                                         1)))
                            (BINABLE.PTYPES                   (* ; 
                                       "For completeness:  the BINABLE test should have picked it off")
                                 (PROG1 (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
                                               (ffetch (STREAM COFFSET) of TSTREAM))
                                     (ADD (ffetch (STREAM COFFSET) of TSTREAM)
                                          1)))
+                           (SUBSTREAM.PTYPE                  (* ; "A substream stored as an object")
+                                (BIN (IMAGEOBJPROP (PCONTENTS PC)
+                                            'SUBSTREAM)))
                            (PROGN 
 
                                  (* ;; "For pieces not listed because they require more work (UTF8?). Assumes the function updates COFFSET and that multi-byte characters are safe: don't cross buffer boundaries.")
@@ -729,7 +760,9 @@
              NPC)])
 
 (\TEXTPEEKBIN
-  [LAMBDA (TSTREAM NOERROR)                                  (* ; "Edited 15-Oct-2023 13:04 by rmk")
+  [LAMBDA (TSTREAM NOERROR)                                  (* ; "Edited  8-Dec-2023 22:54 by rmk")
+                                                             (* ; "Edited  7-Dec-2023 15:41 by rmk")
+                                                             (* ; "Edited 15-Oct-2023 13:04 by rmk")
                                                              (* ; "Edited 22-Sep-2023 10:11 by rmk")
                                                              (* ; "Edited  5-Sep-2023 00:11 by rmk")
                                                              (* ; "Edited 17-Jun-2023 13:47 by rmk")
@@ -782,6 +815,11 @@
                                          (OR (GETTEXTPROP (ffetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
                                                     'OBJECTBYTE)
                                              (PCONTENTS PC)))
+                           (FATFILE1.PTYPE 
+                                (LOGOR (LLSH (PCHARSET PC)
+                                             8)
+                                       (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                              (ffetch (STREAM COFFSET) of TSTREAM))))
                            (SUBSTREAM.PTYPE                  (* ; "A substream stored as an object")
                                 (BIN (IMAGEOBJPROP (PCONTENTS PC)
                                             'SUBSTREAM)))
@@ -798,7 +836,9 @@
                         then (\INSTALL.FILEBUFFER TSTREAM PCCHARSLEFT)))])
 
 (\TEXTBACKFILEPTR
-  [LAMBDA (TSTREAM)                                          (* ; "Edited 26-Nov-2023 23:15 by rmk")
+  [LAMBDA (TSTREAM)                                          (* ; "Edited  8-Dec-2023 22:54 by rmk")
+                                                             (* ; "Edited  7-Dec-2023 15:47 by rmk")
+                                                             (* ; "Edited 26-Nov-2023 23:15 by rmk")
                                                              (* ; "Edited 15-Oct-2023 12:08 by rmk")
                                                              (* ; "Edited 22-Sep-2023 10:11 by rmk")
                                                              (* ; "Edited  5-Sep-2023 00:13 by rmk")
@@ -869,6 +909,11 @@
                  (OBJECT.PTYPE (OR (GETTEXTPROP (ffetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
                                           'OBJECTBYTE)
                                    (PCONTENTS PC)))
+                 (FATFILE1.PTYPE 
+                      (LOGOR (LLSH (PCHARSET PC)
+                                   8)
+                             (\GETBASEBYTE (ffetch (STREAM CBUFPTR) of TSTREAM)
+                                    (ffetch (STREAM COFFSET) of TSTREAM))))
                  (SUBSTREAM.PTYPE 
                       (HELP 'SUBSTREAM)
                       (BIN (IMAGEOBJPROP (PCONTENTS PC)
@@ -878,7 +923,8 @@
                         (\TEXTPEEKBIN TSTREAM))))])
 
 (\INSTALL.FILEBUFFER
-  [LAMBDA (TSTREAM PCCHARSLEFT)                              (* ; "Edited  8-Sep-2023 10:40 by rmk")
+  [LAMBDA (TSTREAM PCCHARSLEFT)                              (* ; "Edited  7-Dec-2023 16:10 by rmk")
+                                                             (* ; "Edited  8-Sep-2023 10:40 by rmk")
                                                              (* ; "Edited  8-Sep-2022 14:17 by rmk")
                                                              (* ; "Edited 21-Aug-2022 22:35 by rmk")
                                                              (* ; "Edited  7-Aug-2022 20:35 by rmk")
@@ -914,7 +960,7 @@
                    (SETQ PCBYTEOFFSET (UNFOLD (IDIFFERENCE PLEN PCCHARSLEFT)
                                              2))
                    (SETQ PCBYTELENGTH (UNFOLD PLEN 2)))
-              (THINFILE.PTYPE 
+              ((LIST THINFILE.PTYPE FATFILE1.PTYPE) 
                    (SETQ PCBYTEOFFSET (IDIFFERENCE PLEN PCCHARSLEFT))
                    (SETQ PCBYTELENGTH PLEN))
               (PROGN 
@@ -1688,15 +1734,16 @@
                               PCCHARSLEFT])
 
 (\TEXTOPENF
-  [LAMBDA (TSTREAM ACCESS ASDF QWER ZXCV)                    (* ; "Edited 22-Aug-2022 15:16 by rmk")
+  [LAMBDA (TSTREAM ACCESS)                                   (* ; "Edited  7-Dec-2023 21:01 by rmk")
+                                                             (* ; "Edited 22-Aug-2022 15:16 by rmk")
                                                              (* ; "Edited 31-May-91 13:58 by jds")
                                                              (* ; 
                                                              "Return the stream, opened for input")
-    (FOR PC _ (\FIRSTPIECE (TEXTOBJ TSTREAM)) BY (fetch (PIECE NEXTPIECE) of PC) WHILE PC
-       WHEN [AND (MEMB (ffetch (PIECE PTYPE) of PC)
-                       FILE.PTYPES)
-                 (EQ NoBits (fetch (STREAM ACCESSBITS) of (fetch (PIECE PCONTENTS) of PC]
-       DO (\TEDIT.REOPEN.STREAM TSTREAM (fetch (PIECE PCONTENTS) of PC)))
+    (for PC inpieces (\FIRSTPIECE (TEXTOBJ TSTREAM)) when [AND (MEMB (PTYPE PC)
+                                                                     FILE.PTYPES)
+                                                               (EQ NoBits (fetch (STREAM ACCESSBITS)
+                                                                             of (PCONTENTS PC]
+       DO (\TEDIT.REOPEN.STREAM TSTREAM (PCONTENTS PC)))
     TSTREAM])
 
 (\TEXTSETEOF
@@ -1929,7 +1976,8 @@
                 NEXTPC])
 
 (\INSERTCH
-  [LAMBDA (CH CH# TEXTOBJ PARALAST)                          (* ; "Edited 18-Oct-2023 21:16 by rmk")
+  [LAMBDA (CH CH# TEXTOBJ PARALAST)                          (* ; "Edited  9-Dec-2023 13:14 by rmk")
+                                                             (* ; "Edited 18-Oct-2023 21:16 by rmk")
                                                              (* ; "Edited 15-Oct-2023 15:59 by rmk")
                                                              (* ; "Edited 18-Aug-2023 14:36 by rmk")
                                                              (* ; "Edited  2-Aug-2023 13:12 by rmk")
@@ -1981,7 +2029,7 @@
 
      (* ;; "Step 2:  Find or create a piece with CH#at offset 0. This may involve splitting off an initial substring into a separate previous piece.")
 
-          (SETQ INSERTPC (\ALIGNEDPIECE CH# TEXTOBJ))
+          (SETQ INSERTPC (\ALIGNEDPIECE CH# TEXTOBJ))
 
      (* ;; "")
 
@@ -2004,11 +2052,17 @@
                                      PLEN _ ILEN
                                      PLOOKS _ (FGETTOBJ TEXTOBJ CARETLOOKS)
                                      PPARALOOKS _ (PPARALOOKS INSERTPC)
-                                     PNEW _ T
-                                     PBINABLE _ (EQ INSERTPTYPE THINSTRING.PTYPE)
-                                     PBYTESPERCHAR _ (CL:IF (EQ INSERTPTYPE THINSTRING.PTYPE)
-                                                         1
-                                                         2)))
+                                     PNEW _ T))
+                 (SELECTC INSERTPTYPE
+                     (THINSTRING.PTYPE 
+                          (FSETPC PREVPC PBYTESPERCHAR 1)
+                          (FSETPC PREVPC PBINABLE T)
+                          (FSETPC PREVPC PCHARSET 0))
+                     (FATSTRING.PTYPE 
+                          (FSETPC PREVPC PBYTESPERCHAR 2)
+                          (FSETPC PREVPC PBINABLE NIL)
+                          (FSETPC PREVPC PCHARSET \NORUNCODE))
+                     NIL)
                  (\INSERTPIECE PREVPC INSERTPC TEXTOBJ))
 
      (* ;; "The insertion is done and the pieces are properly integrated into the stream. ")
@@ -2201,7 +2255,8 @@
 (DEFINEQ
 
 (\INSTALL.PIECE
-  [LAMBDA (TSTREAM PC CHOFFSET)                              (* ; "Edited 26-Nov-2023 20:47 by rmk")
+  [LAMBDA (TSTREAM PC CHOFFSET)                              (* ; "Edited  7-Dec-2023 15:46 by rmk")
+                                                             (* ; "Edited 26-Nov-2023 20:47 by rmk")
                                                              (* ; "Edited 22-Sep-2023 10:11 by rmk")
                                                              (* ; "Edited  3-May-2023 15:10 by rmk")
                                                              (* ; "Edited 11-Oct-2022 18:14 by rmk")
@@ -2245,7 +2300,7 @@
                  (THINFILE.PTYPE                             (* ; "Sets up the buffers")
                       (freplace (STREAM BINABLE) of TSTREAM with T)
                       (\INSTALL.FILEBUFFER TSTREAM PCCHARSLEFT))
-                 (FATFILE2.PTYPE 
+                 ((LIST FATFILE1.PTYPE FATFILE2.PTYPE) 
                       (\INSTALL.FILEBUFFER TSTREAM PCCHARSLEFT))
                  (STRING.PTYPES (SETQ PCONTENTS (PCONTENTS PC))
                                 (freplace (STREAM CPPTR) of TSTREAM with (ffetch (STRINGP BASE)
@@ -2385,25 +2440,25 @@
 (ADDTOVAR LAMA TEXTPROP)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (32306 56595 (\TEXTBIN 32316 . 39790) (\TEXTBIN.NEXT.PIECE 39792 . 40327) (\TEXTPEEKBIN 
-40329 . 45021) (\TEXTBACKFILEPTR 45023 . 49983) (\INSTALL.FILEBUFFER 49985 . 54191) (\TEXTBOUT 54193
- . 56593)) (57481 62068 (\TEXTSTREAM.OUTCHARFN 57491 . 58927) (\TEXTSTREAM.INCCCODEFN 58929 . 59612) (
-\TEXTSTREAM.PEEKCCODEFN 59614 . 59899) (\TEXTSTREAM.BACKCCODEFN 59901 . 60379) (\TEXTSTREAM.OUTCHARFN 
-60381 . 61817) (\TEXTSTREAM.FORMATBYTESTREAM 61819 . 62066)) (62115 93637 (COPYTEXTSTREAM 62125 . 
-65103) (OPENTEXTSTREAM 65105 . 70412) (OPENTEXTSTREAM.PIECES 70414 . 73654) (OPENTEXTSTREAM.PROPS 
-73656 . 74589) (OPENTEXTSTREAM.SETUP.SEL 74591 . 77634) (OPENTEXTSTREAM.WINDOW 77636 . 78993) (
-OPENTEXTSTREAM.DEFAULTLOOKS 78995 . 80835) (\TEDIT.OPENTEXTFILE 80837 . 82268) (
-\TEDIT.CREATE.TEXTSTREAM 82270 . 82882) (REOPENTEXTSTREAM 82884 . 83310) (TEDIT.STREAMCHANGEDP 83312
- . 83614) (TEXTSTREAMP 83616 . 84030) (TXTFILE 84032 . 84501) (\TEDIT.REOPEN.STREAM 84503 . 86268) (
-\TEXTINIT 86270 . 92318) (\TEXTTTYBOUT 92320 . 93635)) (93755 108070 (\TEXTCLOSEF 93765 . 94956) (
-\TEXTDSPFONT 94958 . 95959) (\TEXTEOFP 95961 . 97416) (\TEXTGETEOFPTR 97418 . 97632) (\TEXTGETFILEPTR 
-97634 . 99735) (\TEXTOPENF 99737 . 100563) (\TEXTSETEOF 100565 . 101080) (\TEXTSETFILEPTR 101082 . 
-102811) (\TEXTDSPXPOSITION 102813 . 103673) (\TEXTDSPYPOSITION 103675 . 104222) (\TEXTLEFTMARGIN 
-104224 . 104646) (\TEXTRIGHTMARGIN 104648 . 107604) (\TEXTDSPCHARWIDTH 107606 . 107783) (
-\TEXTDSPSTRINGWIDTH 107785 . 107964) (\TEXTDSPLINEFEED 107966 . 108068)) (109117 128393 (
-\TEDIT.DELETE.SELPIECES 109127 . 112082) (\INSERTSELPIECES 112084 . 113020) (\INSERTCH 113022 . 119554
-) (\INSERTCH.HISTORY 119556 . 122636) (\INSERTEOL 122638 . 124598) (\INSERTCH.INSERTION 124600 . 
-127431) (\INSERTCH.EXTEND 127433 . 128391)) (128394 129666 (\SETUPGETCH 128404 . 129664)) (129775 
-135071 (\INSTALL.PIECE 129785 . 135069)) (136254 139122 (GETTEXTPROP 136264 . 137159) (PUTTEXTPROP 
-137161 . 138620) (TEXTPROP 138622 . 139120)))))
+  (FILEMAP (NIL (33377 59475 (\TEXTBIN 33387 . 41467) (\TEXTBIN.NEXT.PIECE 41469 . 42004) (\TEXTPEEKBIN 
+42006 . 47259) (\TEXTBACKFILEPTR 47261 . 52732) (\INSTALL.FILEBUFFER 52734 . 57071) (\TEXTBOUT 57073
+ . 59473)) (60361 64948 (\TEXTSTREAM.OUTCHARFN 60371 . 61807) (\TEXTSTREAM.INCCCODEFN 61809 . 62492) (
+\TEXTSTREAM.PEEKCCODEFN 62494 . 62779) (\TEXTSTREAM.BACKCCODEFN 62781 . 63259) (\TEXTSTREAM.OUTCHARFN 
+63261 . 64697) (\TEXTSTREAM.FORMATBYTESTREAM 64699 . 64946)) (64995 96517 (COPYTEXTSTREAM 65005 . 
+67983) (OPENTEXTSTREAM 67985 . 73292) (OPENTEXTSTREAM.PIECES 73294 . 76534) (OPENTEXTSTREAM.PROPS 
+76536 . 77469) (OPENTEXTSTREAM.SETUP.SEL 77471 . 80514) (OPENTEXTSTREAM.WINDOW 80516 . 81873) (
+OPENTEXTSTREAM.DEFAULTLOOKS 81875 . 83715) (\TEDIT.OPENTEXTFILE 83717 . 85148) (
+\TEDIT.CREATE.TEXTSTREAM 85150 . 85762) (REOPENTEXTSTREAM 85764 . 86190) (TEDIT.STREAMCHANGEDP 86192
+ . 86494) (TEXTSTREAMP 86496 . 86910) (TXTFILE 86912 . 87381) (\TEDIT.REOPEN.STREAM 87383 . 89148) (
+\TEXTINIT 89150 . 95198) (\TEXTTTYBOUT 95200 . 96515)) (96635 111096 (\TEXTCLOSEF 96645 . 97836) (
+\TEXTDSPFONT 97838 . 98839) (\TEXTEOFP 98841 . 100296) (\TEXTGETEOFPTR 100298 . 100512) (
+\TEXTGETFILEPTR 100514 . 102615) (\TEXTOPENF 102617 . 103589) (\TEXTSETEOF 103591 . 104106) (
+\TEXTSETFILEPTR 104108 . 105837) (\TEXTDSPXPOSITION 105839 . 106699) (\TEXTDSPYPOSITION 106701 . 
+107248) (\TEXTLEFTMARGIN 107250 . 107672) (\TEXTRIGHTMARGIN 107674 . 110630) (\TEXTDSPCHARWIDTH 110632
+ . 110809) (\TEXTDSPSTRINGWIDTH 110811 . 110990) (\TEXTDSPLINEFEED 110992 . 111094)) (112143 131713 (
+\TEDIT.DELETE.SELPIECES 112153 . 115108) (\INSERTSELPIECES 115110 . 116046) (\INSERTCH 116048 . 122874
+) (\INSERTCH.HISTORY 122876 . 125956) (\INSERTEOL 125958 . 127918) (\INSERTCH.INSERTION 127920 . 
+130751) (\INSERTCH.EXTEND 130753 . 131711)) (131714 132986 (\SETUPGETCH 131724 . 132984)) (133095 
+138522 (\INSTALL.PIECE 133105 . 138520)) (139705 142573 (GETTEXTPROP 139715 . 140610) (PUTTEXTPROP 
+140612 . 142071) (TEXTPROP 142073 . 142571)))))
 STOP

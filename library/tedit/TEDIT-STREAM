@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 9-Dec-2023 13:14:59" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;559 143102 
+(FILECREATED "17-Dec-2023 21:54:26" {WMEDLEY}<library>tedit>TEDIT-STREAM.;565 142773 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \INSERTCH \TEXTBIN \TEXTPEEKBIN \TEXTBACKFILEPTR)
-                  (RECORDS PIECE)
+      :CHANGES-TO (RECORDS TEXTOBJ)
 
-      :PREVIOUS-DATE " 7-Dec-2023 21:06:47" {WMEDLEY}<library>tedit>TEDIT-STREAM.;556)
+      :PREVIOUS-DATE "17-Dec-2023 21:49:40" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;563)
 
 
 (PRETTYCOMPRINT TEDIT-STREAMCOMS)
@@ -17,6 +16,7 @@
                (EXPORT (RECORDS PIECE TEXTOBJ TEXTSTREAM)
                       (MACROS NEXTPIECE PREVPIECE PLEN PTYPE PCONTENTS PLOOKS PCHARSET PPARALOOKS 
                              PPARALAST PFPOS PBYTELEN PNEW PBYTESPERCHAR SETPC FSETPC GETPC FGETPC)
+                      (MACROS VISIBLEPIECEP \NEXT.VISIBLE.PIECE \PREV.VISIBLE.PIECE)
                       (MACROS GETTOBJ SETTOBJ FGETTOBJ FSETTOBJ TEXTLEN TEXTSEL)
                       (CONSTANTS (THINFILE.PTYPE 0)
                              (FATFILE1.PTYPE 1)
@@ -74,10 +74,7 @@
               (FNS \SETUPGETCH))
                                                              (* ; 
                                                            "Deprecated, maybe still external callers")
-        (COMS                                                (* ; 
-                                                             "Piece and piece-table manipulation")
-              (FNS \INSTALL.PIECE)
-              (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS \NEXT.VISIBLE.PIECE \PREV.VISIBLE.PIECE)))
+        (FNS \INSTALL.PIECE)
         (COMS                                                (* ; "Support for TEXTPROP")
               (FNS GETTEXTPROP PUTTEXTPROP TEXTPROP))
         [COMS 
@@ -437,6 +434,20 @@
 
 (PUTPROPS FGETPC MACRO ((PC FIELD)
                         (ffetch (PIECE FIELD) of PC)))
+)
+(DECLARE%: EVAL@COMPILE 
+
+(PUTPROPS VISIBLEPIECEP MACRO [(PC)
+                               (NOT (OR (EQ 0 (PLEN PC))
+                                        (fetch (CHARLOOKS CLINVISIBLE) of (PLOOKS PC])
+
+(PUTPROPS \NEXT.VISIBLE.PIECE MACRO ((PC)
+                                     (find NPC inpieces (AND PC (NEXTPIECE PC))
+                                        suchthat (VISIBLEPIECEP NPC))))
+
+(PUTPROPS \PREV.VISIBLE.PIECE MACRO ((PC)
+                                     (find PPC backpieces (AND PC (PREVPIECE PC))
+                                        suchthat (VISIBLEPIECEP PC))))
 )
 (DECLARE%: EVAL@COMPILE 
 
@@ -1165,6 +1176,8 @@
 (OPENTEXTSTREAM
   [LAMBDA (TEXT WINDOW START END PROPS)
 
+    (* ;; "Edited 11-Dec-2023 09:50 by rmk")
+
     (* ;; "Edited 26-Oct-2023 10:59 by rmk")
 
     (* ;; "Edited 23-Oct-2023 22:14 by rmk")
@@ -1205,7 +1218,7 @@
                       (CL:WHEN (OR START END)                (* ; "Do the end first")
                           (CL:WHEN (AND END (ILESSP END (TEXTLEN TEXTOBJ)))
                               (\DELETEPIECES (\SELPIECES (ADD1 END)
-                                                    (ADD1 (TEXTLEN TEXTOBJ))
+                                                    (TEXTLEN TEXTOBJ)
                                                     TEXTOBJ)
                                      TEXTOBJ))
                           (CL:WHEN (AND START (IGREATERP START 1))
@@ -1308,7 +1321,8 @@
         (TEDIT.PAGEFORMAT TEXTOBJ (GETTEXTPROP TEXTOBJ 'PAGEFORMAT)))])
 
 (OPENTEXTSTREAM.SETUP.SEL
-  [LAMBDA (TSTREAM)                                          (* ; "Edited 12-Oct-2023 22:48 by rmk")
+  [LAMBDA (TSTREAM)                                          (* ; "Edited 15-Dec-2023 23:05 by rmk")
+                                                             (* ; "Edited 12-Oct-2023 22:48 by rmk")
                                                              (* ; "Edited 17-Sep-2023 12:52 by rmk")
                                                              (* ; "Edited 12-Sep-2023 11:26 by rmk")
                                                              (* ; "Edited  9-Sep-2023 13:43 by rmk")
@@ -1322,17 +1336,23 @@
          (for S in (\TEDIT.COLLECTSELS TEXTOBJ) do (FSETSEL S SELTEXTOBJ TEXTOBJ)
                                                    (FSETSEL S SET NIL))
          (SETQ SEL (FGETTOBJ TEXTOBJ SEL))
+         (FSETSEL SEL SET T)
+         (\SHOWSEL SEL NIL)
          (CL:UNLESS (EQ SELPROP 'DON'T)
-             (FSETSEL SEL SET T)
              (if (type? SELECTION SELPROP)
                  then                                        (* ; 
                                          "We came in with an explicit initial selection.  Set it up.")
                       (\COPYSEL SELPROP SEL)
                       (FSETSEL SEL SELTEXTOBJ TEXTOBJ)
                elseif (LISTP SELPROP)
-                 then (\TEDIT.UPDATE.SEL (CAR SELPROP)
-                             (CADR SELPROP)
-                             'LEFT)
+                 then 
+                      (* ;; "Default to POINT selection")
+
+                      (\TEDIT.UPDATE.SEL SEL (CAR SELPROP)
+                             (OR (CADR SELPROP)
+                                 0)
+                             (OR (CADDR SELPROP)
+                                 'LEFT))
                       (FSETSEL SEL SELKIND 'CHAR)
                else 
                     (* ;; "Default to before the first character")
@@ -1907,7 +1927,8 @@
 (DEFINEQ
 
 (\TEDIT.DELETE.SELPIECES
-  [LAMBDA (TEXTOBJ FIRSTCHANGEDCHNO NCHARSCHANGED)           (* ; "Edited 21-Oct-2023 23:50 by rmk")
+  [LAMBDA (TEXTOBJ FIRSTCHANGEDCHNO NCHARSCHANGED)           (* ; "Edited 11-Dec-2023 09:51 by rmk")
+                                                             (* ; "Edited 21-Oct-2023 23:50 by rmk")
                                                              (* ; "Edited  3-Jun-2023 22:31 by rmk")
                                                             (* ; "Edited 29-Jan-99 17:28 by kaplan")
 
@@ -1921,7 +1942,7 @@
         (CL:WHEN (type? SELECTION FIRSTCHANGEDCHNO)
             (SETQ NCHARSCHANGED (GETSEL FIRSTCHANGEDCHNO DCH))
             (SETQ FIRSTCHANGEDCHNO (GETSEL FIRSTCHANGEDCHNO CH#)))
-        [PROG ((SELPIECES (\SELPIECES FIRSTCHANGEDCHNO (IPLUS FIRSTCHANGEDCHNO NCHARSCHANGED)
+        [PROG ((SELPIECES (\SELPIECES FIRSTCHANGEDCHNO (SUB1 (IPLUS FIRSTCHANGEDCHNO NCHARSCHANGED))
                                  TEXTOBJ))
                PREVPC)
               (CL:WHEN (AND (fetch (SELPIECES SPFIRST) of SELPIECES)
@@ -2247,11 +2268,6 @@
 
 (* ; "Deprecated, maybe still external callers")
 
-
-
-
-(* ; "Piece and piece-table manipulation")
-
 (DEFINEQ
 
 (\INSTALL.PIECE
@@ -2333,26 +2349,6 @@
                                                                        of TSTREAM))
              (freplace (TEXTSTREAM PCCHARSLEFT) of TSTREAM with PCCHARSLEFT))
         PC)])
-)
-(DECLARE%: EVAL@COMPILE DONTCOPY 
-(DECLARE%: EVAL@COMPILE 
-
-(PUTPROPS \NEXT.VISIBLE.PIECE MACRO ((PC)
-                                     (for (NPC _ PC) by (NEXTPIECE NPC)
-                                        first (CL:UNLESS NPC (RETURN NIL))
-                                              (SETQ NPC (NEXTPIECE NPC)) while NPC
-                                        unless (OR (EQ 0 (PLEN NPC))
-                                                   (fetch (CHARLOOKS CLINVISIBLE) of (PLOOKS NPC)))
-                                        do (RETURN NPC))))
-
-(PUTPROPS \PREV.VISIBLE.PIECE MACRO ((PC)
-                                     (for (PPC _ PC) by (PREVPIECE PPC)
-                                        first (CL:UNLESS PPC (RETURN NIL))
-                                              (SETQ PPC (PREVPIECE PPC)) while PPC
-                                        unless (OR (EQ 0 (PLEN PPC))
-                                                   (fetch (CHARLOOKS CLINVISIBLE) of (PLOOKS PPC)))
-                                        do (RETURN PPC))))
-)
 )
 
 
@@ -2440,25 +2436,25 @@
 (ADDTOVAR LAMA TEXTPROP)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (33377 59475 (\TEXTBIN 33387 . 41467) (\TEXTBIN.NEXT.PIECE 41469 . 42004) (\TEXTPEEKBIN 
-42006 . 47259) (\TEXTBACKFILEPTR 47261 . 52732) (\INSTALL.FILEBUFFER 52734 . 57071) (\TEXTBOUT 57073
- . 59473)) (60361 64948 (\TEXTSTREAM.OUTCHARFN 60371 . 61807) (\TEXTSTREAM.INCCCODEFN 61809 . 62492) (
-\TEXTSTREAM.PEEKCCODEFN 62494 . 62779) (\TEXTSTREAM.BACKCCODEFN 62781 . 63259) (\TEXTSTREAM.OUTCHARFN 
-63261 . 64697) (\TEXTSTREAM.FORMATBYTESTREAM 64699 . 64946)) (64995 96517 (COPYTEXTSTREAM 65005 . 
-67983) (OPENTEXTSTREAM 67985 . 73292) (OPENTEXTSTREAM.PIECES 73294 . 76534) (OPENTEXTSTREAM.PROPS 
-76536 . 77469) (OPENTEXTSTREAM.SETUP.SEL 77471 . 80514) (OPENTEXTSTREAM.WINDOW 80516 . 81873) (
-OPENTEXTSTREAM.DEFAULTLOOKS 81875 . 83715) (\TEDIT.OPENTEXTFILE 83717 . 85148) (
-\TEDIT.CREATE.TEXTSTREAM 85150 . 85762) (REOPENTEXTSTREAM 85764 . 86190) (TEDIT.STREAMCHANGEDP 86192
- . 86494) (TEXTSTREAMP 86496 . 86910) (TXTFILE 86912 . 87381) (\TEDIT.REOPEN.STREAM 87383 . 89148) (
-\TEXTINIT 89150 . 95198) (\TEXTTTYBOUT 95200 . 96515)) (96635 111096 (\TEXTCLOSEF 96645 . 97836) (
-\TEXTDSPFONT 97838 . 98839) (\TEXTEOFP 98841 . 100296) (\TEXTGETEOFPTR 100298 . 100512) (
-\TEXTGETFILEPTR 100514 . 102615) (\TEXTOPENF 102617 . 103589) (\TEXTSETEOF 103591 . 104106) (
-\TEXTSETFILEPTR 104108 . 105837) (\TEXTDSPXPOSITION 105839 . 106699) (\TEXTDSPYPOSITION 106701 . 
-107248) (\TEXTLEFTMARGIN 107250 . 107672) (\TEXTRIGHTMARGIN 107674 . 110630) (\TEXTDSPCHARWIDTH 110632
- . 110809) (\TEXTDSPSTRINGWIDTH 110811 . 110990) (\TEXTDSPLINEFEED 110992 . 111094)) (112143 131713 (
-\TEDIT.DELETE.SELPIECES 112153 . 115108) (\INSERTSELPIECES 115110 . 116046) (\INSERTCH 116048 . 122874
-) (\INSERTCH.HISTORY 122876 . 125956) (\INSERTEOL 125958 . 127918) (\INSERTCH.INSERTION 127920 . 
-130751) (\INSERTCH.EXTEND 130753 . 131711)) (131714 132986 (\SETUPGETCH 131724 . 132984)) (133095 
-138522 (\INSTALL.PIECE 133105 . 138520)) (139705 142573 (GETTEXTPROP 139715 . 140610) (PUTTEXTPROP 
-140612 . 142071) (TEXTPROP 142073 . 142571)))))
+  (FILEMAP (NIL (33768 59866 (\TEXTBIN 33778 . 41858) (\TEXTBIN.NEXT.PIECE 41860 . 42395) (\TEXTPEEKBIN 
+42397 . 47650) (\TEXTBACKFILEPTR 47652 . 53123) (\INSTALL.FILEBUFFER 53125 . 57462) (\TEXTBOUT 57464
+ . 59864)) (60752 65339 (\TEXTSTREAM.OUTCHARFN 60762 . 62198) (\TEXTSTREAM.INCCCODEFN 62200 . 62883) (
+\TEXTSTREAM.PEEKCCODEFN 62885 . 63170) (\TEXTSTREAM.BACKCCODEFN 63172 . 63650) (\TEXTSTREAM.OUTCHARFN 
+63652 . 65088) (\TEXTSTREAM.FORMATBYTESTREAM 65090 . 65337)) (65386 97268 (COPYTEXTSTREAM 65396 . 
+68374) (OPENTEXTSTREAM 68376 . 73726) (OPENTEXTSTREAM.PIECES 73728 . 76968) (OPENTEXTSTREAM.PROPS 
+76970 . 77903) (OPENTEXTSTREAM.SETUP.SEL 77905 . 81265) (OPENTEXTSTREAM.WINDOW 81267 . 82624) (
+OPENTEXTSTREAM.DEFAULTLOOKS 82626 . 84466) (\TEDIT.OPENTEXTFILE 84468 . 85899) (
+\TEDIT.CREATE.TEXTSTREAM 85901 . 86513) (REOPENTEXTSTREAM 86515 . 86941) (TEDIT.STREAMCHANGEDP 86943
+ . 87245) (TEXTSTREAMP 87247 . 87661) (TXTFILE 87663 . 88132) (\TEDIT.REOPEN.STREAM 88134 . 89899) (
+\TEXTINIT 89901 . 95949) (\TEXTTTYBOUT 95951 . 97266)) (97386 111847 (\TEXTCLOSEF 97396 . 98587) (
+\TEXTDSPFONT 98589 . 99590) (\TEXTEOFP 99592 . 101047) (\TEXTGETEOFPTR 101049 . 101263) (
+\TEXTGETFILEPTR 101265 . 103366) (\TEXTOPENF 103368 . 104340) (\TEXTSETEOF 104342 . 104857) (
+\TEXTSETFILEPTR 104859 . 106588) (\TEXTDSPXPOSITION 106590 . 107450) (\TEXTDSPYPOSITION 107452 . 
+107999) (\TEXTLEFTMARGIN 108001 . 108423) (\TEXTRIGHTMARGIN 108425 . 111381) (\TEXTDSPCHARWIDTH 111383
+ . 111560) (\TEXTDSPSTRINGWIDTH 111562 . 111741) (\TEXTDSPLINEFEED 111743 . 111845)) (112894 132580 (
+\TEDIT.DELETE.SELPIECES 112904 . 115975) (\INSERTSELPIECES 115977 . 116913) (\INSERTCH 116915 . 123741
+) (\INSERTCH.HISTORY 123743 . 126823) (\INSERTEOL 126825 . 128785) (\INSERTCH.INSERTION 128787 . 
+131618) (\INSERTCH.EXTEND 131620 . 132578)) (132581 133853 (\SETUPGETCH 132591 . 133851)) (133911 
+139338 (\INSTALL.PIECE 133921 . 139336)) (139376 142244 (GETTEXTPROP 139386 . 140281) (PUTTEXTPROP 
+140283 . 141742) (TEXTPROP 141744 . 142242)))))
 STOP

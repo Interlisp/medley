@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 8-Dec-2023 22:57:10" {WMEDLEY}<library>tedit>TEDIT.;390 109646 
+(FILECREATED "16-Dec-2023 12:08:10" {WMEDLEY}<library>tedit>TEDIT.;396 115059 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.PIECE.NTHCHARCODE)
+      :CHANGES-TO (FNS TEDITSTRING)
 
-      :PREVIOUS-DATE " 7-Dec-2023 21:06:43" {WMEDLEY}<library>tedit>TEDIT.;389)
+      :PREVIOUS-DATE "15-Dec-2023 08:45:30" {WMEDLEY}<library>tedit>TEDIT.;395)
 
 
 (PRETTYCOMPRINT TEDITCOMS)
@@ -55,6 +55,7 @@
              \TEDIT.QUIT \TEDIT.WORDDELETE)
         (FNS \SELPIECES.COPY \SELPIECES.CONCAT \SELPIECES.CHARTRANSFORM \SELPIECES.FROM.STRING 
              \SELPIECES.TO.STRING)
+        (FNS \TEDIT.PARAPIECES \TEDIT.PARA.FIRST \TEDIT.PARA.LAST)
         (P (MOVD? 'NILL 'OBJECTOUTOFTEDIT))
                                                              (* ; 
                                     "HOOK for looked-string copy, etc. Used in \TEDIT.FOREIGN.COPY?.")
@@ -297,18 +298,19 @@
 (TEDITSTRING
   [LAMBDA (TEXT WINDOW DONTSPAWN PROPS)
 
+(* ;;; "Edited 16-Dec-2023 12:06 by rmk")
+
 (* ;;; "Edited  9-May-2023 21:55 by rmk")
 
 (* ;;; "Edited 23-May-2022 15:52 by rmk")
 
 (* ;;; "Edited 19-May-2022 22:46 by rmk: An interface function to replace calls to TEDIT when the text argument may be the string to be edited rather than the name of a file.  This enables the transition that gets TEDIT aligned with the convention that strings, as well as litatoms, are file names")
 
-    (TEDIT (IF (STRINGP TEXT)
-               THEN (LET ((TSTR (OPENTEXTSTREAM)))
-                         (TEDIT.INSERT TSTR TEXT 1 NIL T)
-                         (TEDIT.SETSEL TSTR 1 0 'LEFT)
-                         TSTR)
-             ELSE TEXT)
+    (SETQ TEXT (MKSTRING TEXT))
+    (TEDIT (LET ((TSTR (OPENTEXTSTREAM)))
+                (TEDIT.INSERT TSTR TEXT 1 NIL T)
+                (TEDIT.SETSEL TSTR 1 0 'LEFT)
+                TSTR)
            WINDOW DONTSPAWN PROPS])
 
 (TEDIT-SEE
@@ -1264,7 +1266,8 @@
                       OBJ])
 
 (\TEDIT.DELETE
-  [LAMBDA (TEXTOBJ SEL DONTDISPLAY)                          (* ; "Edited 12-Nov-2023 12:14 by rmk")
+  [LAMBDA (TEXTOBJ SEL DONTDISPLAY)                          (* ; "Edited 15-Dec-2023 08:38 by rmk")
+                                                             (* ; "Edited 12-Nov-2023 12:14 by rmk")
                                                              (* ; "Edited 29-Oct-2023 00:19 by rmk")
                                                              (* ; "Edited  6-Jun-2023 12:48 by rmk")
                                                              (* ; "Edited 29-May-91 18:22 by jds")
@@ -1273,16 +1276,16 @@
 
     (* ;; "On return, the pieces, lines, and selection are complete and correct, and the display is correct unless DONTDISPLAY.")
 
-    (CL:UNLESS (\TEDIT.READONLY TEXTOBJ)
+    (CL:UNLESS (\TEDIT.READONLY TEXTOBJ)
         (CL:WHEN (AND (GETSEL SEL SET)
-                      (IGEQ (GETSEL SEL DCH)
+                      (IGEQ (FGETSEL SEL DCH)
                             1))
             (CL:UNLESS DONTDISPLAY (TEDIT.NORMALIZECARET TEXTOBJ SEL))
                                                              (* ; 
                                                     "Move the deletion point on-screen in every pane")
             (\TEDIT.SHOWSELS TEXTOBJ NIL)                    (* ; 
                                                              "Turn off the selection's highlighting")
-            (LET ((CHNO (GETSEL SEL CH#)))                   (* ; 
+            (LET ((CHNO (FGETSEL SEL CH#)))                  (* ; 
                                                "Grap the CH# before acting, to update the selection.")
                  (\TEDIT.DELETE.SELPIECES TEXTOBJ SEL)       (* ; "Delete the SELected characters")
 
@@ -1296,6 +1299,7 @@
                  (\TEDIT.ADJUST.SELS TEXTOBJ 'DELETION SEL)
                  (TEDIT.MAKEPOINT SEL (SUB1 CHNO)
                         'RIGHT)
+                 (FSETTOBJ TEXTOBJ CARETLOOKS (\TEDIT.GET.INSERT.CHARLOOKS TEXTOBJ SEL))
                  (CL:UNLESS DONTDISPLAY (\SHOWSEL SEL T))
                  T)))])
 
@@ -1326,7 +1330,8 @@
                      (PPARALAST PC)) do (replace (PIECE PPARALOOKS) of PC with PPLOOKS)))])
 
 (\TEDIT.FOREIGN.COPY?
-  [LAMBDA (SEL)                                              (* ; "Edited 22-Sep-2023 19:55 by rmk")
+  [LAMBDA (SEL)                                              (* ; "Edited 10-Dec-2023 21:51 by rmk")
+                                                             (* ; "Edited 22-Sep-2023 19:55 by rmk")
                                                              (* ; "Edited  6-Jun-2023 15:29 by rmk")
                                                              (* ; "Edited 18-Apr-2023 23:37 by rmk")
                                                              (* ; "Edited 21-Oct-2022 18:44 by rmk")
@@ -1336,23 +1341,22 @@
 
     (* ;; "If the current process's window isn't a TEdit window, do a 'Copy' by BKSYSBUFing the selected text.  Then turn off all the various indicators.")
 
-    (LET ((SOURCE.TEXTOBJ (GETSEL SEL SELTEXTOBJ))
-          CH DEST.TEDIT? DEST.TEXTOBJ PROCW)
-         [SETQ DEST.TEDIT? (AND (SETQ PROCW (PROCESSPROP (TTY.PROCESS)
-                                                   'WINDOW))
-                                (SETQ DEST.TEXTOBJ (WINDOWPROP PROCW 'TEXTOBJ))
+    (\DTEST SEL 'SELECTION)
+    (LET ((SEL.TEXTOBJ (\DTEST (FGETSEL SEL SELTEXTOBJ)
+                              'TEXTOBJ))
+          (PROCW (PROCESSPROP (TTY.PROCESS)
+                        'WINDOW))
+          DEST.TEDIT? DEST.TEXTOBJ)
+         [SETQ DEST.TEDIT? (AND PROCW (SETQ DEST.TEXTOBJ (WINDOWPROP PROCW 'TEXTOBJ))
                                 (NOT (GETTEXTPROP DEST.TEXTOBJ 'COPYBYBKSYSBUF]
                                                              (* ; "Treat the destination specially if (1) the recipient process has a window, and (2) it's a TEdit window, and (3) the TEdit isn't declining special treatment by having COPYBYBKSYSBUF set in its props.")
          (COND
-            ((ZEROP (GETSEL SEL DCH))                        (* ; 
-                                         "Nothing to copy (0 characters in selection); don't bother.")
-             (SETQ TEDIT.COPY.PENDING NIL))
-            ((IGREATERP (GETSEL SEL CH#)
-                    (TEXTLEN SOURCE.TEXTOBJ))                (* ; 
-                                   "Trying to copy from beyond the end of the document; don't bother")
+            ((OR (ZEROP (FGETSEL SEL DCH))
+                 (IGREATERP (FGETSEL SEL CH#)
+                        (FGETTOBJ SEL.TEXTOBJ TEXTLEN)))     (* ; "Nothing to copy")
              (SETQ TEDIT.COPY.PENDING NIL))
             ((OR (NOT DEST.TEDIT?)
-                 (AND PROCW DEST.TEXTOBJ (NEQ SOURCE.TEXTOBJ DEST.TEXTOBJ)
+                 (AND PROCW DEST.TEXTOBJ (NEQ SEL.TEXTOBJ DEST.TEXTOBJ)
                       (GETTOBJ DEST.TEXTOBJ EDITOPACTIVE)))  (* ; 
                                                    "OK -- receiver isn't TEdit.  Do it the hard way.")
              [COND
@@ -1360,22 +1364,23 @@
                              'COPYINSERTFN)
                       (PROGN                                 (* ; 
                                                          "This is the exit for looked-string objects")
-                             (OBJECTOUTOFTEDIT SOURCE.TEXTOBJ SEL]
+                             (OBJECTOUTOFTEDIT SEL.TEXTOBJ SEL]
                 (T                                           (* ; 
                          "Old tedit method, run if OBJECTOUTOFTEDIT is NILL (ie., not installed yet)")
 
-                   (* ;; "Still used because COPYINSERT does (PRIN2 BKSYSBUF) if there's no insertfn, which cretes undesired string quotes.")
+                   (* ;; "Still used because COPYINSERT does (PRIN2 BKSYSBUF) if there's no insertfn, which creates undesired string quotes.")
+
+                   (for I CH (TSTR _ (FGETTOBJ SEL.TEXTOBJ STREAMHINT)) from 1
+                      to (FGETSEL SEL DCH) first (SETFILEPTR TSTR (SUB1 (FGETSEL SEL CH# SEL))) 
                                                              (* ; 
                                                              "Go to the first character to be copied")
-                   (for I (TSTREAM _ (GETTOBJ SOURCE.TEXTOBJ STREAMHINT)) from 1
-                      to (GETSEL SEL DCH) first (SETFILEPTR TSTREAM (SUB1 (GETSEL SEL CH# SEL)))
                       do 
-                         (* ;; "Run thru the selected text, copying only those items that really ARE characters--IMAGEOBJs don't get copied by this route.")
+                         (* ;; "BKSYSBUF the individual characters, COPYINSERT the image objects.")
 
-                         (COND
-                            ((FIXP (SETQ CH (BIN TSTREAM)))
-                             (BKSYSBUF (CHARACTER CH)))
-                            (T (COPYINSERT CH]
+                         (SETQ CH (BIN TSTR))
+                         (CL:IF (IMAGEOBJP CH)
+                             (COPYINSERT CH)
+                             (BKSYSBUF (CHARACTER CH)))]
              (\SHOWSEL SEL NIL)                              (* ; 
                                                              "Then reset the copy-pending flags.")
              (SETQ TEDIT.COPY.PENDING NIL])
@@ -1484,7 +1489,8 @@
 (DEFINEQ
 
 (\SELPIECES.COPY
-  [LAMBDA (SELPIECES OPERATION TOTEXTOBJ FROMTEXTOBJ)        (* ; "Edited  2-Jun-2023 11:21 by rmk")
+  [LAMBDA (SELPIECES OPERATION TOTEXTOBJ FROMTEXTOBJ)        (* ; "Edited 11-Dec-2023 08:16 by rmk")
+                                                             (* ; "Edited  2-Jun-2023 11:21 by rmk")
                                                              (* ; "Edited 26-May-2023 00:28 by rmk")
                                                              (* ; "Edited 21-May-2023 23:01 by rmk")
                                                              (* ; "Edited  7-May-2023 17:26 by rmk")
@@ -1510,7 +1516,8 @@
                                                      PREVPC])
 
 (\SELPIECES.CONCAT
-  [LAMBDA (SP1 SP2)                                          (* ; "Edited  3-Jun-2023 17:08 by rmk")
+  [LAMBDA (SP1 SP2)                                          (* ; "Edited 11-Dec-2023 23:03 by rmk")
+                                                             (* ; "Edited  3-Jun-2023 17:08 by rmk")
                                                              (* ; "Edited  2-Jun-2023 12:09 by rmk")
                                                              (* ; "Edited 21-May-2023 22:20 by rmk")
 
@@ -1522,18 +1529,20 @@
         then SP2
       elseif (NULL (fetch (SELPIECES SPFIRST) of SP2))
         then SP1
-      elseif (EQ (fetch (SELPIECES SPTEXTOBJ) of SP1)
-                 (fetch (SELPIECES SPTEXTOBJ) of SP2))
-        then (replace (PIECE NEXTPIECE) of (fetch (SELPIECES SPLAST) of SP1)
-                with (fetch (SELPIECES SPFIRST) of SP2))
-             (replace (PIECE PREVPIECE) of (fetch (SELPIECES SPFIRST) of SP2)
-                with (fetch (SELPIECES SPLAST) of SP1))
+      elseif (EQ (ffetch (SELPIECES SPTEXTOBJ) of SP1)
+                 (ffetch (SELPIECES SPTEXTOBJ) of SP2))
+        then (freplace (PIECE NEXTPIECE) of (ffetch (SELPIECES SPLAST) of SP1)
+                with (ffetch (SELPIECES SPFIRST) of SP2))
+             (freplace (PIECE PREVPIECE) of (ffetch (SELPIECES SPFIRST) of SP2)
+                with (ffetch (SELPIECES SPLAST) of SP1))
              (create SELPIECES
-                    SPFIRST _ (fetch (SELPIECES SPFIRST) of SP1)
-                    SPLAST _ (fetch (SELPIECES SPLAST) of SP2)
-                    SPLEN _ (IPLUS (fetch (SELPIECES SPLEN) of SP1)
-                                   (fetch (SELPIECES SPLEN) of SP2))
-                    SPTEXTOBJ _ (fetch (SELPIECES SPTEXTOBJ) of SP2))
+                    SPFIRST _ (ffetch (SELPIECES SPFIRST) of SP1)
+                    SPLAST _ (ffetch (SELPIECES SPLAST) of SP2)
+                    SPLEN _ (IPLUS (ffetch (SELPIECES SPLEN) of SP1)
+                                   (ffetch (SELPIECES SPLEN) of SP2))
+                    SPTEXTOBJ _ (ffetch (SELPIECES SPTEXTOBJ) of SP2)
+                    SPFIRSTCHAR _ (ffetch (SELPIECES SPFIRSTCHAR) of SP1)
+                    SPLASTCHAR _ (ffetch (SELPIECES SPLASTCHAR) of SP2))
       else (SHOULDNT "CONCATENATING PIECES FROM DIFFERENT TEXTOBJS"])
 
 (\SELPIECES.CHARTRANSFORM
@@ -1585,7 +1594,8 @@
     SELPIECES])
 
 (\SELPIECES.FROM.STRING
-  [LAMBDA (STRING TEXTOBJ CHECKFOREOL CHARLOOKS PARALOOKS)   (* ; "Edited 25-Nov-2023 15:22 by rmk")
+  [LAMBDA (STRING TEXTOBJ CHECKFOREOL CHARLOOKS PARALOOKS)   (* ; "Edited 11-Dec-2023 08:12 by rmk")
+                                                             (* ; "Edited 25-Nov-2023 15:22 by rmk")
                                                              (* ; "Edited 11-Nov-2023 15:49 by rmk")
                                                              (* ; "Edited  2-Jun-2023 11:59 by rmk")
                                                              (* ; "Edited 24-May-2023 15:26 by rmk")
@@ -1611,7 +1621,7 @@
              then 
                   (* ;; "Break it up into PPARALAST pieces")
 
-                  (bind PC STR PREVPC (NCHARS _ (NCHARS STRING))
+                  [bind PC STR PREVPC (NCHARS _ (NCHARS STRING))
                         (LASTEOLPOS _ 0)
                      collect (SETQ STR (SUBSTRING STRING (ADD1 LASTEOLPOS)
                                               (SETQ LASTEOLPOS EOLPOS)))
@@ -1641,7 +1651,9 @@
                                           SPFIRST _ (CAR $$VAL)
                                           SPLAST _ PC
                                           SPLEN _ NCHARS
-                                          SPTEXTOBJ _ TEXTOBJ)))
+                                          SPTEXTOBJ _ TEXTOBJ
+                                          SPFIRSTCHAR _ 1
+                                          SPLASTCHAR _ (NCHARS STRING]
            else (SETQ FIRSTPIECE (create PIECE
                                         PTYPE _ PTYPE
                                         PCONTENTS _ STRING
@@ -1654,7 +1666,9 @@
                        SPFIRST _ FIRSTPIECE
                        SPLAST _ FIRSTPIECE
                        SPLEN _ (NCHARS STRING)
-                       SPTEXTOBJ _ TEXTOBJ])
+                       SPTEXTOBJ _ TEXTOBJ
+                       SPFIRSTCHAR _ 1
+                       SPLASTCHAR _ (NCHARS STRING])
 
 (\SELPIECES.TO.STRING
   [LAMBDA (SELPIECES OBJECTCHARCODE)                         (* ; "Edited  2-Jun-2023 12:07 by rmk")
@@ -1686,6 +1700,102 @@
                    (HELP "SUBSTREAM PIECE?"))
               (SHOULDNT)) finally (RETURN RESULT])
 )
+(DEFINEQ
+
+(\TEDIT.PARAPIECES
+  [LAMBDA (SEL/FIRSTCHAR LASTCHAR TEXTOBJ)                   (* ; "Edited 11-Dec-2023 23:03 by rmk")
+
+    (* ;; "Produces SELPIECES that starts at the first piece of the paragraph containing FIRSTCHAR and runs to the last piece of the paragraph containing LASTCHAR.  Since paragraphs are split anyway, this does not require further splitting.")
+
+    (LET (FIRSTCHAR FIRST LAST START-OF-PIECE)
+         (DECLARE (SPECVARS START-OF-PIECE))
+         (if (type? SELECTION SEL/FIRSTCHAR)
+             then (SETQ TEXTOBJ (FGETSEL SEL/FIRSTCHAR SELTEXTOBJ))
+                  (SETQ FIRSTCHAR (FGETSEL SEL/FIRSTCHAR CH#))
+                  [SETQ LASTCHAR (CL:IF (EQ 0 (FGETSEL SEL/FIRSTCHAR DCH))
+                                     FIRSTCHAR
+                                     (SUB1 (FGETSEL SEL/FIRSTCHAR CHLIM)))]
+           elseif (type? TEDITHISTORYEVENT SEL/FIRSTCHAR)
+             then (SETQ FIRSTCHAR (GETTH SEL/FIRSTCHAR THCH#))
+                  [SETQ LASTCHAR (SUB1 (IPLUS FIRSTCHAR (GETTH SEL/FIRSTCHAR THLEN]
+           else (SETQ FIRSTCHAR SEL/FIRSTCHAR)
+                (CL:UNLESS LASTCHAR (SETQ LASTCHAR FIRSTCHAR)))
+         (SETQ FIRST (\TEDIT.PARA.FIRST TEXTOBJ FIRSTCHAR))
+         (SETQ LAST (\TEDIT.PARA.LAST TEXTOBJ LASTCHAR))
+         (create SELPIECES
+                SPFIRST _ (CDR FIRST)
+                SPLAST _ (CDR LAST)
+                SPLEN _ (ADD1 (IDIFFERENCE (CAR LAST)
+                                     (CAR FIRST)))
+                SPTEXTOBJ _ TEXTOBJ
+                SPFIRSTCHAR _ (CAR FIRST)
+                SPLASTCHAR _ (CAR LAST])
+
+(\TEDIT.PARA.FIRST
+  [LAMBDA (TEXTOBJ CHNO)                                     (* ; "Edited 11-Dec-2023 21:52 by rmk")
+
+    (* ;; "Returns (FIRSTCHAR . FIRSTPC) of the paragraph containing CHNO.  FIRSTCHAR is the firstcharacter of FIRSTPC. ")
+
+    (if (ZEROP (TEXTLEN TEXTOBJ))
+        then (CONS 0)
+      else (LET (CHPIECE START-OF-PIECE START)
+                (DECLARE (SPECVARS START-OF-PIECE))
+                (if (type? SELPIECES CHNO)
+                    then (SETQ CHPIECE (fetch (SELPIECES SPFIRST) of CHNO))
+                         (SETQ START (fetch (SELPIECES SPFIRSTCHAR) of CHNO))
+                  elseif (type? PIECE CHNO)
+                    then (SETQ START (\PCTOCH CHNO TEXTOBJ))
+                         (SETQ CHPIECE CHNO)
+                  else [SETQ CHNO (CL:IF (type? SELECTION CHNO)
+                                      (FGETSEL CHNO CH#)
+                                      (IMAX 0 (IMIN CHNO (TEXTLEN TEXTOBJ))))]
+                       (SETQ CHPIECE (\CHTOPC CHNO TEXTOBJ T))
+                       (SETQ START START-OF-PIECE))
+
+                (* ;; 
+                "Start one before CHPIECE, its PARALAST doesn't matter. Assume CHPIECE is visible")
+
+                (for PC (NEXT _ CHPIECE)
+                     (PLENTOT _ 0) backpieces (AND CHPIECE (PREVPIECE CHPIECE))
+                   when (VISIBLEPIECEP PC) until (PPARALAST PC) do (add PLENTOT (PLEN PC))
+                                                                   (SETQ NEXT PC)
+                   finally 
+
+                         (* ;; "We overshot on PC, NEXT is the winner.")
+
+                         (RETURN (CONS (IDIFFERENCE START PLENTOT)
+                                       NEXT])
+
+(\TEDIT.PARA.LAST
+  [LAMBDA (TEXTOBJ CHNO)                                     (* ; "Edited 11-Dec-2023 23:02 by rmk")
+
+    (* ;; "Returns the character number of the last character of the paragraph containing CHNO.  If CHNO is SELPIECES or SELECTION, CHNO is taken as its last character.")
+
+    (if (ZEROP (TEXTLEN TEXTOBJ))
+        then                                                 (* ; "Empty document")
+             0
+      else (LET (CHPIECE START-OF-PIECE END)
+                (DECLARE (SPECVARS START-OF-PIECE))
+                (if (type? SELPIECES CHNO)
+                    then (SETQ CHPIECE (fetch (SELPIECES SPLAST) of CHNO))
+                         [SETQ END (SUB1 (IDIFFERENCE (fetch (SELPIECES SPLASTCHAR) of CHNO)
+                                                (PLEN CHPIECE]
+                  elseif (type? PIECE CHNO)
+                    then (SETQ CHPIECE CHNO)
+                         (SETQ END (\PCTOCH CHNO TEXTOBJ))
+                  else (SETQ CHPIECE (\CHTOPC (CL:IF (type? SELECTION CHNO)
+                                                  (SUB1 (FGETSEL CHNO CHLIM))
+                                                  CHNO)
+                                            TEXTOBJ T))
+                       (SETQ END START-OF-PIECE))            (* ; "Find the paragraph's last char")
+
+                (* ;; "END is now the first character of the piece containing CHNO")
+
+                (for PC (PLENTOT _ 0) inpieces CHPIECE when (VISIBLEPIECEP PC)
+                   do (add PLENTOT (PLEN PC)) repeatuntil (PPARALAST PC)
+                   finally (RETURN (CONS (IPLUS END PLENTOT -1)
+                                         PC])
+)
 
 (MOVD? 'NILL 'OBJECTOUTOFTEDIT)
 
@@ -1701,20 +1811,14 @@
 (DEFINEQ
 
 (TEDIT.INSERT.OBJECT
-  [LAMBDA (OBJECT TSTREAM CH#)                               (* ; "Edited 12-Nov-2023 12:16 by rmk")
-                                                             (* ; "Edited 21-Jul-2023 23:14 by rmk")
-                                                             (* ; "Edited  8-Jul-2023 22:44 by rmk")
-                                                             (* ; "Edited 20-Jun-2023 23:14 by rmk")
-                                                             (* ; "Edited 17-Jun-2023 17:15 by rmk")
-                                                             (* ; "Edited  2-Jun-2023 12:00 by rmk")
-                                                             (* ; "Edited 31-May-2023 19:55 by rmk")
-                                                             (* ; "Edited 27-May-2023 14:00 by rmk")
+  [LAMBDA (OBJECT TSTREAM CH#)                               (* ; "Edited 11-Dec-2023 08:21 by rmk")
+                                                             (* ; "Edited 12-Nov-2023 12:16 by rmk")
                                                              (* ; "Edited 19-May-2023 00:18 by rmk")
                                                              (* ; "Edited 21-Apr-93 00:52 by jds")
 
     (* ;; "Inserts the Image-object OBJECT into text STREAM in front of character CH.")
 
-    (CL:UNLESS (\TEDIT.READONLY TSTREAM)
+    (CL:UNLESS (\TEDIT.READONLY TSTREAM)
         (PROG ((TEXTOBJ (TEXTOBJ TSTREAM))
                SEL OBJPC OBJSELPIECES SUBSTREAM)
 
@@ -1725,22 +1829,24 @@
                                  PTYPE _ OBJECT.PTYPE
                                  PCONTENTS _ OBJECT
                                  PLEN _ 1
-                                 PLOOKS _ (fetch (TEXTOBJ CARETLOOKS) of TEXTOBJ)))
+                                 PLOOKS _ (FGETTOBJ TEXTOBJ CARETLOOKS)))
                                                              (* ; "The new piece we're inserting")
               (CL:WHEN (SETQ SUBSTREAM (IMAGEOBJPROP OBJECT 'SUBSTREAM))
                                                              (* ; 
                                                   "If this is computed text in bulk, fix the length.")
-                  (freplace (PIECE PTYPE) of OBJPC with SUBSTREAM.PTYPE)
-                  (replace (PIECE PLEN) of OBJPC with (TEXTLEN (fetch (TEXTSTREAM TEXTOBJ)
-                                                                  of SUBSTREAM))))
+                  (FSETPC OBJPC PTYPE SUBSTREAM.PTYPE)
+                  (FSETPC OBJPC PLEN (TEXTLEN (fetch (TEXTSTREAM TEXTOBJ) of SUBSTREAM))))
               (SETQ OBJSELPIECES
                (\SELPIECES.COPY (create SELPIECES
                                        SPLEN _ 1
                                        SPFIRST _ OBJPC
                                        SPLAST _ OBJPC
-                                       SPTEXTOBJ _ TEXTOBJ)
+                                       SPTEXTOBJ _ TEXTOBJ
+                                       SPFIRSTCHAR _ CH#
+                                       SPLASTCHAR _ CH#)
                       'INSERT TEXTOBJ))
-              (CL:UNLESS OBJSELPIECES (RETURN))
+              (CL:UNLESS OBJSELPIECES                        (* ; "Copy may not be allowed")
+                  (RETURN))
 
          (* ;; "")
 
@@ -1881,7 +1987,7 @@
 (* ; "TEDIT Support information")
 
 
-(RPAQQ TEDITSYSTEMDATE " 8-Dec-2023 22:57:10")
+(RPAQQ TEDITSYSTEMDATE "16-Dec-2023 12:08:10")
 
 
 
@@ -1891,24 +1997,25 @@
 (ADDTOVAR PRINTFILETYPES (TEDIT (TEST \TEDIT.FORMATTEDP1)
                                 (EXTENSION (TEDIT))))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4342 6284 (MAKE-TEDIT-EXPORTS.ALL 4352 . 4898) (UPDATE-TEDIT 4900 . 5513) (EDIT-TEDIT 
-5515 . 6282)) (7541 7834 (\CREATE.TEDIT.RESTART.MENU 7551 . 7832)) (8209 34902 (TEDIT 8219 . 10824) (
-COERCETEXTOBJ 10826 . 14004) (TEDITSTRING 14006 . 14767) (TEDIT-SEE 14769 . 15328) (TEDIT.CHARWIDTH 
-15330 . 17354) (TEDIT.COPY 17356 . 17864) (TEDIT.DELETE 17866 . 18839) (TEDIT.INSERT 18841 . 20800) (
-TEDIT.KILL 20802 . 21504) (TEDIT.MAPPIECES 21506 . 22568) (TEDIT.QUIT 22570 . 24138) (
-TEDIT.DO.BLUEPENDINGDELETE 24140 . 24986) (TEDIT.MOVE 24988 . 29580) (TEDIT.STRINGWIDTH 29582 . 30253)
- (TEXTOBJ 30255 . 32563) (TEDITMENUP 32565 . 33203) (TEXTSTREAM 33205 . 34900)) (34903 37095 (
-\TEDIT.MOVE.MSG 34913 . 36791) (\TEDIT.READONLY 36793 . 37093)) (37096 44375 (TEDIT.NCHARS 37106 . 
-37289) (TEDIT.RPLCHARCODE 37291 . 40612) (TEDIT.NTHCHARCODE 40614 . 41456) (\TEDIT.PIECE.NTHCHARCODE 
-41458 . 44373)) (44421 85595 (\TEDIT1 44431 . 46290) (\TEDIT.INSERT 46292 . 51934) (
-\TEDIT.REPLACE.SELPIECES 51936 . 53477) (\TEDIT.INSERT.SELPIECES 53479 . 55158) (\TEDIT.OBJECT.SHOWSEL
- 55160 . 59224) (\TEDIT.RESTARTFN 59226 . 61364) (\TEDIT.CHARDELETE 61366 . 63575) (\TEDIT.COPYPIECE 
-63577 . 68315) (\TEDIT.APPLY.OBJFN 68317 . 71390) (\TEDIT.DELETE 71392 . 73501) (
-\TEDIT.DIFFUSE.PARALOOKS 73503 . 75901) (\TEDIT.FOREIGN.COPY? 75903 . 79988) (\TEDIT.QUIT 79990 . 
-82425) (\TEDIT.WORDDELETE 82427 . 85593)) (85596 98775 (\SELPIECES.COPY 85606 . 87370) (
-\SELPIECES.CONCAT 87372 . 89157) (\SELPIECES.CHARTRANSFORM 89159 . 92391) (\SELPIECES.FROM.STRING 
-92393 . 96727) (\SELPIECES.TO.STRING 96729 . 98773)) (98929 109003 (TEDIT.INSERT.OBJECT 98939 . 102600
-) (TEDIT.EDIT.OBJECT 102602 . 104641) (TEDIT.FIND.OBJECT 104643 . 105050) (TEDIT.OBJECT.CHANGED 105052
- . 107019) (TEDIT.MAP.OBJECTS 107021 . 107853) (TEDIT.COLLECT.OBJECTS 107855 . 108615) (
-TEDIT.COLLECT.OBJECT.GETFNS 108617 . 109001)))))
+  (FILEMAP (NIL (4396 6338 (MAKE-TEDIT-EXPORTS.ALL 4406 . 4952) (UPDATE-TEDIT 4954 . 5567) (EDIT-TEDIT 
+5569 . 6336)) (7595 7888 (\CREATE.TEDIT.RESTART.MENU 7605 . 7886)) (8263 34933 (TEDIT 8273 . 10878) (
+COERCETEXTOBJ 10880 . 14058) (TEDITSTRING 14060 . 14798) (TEDIT-SEE 14800 . 15359) (TEDIT.CHARWIDTH 
+15361 . 17385) (TEDIT.COPY 17387 . 17895) (TEDIT.DELETE 17897 . 18870) (TEDIT.INSERT 18872 . 20831) (
+TEDIT.KILL 20833 . 21535) (TEDIT.MAPPIECES 21537 . 22599) (TEDIT.QUIT 22601 . 24169) (
+TEDIT.DO.BLUEPENDINGDELETE 24171 . 25017) (TEDIT.MOVE 25019 . 29611) (TEDIT.STRINGWIDTH 29613 . 30284)
+ (TEXTOBJ 30286 . 32594) (TEDITMENUP 32596 . 33234) (TEXTSTREAM 33236 . 34931)) (34934 37126 (
+\TEDIT.MOVE.MSG 34944 . 36822) (\TEDIT.READONLY 36824 . 37124)) (37127 44406 (TEDIT.NCHARS 37137 . 
+37320) (TEDIT.RPLCHARCODE 37322 . 40643) (TEDIT.NTHCHARCODE 40645 . 41487) (\TEDIT.PIECE.NTHCHARCODE 
+41489 . 44404)) (44452 85630 (\TEDIT1 44462 . 46321) (\TEDIT.INSERT 46323 . 51965) (
+\TEDIT.REPLACE.SELPIECES 51967 . 53508) (\TEDIT.INSERT.SELPIECES 53510 . 55189) (\TEDIT.OBJECT.SHOWSEL
+ 55191 . 59255) (\TEDIT.RESTARTFN 59257 . 61395) (\TEDIT.CHARDELETE 61397 . 63606) (\TEDIT.COPYPIECE 
+63608 . 68346) (\TEDIT.APPLY.OBJFN 68348 . 71421) (\TEDIT.DELETE 71423 . 73735) (
+\TEDIT.DIFFUSE.PARALOOKS 73737 . 76135) (\TEDIT.FOREIGN.COPY? 76137 . 80023) (\TEDIT.QUIT 80025 . 
+82460) (\TEDIT.WORDDELETE 82462 . 85628)) (85631 99528 (\SELPIECES.COPY 85641 . 87514) (
+\SELPIECES.CONCAT 87516 . 89585) (\SELPIECES.CHARTRANSFORM 89587 . 92819) (\SELPIECES.FROM.STRING 
+92821 . 97480) (\SELPIECES.TO.STRING 97482 . 99526)) (99529 104795 (\TEDIT.PARAPIECES 99539 . 101187) 
+(\TEDIT.PARA.FIRST 101189 . 103009) (\TEDIT.PARA.LAST 103011 . 104793)) (104949 114416 (
+TEDIT.INSERT.OBJECT 104959 . 108013) (TEDIT.EDIT.OBJECT 108015 . 110054) (TEDIT.FIND.OBJECT 110056 . 
+110463) (TEDIT.OBJECT.CHANGED 110465 . 112432) (TEDIT.MAP.OBJECTS 112434 . 113266) (
+TEDIT.COLLECT.OBJECTS 113268 . 114028) (TEDIT.COLLECT.OBJECT.GETFNS 114030 . 114414)))))
 STOP

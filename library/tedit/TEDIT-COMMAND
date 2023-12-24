@@ -1,13 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 5-Dec-2023 23:49:04" {WMEDLEY}<library>tedit>TEDIT-COMMAND.;37 49305  
+(FILECREATED "24-Dec-2023 09:54:47" {WMEDLEY}<library>tedit>TEDIT-COMMAND.;42 50123  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS TEDIT.ATOMBOUND.READTABLE)
+      :CHANGES-TO (FNS \TEDIT.READTABLE \TEDIT.COMMAND.LOOP TEDIT.GETSYNTAX TEDIT.SETSYNTAX)
                   (VARS TEDIT-COMMANDCOMS)
 
-      :PREVIOUS-DATE "12-Oct-2023 23:18:01" {WMEDLEY}<library>TEDIT>TEDIT-COMMAND.;35)
+      :PREVIOUS-DATE " 5-Dec-2023 23:49:04" {WMEDLEY}<library>tedit>TEDIT-COMMAND.;37)
 
 
 (PRETTYCOMPRINT TEDIT-COMMANDCOMS)
@@ -28,6 +28,8 @@
                               (CMD.TTC 7)
                               (NEXT.TTC 8)
                               (EXPAND.TTC 9)
+                              (CHARDELETE.FORWARD.TTC 10)
+                              (WORDDELETE.FORWARD.TTC 11)
                               (PUNCT.TTC 20)
                               (TEXT.TTC 21)
                               (WHITESPACE.TTC 22))
@@ -52,7 +54,7 @@
                              (NEWCHAR-IF-SPLIT.LB 32)
                                                              (* ; "Look this char up in *TEDIT-SPLITCHAR-HASH* if this IS the last character on a line, and render it as the char we found.")
                              ]
-        (FNS \TEDIT.INTERRUPT.SETUP \TEDIT.MARKACTIVE \TEDIT.MARKINACTIVE \PNC \TEDIT.COMMAND.LOOP 
+        (FNS \TEDIT.INTERRUPT.SETUP \TEDIT.MARKACTIVE \TEDIT.MARKINACTIVE \TEDIT.COMMAND.LOOP 
              \TEDIT.COMMAND.RESET.SETUP)
         [INITVARS (TEDIT.INTERRUPTS '((2 BREAK)
                                       (5 ERROR)
@@ -130,6 +132,10 @@
 
 (RPAQQ EXPAND.TTC 9)
 
+(RPAQQ CHARDELETE.FORWARD.TTC 10)
+
+(RPAQQ WORDDELETE.FORWARD.TTC 11)
+
 (RPAQQ PUNCT.TTC 20)
 
 (RPAQQ TEXT.TTC 21)
@@ -147,6 +153,8 @@
        (CMD.TTC 7)
        (NEXT.TTC 8)
        (EXPAND.TTC 9)
+       (CHARDELETE.FORWARD.TTC 10)
+       (WORDDELETE.FORWARD.TTC 11)
        (PUNCT.TTC 20)
        (TEXT.TTC 21)
        (WHITESPACE.TTC 22))
@@ -249,21 +257,9 @@
     (replace (TEXTOBJ EDITOPACTIVE) of TEXTOBJ with NIL)
     TEXTOBJ])
 
-(\PNC
-  [LAMBDA (CH STR)                                           (* jds " 7-JUN-82 14:03")
-    (PROG ((LEN (fetch (STRINGP LENGTH) of STR))
-           (OFFST (fetch (STRINGP OFFST) of STR)))
-          (COND
-             ((ZEROP LEN)
-              (ERROR "NO ROOM LEFT IN STRING TO PUT CHARACTER"))
-             (T (UNINTERRUPTABLY
-                    (\PUTBASEBYTE (fetch (STRINGP BASE) of STR)
-                           OFFST CH)
-                    (replace (STRINGP OFFST) of STR with (ADD1 OFFST))
-                    (replace (STRINGP LENGTH) of STR with (SUB1 LEN)))])
-
 (\TEDIT.COMMAND.LOOP
-  [LAMBDA (STREAM RTBL)                                      (* ; "Edited 12-Oct-2023 21:03 by rmk")
+  [LAMBDA (STREAM RTBL)                                      (* ; "Edited 24-Dec-2023 09:50 by rmk")
+                                                             (* ; "Edited 12-Oct-2023 21:03 by rmk")
                                                              (* ; "Edited  9-Oct-2023 23:09 by rmk")
                                                              (* ; "Edited  5-Oct-2023 21:40 by rmk")
                                                              (* ; "Edited  2-Oct-2023 23:21 by rmk")
@@ -414,8 +410,14 @@
                                        "Backspace handler: Remove the character just before SEL:CH#.")
                                             (\TEDIT.CHARDELETE TEXTOBJ SEL)
                                             (TEDIT.RESET.EXTEND.PENDING.DELETE SEL))
+                                       (CHARDELETE.FORWARD.TTC 
+                                            (\TEDIT.CHARDELETE.FORWARD TEXTOBJ SEL)
+                                            (TEDIT.RESET.EXTEND.PENDING.DELETE SEL))
                                        (WORDDELETE.TTC 
                                             (\TEDIT.WORDDELETE TEXTOBJ SEL)
+                                            (TEDIT.RESET.EXTEND.PENDING.DELETE SEL))
+                                       (WORDDELETE.FORWARD.TTC 
+                                            (\TEDIT.WORDDELETE.FORWARD TEXTOBJ SEL)
                                             (TEDIT.RESET.EXTEND.PENDING.DELETE SEL))
                                        (DELETE.TTC           (* ; 
                                                     "DEL Key handler: Delete the selected characters")
@@ -589,29 +591,32 @@
 (DEFINEQ
 
 (\TEDIT.READTABLE
-  [LAMBDA NIL                                               (* ; "Edited 20-Apr-2018 07:59 by rmk:")
+  [LAMBDA NIL                                                (* ; "Edited 24-Dec-2023 09:54 by rmk")
+                                                            (* ; "Edited 20-Apr-2018 07:59 by rmk:")
                                                              (* jds "12-Sep-86 13:48")
 
-         (* Create a TEdit read-table, to control which characters have what functions and 
-         call which commands.)
+    (* ;; "Create a TEdit read-table, to control which characters have what functions and call which commands.")
 
-    (PROG [(RTBL (create READTABLEP
-                        READMACRODEFS _ (HASHARRAY 50]
-          (for CH in (CHARCODE (BS ^A ^W DEL %#A %#B %#C ESC)) as CL
-             in (LIST CHARDELETE.TTC CHARDELETE.TTC WORDDELETE.TTC DELETE.TTC UNDO.TTC NEXT.TTC 
-                      CMD.TTC REDO.TTC) do                   (* Set up the default syntax classes 
-                                                             for command characters)
-                                           (\SETSYNCODE (fetch READSA of RTBL)
-                                                  CH CL))
-          (for CH in (CHARCODE (^X)) as FN in '(\TEDIT.ABBREV.EXPAND)
-             do                                              (* Set up the default function-calling 
-                                                             characters (^X to expand abbrevs for 
-                                                             now))
-                (TEDIT.SETFUNCTION CH FN RTBL))
-          (TEDIT.SETFUNCTION (CHARCODE ^O)
-                 (FUNCTION GET.OBJ.FROM.USER)
-                 RTBL)                                       (* And for image object capture)
-          (RETURN RTBL])
+    (LET [(RTBL (create READTABLEP
+                       READMACRODEFS _ (HASHARRAY 50]
+
+         (* ;; "CHARDELETE.FORWARD replaces WORDDELETE on ^W")
+
+         (for CH in (CHARCODE (BS ^A ^W DEL %#A %#B %#C ESC)) as CL
+            in (CONSTANT (LIST CHARDELETE.TTC CHARDELETE.TTC CHARDELETE.FORWARD.TTC DELETE.TTC 
+                               UNDO.TTC NEXT.TTC CMD.TTC REDO.TTC))
+            do                                               (* ; 
+                                           "Set up the default syntax classes for command characters")
+               (\SETSYNCODE (fetch READSA of RTBL)
+                      CH CL))
+         (for CH in (CHARCODE (^X)) as FN in '(\TEDIT.ABBREV.EXPAND)
+            do                                               (* ; 
+                      "Set up the default function-calling characters (^X to expand abbrevs for now)")
+               (TEDIT.SETFUNCTION CH FN RTBL))
+         (TEDIT.SETFUNCTION (CHARCODE ^O)
+                (FUNCTION GET.OBJ.FROM.USER)
+                RTBL)                                        (* ; "And for image object capture")
+         RTBL])
 
 (\TEDIT.WORDBOUND.READTABLE
   [LAMBDA NIL                                                (* ; "Edited 22-May-92 15:10 by jds")
@@ -655,7 +660,8 @@
           (RETURN RTBL])
 
 (TEDIT.GETSYNTAX
-  [LAMBDA (CH TABLE)                                         (* ; "Edited 31-Mar-87 10:01 by jds")
+  [LAMBDA (CH TABLE)                                         (* ; "Edited 24-Dec-2023 09:47 by rmk")
+                                                             (* ; "Edited 31-Mar-87 10:01 by jds")
                                                              (* ; 
                                                    "Find TEdit's interpretation of a given character")
     (SELECTC (\SYNCODE [fetch READSA of (COND
@@ -681,8 +687,12 @@
                        (T CH)))
         (WORDDELETE.TTC 
              'WORDDELETE)
+        (WORDDELETE.FORWARD.TTC 
+             'WORDDELETE.FORWARD)
         (CHARDELETE.TTC 
              'CHARDELETE)
+        (CHARDELETE.FORWARD.TTC 
+             'CHARDELETE.FORWARD)
         (DELETE.TTC 'DELETE)
         (UNDO.TTC 'UNDO)
         (REDO.TTC 'REDO)
@@ -694,7 +704,8 @@
         NIL])
 
 (TEDIT.SETSYNTAX
-  [LAMBDA (CHAR CLASS TABLE)                                 (* ; "Edited 31-Mar-87 10:00 by jds")
+  [LAMBDA (CHAR CLASS TABLE)                                 (* ; "Edited 24-Dec-2023 09:17 by rmk")
+                                                             (* ; "Edited 31-Mar-87 10:00 by jds")
                                                              (* ; 
                                                         "SETS TEDIT-STYLE SYNTAX BITS IN A TERMTABLE")
     (PROG1 (TEDIT.GETSYNTAX (SETQ CHAR (COND
@@ -720,7 +731,11 @@
                CHAR
                (SELECTQ CLASS
                    (CHARDELETE CHARDELETE.TTC)
+                   (CHARDELETE.FORWARD 
+                        CHARDELETE.FORWARD.TTC)
                    (WORDDELETE WORDDELETE.TTC)
+                   (WORDDELETE.FORWARD 
+                        WORDDELETE.FORWARD.TTC)
                    ((DELETE LINEDELETE) 
                         DELETE.TTC)
                    (UNDO UNDO.TTC)
@@ -868,11 +883,10 @@
 
 (RPAQ WHEELSCROLLCHARCODES (\TEDIT.WHEELSCROLL))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (8056 33425 (\TEDIT.INTERRUPT.SETUP 8066 . 9706) (\TEDIT.MARKACTIVE 9708 . 9920) (
-\TEDIT.MARKINACTIVE 9922 . 10138) (\PNC 10140 . 10773) (\TEDIT.COMMAND.LOOP 10775 . 27035) (
-\TEDIT.COMMAND.RESET.SETUP 27037 . 33423)) (33945 47925 (\TEDIT.READTABLE 33955 . 35564) (
-\TEDIT.WORDBOUND.READTABLE 35566 . 38159) (TEDIT.GETSYNTAX 38161 . 40357) (TEDIT.SETSYNTAX 40359 . 
-42552) (TEDIT.GETFUNCTION 42554 . 43914) (TEDIT.SETFUNCTION 43916 . 46355) (TEDIT.WORDGET 46357 . 
-46618) (TEDIT.WORDSET 46620 . 47317) (TEDIT.ATOMBOUND.READTABLE 47319 . 47923)) (48319 49228 (
-\TEDIT.WHEELSCROLL 48329 . 49226)))))
+  (FILEMAP (NIL (8358 33667 (\TEDIT.INTERRUPT.SETUP 8368 . 10008) (\TEDIT.MARKACTIVE 10010 . 10222) (
+\TEDIT.MARKINACTIVE 10224 . 10440) (\TEDIT.COMMAND.LOOP 10442 . 27277) (\TEDIT.COMMAND.RESET.SETUP 
+27279 . 33665)) (34187 48743 (\TEDIT.READTABLE 34197 . 35854) (\TEDIT.WORDBOUND.READTABLE 35856 . 
+38449) (TEDIT.GETSYNTAX 38451 . 40890) (TEDIT.SETSYNTAX 40892 . 43370) (TEDIT.GETFUNCTION 43372 . 
+44732) (TEDIT.SETFUNCTION 44734 . 47173) (TEDIT.WORDGET 47175 . 47436) (TEDIT.WORDSET 47438 . 48135) (
+TEDIT.ATOMBOUND.READTABLE 48137 . 48741)) (49137 50046 (\TEDIT.WHEELSCROLL 49147 . 50044)))))
 STOP

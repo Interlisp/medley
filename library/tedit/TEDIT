@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "24-Dec-2023 09:36:05" {WMEDLEY}<library>tedit>TEDIT.;409 116928 
+(FILECREATED "26-Dec-2023 12:29:09" {WMEDLEY}<library>TEDIT>TEDIT.;422 125739 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.WORDDELETE \TEDIT.CHARDELETE.FORWARD)
+      :CHANGES-TO (FNS COERCETEXTOBJ)
 
-      :PREVIOUS-DATE "24-Dec-2023 00:19:10" {WMEDLEY}<library>tedit>TEDIT.;407)
+      :PREVIOUS-DATE "26-Dec-2023 11:50:19" {WMEDLEY}<library>TEDIT>TEDIT.;420)
 
 
 (PRETTYCOMPRINT TEDITCOMS)
@@ -52,10 +52,11 @@
         (FNS \TEDIT1 \TEDIT.INSERT \TEDIT.REPLACE.SELPIECES \TEDIT.INSERT.SELPIECES 
              \TEDIT.OBJECT.SHOWSEL \TEDIT.RESTARTFN \TEDIT.CHARDELETE \TEDIT.CHARDELETE.FORWARD 
              \TEDIT.COPYPIECE \TEDIT.APPLY.OBJFN \TEDIT.DELETE \TEDIT.DIFFUSE.PARALOOKS 
-             \TEDIT.FOREIGN.COPY? \TEDIT.QUIT \TEDIT.WORDDELETE)
+             \TEDIT.FOREIGN.COPY? \TEDIT.QUIT \TEDIT.WORDDELETE \TEDIT.WORDDELETE.FORWARD)
         (FNS \SELPIECES.COPY \SELPIECES.CONCAT \SELPIECES.CHARTRANSFORM \SELPIECES.FROM.STRING 
              \SELPIECES.TO.STRING)
         (FNS \TEDIT.PARAPIECES \TEDIT.PARA.FIRST \TEDIT.PARA.LAST)
+        (FNS \TEDIT.WORD.FIRST \TEDIT.WORD.LAST)
         (P (MOVD? 'NILL 'OBJECTOUTOFTEDIT))
                                                              (* ; 
                                     "HOOK for looked-string copy, etc. Used in \TEDIT.FOREIGN.COPY?.")
@@ -247,7 +248,8 @@
                PROC])
 
 (COERCETEXTOBJ
-  [LAMBDA (TSTREAM TYPE OUTPUTSTREAM)                        (* ; "Edited 18-Dec-2023 23:13 by rmk")
+  [LAMBDA (TSTREAM TYPE OUTPUTSTREAM)                        (* ; "Edited 26-Dec-2023 12:29 by rmk")
+                                                             (* ; "Edited 18-Dec-2023 23:13 by rmk")
                                                              (* ; "Edited 21-Nov-2023 00:08 by rmk")
                                                              (* ; "Edited 15-Sep-2023 00:08 by rmk")
                                                              (* ; "Edited 15-Aug-2023 20:20 by rmk")
@@ -303,6 +305,7 @@
                                                              (* ; "Plaintext=empty looks")
                              (SETFILEINFO LOOKSTREAM 'LENGTH 0))
                          (CONS CHARSTREAM LOOKSTREAM)))
+             (SEXPR (TEDIT.SEL.AS.SEXPR TSTREAM))
              NIL])
 
 (TEDITSTRING
@@ -1462,62 +1465,49 @@
            (RETURN (FGETTOBJ TEXTOBJ EDITFINISHEDFLG])
 
 (\TEDIT.WORDDELETE
-  [LAMBDA (TEXTOBJ SEL)                                      (* ; "Edited 24-Dec-2023 09:34 by rmk")
+  [LAMBDA (TEXTOBJ SEL)                                      (* ; "Edited 25-Dec-2023 00:03 by rmk")
                                                              (* ; "Edited 23-May-2023 16:37 by rmk")
                                                              (* ; "Edited 22-May-2023 10:52 by rmk")
                                                              (* ; "Edited 29-May-91 18:22 by jds")
+
+    (* ;; "This deletes all characters from the character just before the caret to the beginning of the preceding word, skipping over separators to reach the target word.")
+
     (\DTEST TEXTOBJ 'TEXTOBJ)
     (CL:UNLESS SEL
         (SETQ SEL (FGETTOBJ TEXTOBJ SEL)))
-    (PROG ((TSTREAM (FGETTOBJ TEXTOBJ STREAMHINT))
-           (READSA (fetch READSA of (OR (FGETTOBJ TEXTOBJ TXTWTBL)
-                                        TEDIT.WORDBOUND.READTABLE)))
-           (INSCH# (SUB1 (TEDIT.GETPOINT SEL)))
-           CH CHNO)
+    (PROG ((LASTNO (SUB1 (TEDIT.GETPOINT SEL)))
+           FIRSTNO)
 
-     (* ;; "INSCH# is the final (i.e., highest-numbered) character to be deleted.")
+     (* ;; "LASTNO is the final (i.e., highest-numbered) character to be deleted.")
 
-          (CL:UNLESS (IGREATERP INSCH# 0)                    (* ; "Don't back up at start of file.")
+          (CL:WHEN (ILEQ LASTNO 0)                           (* ; 
+                                                             "Nothing to delete at start of file.")
               (RETURN))
-          (\TEXTSETFILEPTR TSTREAM (SUB1 INSCH#))
-          (SETQ CH (BIN TSTREAM))
+          (SETQ FIRSTNO (\TEDIT.WORD.FIRST TEXTOBJ LASTNO))
+          (\TEDIT.UPDATE.SEL SEL FIRSTNO (ADD1 (IDIFFERENCE LASTNO FIRSTNO)))
+          (\TEDIT.DELETE TEXTOBJ SEL])
 
-     (* ;; "Skip over any preceding separator characters")
+(\TEDIT.WORDDELETE.FORWARD
+  [LAMBDA (TEXTOBJ SEL)                                      (* ; "Edited 25-Dec-2023 00:20 by rmk")
+                                                             (* ; "Edited 23-May-2023 16:37 by rmk")
+                                                             (* ; "Edited 22-May-2023 10:52 by rmk")
+                                                             (* ; "Edited 29-May-91 18:22 by jds")
 
-          (for old CHNO from INSCH# to 1 by -1
-             while [AND (SELECTC (COND
-                                    ((CHARCODEP CH)
-                                     (\SYNCODE READSA CH))
-                                    (T                       (* ; "It's an object--stop")
-                                       TEXT.TTC))
-                            (TEXT.TTC NIL)
-                            T)
-                        (NOT (fetch CLPROTECTED of (PLOOKS (fetch (TEXTSTREAM PIECE) of TSTREAM]
-             do (SETQ CH (\BACKBIN TSTREAM)))
+    (* ;; "This deletes all characters from the character just after the caret to the end of the following word, skipping over separators to reach the target word.")
 
-     (* ;; "CH is the first non-separator character, and CHNO is the character number of the character BEFORE that one. Skip over the next group of non-separators (= a 'word')")
+    (\DTEST TEXTOBJ 'TEXTOBJ)
+    (CL:UNLESS SEL
+        (SETQ SEL (FGETTOBJ TEXTOBJ SEL)))
+    (PROG ((FIRSTNO (TEDIT.GETPOINT SEL))
+           LASTNO)
 
-          (for old CHNO from CHNO to 1 by -1
-             while [AND (SELECTC (COND
-                                    ((CHARCODEP CH)
-                                     (\SYNCODE READSA CH))
-                                    (T                       (* ; "It's an object!")
-                                       TEXT.TTC))
-                            (TEXT.TTC T)
-                            NIL)
-                        (NOT (fetch CLPROTECTED of (PLOOKS (fetch (TEXTSTREAM PIECE) of TSTREAM]
-             do (SETQ CH (\BACKBIN TSTREAM)))
+     (* ;; "LASTNO is the final (i.e., highest-numbered) character to be deleted.")
 
-     (* ;; "CH is now the first separator character before the word, and CHNO is the character number of the character BEFORE it, or 0 if you hit the front of the document.")
-
-          (\SHOWSEL SEL NIL)
-
-     (* ;; "If not at the front of the document, the first character to delete is 1 later than the separator we hit, which is 2 higher than CHNO is now")
-
-          (\TEDIT.UPDATE.SEL SEL (CL:IF (ILESSP CHNO 1)
-                                     1
-                                     (IPLUS 2 CHNO))
-                 (SUB1 (IDIFFERENCE INSCH# CHNO)))
+          (CL:WHEN (IGREATERP FIRSTNO (FGETTOBJ TEXTOBJ TEXTLEN))
+                                                             (* ; "Nothing to delete at end of file.")
+              (RETURN))
+          (SETQ LASTNO (\TEDIT.WORD.LAST TEXTOBJ FIRSTNO))
+          (\TEDIT.UPDATE.SEL SEL FIRSTNO (ADD1 (IDIFFERENCE LASTNO FIRSTNO)))
           (\TEDIT.DELETE TEXTOBJ SEL])
 )
 (DEFINEQ
@@ -1766,11 +1756,13 @@
                 SPLASTCHAR _ (CAR LAST])
 
 (\TEDIT.PARA.FIRST
-  [LAMBDA (TEXTOBJ CHNO)                                     (* ; "Edited 11-Dec-2023 21:52 by rmk")
+  [LAMBDA (TEXTOBJ CHNO PROTECTEDNOTOK)                      (* ; "Edited 26-Dec-2023 09:14 by rmk")
+                                                             (* ; "Edited 24-Dec-2023 22:14 by rmk")
+                                                             (* ; "Edited 11-Dec-2023 21:52 by rmk")
 
-    (* ;; "Returns (FIRSTCHAR . FIRSTPC) of the paragraph containing CHNO.  FIRSTCHAR is the firstcharacter of FIRSTPC. ")
+    (* ;; "Returns (FIRSTCHARNO . FIRSTPIECE) of the paragraph containing CHNO.  FIRSTCHARNO is the firstcharacter of FIRSTPIECE, because paragraphs start on piece boundaries. When PROTECTEDNOTOK, the scan will terminated on a protected piece, even if that isn't the end of the paragraph.")
 
-    (if (ZEROP (TEXTLEN TEXTOBJ))
+    (if (ZEROP (FGETTOBJ TEXTOBJ TEXTLEN))
         then (CONS 0)
       else (LET (CHPIECE START-OF-PIECE START)
                 (DECLARE (SPECVARS START-OF-PIECE))
@@ -1789,26 +1781,28 @@
                 (* ;; 
                 "Start one before CHPIECE, its PARALAST doesn't matter. Assume CHPIECE is visible")
 
-                (for PC (NEXT _ CHPIECE)
-                     (PLENTOT _ 0) backpieces (AND CHPIECE (PREVPIECE CHPIECE))
-                   when (VISIBLEPIECEP PC) until (PPARALAST PC) do (add PLENTOT (PLEN PC))
-                                                                   (SETQ NEXT PC)
-                   finally 
+                (for PC (PLENTOT _ 0) backpieces (AND CHPIECE (PREVPIECE CHPIECE))
+                   when (VISIBLEPIECEP PC) until (PPARALAST PC)
+                   until (AND PROTECTEDNOTOK (fetch (CHARLOOKS CLPROTECTED) of (PLOOKS PC)))
+                   do (add PLENTOT (PLEN PC)) finally 
 
-                         (* ;; "We overshot on PC, NEXT is the winner.")
+                                                    (* ;; 
+                                                    "We overshot on PC, its NEXT is the winner.")
 
-                         (RETURN (CONS (IDIFFERENCE START PLENTOT)
-                                       NEXT])
+                                                    (RETURN (CONS (IDIFFERENCE START PLENTOT)
+                                                                  (AND PC (NEXTPIECE PC])
 
 (\TEDIT.PARA.LAST
-  [LAMBDA (TEXTOBJ CHNO)                                     (* ; "Edited 11-Dec-2023 23:02 by rmk")
+  [LAMBDA (TEXTOBJ CHNO PROTECTEDNOTOK)                      (* ; "Edited 26-Dec-2023 09:14 by rmk")
+                                                             (* ; "Edited 24-Dec-2023 22:16 by rmk")
+                                                             (* ; "Edited 11-Dec-2023 23:02 by rmk")
 
-    (* ;; "Returns the character number of the last character of the paragraph containing CHNO.  If CHNO is SELPIECES or SELECTION, CHNO is taken as its last character.")
+    (* ;; "Returns (LASTCHARNO .LASTPIECE) of the paragraph containing CHNO.  If CHNO is SELPIECES or SELECTION, CHNO is taken as its last character.  LASTCHARNO is the number of the last character of the paragraph (presumably on EOL). It is also the character of LASTPIECE, because pargraphs end on piece boundaries.  When PROTECTEDNOTOK, the scan will terminated on a protected piece, even if that isn't the beginning of the paragraph.")
 
-    (if (ZEROP (TEXTLEN TEXTOBJ))
+    (if (ZEROP (FGETTOBJ TEXTOBJ TEXTLEN))
         then                                                 (* ; "Empty document")
-             0
-      else (LET (CHPIECE START-OF-PIECE END)
+             (CONS 0)
+      else (LET (CHPIECE START-OF-PIECE END FORMATTED)
                 (DECLARE (SPECVARS START-OF-PIECE))
                 (if (type? SELPIECES CHNO)
                     then (SETQ CHPIECE (fetch (SELPIECES SPLAST) of CHNO))
@@ -1827,8 +1821,157 @@
 
                 (for PC (PLENTOT _ 0) inpieces CHPIECE when (VISIBLEPIECEP PC)
                    do (add PLENTOT (PLEN PC)) repeatuntil (PPARALAST PC)
+                   repeatuntil (AND PROTECTEDNOTOK (fetch (CHARLOOKS CLPROTECTED) of (PLOOKS PC)))
                    finally (RETURN (CONS (IPLUS END PLENTOT -1)
                                          PC])
+)
+(DEFINEQ
+
+(\TEDIT.WORD.FIRST
+  [LAMBDA (TEXTOBJ CHNO WORDBOUNDTABLE)                      (* ; "Edited 25-Dec-2023 18:53 by rmk")
+                                                             (* ; "Edited 23-May-2023 16:37 by rmk")
+                                                             (* ; "Edited 22-May-2023 10:52 by rmk")
+                                                             (* ; "Edited 29-May-91 18:22 by jds")
+
+    (* ;; "Returns the number of the first character of the word containing CHNO or of the word preceding CHNO if CHNO does not map to a text character. Unlike the paragraph case, we don't get much help from the pieces, because words are not piece-aligned.  Caller can do the piece manipulation given the result.  ")
+
+    (* ;; "We don't need to worry about invisibles here,\BACKBIN skips them.")
+
+    (* ;; "Image objects are treated as text characters.")
+
+    (* ;; "Punctuation is tricky:  It stops whitespace and text, and its immediate predecessor doesn't matter.")
+
+    (\DTEST TEXTOBJ 'TEXTOBJ)
+    (PROG ((TSTREAM (FGETTOBJ TEXTOBJ STREAMHINT))
+           (READSA (fetch READSA of (OR WORDBOUNDTABLE (FGETTOBJ TEXTOBJ TXTWTBL)
+                                        TEDIT.WORDBOUND.READTABLE)))
+           CH)
+          (CL:WHEN (ILEQ CHNO 1)                             (* ; "Beginning of document")
+              (RETURN 1))
+          (SETQ CHNO (IMIN CHNO (FGETTOBJ TEXTOBJ TEXTLEN)))
+          (\TEXTSETFILEPTR TSTREAM (SUB1 CHNO))              (* ; "Fileptrs are one back")
+          (SETQ CH (BIN TSTREAM))                            (* ; "The char at CHNO")
+          (CL:WHEN (AND (CHARCODEP CH)
+                        (EQ PUNCT.TTC (\SYNCODE READSA CH)))
+
+              (* ;; "Started on a punct, return")
+
+              (RETURN CHNO))
+
+     (* ;; "Skip over any preceding whitespace characters. We don't know when the stream's piece might have changed, so test at each iteration.")
+
+          (for old CHNO from CHNO to 1 by -1 while (AND (CHARCODEP CH)
+                                                        (EQ WHITESPACE.TTC (\SYNCODE READSA CH)))
+             until (fetch CLPROTECTED of (PLOOKS (fetch (TEXTSTREAM PIECE) of TSTREAM)))
+             do (SETQ CH (\BACKBIN TSTREAM)))
+
+     (* ;; "")
+
+     (* ;; "CH is either TEXT, PUNCT, or image object.")
+
+          (CL:WHEN (AND (CHARCODEP CH)
+                        (EQ PUNCT.TTC (\SYNCODE READSA CH)))
+
+              (* ;; "Punct before whitespace, look no further, punct is our guy.")
+
+              (RETURN (ADD1 CHNO)))
+
+     (* ;; "")
+
+     (* ;; "We've reached the first unprotected non-separator character, and CHNO is the number of the character BEFORE that one. Continue backwards through the text characters until reaching the first preceding non-text.")
+
+          (for old CHNO from CHNO to 1 by -1 until [OR (CL:IF (CHARCODEP CH)
+                                                           (NEQ TEXT.TTC (\SYNCODE READSA CH))
+                                                           T)
+                                                       (fetch CLPROTECTED
+                                                          of (PLOOKS (fetch (TEXTSTREAM PIECE)
+                                                                        of TSTREAM]
+             do (SETQ CH (\BACKBIN TSTREAM)))
+          (CL:WHEN (AND (CHARCODEP CH)
+                        (EQ PUNCT.TTC (\SYNCODE READSA CH)))
+
+              (* ;; 
+              "We ended on a punct before some text, CHNO is one before the punct, get back to text")
+
+              (RETURN (IPLUS CHNO 2)))
+
+     (* ;; "We've now reached the first non-text character before the word, and CHNO is the character number of the character BEFORE it, or 0 if you hit the front of the document.  We add 1 for that, plus 1 to convert fileptr to charno.")
+
+          (RETURN (IPLUS CHNO (CL:IF (EQ CHNO 0)
+                                  1
+                                  2)])
+
+(\TEDIT.WORD.LAST
+  [LAMBDA (TEXTOBJ CHNO WORDBOUNDTABLE)                      (* ; "Edited 25-Dec-2023 18:38 by rmk")
+                                                             (* ; "Edited 23-May-2023 16:37 by rmk")
+                                                             (* ; "Edited 22-May-2023 10:52 by rmk")
+                                                             (* ; "Edited 29-May-91 18:22 by jds")
+
+    (* ;; "Returns the number of the last character of the word containing CHNO or of the word following CHNO if CHNO does not map to a text character. Unlike the paragraph case, we don't get much help from the pieces, because words are not piece-aligned.  Caller can do the piece manipulation given the result.  ")
+
+    (* ;; "We don't need to worry about invisibles here,\BIN skips them.")
+
+    (* ;; "Image objects are treated as text characters.")
+
+    (* ;; 
+  "Punctuation is tricky:  It stops whitespace and text, and its immediate successor doesn't matter.")
+
+    (\DTEST TEXTOBJ 'TEXTOBJ)
+    (PROG ((TSTREAM (FGETTOBJ TEXTOBJ STREAMHINT))
+           (READSA (fetch READSA of (OR WORDBOUNDTABLE (FGETTOBJ TEXTOBJ TXTWTBL)
+                                        TEDIT.WORDBOUND.READTABLE)))
+           (TEXTLEN (FGETTOBJ TEXTOBJ TEXTLEN))
+           CH)
+          (CL:WHEN (IGEQ CHNO TEXTLEN)
+                 (RETURN TEXTLEN))
+          (SETQ CHNO (IMAX CHNO 1))
+          (\TEXTSETFILEPTR TSTREAM (SUB1 CHNO))              (* ; "Fileptrs are one back")
+          (SETQ CH (BIN TSTREAM))                            (* ; "The char at CHNO")
+          (CL:WHEN (AND (CHARCODEP CH)
+                        (EQ PUNCT.TTC (\SYNCODE READSA CH)))
+
+              (* ;; "Started on a punct, return")
+
+              (RETURN CHNO))
+
+     (* ;; "Skip over any following separator characters.  Objects are consider  to be text characters--don't skip over them. We don't know when the stream's piece might have changed, so test at each iteration.")
+
+          (for old CHNO from CHNO to (SUB1 TEXTLEN) while (AND (CHARCODEP CH)
+                                                               (EQ WHITESPACE.TTC (\SYNCODE READSA CH
+                                                                                         )))
+             until (fetch CLPROTECTED of (PLOOKS (fetch (TEXTSTREAM PIECE) of TSTREAM)))
+             do (SETQ CH (BIN TSTREAM)))
+
+     (* ;; "CH is either TEXT, PUNCT, or image object.")
+
+          (CL:WHEN (AND (CHARCODEP CH)
+                        (EQ PUNCT.TTC (\SYNCODE READSA CH)))
+
+              (* ;; "Punct after whitespace, look no further, punct is our guy.")
+
+              (RETURN CHNO))
+
+     (* ;; "We reached the last unprotected non-separator character, and CHNO is the number of the character AFTER that one. Continue forwards through the text characters until reaching the first following separator.")
+
+          (for old CHNO from CHNO to (SUB1 TEXTLEN)
+             until [OR (CL:IF (CHARCODEP CH)
+                           (NEQ TEXT.TTC (\SYNCODE READSA CH))
+                           T)
+                       (fetch CLPROTECTED of (PLOOKS (fetch (TEXTSTREAM PIECE) of TSTREAM]
+             do (SETQ CH (BIN TSTREAM)))
+          (CL:WHEN (AND (CHARCODEP CH)
+                        (EQ PUNCT.TTC (\SYNCODE READSA CH)))
+
+              (* ;; 
+              "We ended on a punct after some text, CHNO is one after the punct, get back to text")
+
+              (RETURN (SUB1 CHNO)))
+
+     (* ;; "We've now reached the first separator character after the word, and CHNO is the character number of the character after it, or TEXTLEN if we ran off the end..")
+
+          (RETURN (CL:IF (IGEQ CHNO TEXTLEN)
+                      TEXTLEN
+                      (SUB1 CHNO))])
 )
 
 (MOVD? 'NILL 'OBJECTOUTOFTEDIT)
@@ -2021,7 +2164,7 @@
 (* ; "TEDIT Support information")
 
 
-(RPAQQ TEDITSYSTEMDATE "24-Dec-2023 09:36:05")
+(RPAQQ TEDITSYSTEMDATE "26-Dec-2023 12:29:09")
 
 
 
@@ -2031,25 +2174,27 @@
 (ADDTOVAR PRINTFILETYPES (TEDIT (TEST \TEDIT.FORMATTEDP1)
                                 (EXTENSION (TEDIT))))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4454 6396 (MAKE-TEDIT-EXPORTS.ALL 4464 . 5010) (UPDATE-TEDIT 5012 . 5625) (EDIT-TEDIT 
-5627 . 6394)) (7653 7946 (\CREATE.TEDIT.RESTART.MENU 7663 . 7944)) (8321 35844 (TEDIT 8331 . 10936) (
-COERCETEXTOBJ 10938 . 14772) (TEDITSTRING 14774 . 15512) (TEDIT-SEE 15514 . 16073) (TEDIT.CHARWIDTH 
-16075 . 18099) (TEDIT.COPY 18101 . 18609) (TEDIT.DELETE 18611 . 19584) (TEDIT.INSERT 19586 . 21656) (
-TEDIT.KILL 21658 . 22360) (TEDIT.MAPPIECES 22362 . 23424) (TEDIT.QUIT 23426 . 24994) (
-TEDIT.DO.BLUEPENDINGDELETE 24996 . 25928) (TEDIT.MOVE 25930 . 30522) (TEDIT.STRINGWIDTH 30524 . 31195)
- (TEXTOBJ 31197 . 33505) (TEDITMENUP 33507 . 34145) (TEXTSTREAM 34147 . 35842)) (35845 38037 (
-\TEDIT.MOVE.MSG 35855 . 37733) (\TEDIT.READONLY 37735 . 38035)) (38038 45317 (TEDIT.NCHARS 38048 . 
-38231) (TEDIT.RPLCHARCODE 38233 . 41554) (TEDIT.NTHCHARCODE 41556 . 42398) (\TEDIT.PIECE.NTHCHARCODE 
-42400 . 45315)) (45363 87499 (\TEDIT1 45373 . 47232) (\TEDIT.INSERT 47234 . 52513) (
-\TEDIT.REPLACE.SELPIECES 52515 . 54056) (\TEDIT.INSERT.SELPIECES 54058 . 55737) (\TEDIT.OBJECT.SHOWSEL
- 55739 . 59803) (\TEDIT.RESTARTFN 59805 . 61943) (\TEDIT.CHARDELETE 61945 . 63943) (
-\TEDIT.CHARDELETE.FORWARD 63945 . 65457) (\TEDIT.COPYPIECE 65459 . 70197) (\TEDIT.APPLY.OBJFN 70199 . 
-73272) (\TEDIT.DELETE 73274 . 75586) (\TEDIT.DIFFUSE.PARALOOKS 75588 . 77986) (\TEDIT.FOREIGN.COPY? 
-77988 . 81874) (\TEDIT.QUIT 81876 . 84311) (\TEDIT.WORDDELETE 84313 . 87497)) (87500 101397 (
-\SELPIECES.COPY 87510 . 89383) (\SELPIECES.CONCAT 89385 . 91454) (\SELPIECES.CHARTRANSFORM 91456 . 
-94688) (\SELPIECES.FROM.STRING 94690 . 99349) (\SELPIECES.TO.STRING 99351 . 101395)) (101398 106664 (
-\TEDIT.PARAPIECES 101408 . 103056) (\TEDIT.PARA.FIRST 103058 . 104878) (\TEDIT.PARA.LAST 104880 . 
-106662)) (106818 116285 (TEDIT.INSERT.OBJECT 106828 . 109882) (TEDIT.EDIT.OBJECT 109884 . 111923) (
-TEDIT.FIND.OBJECT 111925 . 112332) (TEDIT.OBJECT.CHANGED 112334 . 114301) (TEDIT.MAP.OBJECTS 114303 . 
-115135) (TEDIT.COLLECT.OBJECTS 115137 . 115897) (TEDIT.COLLECT.OBJECT.GETFNS 115899 . 116283)))))
+  (FILEMAP (NIL (4499 6441 (MAKE-TEDIT-EXPORTS.ALL 4509 . 5055) (UPDATE-TEDIT 5057 . 5670) (EDIT-TEDIT 
+5672 . 6439)) (7698 7991 (\CREATE.TEDIT.RESTART.MENU 7708 . 7989)) (8366 36048 (TEDIT 8376 . 10981) (
+COERCETEXTOBJ 10983 . 14976) (TEDITSTRING 14978 . 15716) (TEDIT-SEE 15718 . 16277) (TEDIT.CHARWIDTH 
+16279 . 18303) (TEDIT.COPY 18305 . 18813) (TEDIT.DELETE 18815 . 19788) (TEDIT.INSERT 19790 . 21860) (
+TEDIT.KILL 21862 . 22564) (TEDIT.MAPPIECES 22566 . 23628) (TEDIT.QUIT 23630 . 25198) (
+TEDIT.DO.BLUEPENDINGDELETE 25200 . 26132) (TEDIT.MOVE 26134 . 30726) (TEDIT.STRINGWIDTH 30728 . 31399)
+ (TEXTOBJ 31401 . 33709) (TEDITMENUP 33711 . 34349) (TEXTSTREAM 34351 . 36046)) (36049 38241 (
+\TEDIT.MOVE.MSG 36059 . 37937) (\TEDIT.READONLY 37939 . 38239)) (38242 45521 (TEDIT.NCHARS 38252 . 
+38435) (TEDIT.RPLCHARCODE 38437 . 41758) (TEDIT.NTHCHARCODE 41760 . 42602) (\TEDIT.PIECE.NTHCHARCODE 
+42604 . 45519)) (45567 87058 (\TEDIT1 45577 . 47436) (\TEDIT.INSERT 47438 . 52717) (
+\TEDIT.REPLACE.SELPIECES 52719 . 54260) (\TEDIT.INSERT.SELPIECES 54262 . 55941) (\TEDIT.OBJECT.SHOWSEL
+ 55943 . 60007) (\TEDIT.RESTARTFN 60009 . 62147) (\TEDIT.CHARDELETE 62149 . 64147) (
+\TEDIT.CHARDELETE.FORWARD 64149 . 65661) (\TEDIT.COPYPIECE 65663 . 70401) (\TEDIT.APPLY.OBJFN 70403 . 
+73476) (\TEDIT.DELETE 73478 . 75790) (\TEDIT.DIFFUSE.PARALOOKS 75792 . 78190) (\TEDIT.FOREIGN.COPY? 
+78192 . 82078) (\TEDIT.QUIT 82080 . 84515) (\TEDIT.WORDDELETE 84517 . 85790) (
+\TEDIT.WORDDELETE.FORWARD 85792 . 87056)) (87059 100956 (\SELPIECES.COPY 87069 . 88942) (
+\SELPIECES.CONCAT 88944 . 91013) (\SELPIECES.CHARTRANSFORM 91015 . 94247) (\SELPIECES.FROM.STRING 
+94249 . 98908) (\SELPIECES.TO.STRING 98910 . 100954)) (100957 107386 (\TEDIT.PARAPIECES 100967 . 
+102615) (\TEDIT.PARA.FIRST 102617 . 104976) (\TEDIT.PARA.LAST 104978 . 107384)) (107387 115475 (
+\TEDIT.WORD.FIRST 107397 . 111541) (\TEDIT.WORD.LAST 111543 . 115473)) (115629 125096 (
+TEDIT.INSERT.OBJECT 115639 . 118693) (TEDIT.EDIT.OBJECT 118695 . 120734) (TEDIT.FIND.OBJECT 120736 . 
+121143) (TEDIT.OBJECT.CHANGED 121145 . 123112) (TEDIT.MAP.OBJECTS 123114 . 123946) (
+TEDIT.COLLECT.OBJECTS 123948 . 124708) (TEDIT.COLLECT.OBJECT.GETFNS 124710 . 125094)))))
 STOP

@@ -1,43 +1,41 @@
 # Medley 
 
-This repository is for the Lisp environment of [Medley Interlisp](https://Interlisp.org).
+This repository is for the Lisp environment of [Medley](https://interlisp.org).
 
-See the [Documentation links](https://github.com/Interlisp/medley/wiki/Documentation) for an overview and pointers to documentation.
-In particular [Running](https://github.com/Interlisp/medley/wiki/Running) explains other methods of getting Medley Interlisp.
+[Install and Run](https://interlisp.org/software/install-and-run) covers ways to install and start up Medley on Linux systems, MacOS, and Windows (with or without WSL).
 
-[Interlisp/maiko](https://github.com/Interlisp/maiko), is the repo for the implementation (in C) of the Medley virtual machine.
+[Using Medley](https://interlisp.org/software/using-medley/) has an overview and pointers to documentation.
 
-## Using releases
+[Interlisp/maiko](https://github.com/Interlisp/maiko), is the repo for the implementation (in C) of the Medley virtual machine. 
 
-There currently are separate releases of medley and maiko; get the latest version of each.
+## Releases
 
-### Getting releases
+While there are installers for popular platforms, this section may be useful in some circumstances.
 
-Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the .tgz file corresponding to your operating system and processor (for Windows with WSL or Intel Linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for M1.)
+### Getting releases 
 
-Or, build your own maiko (the binaries `lde` `ldex` and `ldeinit`) We can build for other OS arch pairs depending on what is available for GitHub actions.
+Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the .tgz file corresponding to your operating system and processor. For Windows with WSL or Intel Linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for Mac silicon. Windows without WSL uses `cygwin` instead.
 
-The medley release comes in two parts, found [here](https://github.com/Interlisp/medley/releases)
-1. The "loadups" (download `medley-`YYMMDD`-loadups.tgz`)
-2. The "runtime" (download `medley-`YYMMDD`-runtime.tgz`)
+Or, build your own maiko (the binaries `lde` `ldex` OR `ldesdl` and `ldeinit`).
+You can also build for other architectures
 
-You don't need the "runtime" if you've cloned this (medley) repo, but you'll still need the "loadups" release.
+The medley release image and sources come in two parts, found [here](https://github.com/Interlisp/medley/releases)
+1. The "loadups" (download `medley-`YYMMDD-XXXXX-`loadups.tgz`)
+2. The "runtime" (download `medley-`YYMMDD-XXXXX`-runtime.tgz`)
 
-If you happen to have the 'gh' GitHub command line installed you can download both using
-```
-   gh release download -R Interlisp/medley -p "*"
-```
-but otherwise just click on the link(s) below to the parts you need.
+where YYMMDD is the date and XXXXX is the GitHub commit ID.
+
+The "runtime" isn't needed if you've cloned the (medley) repo--you have all the files. The "runtime" has extra fonts, unicode tables, and source code that aren't part of the loadups but may be called on.
 
 ### Unpacking releases
 
 From a shell/terminal window:
 
-1. Choose where you want to install medley and maiko.
-Unpack the medley loadups file
+1. Choose a directory ~parent~ where you want to install medley and maiko. 
+2. Unpack the medley loadups file
 
-*  `cd ` ~parent~
-*  `tar xvzf medley-`YYMMDD`-loadups.tgz`
+  `cd ` ~parent~
+  `tar xvzf medley-`YYMMDD-XXXXX`-loadups.tgz`
 
 2. Unpack the medley runtime OR clone the Medley repo
    (the "medley runtime" is just a subset of the whole repo)
@@ -59,15 +57,17 @@ Unpack the medley loadups file
 
 ### Setting up X
 
-Medley Interlisp currently needs an X-Server to manage its display. Most Linux desktops have one. Windows 11 with WSL includes an X-Server. For Windows 10 with WSL2, there are a number of open-source X servers; for example vcxsrv.
+In many configurations, Medley uses an X-Server to manage its display. Most Linux desktops have one. Windows 11 with WSL includes an X-Server. For Windows 10 with WSL2, there are a number of open-source X servers; for example vcxsrv.
 
 Mac users should get [XQuartz from XQuartz.org](https://xquartz.org/releases).
 
 Medley manages the display entirely, doesn't use X fonts and manages it's own window system.
 
-If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.) It also presumes you have a 3-button mouse; the scroll-wheel on some mice act as one with some difficulty.) XQuartz Preferences/Input has "Emulate three button mouse" option.
+If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.)
 
-### Running Medley Interlisp
+Medley presumes you have a 3-button mouse; the scroll-wheel on some mice act as one with some difficulty.) Go  into XQuartz Preferences/Input and check "Emulate three button mouse" option.
+
+### Running Medley Interlisp (obsolete)
 
 The `run-medley` script in this repo sets up some convenient defaults. Running Medley can be done by typing:
 ```

@@ -20,10 +20,10 @@ Or, build your own maiko (the binaries `lde`, `ldex` OR `ldesdl`, and `ldeinit`)
 You can also build for other architectures
 
 The medley release image and sources come in two parts, found [here](https://github.com/Interlisp/medley/releases)
-1. The "loadups" (download `medley-`YYMMDD-XXXXX-`loadups.tgz`)
-2. The "runtime" (download `medley-`YYMMDD-XXXXX`-runtime.tgz`)
+1. The "loadups" (download `medley-`_YYMMDD-XXXXX_`-loadups.tgz`)
+2. The "runtime" (download `medley-`_YYMMDD-XXXXX_`-runtime.tgz`)
 
-where YYMMDD is the date and XXXXX is the GitHub commit ID.
+where _YYMMDD_ is the date and _XXXXX_ is the GitHub commit ID.
 
 The "runtime" isn't needed if you've cloned the (medley) repo--you have all the files. The "runtime" has extra fonts, unicode tables, and source code that aren't part of the loadups but may be called on.
 
@@ -31,13 +31,13 @@ The "runtime" isn't needed if you've cloned the (medley) repo--you have all the 
 
 From a shell/terminal window:
 
-1. Choose a directory ~parent~ where you want to install medley and maiko. 
+1. Choose a directory _parent_ where you want to install medley and maiko. 
 2. Unpack the medley loadups file
 
-  `cd ` ~parent~
-  `tar xvzf medley-`YYMMDD-XXXXX`-loadups.tgz`
+* `cd ` _parent_
+* `tar xvzf medley-`_YYMMDD-XXXXX_`-loadups.tgz`
 
-2. Unpack the medley runtime OR clone the Medley repo
+3. Unpack the medley runtime OR clone the Medley repo
    (the "medley runtime" is just a subset of the whole repo)
    
 * `tar xvzf medley-`YYMMDD`-runtime.tgz` 
@@ -47,13 +47,13 @@ From a shell/terminal window:
    git clone https://github.com/Interlisp/medley
    ```
    
-3. Unpack the maiko file for your operating system and CPU type, e.g.,
+4. Unpack the maiko file for your operating system and CPU type, e.g.,
 
    ```
    tar xvzf maiko-210823.linux.x86_64.tgz
    ```
 
-3. This should leave you with two directories, `medley` and `maiko`.
+5. This should leave you with two directories, `medley` and `maiko`.
 
 ### Setting up X
 

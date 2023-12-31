@@ -16,7 +16,7 @@ While there are installers for popular platforms, this section may be useful in 
 
 Get the Maiko release [here](https://github.com/Interlisp/maiko/releases). You'll need the .tgz file corresponding to your operating system and processor. For Windows with WSL or Intel Linux, use `linux.x86_64`; for Macs use `darwin.x86_64` for Intel and `darwin.aarch64` for Mac silicon. Windows without WSL uses `cygwin` instead.
 
-Or, build your own maiko (the binaries `lde` `ldex` OR `ldesdl` and `ldeinit`).
+Or, build your own maiko (the binaries `lde`, `ldex` OR `ldesdl`, and `ldeinit`).
 You can also build for other architectures
 
 The medley release image and sources come in two parts, found [here](https://github.com/Interlisp/medley/releases)
@@ -63,9 +63,9 @@ Mac users should get [XQuartz from XQuartz.org](https://xquartz.org/releases).
 
 Medley manages the display entirely, doesn't use X fonts and manages it's own window system.
 
-If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.)
+If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doubling" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.)
 
-Medley presumes you have a 3-button mouse; the scroll-wheel on some mice acts as one, with some difficulty. Go  into XQuartz Preferences/Input and check "Emulate three button mouse" option.
+Medley presumes you have a 3-button mouse; the scroll-wheel on some mice acts as one, with some difficulty. Go into XQuartz Preferences/Input and check "Emulate three button mouse" option.
 
 ### Running Medley Interlisp (obsolete)
 
@@ -122,9 +122,8 @@ Each directory should have a README.md, but briefly
 
 * BUILDING.md -- instructions on how to make your own loadups
 * clos -- early implementation of Common Lisp Object System
-* CLTL2 -- files submitted to bring Medley up to the conformance to "Common Lisp, the Language" 2nd edition. Not enough to conform to the ANSII standard lisp.
-* Dockerfile -- used when building Docker containers with Medley
-* docs -- Documentation files (in TEdit format PDFs or online help; look [here](https://github.com/Interlisp/medley/Documentation)
+* CLTL2 -- files submitted to bring Medley up to the conformance to "Common Lisp, the Language" 2nd edition. Not enough to conform to the ANSI standard lisp.
+* docs -- Documentation files (in TEdit format, PDFs, or online help; look [here](https://github.com/Interlisp/medley/Documentation))
 * fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
 * greetfiles -- various configuration setups
 * internal -- These _were_ internal to Venue
@@ -134,11 +133,6 @@ Each directory should have a README.md, but briefly
 * obsolete  -- files we should remove from the repo
 * rooms -- implementation of ROOMS window/desktop manager
 * run-medley -- script to enhance the options of running medley
-* scripts  -- some scripts for fixing up things
+* scripts  -- some scripts for fixing up things, building and running medley
 * sources   -- sources for Interlisp and Common Lisp implementations
 * unicode  -- data files for support of XCCS to and from Unicode mappings
-
-plus
-   Dockerfile, and scripts for building and running medley
-   tmp directory for use during build processes
-

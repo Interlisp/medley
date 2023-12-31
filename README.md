@@ -65,7 +65,7 @@ Medley manages the display entirely, doesn't use X fonts and manages it's own wi
 
 If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.)
 
-Medley presumes you have a 3-button mouse; the scroll-wheel on some mice act as one with some difficulty.) Go  into XQuartz Preferences/Input and check "Emulate three button mouse" option.
+Medley presumes you have a 3-button mouse; the scroll-wheel on some mice acts as one, with some difficulty. Go  into XQuartz Preferences/Input and check "Emulate three button mouse" option.
 
 ### Running Medley Interlisp (obsolete)
 
@@ -112,7 +112,8 @@ you can continue right where you left off.
 File Names and Extensions: Most Interlisp source file names are
 UPPERCASE and Interlisp didn't use file extensions for its source
 files. A .TEDIT or .TXT file is probably documentation
-for the package of same name, at least in the library, lispusers.
+for the package of the same name, at least in the library and lispusers
+directories.
 
 The current repo has both Lisp sources and compiled .LCOM and .DFASL
 files.

@@ -31,13 +31,13 @@ The "runtime" isn't needed if you've cloned the (medley) repo--you have all the 
 
 From a shell/terminal window:
 
-1. Choose a directory ~parent~ where you want to install medley and maiko. 
+1. Choose a directory _parent_ where you want to install medley and maiko. 
 2. Unpack the medley loadups file
 
-  `cd ` ~parent~
-  `tar xvzf medley-`YYMMDD-XXXXX`-loadups.tgz`
+* `cd ` _parent_
+* `tar xvzf medley-`_YYMMDD-XXXXX_`-loadups.tgz`
 
-2. Unpack the medley runtime OR clone the Medley repo
+3. Unpack the medley runtime OR clone the Medley repo
    (the "medley runtime" is just a subset of the whole repo)
    
 * `tar xvzf medley-`YYMMDD`-runtime.tgz` 
@@ -47,13 +47,13 @@ From a shell/terminal window:
    git clone https://github.com/Interlisp/medley
    ```
    
-3. Unpack the maiko file for your operating system and CPU type, e.g.,
+4. Unpack the maiko file for your operating system and CPU type, e.g.,
 
    ```
    tar xvzf maiko-210823.linux.x86_64.tgz
    ```
 
-3. This should leave you with two directories, `medley` and `maiko`.
+5. This should leave you with two directories, `medley` and `maiko`.
 
 ### Setting up X
 
@@ -63,9 +63,9 @@ Mac users should get [XQuartz from XQuartz.org](https://xquartz.org/releases).
 
 Medley manages the display entirely, doesn't use X fonts and manages it's own window system.
 
-If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doublilng" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.)
+If you have a high-resolution display, note that much of the graphics was designed for a low-resolution display, so an X-server that does "pixel doubling" is best. (E.g., Raspberry Pi does pixel doubling on 4K displays.)
 
-Medley presumes you have a 3-button mouse; the scroll-wheel on some mice act as one with some difficulty.) Go  into XQuartz Preferences/Input and check "Emulate three button mouse" option.
+Medley presumes you have a 3-button mouse; the scroll-wheel on some mice acts as one, with some difficulty. Go into XQuartz Preferences/Input and check "Emulate three button mouse" option.
 
 ### Running Medley Interlisp (obsolete)
 
@@ -112,7 +112,8 @@ you can continue right where you left off.
 File Names and Extensions: Most Interlisp source file names are
 UPPERCASE and Interlisp didn't use file extensions for its source
 files. A .TEDIT or .TXT file is probably documentation
-for the package of same name, at least in the library, lispusers.
+for the package of the same name, at least in the library and lispusers
+directories.
 
 The current repo has both Lisp sources and compiled .LCOM and .DFASL
 files.
@@ -121,9 +122,8 @@ Each directory should have a README.md, but briefly
 
 * BUILDING.md -- instructions on how to make your own loadups
 * clos -- early implementation of Common Lisp Object System
-* CLTL2 -- files submitted to bring Medley up to the conformance to "Common Lisp, the Language" 2nd edition. Not enough to conform to the ANSII standard lisp.
-* Dockerfile -- used when building Docker containers with Medley
-* docs -- Documentation files (in TEdit format PDFs or online help; look [here](https://github.com/Interlisp/medley/Documentation)
+* CLTL2 -- files submitted to bring Medley up to the conformance to "Common Lisp, the Language" 2nd edition. Not enough to conform to the ANSI standard lisp.
+* docs -- Documentation files (in TEdit format, PDFs, or online help; look [here](https://github.com/Interlisp/medley/Documentation))
 * fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
 * greetfiles -- various configuration setups
 * internal -- These _were_ internal to Venue
@@ -133,11 +133,6 @@ Each directory should have a README.md, but briefly
 * obsolete  -- files we should remove from the repo
 * rooms -- implementation of ROOMS window/desktop manager
 * run-medley -- script to enhance the options of running medley
-* scripts  -- some scripts for fixing up things
+* scripts  -- some scripts for fixing up things, building and running medley
 * sources   -- sources for Interlisp and Common Lisp implementations
 * unicode  -- data files for support of XCCS to and from Unicode mappings
-
-plus
-   Dockerfile, and scripts for building and running medley
-   tmp directory for use during build processes
-

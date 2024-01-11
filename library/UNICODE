@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 8-Dec-2023 15:19:20" {WMEDLEY}<library>UNICODE.;200 65510  
+(FILECREATED " 8-Jan-2024 10:58:06" {WMEDLEY}<library>UNICODE.;212 72240  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS MAKE-UNICODE-FORMATS)
+      :CHANGES-TO (FNS NUTF8CODEBYTES)
 
-      :PREVIOUS-DATE "19-Jul-2023 09:26:13" {WMEDLEY}<library>UNICODE.;199)
+      :PREVIOUS-DATE " 5-Jan-2024 17:25:29" {WMEDLEY}<library>UNICODE.;211)
 
 
 (PRETTYCOMPRINT UNICODECOMS)
@@ -23,7 +23,7 @@
               (ADDVARS (*DEFAULT-EXTERNALFORMATS* (UNIX :UTF-8)))
               (FNS UNICODE.UNMAPPED)
               (FNS XCCS-UTF8-AFTER-OPEN)
-              (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS UNICODE.TRANSLATE))
+              (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS UNICODE.TRANSLATE \UTF8.GETBASEBYTE))
               (FNS XTOUCODE UTOXCODE))
         (COMS 
               (* ;; "Unicode mapping files")
@@ -45,8 +45,10 @@
               (* ;; "Set up translation tables for UTF8 and UTFBE external formats")
 
               (FNS MAKE-UNICODE-TRANSLATION-TABLES)
-              [INITVARS (DEFAULT-XCCS-CHARSETS '(LATIN SYMBOLS1 SYMBOLS2 EXTENDED-LATIN FORMS 
-                                                       SYMBOLS3 SYMBOLS4 ACCENTED-LATIN GREEK]
+              [INITVARS (DEFAULT-XCCS-CHARSETS '(LATIN JAPANESE-SYMBOLS1 JAPANESE-SYMBOLS2 
+                                                       EXTENDED-LATIN FORMS SYMBOLS1 SYMBOLS2 
+                                                       ACCENTED-LATIN1 GREEK))
+                     (DEFAULT-XCCS-JAPANESE-CHARSETS '(HIRAGANA KATAKANA JIS]
               [DECLARE%: DONTEVAL@LOAD DOCOPY (P (MAKE-UNICODE-TRANSLATION-TABLES (
                                                                                  READ-UNICODE-MAPPING
                                                                                    
@@ -55,7 +57,9 @@
                                                         '*XCCSTOUNICODE*
                                                         '*UNICODETOXCCS*]
               (GLOBALVARS *XCCSTOUNICODE* *UNICODETOXCCS*))
-        (FNS HEXSTRING UTF8HEXSTRING NUTF8CODEBYTES NUTF8STRINGBYTES XTOUSTRING XCCSSTRING)
+        (FNS UTF-8.VALIDATE HEXSTRING UTF8HEXSTRING NUTF8CODEBYTES NUTF8STRINGBYTES XTOUSTRING 
+             XCCSSTRING)
+        (FNS \UTF8.FETCHCODE)
         (FNS SHOWCHARS)
         (DECLARE%: EVAL@COMPILE DONTCOPY (FILES (FROM LOADUPS)
                                                 EXPORTS.ALL)
@@ -470,15 +474,17 @@
 (DEFINEQ
 
 (XCCS-UTF8-AFTER-OPEN
-  [LAMBDA (STREAM ACCESS PARAMETERS)                    (* ; "Edited 13-Aug-2020 11:54 by rmk:")
+  [LAMBDA (STREAM ACCESS PARAMETERS)                         (* ; "Edited  3-Jan-2024 10:27 by rmk")
+                                                            (* ; "Edited 13-Aug-2020 11:54 by rmk:")
 
-    (* ;; "If added to STREAM-AFTER-OPEN-FNS, causes mapping files to be opened as UTF8.")
+    (* ;; 
+    "If added to STREAM-AFTER-OPEN-FNS, causes mapping files to be opened as UTF-8. For development")
 
     (CL:WHEN (AND (STRPOS "XCCS-" (U-CASE (FULLNAME STREAM)))
                   [EQ 'TXT (U-CASE (FILENAMEFIELD (FULLNAME STREAM)
                                           'EXTENSION]
                   (NOT (ASSOC 'EXTERNALFORMAT PARAMETERS)))
-        (STREAMPROP STREAM 'EXTERNALFORMAT :UTF8))])
+        (STREAMPROP STREAM 'EXTERNALFORMAT :UTF-8))])
 )
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (DECLARE%: EVAL@COMPILE 
@@ -493,6 +499,15 @@
                                                  CODE))
                                             [(AND X (CL:SVREF X (LOGAND CODE TRANSLATION-MASK]
                                             (T (UNICODE.UNMAPPED CODE TRANSLATION-TABLE])
+
+(PUTPROPS \UTF8.GETBASEBYTE MACRO ((BASE OFFSET ERROR?)      (* ; 
+                        "Fetches the OFFSET'th byte from BASE, checking for UTF-8 validity if ERROR?")
+                                   (IF ERROR?
+                                       THEN (LET ((BYTE (\GETBASEBYTE BASE OFFSET)))
+                                                 (CL:WHEN (ILESSP BYTE 128)
+                                                        (ERROR "INVALID UTF8 BYTE" BYTE))
+                                                 BYTE)
+                                     ELSE (\GETBASEBYTE BASE OFFSET))))
 )
 )
 (DEFINEQ
@@ -513,24 +528,40 @@
 (DEFINEQ
 
 (READ-UNICODE-MAPPING-FILENAMES
-  [LAMBDA (FILESPEC)                                  (* ; "Edited  5-Aug-2020 15:59 by kaplan")
+  [LAMBDA (FILESPEC DIRS)                                    (* ; "Edited  5-Jan-2024 17:24 by rmk")
+                                                          (* ; "Edited  5-Aug-2020 15:59 by kaplan")
                                                             (* ; "Edited  4-Aug-2020 17:31 by rmk:")
-    (FOR F X CSI INSIDE FILESPEC
-       COLLECT (IF (FINDFILE (PACKFILENAME 'BODY F 'EXTENSION 'TXT)
-                                  T UNICODEDIRECTORIES)
-                     ELSEIF [SETQ CSI (OR (SASSOC F XCCS-SET-NAMES)
-                                              (FIND N IN XCCS-SET-NAMES
-                                                 SUCHTHAT (EQ F (CADR N]
-                       THEN (FINDFILE (PACKFILENAME 'BODY (CONCAT 'XCCS- (CAR CSI)
-                                                                     '=
-                                                                     (CADR CSI))
-                                                 'EXTENSION
-                                                 'TXT)
-                                       T UNICODEDIRECTORIES)
-                     ELSE F])
+    (CL:UNLESS DIRS (SETQ DIRS UNICODEDIRECTORIES))
+    (FOR F X CSI INSIDE FILESPEC JOIN 
+                                      (* ;; 
+            "Last case hopes to pick up tables that are gruped together in a subdirectory (e.g. JIS)")
+
+                                      (OR (FINDFILE (PACKFILENAME 'BODY F 'EXTENSION 'TXT)
+                                                 T DIRS)
+                                          (for D inside DIRS
+                                             when (SETQ D (FILDIR (PACKFILENAME 'NAME
+                                                                         (CONCAT "XCCS-*=" F)
+                                                                         'EXTENSION
+                                                                         'TXT
+                                                                         'BODY D)))
+                                             do (RETURN D))
+                                          (AND [SETQ CSI (OR (SASSOC F XCCS-SET-NAMES)
+                                                             (FIND N IN XCCS-SET-NAMES
+                                                                SUCHTHAT (EQ F (CADR N]
+                                               (MKLIST (FINDFILE (PACKFILENAME 'BODY
+                                                                        (CONCAT 'XCCS- (CAR CSI)
+                                                                               '=
+                                                                               (CADR CSI))
+                                                                        'EXTENSION
+                                                                        'TXT)
+                                                              T DIRS)))
+                                          (for D inside DIRS
+                                             when (DIRECTORYNAMEP (SETQ D (CONCAT D ">" F ">")))
+                                             join (FILDIR (CONCAT D ">*.TXT;*"])
 
 (READ-UNICODE-MAPPING
-  [LAMBDA (FILESPEC NOPRINT NOERROR)                    (* ; "Edited  3-Jul-2021 13:37 by rmk:")
+  [LAMBDA (FILESPEC NOPRINT NOERROR)                         (* ; "Edited  5-Jan-2024 12:26 by rmk")
+                                                            (* ; "Edited  3-Jul-2021 13:37 by rmk:")
 
     (* ;; "Combines the char-mapping tables from FILES coded in the Uncode-CDROM format.  Comments prefixed by # and")
 
@@ -540,8 +571,7 @@
 
     (* ;; "                                            0xXXXX  ... 0xYYYY")
 
-    (* ;; 
-  "               Column 3:  (after #) Character name in some mapping files, utf-8 character")
+    (* ;; "               Column 3:  (after #) Character name in some mapping files, utf-8 character")
 
     (* ;; "                                     for XCCS mapping files")
 
@@ -549,37 +579,34 @@
 
     (* ;; "Result is a list of (fromcode tocode1 ... tocoden) integer lists (almost always with only a single tocode")
 
-    (FOR FILE [SEPBITTABLE _ (MAKEBITTABLE (CHARCODE (TAB SPACE] IN (
-                                                                     READ-UNICODE-MAPPING-FILENAMES
-                                                                             FILESPEC)
+    (FOR FILE [SEPBITTABLE _ (MAKEBITTABLE (CHARCODE (TAB SPACE] IN (READ-UNICODE-MAPPING-FILENAMES
+                                                                     FILESPEC)
        JOIN (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :INPUT :EXTERNAL-FORMAT :UTF-8-RAW)
-                       (BIND LINE START FIRST (CL:UNLESS 
-                                                          (FILEPOS "Name:" STREAM NIL NIL NIL T)
-                                                          (ERROR "NOT A UNICODE MAPPING FILE"
-                                                                 (FULLNAME STREAM)))
-                                                  (SETQ LINE (CL:READ-LINE STREAM NIL NIL))
-                                                  (CL:UNLESS NOPRINT
-                                                      (PRINTOUT T T "Unicode mapping:  "
-                                                             (CL:STRING-TRIM " " LINE)
-                                                             T)) WHILE (SETQ LINE
-                                                                            (CL:READ-LINE STREAM NIL
-                                                                                   NIL))
-                          WHEN (SETQ START (STRPOSL SEPBITTABLE LINE 1 T))
-                          UNLESS (EQ (CHARCODE %#)
-                                         (NTHCHARCODE LINE START))
-                          COLLECT (BIND END WHILE [SETQ END (OR (STRPOSL SEPBITTABLE LINE
-                                                                                   START)
-                                                                            (ADD1 (NCHARS LINE]
-                                         COLLECT [CHARCODE.DECODE (SUBSTRING LINE START
-                                                                             (SUB1 END)
-                                                                             (CONSTANT (CONCAT]
-                                         REPEATWHILE (AND (SETQ START (STRPOSL SEPBITTABLE LINE 
-                                                                                 END T))
-                                                              (NEQ (CHARCODE %#)
-                                                                   (NTHCHARCODE LINE START])
+                   (BIND LINE NAME CHARSET START
+                      FIRST (CL:UNLESS (FILEPOS "Name:" STREAM NIL NIL NIL T)
+                                (ERROR "NOT A UNICODE MAPPING FILE" (FULLNAME STREAM)))
+                            (SETQ NAME (CL:STRING-TRIM " " (CL:READ-LINE STREAM NIL NIL)))
+                            (SETQ CHARSET (CL:IF (FILEPOS "XCCS charset:" STREAM NIL NIL NIL T)
+                                              (CL:STRING-TRIM " " (CL:READ-LINE STREAM NIL NIL))
+                                              ""))
+                            (CL:UNLESS NOPRINT               (* ; "Strip off XCCS in front of name")
+                                (PRINTOUT T T CHARSET " " [SUBSTRING NAME (CONSTANT
+                                                                           (ADD1 (NCHARS "XCCS"]
+                                       T)) WHILE (SETQ LINE (CL:READ-LINE STREAM NIL NIL))
+                      WHEN (SETQ START (STRPOSL SEPBITTABLE LINE 1 T))
+                      UNLESS (EQ (CHARCODE %#)
+                                 (NTHCHARCODE LINE START))
+                      COLLECT (BIND END WHILE [SETQ END (OR (STRPOSL SEPBITTABLE LINE START)
+                                                            (ADD1 (NCHARS LINE]
+                                 COLLECT [CHARCODE.DECODE (SUBSTRING LINE START (SUB1 END)
+                                                                 (CONSTANT (CONCAT]
+                                 REPEATWHILE (AND (SETQ START (STRPOSL SEPBITTABLE LINE END T))
+                                                  (NEQ (CHARCODE %#)
+                                                       (NTHCHARCODE LINE START])
 
 (WRITE-UNICODE-MAPPING
-  [LAMBDA (MAPPING INCLUDECHARSETS FILE EMPTYOK)        (* ; "Edited 16-Aug-2020 16:56 by rmk:")
+  [LAMBDA (MAPPING INCLUDECHARSETS FILE EMPTYOK)             (* ; "Edited  4-Jan-2024 22:44 by rmk")
+                                                            (* ; "Edited 16-Aug-2020 16:56 by rmk:")
 
     (* ;; "Writes a symbol unicode mapping file.  Mapping is a list of (XCCS-code Unicode) pairs, which may contain codes in multiple character sets.")
 
@@ -588,21 +615,18 @@
     (* ;; "The output lines are of the form x0XXX<tab>x0UUUU<tab>#  Unicode-char")
 
     (* ;; 
-  "If INCLUDECHARSETS=T then the mappings are split up into separate per-character set files.")
+    "If INCLUDECHARSETS=T then the mappings are split up into separate per-character set files.")
 
     (* ;; "Otherwise, all and only mappings included in thos charsets are included in a single output file--an implicit subset.")
 
     (IF (AND (EQ INCLUDECHARSETS T)
-                 (NULL FILE))
+             (NULL FILE))
         THEN (IF MAPPING
-                     THEN (FOR CSI F IN XCCS-SET-NAMES WHEN (SETQ F
-                                                                             (WRITE-UNICODE-MAPPING
-                                                                              MAPPING
-                                                                              (CAR CSI)
-                                                                              NIL T)) COLLECT
-                                                                                      F)
-                   ELSE (PRINTOUT T "THERE ARE NO MAPPINGS" T)
-                         NIL)
+                 THEN (FOR CSI F IN XCCS-SET-NAMES WHEN (SETQ F (WRITE-UNICODE-MAPPING MAPPING
+                                                                       (CAR CSI)
+                                                                       NIL T)) COLLECT F)
+               ELSE (PRINTOUT T "THERE ARE NO MAPPINGS" T)
+                    NIL)
       ELSE
       (LET
        (IMAPPING CSETINFO RANGES)
@@ -610,47 +634,45 @@
               (WRITE-UNICODE-INCLUDED MAPPING INCLUDECHARSETS))
        (IF IMAPPING
            THEN (CL:WITH-OPEN-FILE
-                     (STREAM (WRITE-UNICODE-MAPPING-FILENAME FILE CSETINFO RANGES)
-                            :DIRECTION :OUTPUT :IF-EXISTS :NEW-VERSION :EXTERNAL-FORMAT :UTF8-RAW)
-                     (WRITE-UNICODE-MAPPING-HEADER STREAM CSETINFO RANGES)
-                     (SORT IMAPPING T)
-                     (FOR M CSET LEFTC FIRSTRIGHTC CSI IN IMAPPING
-                        DO (SETQ LEFTC (CAR M))
-                              (SETQ FIRSTRIGHTC (CADR M))
-                              (CL:UNLESS (EQ CSET (LRSH LEFTC 8))
-                                  (SETQ CSET (LRSH LEFTC 8))
-                                  (SETQ CSI (ASSOC CSET CSETINFO))
-                                  (PRINTOUT STREAM T "#  " .P2 (CADR CSI)
-                                         " "
-                                         (CADDR CSI)
-                                         T))
-                              (PRINTOUT STREAM "0x" (HEXSTRING LEFTC 4)
-                                     %#
-                                     (FOR RIGHTC IN (CDR M)
-                                        DO (PRINTOUT NIL "	" "0x" (HEXSTRING RIGHTC 4)))
-                                     "	#  "
-                                     (SELECTC FIRSTRIGHTC
-                                         (UNDEFINEDCODE 
-                                                        (* ;; "FFFF")
+                 (STREAM (WRITE-UNICODE-MAPPING-FILENAME FILE CSETINFO RANGES)
+                        :DIRECTION :OUTPUT :IF-EXISTS :NEW-VERSION :EXTERNAL-FORMAT :UTF-8-RAW)
+                 (WRITE-UNICODE-MAPPING-HEADER STREAM CSETINFO RANGES)
+                 (SORT IMAPPING T)
+                 (FOR M CSET LEFTC FIRSTRIGHTC CSI IN IMAPPING
+                    DO (SETQ LEFTC (CAR M))
+                       (SETQ FIRSTRIGHTC (CADR M))
+                       (CL:UNLESS (EQ CSET (LRSH LEFTC 8))
+                           (SETQ CSET (LRSH LEFTC 8))
+                           (SETQ CSI (ASSOC CSET CSETINFO))
+                           (PRINTOUT STREAM T "#  " .P2 (CADR CSI)
+                                  " "
+                                  (CADDR CSI)
+                                  T))
+                       (PRINTOUT STREAM "0x" (HEXSTRING LEFTC 4)
+                              %#
+                              (FOR RIGHTC IN (CDR M) DO (PRINTOUT NIL "	" "0x" (HEXSTRING RIGHTC 4)))
+                              "	#  "
+                              (SELECTC FIRSTRIGHTC
+                                  (UNDEFINEDCODE 
+                                                 (* ;; "FFFF")
 
-                                                        "UNDEFINED")
-                                         (MISSINGCODE 
-                                                      (* ;; "FFFE")
+                                                 "UNDEFINED")
+                                  (MISSINGCODE 
+                                               (* ;; "FFFE")
 
-                                                      "MISSING")
-                                         (IF (ILESSP FIRSTRIGHTC 32)
-                                             THEN        (* ; "Control chars")
-                                                   [CONCAT "^" (CHARACTER (IPLUS FIRSTRIGHTC
-                                                                                 (CHARCODE @]
-                                           ELSE (CHARACTER FIRSTRIGHTC)))
-                                     T))
-                     (FULLNAME STREAM))
+                                               "MISSING")
+                                  (IF (ILESSP FIRSTRIGHTC 32)
+                                      THEN                   (* ; "Control chars")
+                                           [CONCAT "^" (CHARACTER (IPLUS FIRSTRIGHTC (CHARCODE @]
+                                    ELSE (CHARACTER FIRSTRIGHTC)))
+                              T))
+                 (FULLNAME STREAM))
          ELSEIF (NOT EMPTYOK)
            THEN (PRINTOUT T "THERE ARE NO MAPPINGS")
-                 (CL:WHEN INCLUDECHARSETS
-                     (PRINTOUT T " FOR " .PPVTL (MKLIST INCLUDECHARSETS)
-                            T))
-                 NIL])
+                (CL:WHEN INCLUDECHARSETS
+                    (PRINTOUT T " FOR " .PPVTL (MKLIST INCLUDECHARSETS)
+                           T))
+                NIL])
 
 (WRITE-UNICODE-INCLUDED
   [LAMBDA (MAPPING INCLUDECHARSETS)                     (* ; "Edited  4-Aug-2020 17:47 by rmk:")
@@ -725,28 +747,28 @@
          (CL:VALUES IMAPPING CSETINFO RANGES])
 
 (WRITE-UNICODE-MAPPING-HEADER
-  [LAMBDA (STREAM CSETINFO RANGES)                      (* ; "Edited  4-Aug-2020 17:38 by rmk:")
+  [LAMBDA (STREAM CSETINFO RANGES)                           (* ; "Edited  5-Jan-2024 13:24 by rmk")
+                                                            (* ; "Edited  4-Aug-2020 17:38 by rmk:")
 
     (* ;; "Writes the standard per-file header information")
 
     (FOR LINE IN UNICODE-MAPPING-HEADER
        DO (PRINTOUT STREAM "#" 2)
-             (SELECTQ LINE
-                 (XCCSCHARACTERSETS 
-                      (PRINTOUT STREAM "        XCCS charset")
-                      (IF (CDR CSETINFO)
-                          THEN (PRINTOUT STREAM "s:" -4)
-                                (FOR R IN RANGES DO (PRINTOUT STREAM R " "))
-                                (TERPRI STREAM)
-                        ELSE                             (* ; "Singleton")
-                              (PRINTOUT STREAM ": " -4 (CADAR CSETINFO)
-                                     " "
-                                     (CADDAR CSETINFO)))
-                      (TERPRI STREAM))
-                 (DATE (PRINTOUT STREAM "        Date:" -13 (DATE (DATEFORMAT NO.TIME 
-                                                                         NO.LEADING.SPACES))
-                              T))
-                 (PRINTOUT STREAM LINE T)))
+          (SELECTQ LINE
+              (XCCSCHARACTERSETS 
+                   (PRINTOUT STREAM "        XCCS charset")
+                   (IF (CDR CSETINFO)
+                       THEN (PRINTOUT STREAM "s:" -4)
+                            (FOR R IN RANGES DO (PRINTOUT STREAM R " "))
+                     ELSE                                    (* ; "Singleton")
+                          (PRINTOUT STREAM ": " -4 (CADAR CSETINFO)
+                                 " "
+                                 (CADDAR CSETINFO)))
+                   (TERPRI STREAM))
+              (DATE (PRINTOUT STREAM "        Date:" -13 (DATE (DATEFORMAT NO.TIME NO.LEADING.SPACES)
+                                                               )
+                           T))
+              (PRINTOUT STREAM LINE T)))
     (TERPRI STREAM])
 
 (WRITE-UNICODE-MAPPING-FILENAME
@@ -775,24 +797,28 @@
 
 (RPAQQ XCCS-SET-NAMES
        (("0" LATIN)
-        ("41" SYMBOLS1)
-        ("42" SYMBOLS2)
+        ("41" JAPANESE-SYMBOLS1)
+        ("42" JAPANESE-SYMBOLS2)
         ("43" EXTENDED-LATIN)
         ("44" HIRAGANA)
         ("45" KATAKANA)
         ("46" GREEK)
         ("47" CYRILLIC)
         ("50" FORMS)
-        ("60-172" JIS)
+        ("60-166" JIS)
         ("340" ARABIC)
         ("341" HEBREW)
         ("342" IPA)
         ("343" HANGUL)
         ("344" GEORGIAN-ARMENIAN)
-        ("356" SYMBOLS3)
-        ("357" SYMBOLS4)
+        ("345" DEVANAGRI)
+        ("346" BENGALI)
+        ("347" GURMUKHI)
+        ("350" THAI-LAO)
+        ("356" SYMBOLS2)
+        ("357" SYMBOLS1)
         ("360" LIGATURES)
-        ("361" ACCENTED-LATIN)
+        ("361" ACCENTED-LATIN1)
         ("365" MORE-ARABIC)
         ("375" GRAPHIC-VARIANTS)))
 
@@ -814,22 +840,21 @@
 )
 
 (RPAQQ UNICODE-MAPPING-HEADER
-       ("" "        Name:             XCCS (XC-3-1-1-0) to Unicode" "        Unicode version:  3.0" 
+       ("" "        Name:             XCCS (Version 2.0) to Unicode" "        Unicode version:  3.0"
            XCCSCHARACTERSETS "        Table version:    0.1" "        Table format:     Format A" 
            DATE "        Author:           Ron Kaplan <Ron.Kaplan@post.harvard.edu>" "" 
            "This file contains mappings from the Xerox Character Code Standard (version" 
-           "XC1-3-3-0, 1987) into Unicode 3.0. standard codes.  That is the version of" 
-           "XCCS corresponding to the fonts in the Medley system." "" 
+           "2.0, 1990) into Unicode 3.0. standard codes.  That is an extension of the" 
+           "version of XCCS corresponding to the fonts in the Medley system." "" 
            "The format of this file conforms to the format of the other Unicode-supplied" 
            "mapping files:" "   Three white-space (tab or spaces) separated columns:" 
            "     Column 1 is the XCCS code (as hex 0xXXXX)" 
            "     Column 2 is the corresponding Unicode (as hex 0xXXXX)" 
            "     Column 3 (after #) is a comment column. For convenience, it contains the" 
-           "        Unicode character itself (since the Unicode character names" 
-           "        are not available)" 
+           "        Unicode character itself and the Unicode character names when available." 
            "Unicode FFFF is used for undefined XCCS codes (Column 3 = UNDEFINED" 
            "Unicode FFFE is used for XCCS codes that have not yet been filled in." 
-           "(Column 3 = MISSING)" "" "This file is encoded in UTF8, so that the Unicode characters" 
+           "(Column 3 = MISSING)" "" "This file is encoded in UTF-8, so that the Unicode characters"
            "are properly displayed in Column 3 and can be edited by standard" 
            "Unicode-enabled editors (e.g. Mac Textedit)." "" 
            "This file can also be read by the function" 
@@ -992,8 +1017,10 @@
          (LIST LTORARRAY RTOLARRAY])
 )
 
-(RPAQ? DEFAULT-XCCS-CHARSETS '(LATIN SYMBOLS1 SYMBOLS2 EXTENDED-LATIN FORMS SYMBOLS3 SYMBOLS4 
-                                     ACCENTED-LATIN GREEK))
+(RPAQ? DEFAULT-XCCS-CHARSETS '(LATIN JAPANESE-SYMBOLS1 JAPANESE-SYMBOLS2 EXTENDED-LATIN FORMS 
+                                     SYMBOLS1 SYMBOLS2 ACCENTED-LATIN1 GREEK))
+
+(RPAQ? DEFAULT-XCCS-JAPANESE-CHARSETS '(HIRAGANA KATAKANA JIS))
 (DECLARE%: DONTEVAL@LOAD DOCOPY 
 
 (MAKE-UNICODE-TRANSLATION-TABLES (READ-UNICODE-MAPPING DEFAULT-XCCS-CHARSETS T)
@@ -1005,6 +1032,63 @@
 (GLOBALVARS *XCCSTOUNICODE* *UNICODETOXCCS*)
 )
 (DEFINEQ
+
+(UTF-8.VALIDATE
+  [LAMBDA (STREAM BYTE1)                                     (* ; "Edited 28-Dec-2023 11:57 by rmk")
+                                                            (* ; "Edited  6-Aug-2021 16:02 by rmk:")
+                                                            (* ; "Edited  6-Aug-2020 17:13 by rmk:")
+
+    (* ;; "Returns the codesize if the bytes starting at STREAM's current position form a valid UTF-8 sequence.")
+
+    (* ;; "If BYTE1 is provided, it is interpreted as the just-read header byte with the stream is positioned just after it.")
+
+    (* ;; "Test for smallp because the stream's End-of-file operation may suppress the error--otherwise an error will happen if the streams runs out of necessary bytes.")
+
+    (* ;; "For valid sequences, returns the same value as NUTF8CODEBYTES, but this reads/validates the rest of the bytes. On a non-NILreturn the  stream is positioned before the header byte of the next putative code. The stream position is uncertain on a NIL return.")
+
+    (* ;; "")
+
+    (CL:UNLESS BYTE1
+        (SETQ BYTE1 (\BIN STREAM)))
+    (PROG (BYTE2 BYTE3 BYTE4)
+
+     (* ;; "Distinguish on the header byte BYTE1.")
+
+          (CL:WHEN (SMALLP BYTE1)
+              (IF (ILESSP BYTE1 128)
+                  THEN (RETURN 1)
+                ELSEIF (IGEQ BYTE1 (LLSH 15 4))
+                  THEN                                       (* ; "4 bytes")
+                       (SETQ BYTE2 (\BIN STREAM))
+                       (CL:WHEN (OR (NOT (SMALLP BYTE2))
+                                    (ILESSP BYTE2 128))
+                              (RETURN))
+                       (SETQ BYTE3 (\BIN STREAM))
+                       (CL:WHEN (OR (NOT (SMALLP BYTE3))
+                                    (ILESSP BYTE3 128))
+                              (RETURN))
+                       (SETQ BYTE4 (\BIN STREAM))
+                       (CL:WHEN (OR (NOT (SMALLP BYTE4))
+                                    (ILESSP BYTE4 128))
+                              (RETURN))
+                       (RETURN 4)
+                ELSEIF (IGEQ BYTE1 (LLSH 7 5))
+                  THEN                                       (* ; "3 bytes")
+                       (SETQ BYTE2 (\BIN STREAM))
+                       (CL:WHEN (OR (NOT (SMALLP BYTE2))
+                                    (ILESSP BYTE2 128))
+                              (RETURN))
+                       (SETQ BYTE3 (\BIN STREAM))
+                       (CL:WHEN (OR (NOT (SMALLP BYTE3))
+                                    (ILESSP BYTE3 128))
+                              (RETURN))
+                       (RETURN 3)
+                ELSE                                         (* ; " 2 bytes")
+                     (SETQ BYTE2 (\BIN STREAM))
+                     (CL:WHEN (OR (NOT (SMALLP BYTE2))
+                                  (ILESSP BYTE2 128))
+                            (RETURN NIL))
+                     (RETURN 2)))])
 
 (HEXSTRING
   [LAMBDA (N WIDTH)                                     (* ; "Edited 23-Jul-2020 08:28 by rmk:")
@@ -1069,23 +1153,24 @@
                      ELSE (ERROR "CHARCODE too big for UTF8" CHARCODE])
 
 (NUTF8CODEBYTES
-  [LAMBDA (N)                                                (* ; "Edited 28-Jun-2022 00:02 by rmk")
+  [LAMBDA (BYTE)                                             (* ; "Edited  8-Jan-2024 10:57 by rmk")
+                                                             (* ; "Edited 28-Jun-2022 00:02 by rmk")
                                                             (* ; "Edited 10-Aug-2020 12:35 by rmk:")
 
-    (* ;; "Returns the number of bytes needed to encode N in UTF8, ")
+    (* ;; "Returns the number of bytes needed to encode in UTF8 a number headed by BYTE. ")
 
-    (IF (ILESSP N 128)
+    (IF (ILESSP BYTE 128)
         THEN 1
-      ELSEIF (ILESSP N 2048)
+      ELSEIF (ILESSP BYTE 2048)
         THEN                                                 (* ; "x800")
              2
-      ELSEIF (ILESSP N 65536)
+      ELSEIF (ILESSP BYTE 65536)
         THEN                                                 (* ; "x10000")
              3
-      ELSEIF (ILESSP N 2097152)
+      ELSEIF (ILESSP BYTE 2097152)
         THEN                                                 (* ; "x200000")
              4
-      ELSE (SHOULDNT])
+      ELSE (ERROR "INVALID UTF-8 HEADER BYTE"])
 
 (NUTF8STRINGBYTES
   [LAMBDA (STRING RAWFLG)                               (* ; "Edited 10-Aug-2020 09:06 by rmk:")
@@ -1161,6 +1246,44 @@
 )
 (DEFINEQ
 
+(\UTF8.FETCHCODE
+  [LAMBDA (CODESIZE BUFFER BYTEOFFSET)                       (* ; "Edited 28-Dec-2023 13:32 by rmk")
+                                                            (* ; "Edited  6-Aug-2021 16:02 by rmk:")
+                                                            (* ; "Edited  6-Aug-2020 17:13 by rmk:")
+
+    (* ;; "Decodes a UTF8 byte sequence of size CODESIZE in BUFFER starting at BYTEOFFSET.")
+
+    (* ;; "The validity of the thesize, buffer, and offset are guaranteed by the caller.")
+
+    (LET ((BYTE1 (\GETBASEBYTE BUFFER BYTEOFFSET))
+          BYTE2 BYTE3 BYTE4)
+         (SELECTQ CODESIZE
+             (2 (SETQ BYTE2 (\UTF8.GETBASEBYTE BUFFER (IPLUS 1 BYTEOFFSET)))
+                (LOGOR (LLSH (LOADBYTE BYTE1 0 5)
+                             6)
+                       (LOADBYTE BYTE2 0 6)))
+             (3 (SETQ BYTE2 (\UTF8.GETBASEBYTE BUFFER (IPLUS 1 BYTEOFFSET)))
+                (SETQ BYTE3 (\UTF8.GETBASEBYTE BUFFER (IPLUS 2 BYTEOFFSET)))
+                (LOGOR (LLSH (LOADBYTE BYTE1 0 4)
+                             12)
+                       (LLSH (LOADBYTE BYTE2 0 6)
+                             6)
+                       (LOADBYTE BYTE3 0 6)))
+             (4 (SETQ BYTE2 (\UTF8.GETBASEBYTE BUFFER (IPLUS 1 BYTEOFFSET)))
+                (SETQ BYTE3 (\UTF8.GETBASEBYTE BUFFER (IPLUS 2 BYTEOFFSET)))
+                (SETQ BYTE4 (\UTF8.GETBASEBYTE BUFFER (IPLUS 3 BYTEOFFSET)))
+                (LOGOR (LLSH (LOADBYTE BYTE1 0 3)
+                             18)
+                       (LLSH (LOADBYTE BYTE2 0 6)
+                             12)
+                       (LLSH (LOADBYTE BYTE3 0 6)
+                             6)
+                       (LOADBYTE BYTE4 0 6)))
+             (1 BYTE1)
+             (SHOULDNT])
+)
+(DEFINEQ
+
 (SHOWCHARS
   [LAMBDA (FROMCHAR TOCHAR FONT)                        (* ; "Edited  1-Aug-2020 09:27 by rmk:")
     (RESETFORM (DSPFONT (OR FONT '(CLASSIC 12))
@@ -1216,15 +1339,16 @@
 )
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3725 17816 (UTF8.OUTCHARFN 3735 . 6566) (UTF8.INCCODEFN 6568 . 12058) (UTF8.PEEKCCODEFN
- 12060 . 16834) (\UTF8.BACKCCODEFN 16836 . 17814)) (17817 21598 (UTF16BE.OUTCHARFN 17827 . 18651) (
-UTF16BE.INCCODEFN 18653 . 19552) (UTF16BE.PEEKCCODEFN 19554 . 20625) (\UTF16BE.BACKCCODEFN 20627 . 
-21596)) (21628 23909 (MAKE-UNICODE-FORMATS 21638 . 23907)) (24006 25312 (UNICODE.UNMAPPED 24016 . 
-25310)) (25313 25849 (XCCS-UTF8-AFTER-OPEN 25323 . 25847)) (26682 27031 (XTOUCODE 26692 . 26860) (
-UTOXCODE 26862 . 27029)) (27071 43193 (READ-UNICODE-MAPPING-FILENAMES 27081 . 28182) (
-READ-UNICODE-MAPPING 28184 . 31482) (WRITE-UNICODE-MAPPING 31484 . 35701) (WRITE-UNICODE-INCLUDED 
-35703 . 40425) (WRITE-UNICODE-MAPPING-HEADER 40427 . 41659) (WRITE-UNICODE-MAPPING-FILENAME 41661 . 
-43191)) (46406 54885 (MAKE-UNICODE-TRANSLATION-TABLES 46416 . 54883)) (55302 63328 (HEXSTRING 55312 . 
-56473) (UTF8HEXSTRING 56475 . 58680) (NUTF8CODEBYTES 58682 . 59467) (NUTF8STRINGBYTES 59469 . 59950) (
-XTOUSTRING 59952 . 62963) (XCCSSTRING 62965 . 63326)) (63329 64798 (SHOWCHARS 63339 . 64796)))))
+  (FILEMAP (NIL (3950 18041 (UTF8.OUTCHARFN 3960 . 6791) (UTF8.INCCODEFN 6793 . 12283) (UTF8.PEEKCCODEFN
+ 12285 . 17059) (\UTF8.BACKCCODEFN 17061 . 18039)) (18042 21823 (UTF16BE.OUTCHARFN 18052 . 18876) (
+UTF16BE.INCCODEFN 18878 . 19777) (UTF16BE.PEEKCCODEFN 19779 . 20850) (\UTF16BE.BACKCCODEFN 20852 . 
+21821)) (21853 24134 (MAKE-UNICODE-FORMATS 21863 . 24132)) (24231 25537 (UNICODE.UNMAPPED 24241 . 
+25535)) (25538 26214 (XCCS-UTF8-AFTER-OPEN 25548 . 26212)) (27670 28019 (XTOUCODE 27680 . 27848) (
+UTOXCODE 27850 . 28017)) (28059 44757 (READ-UNICODE-MAPPING-FILENAMES 28069 . 30519) (
+READ-UNICODE-MAPPING 30521 . 33497) (WRITE-UNICODE-MAPPING 33499 . 37249) (WRITE-UNICODE-INCLUDED 
+37251 . 41973) (WRITE-UNICODE-MAPPING-HEADER 41975 . 43223) (WRITE-UNICODE-MAPPING-FILENAME 43225 . 
+44755)) (48071 56550 (MAKE-UNICODE-TRANSLATION-TABLES 48081 . 56548)) (57055 68253 (UTF-8.VALIDATE 
+57065 . 60067) (HEXSTRING 60069 . 61230) (UTF8HEXSTRING 61232 . 63437) (NUTF8CODEBYTES 63439 . 64392) 
+(NUTF8STRINGBYTES 64394 . 64875) (XTOUSTRING 64877 . 67888) (XCCSSTRING 67890 . 68251)) (68254 70058 (
+\UTF8.FETCHCODE 68264 . 70056)) (70059 71528 (SHOWCHARS 70069 . 71526)))))
 STOP

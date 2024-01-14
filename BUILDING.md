@@ -27,7 +27,7 @@ Historically, building the medley image (called a "sysout") was called "doing a 
 
 The shell command:
 ```
-time ./scripts/loadup-all.sh =apps && time ./scripts/loadup-db.sh
+time ./scripts/loadup-all.sh -apps && time ./scripts/loadup-db.sh
 ```
 does everything; on a fast machine it takes 4-6 minutes, most of which is spent in the `loadup-db.sh` step. Without the `loadup-db.sh` step, it runs in 22 seconds on a fast system.
 
@@ -85,7 +85,7 @@ Masterscope has some gaps and bugs so `fuller.database` isn't as useful as it co
 
 This step uses a Maiko that has been compiled with the `init` option. It reads the `init.dlinit` and initializes the package system and runs the EXPRESSIONS from the files that were "loaded" by MAKEINIT, and writes out `init-mid.sysout`.
 
-1. `loadup-init.sh`: build `mid.sysout`
+### `loadup-init.sh`: build `mid.sysout`
 
 This step (called `MAKEINIT`) runs a Lisp program (using a `starter` sysout) that reads in Lisp sources for the bootstrap loader, walks through the code renaming the low-level memory management functions to work on a file instead of in memory. These renamed functions are written to a file (called I-NEW), and I-NEW is then compiled and loaded in and run to 'virtually' load the core set of files in an initial memory image (called INIT.SYSOUT). It then does another (theoretically unnecessary) pass of reading in INIT.SYSOUT using a different renaming of variables used originally for remote debugging (called TELERAID) and moving some pages around to make room for Dandelion IO Processor boot code. 
 

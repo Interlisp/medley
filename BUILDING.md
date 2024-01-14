@@ -23,6 +23,19 @@ The actual building itself is done with various shell scripts, found in the `scr
 
 Historically, building the medley image (called a "sysout") was called "doing a loadup".  Back in the day, a loadup took the better part of a day, and no one would do the whole thing -- there was no automation.
 
+## Prerequisites
+
+In these instructions, there is an assumption that the loadup scripts can find other repositories. All of the loadup scripts have to find `lde` and `ldex` or `ldisdl` and also `ldeinit`.
+
+Loadups use the run-medley script, which looks for Maiko (actually the lde & ldeinit executables) as follows:
+
+1. lde (ldeinit) on PATH
+2. In the `<osversion>.<machinetype>` subdirectory of the directory specified by $MAIKODIR
+3. In the `<osversion>.<machinetype>` subdirectory of the directory specified by $MEDLEYDIR/../maiko/
+4. In the `<osversion>.<machinetype>` subdirectory of the directory specified by $MEDLEYDIR/maiko/
+
+where $MEDLEYDIR is the directory from which you called the loadup script.
+
 ## Make everything
 
 The shell command:
@@ -68,7 +81,7 @@ Masterscope has some gaps and bugs so `fuller.database` isn't as useful as it co
 
 ### `loadup-apps-from-full.sh:`build `apps.sysout`
 
-`apps.sysout` includes some other components that are part of online.interlisp.org experience.
+`apps.sysout` includes some other components that are part of online.interlisp.org experience. 
 
 ### `loadup-full-from-lisp.sh`: Build a `full.sysout` and
 

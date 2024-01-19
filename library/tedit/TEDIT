@@ -1,12 +1,14 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "14-Jan-2024 12:17:26" {WMEDLEY}<library>TEDIT>TEDIT.;435 125998 
+(FILECREATED "18-Jan-2024 00:04:41" {WMEDLEY}<library>TEDIT>TEDIT.;453 135343 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.INSERT)
+      :CHANGES-TO (FNS \TEDIT.CONCAT.PAGEFRAMES TEDIT.CONCAT \TEDIT.CONCAT.INSTALL.HEADINGS 
+                       \TEDIT.GET.PAGE.HEADINGS)
+                  (VARS TEDITCOMS)
 
-      :PREVIOUS-DATE "13-Jan-2024 20:02:16" {WMEDLEY}<library>TEDIT>TEDIT.;434)
+      :PREVIOUS-DATE "16-Jan-2024 20:18:33" {WMEDLEY}<library>TEDIT>TEDIT.;439)
 
 
 (PRETTYCOMPRINT TEDITCOMS)
@@ -43,9 +45,10 @@
         
         (* ;; "Unslashed functions.  Public?")
 
-        (FNS TEDIT COERCETEXTOBJ TEDITSTRING TEDIT-SEE TEDIT.CHARWIDTH TEDIT.COPY TEDIT.DELETE 
-             TEDIT.INSERT TEDIT.KILL TEDIT.MAPPIECES TEDIT.QUIT TEDIT.DO.BLUEPENDINGDELETE TEDIT.MOVE
-             TEDIT.STRINGWIDTH TEXTOBJ TEDITMENUP TEXTSTREAM)
+        (FNS TEDIT COERCETEXTOBJ TEDIT.CONCAT \TEDIT.CONCAT.PAGEFRAMES \TEDIT.GET.PAGE.HEADINGS 
+             \TEDIT.CONCAT.INSTALL.HEADINGS TEDITSTRING TEDIT-SEE TEDIT.CHARWIDTH TEDIT.COPY 
+             TEDIT.DELETE TEDIT.INSERT TEDIT.KILL TEDIT.MAPPIECES TEDIT.QUIT 
+             TEDIT.DO.BLUEPENDINGDELETE TEDIT.MOVE TEDIT.STRINGWIDTH TEXTOBJ TEDITMENUP TEXTSTREAM)
         (FNS \TEDIT.MOVE.MSG \TEDIT.READONLY)
         (FNS TEDIT.NCHARS TEDIT.RPLCHARCODE TEDIT.NTHCHARCODE \TEDIT.PIECE.NTHCHARCODE)
         
@@ -313,6 +316,145 @@
                          (CONS CHARSTREAM FORMATSTREAM)))
              (SEXPR (TEDIT.SEL.AS.SEXPR TSTREAM))
              NIL])
+
+(TEDIT.CONCAT
+  [LAMBDA (TSTREAMS SEPARATOR)                               (* ; "Edited 18-Jan-2024 00:03 by rmk")
+
+    (* ;; "Produces a textstream that contains the concatenation of all of the TSTREAMS, separated by SEPARATOR.  Any stream that is not already a text stream is first converted to a plaintext stream.  SEPARATOR if provided as a string or character is inserted between the files.")
+
+    (CL:WHEN SEPARATOR
+        (CL:UNLESS (CHARCODEP SEPARATOR)
+            (SETQ SEPARATOR (OR (CHARCODE.DECODE SEPARATOR T)
+                                (MKSTRING SEPARATOR)))))
+    (LET* ((CSTREAM (OPENTEXTSTREAM))
+           (CTEXTOBJ (TEXTOBJ CSTREAM))
+           [TSTEXTOBJECTS (for TS inside TSTREAMS collect (OR (TEXTOBJ TS T)
+                                                              (TEXTOBJ (OPENTEXTSTREAM TS]
+           FIRSTTOBJ INITIALFILEPIECES)
+          (CL:WHEN TSTEXTOBJECTS
+              (SETQ FIRSTTOBJ (CAR TSTEXTOBJECTS))
+
+              (* ;; "Take overall parameters from the first stream.  ")
+
+              (FSETTOBJ CTEXTOBJ DEFAULTCHARLOOKS (FGETTOBJ FIRSTTOBJ DEFAULTCHARLOOKS))
+              (FSETTOBJ CTEXTOBJ FMTSPEC (FGETTOBJ FIRSTTOBJ FMTSPEC))
+              (FSETTOBJ CTEXTOBJ TXTRTBL (FGETTOBJ FIRSTTOBJ TXTRTBL))
+              (FSETTOBJ CTEXTOBJ TXTWTBL (FGETTOBJ FIRSTTOBJ TXTWTBL))
+              (FSETTOBJ CTEXTOBJ TXTSTYLESHEET (FGETTOBJ FIRSTTOBJ TXTSTYLESHEET))
+              (for TSOBJ PREVPC (LASTTOBJ _ (CAR (LAST TSTEXTOBJECTS)))
+                   (FIRSTPC _ (create PIECE)) in TSTEXTOBJECTS first 
+                                                                     (* ;; 
+                                                               "LASTTOBJ to suppress final separator")
+
+                                                                     (SETQ PREVPC FIRSTPC) 
+                                                             (* ; "Dummy")
+                 do (CL:WHEN (FGETTOBJ TSOBJ FORMATTEDP)
+                           (FSETTOBJ CTEXTOBJ FORMATTEDP T))
+                    (for PC NEWPIECE inpieces (\FIRSTPIECE TSOBJ)
+                       do (SETQ NEWPIECE (\TEDIT.COPYPIECE PC TSOBJ CTEXTOBJ NIL 'COPY))
+                          (FSETPC PREVPC NEXTPIECE NEWPIECE)
+                          (FSETPC NEWPIECE PREVPIECE PREVPC)
+                          (SETQ PREVPC NEWPIECE)) 
+
+                    (* ;; "Information for pageframe adjustments")
+
+                    (push INITIALFILEPIECES (\FIRSTPIECE TSOBJ))
+                    (CL:WHEN SEPARATOR
+                        (CL:UNLESS (EQ TSOBJ LASTTOBJ)
+                            (SETQ PREVPC (\TEDIT.MAKE.STRINGPIECE PREVPC SEPARATOR))))
+                 finally (\INSERTPIECES (NEXTPIECE FIRSTPC)
+                                NIL CTEXTOBJ)
+                       (\TEDIT.CONCAT.PAGEFRAMES CTEXTOBJ TSTEXTOBJECTS (DREVERSE INITIALFILEPIECES))
+                       (\TEDIT.UNIQUIFY.ALL CTEXTOBJ)))
+          CSTREAM])
+
+(\TEDIT.CONCAT.PAGEFRAMES
+  [LAMBDA (CTEXTOBJ TSTEXTOBJECTS INITIALFILEPIECES)         (* ; "Edited 18-Jan-2024 00:04 by rmk")
+
+    (* ;; "The individual files may have their own heading paragraphs specified in their pieces and in their pageframes.  Since the heading types are global for the file, we have to make sure the any conflicting heading-type names are made distinct within the combined toplevel pageframe, and that any new names are propagated into the FMTSPEC's of the pieces within each file.")
+
+    (for TSOBJ HEADINGTYPES CPAGEFRAME CDEFAULT CVERSO CRECTO in TSTEXTOBJECTS as IPCTAIL
+       on INITIALFILEPIECES as I from 1
+       do 
+          (* ;; "We use I to create unique new names.  We traverse the piece-tail so we know when we're moving from the pieces of one stream to the  pieces of another. Within a stream we assume that there are no heading conflicts to be resolved.")
+
+          [for PC PPARALOOKS HTYPE HTYPEMAP NEWHTYPE inpieces (CAR IPCTAIL)
+             until (EQ PC (CADR IPCTAIL)) eachtime (SETQ PPARALOOKS (PPARALOOKS PC))
+             when (AND (EQ 'HEADING (fetch (FMTSPEC FMTPARATYPE) of PPARALOOKS))
+                       (MEMB (SETQ HTYPE (fetch (FMTSPEC FMTPARASUBTYPE) of PPARALOOKS))
+                             HEADINGTYPES))
+             do 
+                (* ;; "We have a conflict , substitute the new heading type in PC, save it for later. Should make sure new heading is also unique")
+
+                (SETQ NEWHTYPE (PACK* HTYPE "-" I))
+                [FSETPC PC PPARALOOKS (create FMTSPEC
+                                         using PPARALOOKS FMTPARASUBTYPE _
+                                               (CDR (OR (ASSOC HTYPE HTYPEMAP)
+                                                        (CAR (PUSH HTYPEMAP (CONS HTYPE NEWHTYPE]
+             finally 
+
+                   (* ;; 
+             "Collect the global list of heading frames by page type, for the concatenation textobj.")
+
+                   (LET ((TSPF (FGETTOBJ TSOBJ TXTPAGEFRAMES)))
+                        (change CDEFAULT (NCONC (\TEDIT.GET.PAGE.HEADINGS (CAR TSPF)
+                                                       HTYPEMAP)
+                                                DATUM))
+                        (change CVERSO (NCONC (\TEDIT.GET.PAGE.HEADINGS (CADR TSPF)
+                                                     HTYPEMAP)
+                                              DATUM))
+                        (change CRECTO (NCONC (\TEDIT.GET.PAGE.HEADINGS (CADDR TSPF)
+                                                     HTYPEMAP)
+                                              DATUM] finally 
+
+                                                       (* ;; 
+          "Make a copy of the first stream's pageframes, then extend with the full set of headings. ")
+
+                                                           [SETQ CPAGEFRAME
+                                                            (\TEDIT.PARSE.PAGEFRAMES
+                                                             (\TEDIT.UNPARSE.PAGEFRAMES
+                                                              (FGETTOBJ (CAR TSTEXTOBJECTS)
+                                                                     TXTPAGEFRAMES]
+                                                           (\TEDIT.CONCAT.INSTALL.HEADINGS
+                                                            (CAR CPAGEFRAME)
+                                                            CDEFAULT)
+                                                           (\TEDIT.CONCAT.INSTALL.HEADINGS
+                                                            (CADR CPAGEFRAME)
+                                                            CVERSO)
+                                                           (\TEDIT.CONCAT.INSTALL.HEADINGS
+                                                            (CADR CPAGEFRAME)
+                                                            CRECTO)
+                                                           (FSETTOBJ CTEXTOBJ TXTPAGEFRAMES 
+                                                                  CPAGEFRAME])
+
+(\TEDIT.GET.PAGE.HEADINGS
+  [LAMBDA (PAGEREGION HTYPEMAP)                              (* ; "Edited 17-Jan-2024 23:45 by rmk")
+
+    (* ;; "Returns the page-heading regions of PAGEREGION, with heading types possibly updated. ")
+
+    (CL:WHEN (EQ 'PAGE (fetch (PAGEREGION REGIONFILLMETHOD) of PAGEREGION))
+        (for SPF NEWTYPE in (fetch (PAGEREGION REGIONSUBBOXES) of PAGEREGION)
+           when (EQ 'HEADINGTYPE (CAR (fetch (PAGEREGION REGIONLOCALINFO) of SPF)))
+           collect (if [SETQ NEWTYPE (CDR (ASSOC (CADR (fetch (PAGEREGION REGIONLOCALINFO)
+                                                          of SPF]
+                       then (create PAGEREGION using SPF REGIONLOCALINFO _ (LIST 'HEADINGTYPE NEWTYPE
+                                                                                 ))
+                     else SPF)))])
+
+(\TEDIT.CONCAT.INSTALL.HEADINGS
+  [LAMBDA (PAGEREGION HEADINGS)                              (* ; "Edited 17-Jan-2024 23:49 by rmk")
+
+    (* ;; "Smash HEADINGS into PAGEREGION, removing any headings previously there.")
+
+    (CL:WHEN (EQ 'PAGE (fetch (PAGEREGION REGIONFILLMETHOD) of PAGEREGION))
+
+        (* ;; "Replace all the old headings with the new ones, keeping all other subboxes")
+
+        (change (fetch (PAGEREGION REGIONSUBBOXES) of PAGEREGION)
+               (NCONC (for SPF in DATUM unless (EQ 'HEADINGTYPE (CAR (fetch (PAGEREGION 
+                                                                                   REGIONLOCALINFO)
+                                                                        of SPF))) collect SPF)
+                      HEADINGS)))])
 
 (TEDITSTRING
   [LAMBDA (TEXT WINDOW DONTSPAWN PROPS)
@@ -2168,7 +2310,7 @@
 (* ; "TEDIT Support information")
 
 
-(RPAQQ TEDITSYSTEMDATE "14-Jan-2024 12:17:26")
+(RPAQQ TEDITSYSTEMDATE "18-Jan-2024 00:04:41")
 
 
 
@@ -2178,27 +2320,28 @@
 (ADDTOVAR PRINTFILETYPES (TEDIT (TEST \TEDIT.GET.TRAILER)
                                 (EXTENSION (TEDIT))))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4656 6598 (MAKE-TEDIT-EXPORTS.ALL 4666 . 5212) (UPDATE-TEDIT 5214 . 5827) (EDIT-TEDIT 
-5829 . 6596)) (7930 8223 (\CREATE.TEDIT.RESTART.MENU 7940 . 8221)) (8598 36386 (TEDIT 8608 . 11213) (
-COERCETEXTOBJ 11215 . 15314) (TEDITSTRING 15316 . 16054) (TEDIT-SEE 16056 . 16615) (TEDIT.CHARWIDTH 
-16617 . 18641) (TEDIT.COPY 18643 . 19151) (TEDIT.DELETE 19153 . 20126) (TEDIT.INSERT 20128 . 22198) (
-TEDIT.KILL 22200 . 22902) (TEDIT.MAPPIECES 22904 . 23966) (TEDIT.QUIT 23968 . 25536) (
-TEDIT.DO.BLUEPENDINGDELETE 25538 . 26470) (TEDIT.MOVE 26472 . 31064) (TEDIT.STRINGWIDTH 31066 . 31737)
- (TEXTOBJ 31739 . 34047) (TEDITMENUP 34049 . 34687) (TEXTSTREAM 34689 . 36384)) (36387 38579 (
-\TEDIT.MOVE.MSG 36397 . 38275) (\TEDIT.READONLY 38277 . 38577)) (38580 45623 (TEDIT.NCHARS 38590 . 
-38773) (TEDIT.RPLCHARCODE 38775 . 42128) (TEDIT.NTHCHARCODE 42130 . 42972) (\TEDIT.PIECE.NTHCHARCODE 
-42974 . 45621)) (45669 87302 (\TEDIT1 45679 . 47538) (\TEDIT.INSERT 47540 . 52961) (
-\TEDIT.REPLACE.SELPIECES 52963 . 54504) (\TEDIT.INSERT.SELPIECES 54506 . 56185) (\TEDIT.OBJECT.SHOWSEL
- 56187 . 60251) (\TEDIT.RESTARTFN 60253 . 62391) (\TEDIT.CHARDELETE 62393 . 64391) (
-\TEDIT.CHARDELETE.FORWARD 64393 . 65905) (\TEDIT.COPYPIECE 65907 . 70645) (\TEDIT.APPLY.OBJFN 70647 . 
-73720) (\TEDIT.DELETE 73722 . 76034) (\TEDIT.DIFFUSE.PARALOOKS 76036 . 78434) (\TEDIT.FOREIGN.COPY? 
-78436 . 82322) (\TEDIT.QUIT 82324 . 84759) (\TEDIT.WORDDELETE 84761 . 86034) (
-\TEDIT.WORDDELETE.FORWARD 86036 . 87300)) (87303 101200 (\SELPIECES.COPY 87313 . 89186) (
-\SELPIECES.CONCAT 89188 . 91257) (\SELPIECES.CHARTRANSFORM 91259 . 94491) (\SELPIECES.FROM.STRING 
-94493 . 99152) (\SELPIECES.TO.STRING 99154 . 101198)) (101201 107630 (\TEDIT.PARAPIECES 101211 . 
-102859) (\TEDIT.PARA.FIRST 102861 . 105220) (\TEDIT.PARA.LAST 105222 . 107628)) (107631 115719 (
-\TEDIT.WORD.FIRST 107641 . 111785) (\TEDIT.WORD.LAST 111787 . 115717)) (115873 125340 (
-TEDIT.INSERT.OBJECT 115883 . 118937) (TEDIT.EDIT.OBJECT 118939 . 120978) (TEDIT.FIND.OBJECT 120980 . 
-121387) (TEDIT.OBJECT.CHANGED 121389 . 123356) (TEDIT.MAP.OBJECTS 123358 . 124190) (
-TEDIT.COLLECT.OBJECTS 124192 . 124952) (TEDIT.COLLECT.OBJECT.GETFNS 124954 . 125338)))))
+  (FILEMAP (NIL (4904 6846 (MAKE-TEDIT-EXPORTS.ALL 4914 . 5460) (UPDATE-TEDIT 5462 . 6075) (EDIT-TEDIT 
+6077 . 6844)) (8178 8471 (\CREATE.TEDIT.RESTART.MENU 8188 . 8469)) (8846 45731 (TEDIT 8856 . 11461) (
+COERCETEXTOBJ 11463 . 15562) (TEDIT.CONCAT 15564 . 18616) (\TEDIT.CONCAT.PAGEFRAMES 18618 . 22889) (
+\TEDIT.GET.PAGE.HEADINGS 22891 . 23818) (\TEDIT.CONCAT.INSTALL.HEADINGS 23820 . 24659) (TEDITSTRING 
+24661 . 25399) (TEDIT-SEE 25401 . 25960) (TEDIT.CHARWIDTH 25962 . 27986) (TEDIT.COPY 27988 . 28496) (
+TEDIT.DELETE 28498 . 29471) (TEDIT.INSERT 29473 . 31543) (TEDIT.KILL 31545 . 32247) (TEDIT.MAPPIECES 
+32249 . 33311) (TEDIT.QUIT 33313 . 34881) (TEDIT.DO.BLUEPENDINGDELETE 34883 . 35815) (TEDIT.MOVE 35817
+ . 40409) (TEDIT.STRINGWIDTH 40411 . 41082) (TEXTOBJ 41084 . 43392) (TEDITMENUP 43394 . 44032) (
+TEXTSTREAM 44034 . 45729)) (45732 47924 (\TEDIT.MOVE.MSG 45742 . 47620) (\TEDIT.READONLY 47622 . 47922
+)) (47925 54968 (TEDIT.NCHARS 47935 . 48118) (TEDIT.RPLCHARCODE 48120 . 51473) (TEDIT.NTHCHARCODE 
+51475 . 52317) (\TEDIT.PIECE.NTHCHARCODE 52319 . 54966)) (55014 96647 (\TEDIT1 55024 . 56883) (
+\TEDIT.INSERT 56885 . 62306) (\TEDIT.REPLACE.SELPIECES 62308 . 63849) (\TEDIT.INSERT.SELPIECES 63851
+ . 65530) (\TEDIT.OBJECT.SHOWSEL 65532 . 69596) (\TEDIT.RESTARTFN 69598 . 71736) (\TEDIT.CHARDELETE 
+71738 . 73736) (\TEDIT.CHARDELETE.FORWARD 73738 . 75250) (\TEDIT.COPYPIECE 75252 . 79990) (
+\TEDIT.APPLY.OBJFN 79992 . 83065) (\TEDIT.DELETE 83067 . 85379) (\TEDIT.DIFFUSE.PARALOOKS 85381 . 
+87779) (\TEDIT.FOREIGN.COPY? 87781 . 91667) (\TEDIT.QUIT 91669 . 94104) (\TEDIT.WORDDELETE 94106 . 
+95379) (\TEDIT.WORDDELETE.FORWARD 95381 . 96645)) (96648 110545 (\SELPIECES.COPY 96658 . 98531) (
+\SELPIECES.CONCAT 98533 . 100602) (\SELPIECES.CHARTRANSFORM 100604 . 103836) (\SELPIECES.FROM.STRING 
+103838 . 108497) (\SELPIECES.TO.STRING 108499 . 110543)) (110546 116975 (\TEDIT.PARAPIECES 110556 . 
+112204) (\TEDIT.PARA.FIRST 112206 . 114565) (\TEDIT.PARA.LAST 114567 . 116973)) (116976 125064 (
+\TEDIT.WORD.FIRST 116986 . 121130) (\TEDIT.WORD.LAST 121132 . 125062)) (125218 134685 (
+TEDIT.INSERT.OBJECT 125228 . 128282) (TEDIT.EDIT.OBJECT 128284 . 130323) (TEDIT.FIND.OBJECT 130325 . 
+130732) (TEDIT.OBJECT.CHANGED 130734 . 132701) (TEDIT.MAP.OBJECTS 132703 . 133535) (
+TEDIT.COLLECT.OBJECTS 133537 . 134297) (TEDIT.COLLECT.OBJECT.GETFNS 134299 . 134683)))))
 STOP

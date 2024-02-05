@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 4-Feb-2024 12:42:00" {WMEDLEY}<library>UNICODE.;56 87034  
+(FILECREATED " 5-Feb-2024 13:49:35" {WMEDLEY}<library>UNICODE.;57 88440  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS XCCS-CHARSETS UNICODECOMS)
-                  (FNS UTF8.VALIDATE)
+      :CHANGES-TO (FNS INVERT-ALL-UNICODE-MAPPINGS UNICODE-EXTEND-TRANSLATION?)
 
-      :PREVIOUS-DATE " 4-Feb-2024 01:07:00" {WMEDLEY}<library>UNICODE.;54)
+      :PREVIOUS-DATE " 4-Feb-2024 12:42:00" {WMEDLEY}<library>UNICODE.;56)
 
 
 (PRETTYCOMPRINT UNICODECOMS)
@@ -20,7 +19,7 @@
               (FNS MAKE-UNICODE-FORMATS)
               (P (MAKE-UNICODE-FORMATS EXTERNALEOL))
               (ADDVARS (*DEFAULT-EXTERNALFORMATS* (UNIX :UTF-8)))
-              (FNS UNICODE.UNMAPPED UTF8.BINCODE \UTF8.FETCHCODE)
+              (FNS UNICODE.UNMAPPED UNICODE-EXTEND-TRANSLATION? UTF8.BINCODE \UTF8.FETCHCODE)
               (FNS UTF8.VALIDATE UTF8-SIZE-FROM-BYTE1 NUTF8-BYTE1-BYTES NUTF8-CODE-BYTES 
                    NUTF8-STRING-BYTES)
               (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS UNICODE.TRANSLATE \UTF8.GETBASEBYTE))
@@ -36,7 +35,7 @@
                                                   "Make translation tables for  UTF external formats")
               (FNS MAKE-UNICODE-TRANSLATION-TABLES MERGE-UNICODE-TRANSLATION-TABLES 
                    MERGE-UNICODE-TRANSLATION-TABLES1)
-              (FNS INVERT-ALL-UNICODE-MAPPINGS UNICODE-EXTEND-TRANSLATION?)
+              (FNS INVERT-ALL-UNICODE-MAPPINGS)
               (INITVARS (*XCCSTOUNICODE*)
                      (*UNICODETOXCCS*)
                      (*INVERTED-UNICODE-MAPPINGS*))
@@ -486,6 +485,39 @@
                 (PUTHASH CODE NEXTCODE (CAR FORWARD))
                 (PUTHASH NEXTCODE CODE (CAR INVERSE))
                 NEXTCODE])
+
+(UNICODE-EXTEND-TRANSLATION?
+  [LAMBDA (CODE TRANSLATION-TABLE)                           (* ; "Edited  5-Feb-2024 13:48 by rmk")
+                                                             (* ; "Edited  3-Feb-2024 12:40 by rmk")
+
+    (* ;; "There is currently no mapping for CODE in TRANSLATION-TABLE, hopefully just because the relevant character-set mapping as not be installed. We infer from TRANSLATION-TABLE whether CODE is an XCCS or UNICODE code.")
+
+    (* ;; "The relevant mapping file, if any, can be determined directly from an XCCS code, since the mapping files are indexed by XCCS charset.")
+
+    (* ;; "To find the file for a Unicode code by first running it through the precomputed inverted Unicode-to-XCCS inverted index, and then find the charset file for the corresponding XCCS code.  Presumably that has the inverted mapping for future fast lookups.")
+
+    (LET (XCCSCODE NEWMAPPING INVERTEDFILE)
+         [SETQ XCCSCODE (if (EQ TRANSLATION-TABLE *XCCSTOUNICODE*)
+                            then CODE
+                          elseif (SETQ INVERTEDFILE (FINDFILE 'INVERTED-UNICODE-MAPPINGS.TXT T 
+                                                           UNICODEDIRECTORIES))
+                            then 
+                                 (* ;; "Note that we open/scan the inverted file for each unknown character, read the relevant character set (if any), get the XCCS code, and throw away what we just read.  We will have installed all of the characters in the XCCS charset corresponding to CODE, that will catch a lot of what would otherwise be future unknowns (e.g. all Greeks are in).  We may hit the same one repeatedly for Unicode JIS, since they appear to be scattered across XCCS.")
+
+                                 (CL:WITH-OPEN-FILE (STREAM INVERTEDFILE :INPUT)
+                                        (FFILEPOS (CONCAT "[" (LRSH CODE 8)
+                                                         " ")
+                                               STREAM NIL NIL NIL T)
+                                        (CADR (ASSOC CODE (READ STREAM]
+         (CL:WHEN (AND XCCSCODE (SETQ NEWMAPPING (READ-UNICODE-MAPPING XCCSCODE T T)))
+
+             (* ;; "Whatever we find, we merge it in both directions--the tables bound to these variables are the only game in town.")
+
+             (MERGE-UNICODE-TRANSLATION-TABLES NEWMAPPING)
+
+             (* ;; "CODE's charset may not have a  mapping for idiosyncratic CODE.  ")
+
+             (UNICODE.TRANSLATE CODE TRANSLATION-TABLE T))])
 
 (UTF8.BINCODE
   [LAMBDA (STREAM RAW)                                       (* ; "Edited  4-Feb-2024 01:06 by rmk")
@@ -1072,7 +1104,8 @@
 (DEFINEQ
 
 (INVERT-ALL-UNICODE-MAPPINGS
-  [LAMBDA (MAKEFILE)                                         (* ; "Edited  3-Feb-2024 09:16 by rmk")
+  [LAMBDA (MAKEFILE)                                         (* ; "Edited  5-Feb-2024 13:14 by rmk")
+                                                             (* ; "Edited  3-Feb-2024 09:16 by rmk")
 
     (* ;; "Reads all the XCCS-to-UNICODE mapping files that we know about, and iproduces a 2-level index that maps each UNICODE code back to the one or more XCCS corresponding XCCS codes.")
 
@@ -1080,7 +1113,7 @@
 
     (* ;; "GIven a UCODE, the lookup for the lowest XCCS is")
 
-    (* ;; "   (CADR (ASSOC UCODE (CDR (ASSOC (LRSH UCODE 8) INDEX)))).")
+    (* ;; "   (CADR (ASSOC UCODE (CADR (ASSOC (LRSH UCODE 8) INDEX)))).")
 
     (* ;; "If IMAKEFILE is given, the resulting is written to that file.")
 
@@ -1095,51 +1128,32 @@
                      (LIST (CADR M)
                            (CAR M]
 
-         (* ;; "Sort within groups to get the lowest XCCS code first")
+         (* ;; "Sort within groups to get the lowest XCCS code first. But also push the sublists down an extra CONS, so that a subsequent READ will get them all.")
 
          [for I in INDEX do (change (CDR I)
-                                   (SORT DATUM (FUNCTION (LAMBDA (M1 M2)
-                                                           (OR (ILESSP (CAR M1)
-                                                                      (CAR M2))
-                                                               (AND (EQ (CAR M1)
-                                                                        (CAR M2))
-                                                                    (ILESSP (CADR M1)
-                                                                           (CADR M2]
+                                   (CONS (SORT DATUM (FUNCTION (LAMBDA (M1 M2)
+                                                                 (OR (ILESSP (CAR M1)
+                                                                            (CAR M2))
+                                                                     (AND (EQ (CAR M1)
+                                                                              (CAR M2))
+                                                                          (ILESSP (CADR M1)
+                                                                                 (CADR M2]
          (SETQ INDEX (SORT INDEX T))                         (* ; "Sort groups")
          (if MAKEFILE
-             then (WRITEFILE INDEX (PACKFILENAME 'DIRECTORY (CAR (MKLIST UNICODEDIRECTORIES))
-                                          'BODY
-                                          'INVERTED-UNICODE-MAPPINGS.TXT))
+             then (CL:WITH-OPEN-FILE (STREAM (PACKFILENAME 'DIRECTORY (CAR (MKLIST UNICODEDIRECTORIES
+                                                                                  ))
+                                                    'BODY
+                                                    'INVERTED-UNICODE-MAPPINGS.TXT)
+                                            :DIRECTION :OUTPUT :IF-EXISTS :NEW-VERSION)
+
+                         (* ;; "We can FFILEPOS for %"[nnn %" then READ. Or just READFILE")
+
+                         (for I in INDEX do (PRINTOUT STREAM "[" (CAR I)
+                                                   " "
+                                                   (CADR I)
+                                                   "]" T))
+                         (FULLNAME STREAM))
            else INDEX])
-
-(UNICODE-EXTEND-TRANSLATION?
-  [LAMBDA (CODE TRANSLATION-TABLE)                           (* ; "Edited  3-Feb-2024 12:40 by rmk")
-
-    (* ;; "There is currently no mapping for CODE in TRANSLATION-TABLE, hopefully just because the relevant character-set mapping as not be installed. We infer from TRANSLATION-TABLE whether CODE is an XCCS or UNICODE code.")
-
-    (* ;; "The relevant mapping file, if any, can be determined directly from an XCCS code, since the mapping files are indexed by XCCS charset.")
-
-    (* ;; "To find the file for a Unicode code by first running it through the precomputed inverted Unicode-to-XCCS inverted index, and then find the charset file for the corresponding XCCS code.  Presumably that has the inverted mapping for future fast lookups.")
-
-    (LET (XCCSCODE NEWMAPPING INVERTEDFILE)
-         [SETQ XCCSCODE (if (EQ TRANSLATION-TABLE *XCCSTOUNICODE*)
-                            then CODE
-                          else (CL:UNLESS *INVERTED-UNICODE-MAPPINGS*
-                                   (CL:WHEN (SETQ INVERTEDFILE (FINDFILE 
-                                                                      'INVERTED-UNICODE-MAPPINGS.TXT
-                                                                      T UNICODEDIRECTORIES)))
-                                   (SETQ *INVERTED-UNICODE-MAPPINGS* (CDR (READFILE INVERTEDFILE))))
-                               (CADR (ASSOC CODE (CDR (ASSOC (LRSH CODE 8)
-                                                             *INVERTED-UNICODE-MAPPINGS*]
-         (CL:WHEN (AND XCCSCODE (SETQ NEWMAPPING (READ-UNICODE-MAPPING XCCSCODE T T)))
-
-             (* ;; "Whatever we find, we merge it in both directions--the tables bound to these variables are the only game in town.")
-
-             (MERGE-UNICODE-TRANSLATION-TABLES NEWMAPPING)
-
-             (* ;; "CODE's charset may not have a  mapping for idiosyncratic CODE.  ")
-
-             (UNICODE.TRANSLATE CODE TRANSLATION-TABLE T))])
 )
 
 (RPAQ? *XCCSTOUNICODE* )
@@ -1604,20 +1618,20 @@
 
 (PUTPROPS UNICODE FILETYPE :TCOMPL)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3924 18070 (UTF8.OUTCHARFN 3934 . 6732) (UTF8.INCCODEFN 6734 . 12346) (UTF8.PEEKCCODEFN
- 12348 . 17088) (\UTF8.BACKCCODEFN 17090 . 18068)) (18071 21938 (UTF16BE.OUTCHARFN 18081 . 18991) (
-UTF16BE.INCCODEFN 18993 . 19892) (UTF16BE.PEEKCCODEFN 19894 . 20965) (\UTF16BE.BACKCCODEFN 20967 . 
-21936)) (21968 24249 (MAKE-UNICODE-FORMATS 21978 . 24247)) (24346 30807 (UNICODE.UNMAPPED 24356 . 
-26430) (UTF8.BINCODE 26432 . 29011) (\UTF8.FETCHCODE 29013 . 30805)) (30808 36329 (UTF8.VALIDATE 30818
- . 33415) (UTF8-SIZE-FROM-BYTE1 33417 . 33849) (NUTF8-BYTE1-BYTES 33851 . 34588) (NUTF8-CODE-BYTES 
-34590 . 35647) (NUTF8-STRING-BYTES 35649 . 36327)) (37760 38109 (XTOUCODE 37770 . 37938) (UTOXCODE 
-37940 . 38107)) (39052 45098 (READ-UNICODE-MAPPING-FILENAMES 39062 . 42009) (READ-UNICODE-MAPPING 
-42011 . 45096)) (45165 58801 (MAKE-UNICODE-TRANSLATION-TABLES 45175 . 54247) (
-MERGE-UNICODE-TRANSLATION-TABLES 54249 . 55689) (MERGE-UNICODE-TRANSLATION-TABLES1 55691 . 58799)) (
-58802 63265 (INVERT-ALL-UNICODE-MAPPINGS 58812 . 61251) (UNICODE-EXTEND-TRANSLATION? 61253 . 63263)) (
-64233 76664 (WRITE-UNICODE-MAPPING 64243 . 67993) (WRITE-UNICODE-INCLUDED 67995 . 72717) (
-WRITE-UNICODE-MAPPING-HEADER 72719 . 73967) (WRITE-UNICODE-MAPPING-FILENAME 73969 . 75499) (HEXSTRING 
-75501 . 76662)) (76665 77341 (XCCS-UTF8-AFTER-OPEN 76675 . 77339)) (79866 85368 (UTF8HEXSTRING 79876
- . 82081) (XTOUSTRING 82083 . 85003) (XCCSSTRING 85005 . 85366)) (85369 86879 (SHOWCHARS 85379 . 86877
+  (FILEMAP (NIL (3915 18061 (UTF8.OUTCHARFN 3925 . 6723) (UTF8.INCCODEFN 6725 . 12337) (UTF8.PEEKCCODEFN
+ 12339 . 17079) (\UTF8.BACKCCODEFN 17081 . 18059)) (18062 21929 (UTF16BE.OUTCHARFN 18072 . 18982) (
+UTF16BE.INCCODEFN 18984 . 19883) (UTF16BE.PEEKCCODEFN 19885 . 20956) (\UTF16BE.BACKCCODEFN 20958 . 
+21927)) (21959 24240 (MAKE-UNICODE-FORMATS 21969 . 24238)) (24337 33379 (UNICODE.UNMAPPED 24347 . 
+26421) (UNICODE-EXTEND-TRANSLATION? 26423 . 29002) (UTF8.BINCODE 29004 . 31583) (\UTF8.FETCHCODE 31585
+ . 33377)) (33380 38901 (UTF8.VALIDATE 33390 . 35987) (UTF8-SIZE-FROM-BYTE1 35989 . 36421) (
+NUTF8-BYTE1-BYTES 36423 . 37160) (NUTF8-CODE-BYTES 37162 . 38219) (NUTF8-STRING-BYTES 38221 . 38899)) 
+(40332 40681 (XTOUCODE 40342 . 40510) (UTOXCODE 40512 . 40679)) (41624 47670 (
+READ-UNICODE-MAPPING-FILENAMES 41634 . 44581) (READ-UNICODE-MAPPING 44583 . 47668)) (47737 61373 (
+MAKE-UNICODE-TRANSLATION-TABLES 47747 . 56819) (MERGE-UNICODE-TRANSLATION-TABLES 56821 . 58261) (
+MERGE-UNICODE-TRANSLATION-TABLES1 58263 . 61371)) (61374 64671 (INVERT-ALL-UNICODE-MAPPINGS 61384 . 
+64669)) (65639 78070 (WRITE-UNICODE-MAPPING 65649 . 69399) (WRITE-UNICODE-INCLUDED 69401 . 74123) (
+WRITE-UNICODE-MAPPING-HEADER 74125 . 75373) (WRITE-UNICODE-MAPPING-FILENAME 75375 . 76905) (HEXSTRING 
+76907 . 78068)) (78071 78747 (XCCS-UTF8-AFTER-OPEN 78081 . 78745)) (81272 86774 (UTF8HEXSTRING 81282
+ . 83487) (XTOUSTRING 83489 . 86409) (XCCSSTRING 86411 . 86772)) (86775 88285 (SHOWCHARS 86785 . 88283
 )))))
 STOP

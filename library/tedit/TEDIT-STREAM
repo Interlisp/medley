@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 3-Feb-2024 14:34:04" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;610 141944 
+(FILECREATED "22-Feb-2024 23:11:56" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;612 140804 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEXTBIN)
+      :CHANGES-TO (RECORDS TEXTOBJ)
 
-      :PREVIOUS-DATE " 1-Feb-2024 11:45:08" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;609)
+      :PREVIOUS-DATE "16-Feb-2024 23:10:28" {WMEDLEY}<library>TEDIT>TEDIT-STREAM.;611)
 
 
 (PRETTYCOMPRINT TEDIT-STREAMCOMS)
@@ -66,8 +66,8 @@
 
               (DECLARE%: EVAL@COMPILE DONTCOPY (CONSTANTS (INSERTSTRINGLENGTH 512))
                      (MACROS \INSERTCH.EXTENDABLE))
-              (FNS \TEDIT.DELETE.SELPIECES \INSERTSELPIECES \INSERTCH \INSERTCH.HISTORY \INSERTEOL 
-                   \INSERTCH.INSERTION \INSERTCH.EXTEND)
+              (FNS \TEDIT.DELETE.SELPIECES \INSERTCH \INSERTCH.HISTORY \INSERTEOL \INSERTCH.INSERTION
+                   \INSERTCH.EXTEND)
               (FNS \SETUPGETCH))
                                                              (* ; 
                                                            "Deprecated, maybe still external callers")
@@ -149,9 +149,12 @@
                                                              "The current selection within the text")
            SCRATCHSEL                                        (* ; 
                                                              "Scratch space for the selection code")
-           MOVESEL                                           (* ; "Source for the next MOVE of text")
-           SHIFTEDSEL                                        (* ; "Source for the next COPY")
-           DELETESEL                                         (* ; "Text to be deleted imminently")
+           SCRATCHSEL2                                       (* ; 
+                                                      "Was MOVESEL: Source for the next MOVE of text")
+           NIL                                               (* ; 
+                                                           "Was SHIFTEDSEL: Source for the next COPY")
+           NIL                                               (* ; 
+                                                       "Was DELETESEL: Text to be deleted imminently")
            WRIGHT                                            (* ; 
                                     "Right edge of the window (or subregion) where this is displayed")
            WTOP                                              (* ; "Top of the window/region")
@@ -196,7 +199,7 @@
            (BLUEPENDINGDELETE FLAG)                          (* ; "T if the next insertion in this document is to be preceded by a deletion of the then-current selection")
            TXTHISTORY                                        (* ; 
                                                             "The history list for this edit session.")
-           (SELWINDOW FULLXPOINTER)                          (* ; 
+           (SELPANE FULLXPOINTER)                            (* ; 
  "The pane in which the last 'real' selection got made for this edit;  used by TEDIT.NORMALIZECAREET")
            PROMPTWINDOW                                      (* ; 
    "A window to be used for unscheduled interactions;  normally a small window above the edit window")
@@ -227,14 +230,7 @@
                                          (freplace \XDIRTY OF DATUM WITH NEWVALUE))]
           SEL _ (create SELECTION)
           SCRATCHSEL _ (create SELECTION)
-          MOVESEL _ (create SELECTION
-                           HOWHEIGHT _ 32767
-                           HASCARET _ NIL)
-          SHIFTEDSEL _ (create SELECTION
-                              HASCARET _ NIL)
-          DELETESEL _ (create SELECTION
-                             HOWHEIGHT _ 32767
-                             HASCARET _ NIL)
+          SCRATCHSEL2 _ (create SELECTION)
           TEXTLEN _ 0 WRIGHT _ 0 WTOP _ 0 WLEFT _ 0 WBOTTOM _ 0 TXTFILE _ NIL \XDIRTY _ NIL 
           MOUSEREGION _ 'TEXT THISLINE _ (create THISLINE)
           MENUFLG _ NIL FMTSPEC _ TEDIT.DEFAULT.FMTSPEC FORMATTEDP _ NIL INSERTSTRING _ NIL)
@@ -1907,74 +1903,52 @@
 (DEFINEQ
 
 (\TEDIT.DELETE.SELPIECES
-  [LAMBDA (TEXTOBJ FIRSTCHANGEDCHNO NCHARSCHANGED)           (* ; "Edited 11-Dec-2023 09:51 by rmk")
+  [LAMBDA (TEXTOBJ TARGETSEL)                                (* ; "Edited 13-Feb-2024 00:13 by rmk")
+                                                             (* ; "Edited 11-Dec-2023 09:51 by rmk")
                                                              (* ; "Edited 21-Oct-2023 23:50 by rmk")
                                                              (* ; "Edited  3-Jun-2023 22:31 by rmk")
                                                             (* ; "Edited 29-Jan-99 17:28 by kaplan")
 
-    (* ;; "Delete the selected characters.  FIRSTCHANGEDCHNO may be a selection.  If any of the pieces contains an objecting object, nothing is done.")
+    (* ;; "Delete the characters selected by TARGETSEL.  If any of the pieces contains an objecting object, nothing is done.")
 
     (CL:UNLESS (fetch (TEXTOBJ TXTREADONLY) of TEXTOBJ)
 
         (* ;; "Only delete characters if changes are permitted. ")
 
         (BTVALIDATE '\TEDIT.DELETE.SELPIECES 'START TEXTOBJ)
-        (CL:WHEN (type? SELECTION FIRSTCHANGEDCHNO)
-            (SETQ NCHARSCHANGED (GETSEL FIRSTCHANGEDCHNO DCH))
-            (SETQ FIRSTCHANGEDCHNO (GETSEL FIRSTCHANGEDCHNO CH#)))
-        [PROG ((SELPIECES (\SELPIECES FIRSTCHANGEDCHNO (SUB1 (IPLUS FIRSTCHANGEDCHNO NCHARSCHANGED))
-                                 TEXTOBJ))
-               PREVPC)
-              (CL:WHEN (AND (fetch (SELPIECES SPFIRST) of SELPIECES)
-                            (for PC inselpieces SELPIECES always (OBJECT.ALLOWS PC 'DELETE TEXTOBJ)))
+        (LET (SELPIECES PREVPC)
+             (SETQ SELPIECES (\SELPIECES TARGETSEL))
+             (CL:WHEN (AND (fetch (SELPIECES SPFIRST) of SELPIECES)
+                           (for PC inselpieces SELPIECES always (OBJECT.ALLOWS PC 'DELETE TEXTOBJ)))
 
-                  (* ;; "First deleted piece still points back into the TEXTOBJ sequence")
+                 (* ;; "First deleted piece still points back into the TEXTOBJ sequence")
 
-                  (SETQ PREVPC (PREVPIECE (fetch (SELPIECES SPFIRST) of SELPIECES)))
-                  (\DELETEPIECES SELPIECES TEXTOBJ)
-                  (FSETTOBJ TEXTOBJ \DIRTY T)
+                 (SETQ PREVPC (PREVPIECE (ffetch (SELPIECES SPFIRST) of SELPIECES)))
+                 (\DELETEPIECES SELPIECES TEXTOBJ)
+                 (FSETTOBJ TEXTOBJ \DIRTY T)
 
-                  (* ;; "If the the effect of the deletion is to concatenate a (non-empty) prefix of one paragraph with a (non-empty) suffix of another, propagate the prefix PARALOOKS all the way through to the end of the newly combined paragraph. All the pieces of a paragraph must have the same PARALOOKS.")
+                 (* ;; "If the the effect of the deletion is to concatenate a (non-empty) prefix of one paragraph with a (non-empty) suffix of another, propagate the prefix PARALOOKS all the way through to the end of the newly combined paragraph. All the pieces of a paragraph must have the same PARALOOKS.")
 
-                  (CL:WHEN (AND PREVPC (NOT (PPARALAST PREVPC)))
+                 (CL:WHEN (AND PREVPC (NOT (PPARALAST PREVPC)))
                                                              (* ; "Retained a non-empty prefix")
-                      (for PC (PPLOOKS _ (PPARALOOKS PREVPC)) inpieces (NEXTPIECE PREVPC)
-                         do 
-                            (* ;; 
+                     (for PC (PPLOOKS _ (PPARALOOKS PREVPC)) inpieces (NEXTPIECE PREVPC)
+                        do 
+                           (* ;; 
                         "(NEXTPIECE PREVPC) is the first retained piece linked in after the deletion")
 
-                            (FSETPC PC PPARALOOKS PPLOOKS) repeatuntil (PPARALAST PC)))
-                  (BTVALIDATE '\TEDIT.DELETE.SELPIECES 'END TEXTOBJ)
+                           (FSETPC PC PPARALOOKS PPLOOKS) repeatuntil (PPARALAST PC)))
+                 (BTVALIDATE '\TEDIT.DELETE.SELPIECES 'END TEXTOBJ)
 
-                  (* ;; "")
+                 (* ;; "")
 
-                  (* ;; 
-                  "The pieces are now properly linked with the proper looks.  Now for the history:")
+                 (* ;; "The pieces are now properly linked with the proper looks.  For the history, SELPIECES knows where it came from")
 
-                  (\TEDIT.HISTORYADD TEXTOBJ
-                         (create TEDITHISTORYEVENT
-                                THACTION _ :Delete
-                                THCH# _ FIRSTCHANGEDCHNO
-                                THLEN _ NCHARSCHANGED
-                                THDELETEDPIECES _ SELPIECES)))])])
-
-(\INSERTSELPIECES
-  [LAMBDA (SELPIECES TEXTOBJ CH#)                            (* ; "Edited 29-Aug-2023 11:01 by rmk")
-                                                             (* ; "Edited  2-Jul-2023 16:35 by rmk")
-                                                             (* ; "Edited  3-Jun-2023 20:53 by rmk")
-                                                             (* ; "Edited 21-May-2023 21:00 by rmk")
-
-    (* ;; "")
-
-    (* ;; " ")
-
-    (* ;; "Inserts pieces in  SELPIECES into TEXTOBJ starting at CH#.  This assumes that these pieces are already properly copied, if need be, and they are initially linked from SFIRST to SPLAST.")
-
-    (LET ((NEXTPC (\ALIGNEDPIECE CH# TEXTOBJ)))
-         (\INSERTPIECES (fetch (SELPIECES SPFIRST) of SELPIECES)
-                NEXTPC TEXTOBJ)
-         (\TEDIT.DIFFUSE.PARALOOKS (PREVPIECE NEXTPC)
-                NEXTPC])
+                 (\TEDIT.HISTORYADD TEXTOBJ (create TEDITHISTORYEVENT
+                                                   THACTION _ :Delete
+                                                   THCH# _ (FGETSEL TARGETSEL CH#)
+                                                   THLEN _ (FGETSEL TARGETSEL DCH)
+                                                   THDELETEDPIECES _ SELPIECES))
+                 T)))])
 
 (\INSERTCH
   [LAMBDA (CH CH# TEXTOBJ PARALAST)                          (* ; "Edited 21-Jan-2024 14:06 by rmk")
@@ -2427,24 +2401,24 @@
 (ADDTOVAR LAMA TEXTPROP)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (33463 57117 (\TEXTBIN 33473 . 40978) (\TEXTPEEKBIN 40980 . 45203) (\TEXTBACKFILEPTR 
-45205 . 50759) (\TEDIT.INSTALL.FILEBUFFER 50761 . 54592) (\TEXTBOUT 54594 . 57115)) (58021 60941 (
-\TEXTSTREAM.OUTCHARFN 58031 . 59467) (\TEXTSTREAM.INCCCODEFN 59469 . 60210) (\TEXTSTREAM.BACKCCODEFN 
-60212 . 60690) (\TEXTSTREAM.FORMATBYTESTREAM 60692 . 60939)) (60988 71596 (OPENTEXTSTREAM 60998 . 
-66489) (COPYTEXTSTREAM 66491 . 69656) (TEDIT.STREAMCHANGEDP 69658 . 69960) (TEXTSTREAMP 69962 . 70376)
- (TXTFILE 70378 . 70847) (REOPENTEXTSTREAM 70849 . 71594)) (71597 95349 (\TEDIT.OPENTEXTSTREAM.PIECES 
-71607 . 75916) (\TEDIT.OPENTEXTSTREAM.PROPS 75918 . 76974) (\TEDIT.OPENTEXTSTREAM.SETUP.SEL 76976 . 
-80343) (\TEDIT.OPENTEXTSTREAM.WINDOW 80345 . 81709) (\TEDIT.OPENTEXTSTREAM.DEFAULTLOOKS 81711 . 83558)
- (\TEDIT.OPENTEXTFILE 83560 . 85159) (\TEDIT.CREATE.TEXTSTREAM 85161 . 85980) (\TEDIT.REOPEN.STREAM 
-85982 . 87980) (\TEXTINIT 87982 . 94030) (\TEXTTTYBOUT 94032 . 95347)) (95467 110205 (\TEXTCLOSEF 
-95477 . 96668) (\TEXTDSPFONT 96670 . 97671) (\TEXTEOFP 97673 . 99290) (\TEXTGETEOFPTR 99292 . 99506) (
-\TEXTGETFILEPTR 99508 . 101609) (\TEXTOPENF 101611 . 102583) (\TEXTSETEOF 102585 . 103100) (
-\TEXTSETFILEPTR 103102 . 104946) (\TEXTDSPXPOSITION 104948 . 105808) (\TEXTDSPYPOSITION 105810 . 
-106357) (\TEXTLEFTMARGIN 106359 . 106781) (\TEXTRIGHTMARGIN 106783 . 109739) (\TEXTDSPCHARWIDTH 109741
- . 109918) (\TEXTDSPSTRINGWIDTH 109920 . 110099) (\TEXTDSPLINEFEED 110101 . 110203)) (111252 131373 (
-\TEDIT.DELETE.SELPIECES 111262 . 114333) (\INSERTSELPIECES 114335 . 115271) (\INSERTCH 115273 . 122331
-) (\INSERTCH.HISTORY 122333 . 125413) (\INSERTEOL 125415 . 127375) (\INSERTCH.INSERTION 127377 . 
-130208) (\INSERTCH.EXTEND 130210 . 131371)) (131374 132767 (\SETUPGETCH 131384 . 132765)) (132825 
-137925 (\TEDIT.INSTALL.PIECE 132835 . 137923)) (137963 141415 (GETTEXTPROP 137973 . 139065) (
-PUTTEXTPROP 139067 . 140913) (TEXTPROP 140915 . 141413)))))
+  (FILEMAP (NIL (33365 57019 (\TEXTBIN 33375 . 40880) (\TEXTPEEKBIN 40882 . 45105) (\TEXTBACKFILEPTR 
+45107 . 50661) (\TEDIT.INSTALL.FILEBUFFER 50663 . 54494) (\TEXTBOUT 54496 . 57017)) (57923 60843 (
+\TEXTSTREAM.OUTCHARFN 57933 . 59369) (\TEXTSTREAM.INCCCODEFN 59371 . 60112) (\TEXTSTREAM.BACKCCODEFN 
+60114 . 60592) (\TEXTSTREAM.FORMATBYTESTREAM 60594 . 60841)) (60890 71498 (OPENTEXTSTREAM 60900 . 
+66391) (COPYTEXTSTREAM 66393 . 69558) (TEDIT.STREAMCHANGEDP 69560 . 69862) (TEXTSTREAMP 69864 . 70278)
+ (TXTFILE 70280 . 70749) (REOPENTEXTSTREAM 70751 . 71496)) (71499 95251 (\TEDIT.OPENTEXTSTREAM.PIECES 
+71509 . 75818) (\TEDIT.OPENTEXTSTREAM.PROPS 75820 . 76876) (\TEDIT.OPENTEXTSTREAM.SETUP.SEL 76878 . 
+80245) (\TEDIT.OPENTEXTSTREAM.WINDOW 80247 . 81611) (\TEDIT.OPENTEXTSTREAM.DEFAULTLOOKS 81613 . 83460)
+ (\TEDIT.OPENTEXTFILE 83462 . 85061) (\TEDIT.CREATE.TEXTSTREAM 85063 . 85882) (\TEDIT.REOPEN.STREAM 
+85884 . 87882) (\TEXTINIT 87884 . 93932) (\TEXTTTYBOUT 93934 . 95249)) (95369 110107 (\TEXTCLOSEF 
+95379 . 96570) (\TEXTDSPFONT 96572 . 97573) (\TEXTEOFP 97575 . 99192) (\TEXTGETEOFPTR 99194 . 99408) (
+\TEXTGETFILEPTR 99410 . 101511) (\TEXTOPENF 101513 . 102485) (\TEXTSETEOF 102487 . 103002) (
+\TEXTSETFILEPTR 103004 . 104848) (\TEXTDSPXPOSITION 104850 . 105710) (\TEXTDSPYPOSITION 105712 . 
+106259) (\TEXTLEFTMARGIN 106261 . 106683) (\TEXTRIGHTMARGIN 106685 . 109641) (\TEXTDSPCHARWIDTH 109643
+ . 109820) (\TEXTDSPSTRINGWIDTH 109822 . 110001) (\TEXTDSPLINEFEED 110003 . 110105)) (111154 130233 (
+\TEDIT.DELETE.SELPIECES 111164 . 114131) (\INSERTCH 114133 . 121191) (\INSERTCH.HISTORY 121193 . 
+124273) (\INSERTEOL 124275 . 126235) (\INSERTCH.INSERTION 126237 . 129068) (\INSERTCH.EXTEND 129070 . 
+130231)) (130234 131627 (\SETUPGETCH 130244 . 131625)) (131685 136785 (\TEDIT.INSTALL.PIECE 131695 . 
+136783)) (136823 140275 (GETTEXTPROP 136833 . 137925) (PUTTEXTPROP 137927 . 139773) (TEXTPROP 139775
+ . 140273)))))
 STOP

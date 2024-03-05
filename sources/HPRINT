@@ -1,17 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "31-Jul-2023 13:33:10" {WMEDLEY}<sources>HPRINT.;5 57926  
+(FILECREATED "15-Jan-2024 13:54:51" {WMEDLEY}<sources>HPRINT.;16 62566  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS EQUALALL)
+      :CHANGES-TO (FNS BLOCKEQUALP)
 
-      :PREVIOUS-DATE " 3-Aug-2022 21:31:57" {WMEDLEY}<sources>HPRINT.;2)
+      :PREVIOUS-DATE "11-Jan-2024 10:52:14" {WMEDLEY}<sources>HPRINT.;14)
 
-
-(* ; "
-Copyright (c) 1982-1988, 1990-1991, 1993-1994, 2022 by Venue & Xerox Corporation.
-")
 
 (PRETTYCOMPRINT HPRINTCOMS)
 
@@ -23,7 +19,7 @@ Copyright (c) 1982-1988, 1990-1991, 1993-1994, 2022 by Venue & Xerox Corporation
         (FNS HPRINT HPRINT1 HPRINTEND RPTPRINT RPTEND RPTPUT HPRINTSP HPERR HVFWDCDREAD HVBAKREAD 
              HVREADCHECKGETFN HVREADEND HVRPTREAD HVFWDREAD HREAD HPINITRDTBL HVREADERR HPRINSP)
         (FNS COPYALL \COPYDATATYPE HCOPYALL HCOPYALL1)
-        (FNS EQUALALL EQUALHASH)
+        (FNS EQUALALL EQUALHASH BLOCKEQUALP)
         (BLOCKS (COPYALL COPYALL (NOLINKFNS . T)
                        (GLOBALVARS SYSHASHARRAY))
                (EQUALALL EQUALALL EQUALHASH (RETFNS EQUALHASH)
@@ -902,7 +898,8 @@ Copyright (c) 1982-1988, 1990-1991, 1993-1994, 2022 by Venue & Xerox Corporation
 (DEFINEQ
 
 (EQUALALL
-  [LAMBDA (X Y)                                              (* ; "Edited 31-Jul-2023 13:31 by rmk")
+  [LAMBDA (X Y)                                              (* ; "Edited 24-Dec-2023 21:34 by rmk")
+                                                             (* ; "Edited 31-Jul-2023 13:31 by rmk")
                                                             (* ; "Edited 26-Apr-2021 14:34 by rmk:")
     (OR (EQ X Y)
         (PROG ((TY (TYPENAME Y))
@@ -974,9 +971,10 @@ Copyright (c) 1982-1988, 1990-1991, 1993-1994, 2022 by Venue & Xerox Corporation
                                ((BITMAP BIGBM) 
                                     (BITMAPEQUAL X Y))
                                (OR (EQP X Y)
-                                   (AND (SETQ TY (GETDESCRIPTORS TY))
-                                        (for FIELD in TY always (EQUALALL (FETCHFIELD FIELD X)
-                                                                       (FETCHFIELD FIELD Y])
+                                   (if (SETQ TEM (GETDESCRIPTORS TY))
+                                       then (for FIELD in TEM always (EQUALALL (FETCHFIELD FIELD X)
+                                                                            (FETCHFIELD FIELD Y)))
+                                     else (BLOCKEQUALP X Y])
 
 (EQUALHASH
   [LAMBDA (AR1 AR2)
@@ -1006,6 +1004,63 @@ Copyright (c) 1982-1988, 1990-1991, 1993-1994, 2022 by Venue & Xerox Corporation
                                                                               (GETHASH Y AR1]
                                        (RETFROM (FUNCTION EQUALHASH]
     T])
+
+(BLOCKEQUALP
+  [LAMBDA (BLOCK1 BLOCK2)                                    (* ; "Edited 15-Jan-2024 13:54 by rmk")
+                                                             (* ; "Edited 11-Jan-2024 10:52 by rmk")
+                                                             (* ; "Edited  1-Jan-2024 22:59 by rmk")
+                                                             (* ; "Edited 24-Dec-2023 21:14 by rmk")
+                                                             (* ; "Edited 10-Dec-2023 21:19 by rmk")
+
+    (* ;; "True if BLOCK1 and BLOCK2 are blocks (produced by \ALLOCBLOCK) of equal size and equivalent contents.  Small blocks are allocated as hunks. Hunks have their own datatypes, blocks have type NIL and type number 0.  Either way the type numbers have to be the same.")
+
+    (* ;; "The ARLEN of blocks may be bigger than the requested allocation size, given the way the allocator works.  We return NIL if they differ up to the ARLEN of the smallest block, and all the cells in the larger block above that are the initial value, NIL or 0.")
+
+    (OR (EQ BLOCK1 BLOCK2)
+        (CL:WHEN (AND (\BLOCKDATAP BLOCK1)
+                      (\BLOCKDATAP BLOCK2))
+
+            (* ;; "\BLOCKDATAP tests both arrayblocks and hunks")
+
+            [LET (HDR1 HDR2 NWORDS1 NWORDS2 GCTYPE DTD (TYPENO (NTYPX BLOCK1)))
+                 (AND (EQ TYPENO (NTYPX BLOCK2))
+                      (if (NEQ 0 TYPENO)
+                          then (SETQ DTD (\GETDTD TYPENO))   (* ; 
+                                                        "Hunks: if TYNO's are the same, so are DTD's")
+                               (SETQ GCTYPE (fetch DTDGCTYPE of DTD))
+                               (SETQ NWORDS1 (SETQ NWORDS2 (fetch DTDSIZE of DTD)))
+                        else (SETQ HDR1 (\ADDBASE BLOCK1 (IMINUS \ArrayBlockHeaderWords))) 
+                                                             (* ; "Real blocks, get the headers")
+                             (SETQ HDR2 (\ADDBASE BLOCK1 (IMINUS \ArrayBlockHeaderWords)))
+                             (SETQ NWORDS1 (UNFOLD (IDIFFERENCE (ffetch (ARRAYBLOCK ARLEN)
+                                                                   of HDR1)
+                                                          \ArrayBlockOverheadCells)
+                                                  WORDSPERCELL))
+                             (SETQ NWORDS2 (UNFOLD (IDIFFERENCE (ffetch (ARRAYBLOCK ARLEN)
+                                                                   of HDR2)
+                                                          \ArrayBlockOverheadCells)
+                                                  WORDSPERCELL))
+                             (SETQ GCTYPE (ffetch (ARRAYBLOCK GCTYPE) of HDR1))
+                             (EQ GCTYPE (ffetch (ARRAYBLOCK GCTYPE) of HDR2)))
+                      (if (EQ PTRBLOCK.GCT GCTYPE)
+                          then [AND (for I from 0 to (SUB1 (IMIN NWORDS1 NWORDS2)) by WORDSPERCELL
+                                       always (EQUALALL (\GETBASEPTR BLOCK1 I)
+                                                     (\GETBASEPTR BLOCK2 I)))
+                                    (if (IEQP NWORDS1 NWORDS2)
+                                      elseif (IGREATERP NWORDS1 NWORDS2)
+                                        then (for I from NWORDS2 to (SUB1 NWORDS1) by WORDSPERCELL
+                                                never (\GETBASEPTR BLOCK2 I))
+                                      else (for I from NWORDS1 to (SUB1 NWORDS2) by WORDSPERCELL
+                                              never (\GETBASEPTR BLOCK1 I]
+                        else (AND (for I from 0 to (SUB1 (IMIN NWORDS1 NWORDS2)) by WORDSPERCELL
+                                     always (IEQP (\GETBASEFIXP BLOCK1 I)
+                                                  (\GETBASEFIXP BLOCK2 I)))
+                                  (if (IEQP NWORDS1 NWORDS2)
+                                    elseif (IGREATERP NWORDS1 NWORDS2)
+                                      then (for I from NWORDS2 to (SUB1 NWORDS1) by WORDSPERCELL
+                                              always (EQ 0 (\GETBASEFIXP BLOCK2 I)))
+                                    else (for I from NWORDS1 to (SUB1 NWORDS2) by WORDSPERCELL
+                                            always (EQ 0 (\GETBASEFIXP BLOCK1 I])])
 )
 (DECLARE%: DONTEVAL@LOAD DOEVAL@COMPILE DONTCOPY
 
@@ -1115,17 +1170,16 @@ Copyright (c) 1982-1988, 1990-1991, 1993-1994, 2022 by Venue & Xerox Corporation
 
 (ADDTOVAR LAMA )
 )
-(PUTPROPS HPRINT COPYRIGHT ("Venue & Xerox Corporation" 1982 1983 1984 1985 1986 1987 1988 1990 1991 
-1993 1994 2022))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3652 6190 (MAKEHVPRETTYCOMS 3662 . 4949) (READVARS 4951 . 5517) (HPRINT0 5519 . 6188)) 
-(6192 6525 (READVARS-FROM-STRINGS 6192 . 6525)) (6527 6914 (READVARS-FROM-STREAM 6527 . 6914)) (6915 
-8843 (READVAR-FROM-STRING 6925 . 7331) (READVARS-FROM-STRING 7333 . 7569) (HPRINT-TO-STRING 7571 . 
-7777) (HPRINT-TO-STRINGS 7779 . 8841)) (9654 38247 (HPRINT 9664 . 11655) (HPRINT1 11657 . 23159) (
-HPRINTEND 23161 . 24197) (RPTPRINT 24199 . 24437) (RPTEND 24439 . 24598) (RPTPUT 24600 . 25098) (
-HPRINTSP 25100 . 25164) (HPERR 25166 . 25263) (HVFWDCDREAD 25265 . 25644) (HVBAKREAD 25646 . 33691) (
-HVREADCHECKGETFN 33693 . 35092) (HVREADEND 35094 . 35446) (HVRPTREAD 35448 . 35974) (HVFWDREAD 35976
- . 36830) (HREAD 36832 . 37154) (HPINITRDTBL 37156 . 37990) (HVREADERR 37992 . 38105) (HPRINSP 38107
- . 38245)) (38248 47130 (COPYALL 38258 . 42161) (\COPYDATATYPE 42163 . 42852) (HCOPYALL 42854 . 43164)
- (HCOPYALL1 43166 . 47128)) (47131 54425 (EQUALALL 47141 . 52746) (EQUALHASH 52748 . 54423)))))
+  (FILEMAP (NIL (3576 6114 (MAKEHVPRETTYCOMS 3586 . 4873) (READVARS 4875 . 5441) (HPRINT0 5443 . 6112)) 
+(6116 6449 (READVARS-FROM-STRINGS 6116 . 6449)) (6451 6838 (READVARS-FROM-STREAM 6451 . 6838)) (6839 
+8767 (READVAR-FROM-STRING 6849 . 7255) (READVARS-FROM-STRING 7257 . 7493) (HPRINT-TO-STRING 7495 . 
+7701) (HPRINT-TO-STRINGS 7703 . 8765)) (9578 38171 (HPRINT 9588 . 11579) (HPRINT1 11581 . 23083) (
+HPRINTEND 23085 . 24121) (RPTPRINT 24123 . 24361) (RPTEND 24363 . 24522) (RPTPUT 24524 . 25022) (
+HPRINTSP 25024 . 25088) (HPERR 25090 . 25187) (HVFWDCDREAD 25189 . 25568) (HVBAKREAD 25570 . 33615) (
+HVREADCHECKGETFN 33617 . 35016) (HVREADEND 35018 . 35370) (HVRPTREAD 35372 . 35898) (HVFWDREAD 35900
+ . 36754) (HREAD 36756 . 37078) (HPINITRDTBL 37080 . 37914) (HVREADERR 37916 . 38029) (HPRINSP 38031
+ . 38169)) (38172 47054 (COPYALL 38182 . 42085) (\COPYDATATYPE 42087 . 42776) (HCOPYALL 42778 . 43088)
+ (HCOPYALL1 43090 . 47052)) (47055 59184 (EQUALALL 47065 . 52863) (EQUALHASH 52865 . 54540) (
+BLOCKEQUALP 54542 . 59182)))))
 STOP

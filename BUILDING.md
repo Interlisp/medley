@@ -30,7 +30,7 @@ In these instructions, there is an assumption that the loadup scripts can find o
 Loadups use the run-medley script, which looks for Maiko (actually the lde & ldeinit executables) as follows:
 
 1. lde (ldeinit) on PATH
-2. In the `<osversion>.<machinetype>` subdirectory of the directory specified by $MAIKODIR
+2. In the `<osversion>.<machinetype>` subdirectory of the directory specified by the $MAIKODIR environment variable
 3. In the `<osversion>.<machinetype>` subdirectory of the directory specified by $MEDLEYDIR/../maiko/
 4. In the `<osversion>.<machinetype>` subdirectory of the directory specified by $MEDLEYDIR/maiko/
 
@@ -44,9 +44,13 @@ time ./scripts/loadup-all.sh -apps && time ./scripts/loadup-db.sh
 ```
 does everything; on a fast machine it takes 4-6 minutes, most of which is spent in the `loadup-db.sh` step. Without the `loadup-db.sh` step, it runs in 22 seconds on a fast system.
 
-These are explained in reverse order:
+## How loadup-all.sh works
 
-*` loadup-init.sh` 
+You don't need to know this unless you want to change some of the low-level files involved.
+
+The script "loadup-all.sh" itself involes scripts used for different steps in the loadup -- basically loadup-all calls the scripts in this order:
+
+* `loadup-init.sh` 
 * `loadup-mid-from-init.sh`
 * `loadup-lisp-from-mid.sh` 
 * `loadup-full-from-lisp.sh`

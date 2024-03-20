@@ -1,7 +1,22 @@
 #!/bin/sh
-
 # cpv file dest
 # could extend with -r or copying multiple files
+
+#define ln_or_cp function - try to hardlink and if that fails copy source to dest
+ln_or_cp () {
+  ln_or_cp_src="$1"
+  ln_or_cp_dest="$2"
+  ln "$ln_or_cp_src" "$ln_or_cp_dest" >/dev/null 2>&1
+  if [ $? -eq 0 ]
+  then
+    return 0
+  else
+    cp -p "$ln_or_cp_src" "$ln_or_cp_dest"
+    return $?
+  fi
+}
+# end of funtion definitions
+
 
 file="$1"
 dest="$2"
@@ -22,11 +37,21 @@ if [ -d "$dest" ]; then
     exit 1
 fi
 
-# if no such file $dest then just copy
-if [ ! -f "$dest" ]; then
-    cp $file $dest
-    echo "Added $(basename $dest) to $(dirname $dest)"
-    exit 0
+# if no such file $dest or dest.~[0-9]*~ then just link or copy
+# without adding version info
+# THEN EXIT
+if [ ! -f "$dest" ] && ! ls "$dest".~[0-9]*~ >/dev/null 2>&1
+then
+  ln_or_cp $file $dest
+  res=$?
+  if [ $res -eq 0 ]
+  then
+    msg_start="Added"
+  else
+    msg_start="Error: failed to add"
+  fi
+  echo "$msg_start $(basename $dest) to $(dirname $dest)"
+  exit $res
 fi
 
 
@@ -56,14 +81,27 @@ else
     fi
 fi
 
-# make new version and link it
-ln $file $dest.~$new~ >/dev/null 2>&1
-if [ $? -ne 0 ]
+# make new version and link or copy it.
+# If link or copy fails, then exit with error code
+ln_or_cp $file $dest.~$new~
+res=$?
+if [ $res -eq 0 ]
 then
-    cp -p $file $dest.~$new~
+  echo "Added $(basename $dest.~$new~) to $(dirname $dest.~$new~)"
+else
+  echo "Error: failed to add $(basename $dest.~$new~) to $(dirname $dest.~$new~)."
+  exit $res
 fi
 
-echo "Added $(basename $dest.~$new~) to $(dirname $dest.~$new~)"
+# hardlink latest version to unversioned filename
 rm -f $dest
 ln $dest.~$new~ $dest
-echo "Linked $(basename $dest) to $(basename $dest.~$new~) in $(dirname $dest)"
+if [ $? -eq 0 ]
+then
+  msg_start="Linked"
+else
+  msg_start="Warning: failed to link"
+fi
+echo "$msg_start $(basename $dest) to $(basename $dest.~$new~) in $(dirname $dest)"
+
+exit 0

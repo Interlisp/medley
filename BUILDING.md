@@ -1,6 +1,12 @@
 # How to Build Medley and make a Release
 
+The files in the Medley repository are used for making "loadups" lisp.sysout, full.sysout, apps.sysout. In order to build the Medley images, you need to have a build of "Maiko" (in flavors 'ldeinit' and 'lde' and either (`ldex` or `ldesdl`).  Head over to the `Interlisp/maiko` repository to find out about making those.
+
 # Using GitHub actions
+
+Note that GitHub actions are used to automate the build process and insure that the system is built using known files, and that the releases are coordinated across platforms.  We try to minimize dependencies on GitHub.
+
+That said, you can manually trigger the automatic making of Medley loadups.
 
 In the GitHub medley repository (Interlisp/medley) go to the Actions tab.
 
@@ -8,6 +14,7 @@ It will list the available GitHub actions.
 Select: **Build/Push Release & Docker**. 
 
 In the middle of the screen there is a box labeled "Workflow Runs".
+
 There should be a row in it that states 'This workflow has a workflow_dispatch event trigger' with a drop down menu (it really looks more like a button) on the right side labeled 'Run workflow'.  Select that and you'll get a form allowing you to select the branch (I've only used Master) and enter the release name.  Enter a name or leave it empty and press the green 'Run workflow' button. The workflow should queue up and run.  
 
 Build/Push Release & Docker first builds Maiko and Medley, pushes a Medley release to the Interlisp/medley repo Releases, then makes a Docker image.
@@ -59,6 +66,15 @@ The script "loadup-all.sh" itself involes scripts used for different steps in th
 * `loadup-db.sh`
 * `copy-all.sh`
 
+Most of these scripts should only be run from the 'medley' repository top level directory.
+
+```
+ your-working-area
+    maiko
+    medley
+    notecards
+```
+
 These are explained in reverse order:
 
 ### `copy-all.sh`: copy files from build directory to loadups
@@ -85,7 +101,7 @@ Masterscope has some gaps and bugs so `fuller.database` isn't as useful as it co
 
 ### `loadup-apps-from-full.sh:`build `apps.sysout`
 
-`apps.sysout` includes some other components that are part of online.interlisp.org experience. 
+`apps.sysout` includes some other components that are part of online.interlisp.org experience. In particular, you need `notecards`, which is in a separate repository (currently).
 
 ### `loadup-full-from-lisp.sh`: Build a `full.sysout` and
 

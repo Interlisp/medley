@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 5-Feb-2024 13:49:35" {WMEDLEY}<library>UNICODE.;57 88440  
+(FILECREATED "16-Mar-2024 20:53:28" {WMEDLEY}<library>UNICODE.;62 97993  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS INVERT-ALL-UNICODE-MAPPINGS UNICODE-EXTEND-TRANSLATION?)
+      :CHANGES-TO (VARS UNICODECOMS)
+                  (FNS WRITEBOM)
 
-      :PREVIOUS-DATE " 4-Feb-2024 12:42:00" {WMEDLEY}<library>UNICODE.;56)
+      :PREVIOUS-DATE "11-Mar-2024 23:54:34" {WMEDLEY}<library>UNICODE.;61)
 
 
 (PRETTYCOMPRINT UNICODECOMS)
@@ -15,6 +16,8 @@
        ((COMS                                                (* ; "External formats")
               (FNS UTF8.OUTCHARFN UTF8.INCCODEFN UTF8.PEEKCCODEFN \UTF8.BACKCCODEFN)
               (FNS UTF16BE.OUTCHARFN UTF16BE.INCCODEFN UTF16BE.PEEKCCODEFN \UTF16BE.BACKCCODEFN)
+              (FNS UTF16LE.OUTCHARFN UTF16LE.INCCODEFN UTF16LE.PEEKCCODEFN \UTF16LE.BACKCCODEFN)
+              (FNS READBOM WRITEBOM)
               (INITVARS (EXTERNALEOL 'LF))
               (FNS MAKE-UNICODE-FORMATS)
               (P (MAKE-UNICODE-FORMATS EXTERNALEOL))
@@ -66,6 +69,7 @@
                                                                             16]
               (VARS UNICODE-MAPPING-HEADER))
         (FNS UTF8HEXSTRING XTOUSTRING XCCSSTRING)
+        (FNS UNHEXSTRING)
         (FNS SHOWCHARS)
         (DECLARE%: EVAL@COMPILE DONTCOPY (FILES (FROM LOADUPS)
                                                 EXPORTS.ALL))
@@ -336,27 +340,29 @@
                       (UNICODE.TRANSLATE CHARCODE *XCCSTOUNICODE*)) DO (\WOUT STREAM C])
 
 (UTF16BE.INCCODEFN
-  [LAMBDA (STREAM COUNTP RAW)                           (* ; "Edited  6-Aug-2021 16:05 by rmk:")
+  [LAMBDA (STREAM COUNTP RAW)                                (* ; "Edited 10-Mar-2024 12:00 by rmk")
+                                                            (* ; "Edited  6-Aug-2021 16:05 by rmk:")
 
     (* ;; 
-  "Do not do UNICODE to XCCS translation if RAW.  Test for SMALLPin case of funky EOF behavior")
+    "Do not do UNICODE to XCCS translation if RAW.  Test for SMALLPin case of funky EOF behavior")
 
     (DECLARE (USEDFREE *BYTECOUNTER*))
     (LET (CODE BYTE1 BYTE2 COUNT)
          (IF [AND (SMALLP (SETQ BYTE1 (\BIN STREAM)))
-                      (SMALLP (SETQ BYTE2 (\BIN STREAM]
+                  (SMALLP (SETQ BYTE2 (\BIN STREAM]
              THEN (SETQ COUNT 2)
-                   (SETQ CODE (LOGOR (LLSH (\BIN STREAM)
-                                           8)
-                                     (\BIN STREAM)))
-                   (CL:UNLESS RAW
-                       (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))
-                   (CL:WHEN COUNTP (SETQ *BYTECOUNTER* COUNT))
-                   CODE
+                  (SETQ CODE (create WORD
+                                    HIBYTE _ (\BIN STREAM)
+                                    LOBYTE _ (\BIN STREAM)))
+                  (CL:UNLESS RAW
+                      (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))
+                  (CL:WHEN COUNTP (SETQ *BYTECOUNTER* COUNT))
+                  CODE
            ELSE (ERROR "ODD NUMBER OF BYTES IN UTF16 FILE" STREAM])
 
 (UTF16BE.PEEKCCODEFN
-  [LAMBDA (STREAM NOERROR RAW)                          (* ; "Edited 14-Jun-2021 22:58 by rmk:")
+  [LAMBDA (STREAM NOERROR RAW)                               (* ; "Edited 10-Mar-2024 12:01 by rmk")
+                                                            (* ; "Edited 14-Jun-2021 22:58 by rmk:")
 
     (* ;; "Could be that the caller takes care of backing up the file position if the number of binned-bytes is returned.")
 
@@ -366,35 +372,36 @@
          (SETQ BYTE1 (\PEEKBIN STREAM NOERROR))
          (IF BYTE1
              THEN (\BIN STREAM)
-                   (SETQ BYTE2 (\PEEKBIN STREAM NOERROR))
-                   (\BACKFILEPTR STREAM)
-                   (IF BYTE2
-                       THEN (SETQ CODE (LOGOR (LLSH BYTE1 8)
-                                                  BYTE2))
-                             (CL:IF RAW
-                                 CODE
-                                 (UNICODE.TRANSLATE CODE *UNICODETOXCCS*))
-                     ELSEIF NOERROR
-                       THEN NIL)
+                  (SETQ BYTE2 (\PEEKBIN STREAM NOERROR))
+                  (\BACKFILEPTR STREAM)
+                  (IF BYTE2
+                      THEN (SETQ CODE (create WORD
+                                             HIBYTE _ BYTE1
+                                             LOBYTE _ BYTE2))
+                           (CL:IF RAW
+                               CODE
+                               (UNICODE.TRANSLATE CODE *UNICODETOXCCS*))
+                    ELSEIF NOERROR
+                      THEN NIL)
            ELSEIF NOERROR
              THEN NIL
            ELSE (ERROR "INVALID UTF16 CHARACTER" (LIST BYTE1 BYTE2])
 
 (\UTF16BE.BACKCCODEFN
-  [LAMBDA (STREAM COUNTP RAW)                                (* ; "Edited 19-Jul-2022 15:14 by rmk")
+  [LAMBDA (STREAM COUNTP RAW)                                (* ; "Edited 10-Mar-2024 12:02 by rmk")
+                                                             (* ; "Edited 19-Jul-2022 15:14 by rmk")
                                                             (* ; "Edited  6-Aug-2021 16:07 by rmk:")
 
     (* ;; "\BACKFILEPTR is NIL at beginning of FILE, do nothing.")
-
-    (* ;; "Common for big-ending and little-ending")
 
     (DECLARE (USEDFREE *BYTECOUNTER*))
     (CL:WHEN (\BACKFILEPTR STREAM)
         (LET (CODE (BYTE2 (\PEEKBIN STREAM)))
              (IF (\BACKFILEPTR STREAM)
                  THEN (CL:WHEN COUNTP (SETQ *BYTECOUNTER* -2))
-                      (SETQ CODE (LOGOR (LLSH BYTE2 8)
-                                        (\PEEKBIN STREAM)))
+                      (SETQ CODE (create WORD
+                                        HIBYTE _ (\PEEKBIN STREAM)
+                                        LOBYTE _ BYTE2))
                       (CL:IF RAW
                           CODE
                           (UNICODE.TRANSLATE CODE *UNICODETOXCCS*))
@@ -402,12 +409,164 @@
                  THEN (SETQ *BYTECOUNTER* -1)
                       NIL)))])
 )
+(DEFINEQ
+
+(UTF16LE.OUTCHARFN
+  [LAMBDA (STREAM CHARCODE RAW)                              (* ; "Edited 10-Mar-2024 11:58 by rmk")
+                                                            (* ; "Edited  8-Aug-2021 13:09 by rmk:")
+                                                            (* ; "Edited 30-Jan-2020 23:08 by rmk:")
+
+    (* ;; "PRINT UTF16 sequence for CHARCODE.  Do not do XCCS to UNICODE translation if RAW.")
+
+    (* ;; "Not sure about EOL conversion if truly %"raw%"")
+
+    (IF (EQ CHARCODE (CHARCODE EOL))
+        THEN (FREPLACE (STREAM CHARPOSITION) OF STREAM WITH 0)
+      ELSE (CHANGE (FFETCH (STREAM CHARPOSITION) OF STREAM)
+                  (IPLUS16 1 DATUM)))
+    (FOR C INSIDE (CL:IF RAW
+                      CHARCODE
+                      (UNICODE.TRANSLATE CHARCODE *XCCSTOUNICODE*))
+       DO (BOUT STREAM (fetch LOBYTE of CHARCODE))
+          (BOUT STREAM (fetch HIBYTE of CHARCODE])
+
+(UTF16LE.INCCODEFN
+  [LAMBDA (STREAM COUNTP RAW)                                (* ; "Edited 10-Mar-2024 12:03 by rmk")
+                                                            (* ; "Edited  6-Aug-2021 16:05 by rmk:")
+
+    (* ;; 
+    "Do not do UNICODE to XCCS translation if RAW.  Test for SMALLPin case of funky EOF behavior")
+
+    (DECLARE (USEDFREE *BYTECOUNTER*))
+    (LET (CODE BYTE1 BYTE2 COUNT)
+         (IF [AND (SMALLP (SETQ BYTE1 (\BIN STREAM)))
+                  (SMALLP (SETQ BYTE2 (\BIN STREAM]
+             THEN (SETQ COUNT 2)
+                  (SETQ CODE (create WORD
+                                    LOBYTE _ (\BIN STREAM)
+                                    HIBYTE _ (\BIN STREAM)))
+                  (CL:UNLESS RAW
+                      (SETQ CODE (UNICODE.TRANSLATE CODE *UNICODETOXCCS*)))
+                  (CL:WHEN COUNTP (SETQ *BYTECOUNTER* COUNT))
+                  CODE
+           ELSE (ERROR "ODD NUMBER OF BYTES IN UTF16 FILE" STREAM])
+
+(UTF16LE.PEEKCCODEFN
+  [LAMBDA (STREAM NOERROR RAW)                               (* ; "Edited 10-Mar-2024 11:43 by rmk")
+                                                            (* ; "Edited 14-Jun-2021 22:58 by rmk:")
+
+    (* ;; "Could be that the caller takes care of backing up the file position if the number of binned-bytes is returned.")
+
+    (* ;; "Do not do UNICODE to XCCS translation if RAW")
+
+    (LET (BYTE1 BYTE2 CODE)
+         (SETQ BYTE1 (\PEEKBIN STREAM NOERROR))
+         (IF BYTE1
+             THEN (\BIN STREAM)
+                  (SETQ BYTE2 (\PEEKBIN STREAM NOERROR))
+                  (\BACKFILEPTR STREAM)
+                  (IF BYTE2
+                      THEN (SETQ CODE (LOGOR (LLSH BYTE2 8)
+                                             BYTE1))
+                           (CL:IF RAW
+                               CODE
+                               (UNICODE.TRANSLATE CODE *UNICODETOXCCS*))
+                    ELSEIF NOERROR
+                      THEN NIL)
+           ELSEIF NOERROR
+             THEN NIL
+           ELSE (ERROR "INVALID UTF16 CHARACTER" (LIST BYTE1 BYTE2])
+
+(\UTF16LE.BACKCCODEFN
+  [LAMBDA (STREAM COUNTP RAW)                                (* ; "Edited 10-Mar-2024 12:04 by rmk")
+                                                             (* ; "Edited 19-Jul-2022 15:14 by rmk")
+                                                            (* ; "Edited  6-Aug-2021 16:07 by rmk:")
+
+    (* ;; "\BACKFILEPTR is NIL at beginning of FILE, do nothing.")
+
+    (DECLARE (USEDFREE *BYTECOUNTER*))
+    (CL:WHEN (\BACKFILEPTR STREAM)
+        (LET (CODE (BYTE2 (\PEEKBIN STREAM)))
+             (IF (\BACKFILEPTR STREAM)
+                 THEN (CL:WHEN COUNTP (SETQ *BYTECOUNTER* -2))
+                      (SETQ CODE (create WORD
+                                        HIBYTE _ BYTE2
+                                        LOBYTE _ (\PEEKBIN STREAM)))
+                      (CL:IF RAW
+                          CODE
+                          (UNICODE.TRANSLATE CODE *UNICODETOXCCS*))
+               ELSEIF COUNTP
+                 THEN (SETQ *BYTECOUNTER* -1)
+                      NIL)))])
+)
+(DEFINEQ
+
+(READBOM
+  [LAMBDA (STREAM COUNTP)                                    (* ; "Edited 11-Mar-2024 23:53 by rmk")
+                                                             (* ; "Edited 10-Mar-2024 13:01 by rmk")
+
+    (* ;; "If COUNTP, this must be under a generic \INCCODE that binds *BYTECOUNTER*")
+
+    (* ;; "Reads and decodes the BOM bytes.  If BOM ispresent, the stream is left at the first following byte, otherwise the stream is reset to its position on entry (presumably 0).")
+
+    (* ;; "I used the UNHEXTRING constants so that the hex bytes are visible in the code, maybe there's another function that does that?")
+
+    (DECLARE (USEDFREE *BYTECOUNTER*))
+    (SELECTC (\PEEKBIN STREAM T)
+        ((UNHEXSTRING "EF") 
+             (BIN STREAM)
+             (if (EQ (CONSTANT (UNHEXSTRING "BB"))
+                     (\PEEKBIN STREAM T))
+                 then (BIN STREAM)
+                      (if (EQ (CONSTANT (UNHEXSTRING "BF"))
+                              (\PEEKBIN STREAM T))
+                          then (BIN STREAM)
+                               (CL:WHEN COUNTP (add *BYTECOUNTER* 3))
+                               :UTF-8
+                        else (\BACKFILEPTR STREAM))
+               else (\BACKFILEPTR STREAM)))
+        ((UNHEXSTRING "FE") 
+             (BIN STREAM)
+             (if (EQ (CONSTANT (UNHEXSTRING "FF"))
+                     (\PEEKBIN STREAM T))
+                 then (BIN STREAM)
+                      (CL:WHEN COUNTP (add *BYTECOUNTER* 2))
+                      :UTF-16BE
+               else (\BACKFILEPTR STREAM)))
+        ((UNHEXSTRING "FF") 
+             (BIN STREAM)
+             (if (EQ (CONSTANT (UNHEXSTRING "FE"))
+                     (\PEEKBIN STREAM T))
+                 then (BIN STREAM)
+                      (CL:WHEN COUNTP (add *BYTECOUNTER* 2))
+                      :UTF-16LE
+               else (\BACKFILEPTR STREAM)))
+        NIL])
+
+(WRITEBOM
+  [LAMBDA (STREAM FORMAT)                                    (* ; "Edited 16-Mar-2024 20:53 by rmk")
+                                                             (* ; "Edited 11-Mar-2024 23:53 by rmk")
+                                                             (* ; "Edited 10-Mar-2024 13:01 by rmk")
+
+    (* ;; "Writes a BOM that represents FORMAT (:UTF-8, :UTF16-BE, :UTF16-LE")
+
+    (SELECTQ FORMAT
+        (:UTF-8 (BOUT STREAM (CONSTANT (UNHEXSTRING "EF")))
+                (BOUT STREAM (CONSTANT (UNHEXSTRING "BB")))
+                (BOUT STREAM (CONSTANT (UNHEXSTRING "BF"))))
+        (:UTF-16BE (BOUT STREAM (CONSTANT (UNHEXSTRING "FE")))
+                   (BOUT STREAM (CONSTANT (UNHEXSTRING "FF"))))
+        (:UTF-16LE (BOUT STREAM (CONSTANT (UNHEXSTRING "FF")))
+                   (BOUT STREAM (UNHEXSTRING "FE")))
+        NIL])
+)
 
 (RPAQ? EXTERNALEOL 'LF)
 (DEFINEQ
 
 (MAKE-UNICODE-FORMATS
-  [LAMBDA (EXTERNALEOL)                                      (* ; "Edited  8-Dec-2023 15:19 by rmk")
+  [LAMBDA (EXTERNALEOL)                                      (* ; "Edited 10-Mar-2024 11:55 by rmk")
+                                                             (* ; "Edited  8-Dec-2023 15:19 by rmk")
                                                              (* ; "Edited 19-Jul-2022 15:36 by rmk")
                                                             (* ; "Edited  6-Aug-2021 16:08 by rmk:")
 
@@ -442,6 +601,20 @@
                        (\UTF16BE.BACKCCODEFN STREAM COUNTP T]
            [FUNCTION (LAMBDA (STREAM CHARCODE)
                        (UTF16BE.OUTCHARFN STREAM CHARCODE T]
+           NIL EXTERNALEOL NIL NIL NIL (FUNCTION NILL))
+    (MAKE-EXTERNALFORMAT :UTF-16LE (FUNCTION UTF16LE.INCCODEFN)
+           (FUNCTION UTF16LE.PEEKCCODEFN)
+           (FUNCTION \UTF16LE.BACKCCODEFN)
+           (FUNCTION UTF16LE.OUTCHARFN)
+           NIL EXTERNALEOL NIL NIL NIL (FUNCTION NILL))
+    (MAKE-EXTERNALFORMAT :UTF-16LE-RAW [FUNCTION (LAMBDA (STREAM COUNTP)
+                                                   (UTF16LE.INCCODEFN STREAM COUNTP T]
+           [FUNCTION (LAMBDA (STREAM NOERROR)
+                       (UTF16LE.PEEKCCODEFN STREAM NOERROR T]
+           [FUNCTION (LAMBDA (STREAM COUNTP)
+                       (\UTF16LE.BACKCCODEFN STREAM COUNTP T]
+           [FUNCTION (LAMBDA (STREAM CHARCODE)
+                       (UTF16LE.OUTCHARFN STREAM CHARCODE T]
            NIL EXTERNALEOL NIL NIL NIL (FUNCTION NILL])
 )
 
@@ -1580,6 +1753,25 @@
 )
 (DEFINEQ
 
+(UNHEXSTRING
+  [LAMBDA (HSTRING)                                          (* ; "Edited 10-Mar-2024 12:56 by rmk")
+
+    (* ;; "Converts a hexstring to its number.")
+
+    (for I B (N _ 0) from 1 while (SETQ B (NTHCHARCODE HSTRING I))
+       do [SETQ N (IPLUS (LLSH N 4)
+                         (if (AND (IGEQ B (CHARCODE 0))
+                                  (ILEQ B (CHARCODE 9)))
+                             then (IDIFFERENCE B (CHARCODE 0))
+                           elseif (AND (IGEQ (SETQ B (UCASECODE B))
+                                             (CHARCODE A))
+                                       (ILEQ B (CHARCODE F)))
+                             then (IPLUS 10 (IDIFFERENCE B (CHARCODE A)))
+                           else (ERROR "INVALID HEX CHARACTER" (NTHCHARCODE HSTRING I]
+       finally (RETURN N])
+)
+(DEFINEQ
+
 (SHOWCHARS
   [LAMBDA (FROMCHAR TOCHAR FONT)                             (* ; "Edited 26-Jan-2024 14:18 by mth")
                                                             (* ; "Edited  1-Aug-2020 09:27 by rmk:")
@@ -1618,20 +1810,22 @@
 
 (PUTPROPS UNICODE FILETYPE :TCOMPL)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3915 18061 (UTF8.OUTCHARFN 3925 . 6723) (UTF8.INCCODEFN 6725 . 12337) (UTF8.PEEKCCODEFN
- 12339 . 17079) (\UTF8.BACKCCODEFN 17081 . 18059)) (18062 21929 (UTF16BE.OUTCHARFN 18072 . 18982) (
-UTF16BE.INCCODEFN 18984 . 19883) (UTF16BE.PEEKCCODEFN 19885 . 20956) (\UTF16BE.BACKCCODEFN 20958 . 
-21927)) (21959 24240 (MAKE-UNICODE-FORMATS 21969 . 24238)) (24337 33379 (UNICODE.UNMAPPED 24347 . 
-26421) (UNICODE-EXTEND-TRANSLATION? 26423 . 29002) (UTF8.BINCODE 29004 . 31583) (\UTF8.FETCHCODE 31585
- . 33377)) (33380 38901 (UTF8.VALIDATE 33390 . 35987) (UTF8-SIZE-FROM-BYTE1 35989 . 36421) (
-NUTF8-BYTE1-BYTES 36423 . 37160) (NUTF8-CODE-BYTES 37162 . 38219) (NUTF8-STRING-BYTES 38221 . 38899)) 
-(40332 40681 (XTOUCODE 40342 . 40510) (UTOXCODE 40512 . 40679)) (41624 47670 (
-READ-UNICODE-MAPPING-FILENAMES 41634 . 44581) (READ-UNICODE-MAPPING 44583 . 47668)) (47737 61373 (
-MAKE-UNICODE-TRANSLATION-TABLES 47747 . 56819) (MERGE-UNICODE-TRANSLATION-TABLES 56821 . 58261) (
-MERGE-UNICODE-TRANSLATION-TABLES1 58263 . 61371)) (61374 64671 (INVERT-ALL-UNICODE-MAPPINGS 61384 . 
-64669)) (65639 78070 (WRITE-UNICODE-MAPPING 65649 . 69399) (WRITE-UNICODE-INCLUDED 69401 . 74123) (
-WRITE-UNICODE-MAPPING-HEADER 74125 . 75373) (WRITE-UNICODE-MAPPING-FILENAME 75375 . 76905) (HEXSTRING 
-76907 . 78068)) (78071 78747 (XCCS-UTF8-AFTER-OPEN 78081 . 78745)) (81272 86774 (UTF8HEXSTRING 81282
- . 83487) (XTOUSTRING 83489 . 86409) (XCCSSTRING 86411 . 86772)) (86775 88285 (SHOWCHARS 86785 . 88283
-)))))
+  (FILEMAP (NIL (4065 18211 (UTF8.OUTCHARFN 4075 . 6873) (UTF8.INCCODEFN 6875 . 12487) (UTF8.PEEKCCODEFN
+ 12489 . 17229) (\UTF8.BACKCCODEFN 17231 . 18209)) (18212 22466 (UTF16BE.OUTCHARFN 18222 . 19132) (
+UTF16BE.INCCODEFN 19134 . 20150) (UTF16BE.PEEKCCODEFN 20152 . 21383) (\UTF16BE.BACKCCODEFN 21385 . 
+22464)) (22467 26754 (UTF16LE.OUTCHARFN 22477 . 23484) (UTF16LE.INCCODEFN 23486 . 24502) (
+UTF16LE.PEEKCCODEFN 24504 . 25671) (\UTF16LE.BACKCCODEFN 25673 . 26752)) (26755 29684 (READBOM 26765
+ . 28769) (WRITEBOM 28771 . 29682)) (29714 32904 (MAKE-UNICODE-FORMATS 29724 . 32902)) (33001 42043 (
+UNICODE.UNMAPPED 33011 . 35085) (UNICODE-EXTEND-TRANSLATION? 35087 . 37666) (UTF8.BINCODE 37668 . 
+40247) (\UTF8.FETCHCODE 40249 . 42041)) (42044 47565 (UTF8.VALIDATE 42054 . 44651) (
+UTF8-SIZE-FROM-BYTE1 44653 . 45085) (NUTF8-BYTE1-BYTES 45087 . 45824) (NUTF8-CODE-BYTES 45826 . 46883)
+ (NUTF8-STRING-BYTES 46885 . 47563)) (48996 49345 (XTOUCODE 49006 . 49174) (UTOXCODE 49176 . 49343)) (
+50288 56334 (READ-UNICODE-MAPPING-FILENAMES 50298 . 53245) (READ-UNICODE-MAPPING 53247 . 56332)) (
+56401 70037 (MAKE-UNICODE-TRANSLATION-TABLES 56411 . 65483) (MERGE-UNICODE-TRANSLATION-TABLES 65485 . 
+66925) (MERGE-UNICODE-TRANSLATION-TABLES1 66927 . 70035)) (70038 73335 (INVERT-ALL-UNICODE-MAPPINGS 
+70048 . 73333)) (74303 86734 (WRITE-UNICODE-MAPPING 74313 . 78063) (WRITE-UNICODE-INCLUDED 78065 . 
+82787) (WRITE-UNICODE-MAPPING-HEADER 82789 . 84037) (WRITE-UNICODE-MAPPING-FILENAME 84039 . 85569) (
+HEXSTRING 85571 . 86732)) (86735 87411 (XCCS-UTF8-AFTER-OPEN 86745 . 87409)) (89936 95438 (
+UTF8HEXSTRING 89946 . 92151) (XTOUSTRING 92153 . 95073) (XCCSSTRING 95075 . 95436)) (95439 96327 (
+UNHEXSTRING 95449 . 96325)) (96328 97838 (SHOWCHARS 96338 . 97836)))))
 STOP

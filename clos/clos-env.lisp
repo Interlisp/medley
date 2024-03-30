@@ -1505,7 +1505,7 @@ window"
 (setf (sedit:get-format 'call-next-method)
       '(:indent (1) :args (:keyword nil)))
 
-(setf (sedit:get-format 'symbol-macrolet) 'let)
+(setf (sedit:get-format 'cl:symbol-macrolet) 'let)
 
 (setf (sedit:get-format 'with-accessors)
       '(:indent ((1) 1)

@@ -1,15 +1,11 @@
 ;;;-*- Package: CLOS; Syntax: Common-Lisp; Base: 10 -*-
 
-
 ;;; File converted on 26-Mar-91 10:23:29 from source pkg
 ;;;. Original source {dsk}<usr>local>users>welch>lisp>clos>rev4>il-format>pkg.;4 created  1-Mar-91 10:10:26
 
 ;;;. Copyright (c) 1991 by Venue
 
-
 (in-package "CLOS")
-
-
 
 ;;; Some CommonLisps have more symbols in the Lisp package than the ones that are explicitly
 ;;; specified in CLtL.  This causes trouble. Any Lisp that has extra symbols in the Lisp package
@@ -31,7 +27,7 @@
                no-applicable-method no-next-method print-object reinitialize-instance remove-method 
                shared-initialize slot-boundp slot-exists-p slot-makunbound slot-missing slot-unbound
                slot-value standard standard-class standard-generic-function standard-method 
-               standard-object structure-class symbol-macrolet update-instance-for-different-class 
+               standard-object structure-class  update-instance-for-different-class 
                update-instance-for-redefined-class with-accessors with-added-methods with-slots))
 
 (import '(xcl:false xcl:destructuring-bind xcl:true) *the-clos-package*)

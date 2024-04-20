@@ -1,3 +1,4 @@
+#!/bin/sh
 ###############################################################################
 #
 #    medley_useage.sh - script defining the "usage" for medley.sh script.
@@ -10,15 +11,15 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
+# shellcheck disable=SC2154
 
-PAGER=$( if [ -n $(which more) ]; then echo "more"; else echo "cat"; fi)
+
+PAGER=$( if [ -n "$(which more)" ]; then echo "more"; else echo "cat"; fi)
 
 usage() {
-   local err_msg
-   local msg_path=/tmp/msg-$$
-   local lines=("$@")
+   usage_msg_path=/tmp/msg-$$
 
-   if [ ${wsl} = true ];
+   if [ "${wsl}" = true ];
    then
      wsl_incl="+w"
      wsl_excl="-w"
@@ -27,7 +28,7 @@ usage() {
      wsl_excl="+w"
    fi
 
-   if [ ${docker} = true ];
+   if [ "${docker}" = true ];
    then
      docker_incl="+d"
      docker_excl="-d"
@@ -36,7 +37,7 @@ usage() {
      docker_excl="+d"
    fi
 
-   if [ ${windows} = true ];
+   if [ "${windows}" = true ];
    then
      windows_incl="+W"
      windows_excl="-W"
@@ -47,15 +48,12 @@ usage() {
 
    if [ $# -ne 0 ];
    then
-     echo > ${msg_path}
-     echo "$(output_error_msg "${lines[@]}")" >> ${msg_path}
-     echo >> ${msg_path}
-     echo >> ${msg_path}
+     { echo; output_error_msg "$1"; echo; echo; } >> "${usage_msg_path}"
    else
-     touch ${msg_path}
+     touch "${usage_msg_path}"
    fi
 
-   cat ${msg_path} - <<EOF \
+   cat "${usage_msg_path}" - <<EOF \
        | sed -e "/^${docker_excl}/d" -e "s/^${docker_incl}/  /" \
        | sed -e "/^${wsl_excl}/d" -e "s/^${wsl_incl}/  /" \
        | sed -e "/^${windows_excl}/d" -e "s/^${windows_incl}/  /" \

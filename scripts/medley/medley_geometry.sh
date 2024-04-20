@@ -1,3 +1,4 @@
+#!/bin/sh
 ###############################################################################
 #
 #    medley_geometry.sh - script for computing the geometry and screensize
@@ -11,18 +12,19 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
+# shellcheck disable=SC2154
 
-if [ ${noscroll} = false ];
+if [ "${noscroll}" = false ];
 then
   scroll=22
 else
   scroll=0
 fi
-if [[ -n ${geometry} && -n ${screensize} ]];
+if [ -n "${geometry}" ] && [ -n "${screensize}" ]
 then
   gw=$(expr "${geometry}" : "\([0-9]*\)x[0-9]*$")
   gh=$(expr "${geometry}" : "[0-9]*x\([0-9]*\)$")
-  if [[ -z "${gw}" || -z "${gh}" ]];
+  if [ -z "${gw}" ] || [ -z "${gh}" ]
   then
     echo "Error: Improperly formed -geometry or -dimension argument: ${geometry}"
     echo "Exiting"
@@ -32,20 +34,21 @@ then
   #
   sw=$(expr "${screensize}" : "\([0-9]*\)x[0-9]*$")
   sh=$(expr "${screensize}" : "[0-9]*x\([0-9]*\)$")
-  if [[ -z "${sw}" || -z "${sh}" ]];
+  if [ -z "${sw}" ] || [ -z "${sh}" ]
   then
     echo "Error: Improperly formed -screensize argument: ${screensize}"
     echo "Exiting"
     exit 7
   fi
   screensize="-sc ${screensize}"
-elif [[ -n ${geometry} ]];
+elif [ -n "${geometry}" ]
 then
   gw=$(expr "${geometry}" : "\([0-9]*\)x[0-9]*$")
   gh=$(expr "${geometry}" : "[0-9]*x\([0-9]*\)$")
-  if [ -n "${gw}" -a -n "${gh}" ] ; then
-    sw=$(( ((31+${gw})/32*32) - ${scroll} ))
-    sh=$(( ${gh} - ${scroll} ))
+  if [ -n "${gw}" ] && [ -n "${gh}" ]
+  then
+    sw=$(( (((31+gw)/32)*32)-scroll ))
+    sh=$(( gh - scroll ))
     geometry="-g ${gw}x${gh}"
     screensize="-sc ${sw}x${sh}"
   else
@@ -53,14 +56,15 @@ then
     echo "Exiting"
     exit 7
   fi
-elif [[ -n ${screensize} ]];
+elif [ -n "${screensize}" ]
 then
   sw=$(expr "${screensize}" : "\([0-9]*\)x[0-9]*$")
   sh=$(expr "${screensize}" : "[0-9]*x\([0-9]*\)$")
-  if [ -n "${sw}" -a -n "${sh}" ] ; then
-    sw=$(( (31+$sw)/32*32 ))
-    gw=$(( ${scroll}+${sw} ))
-    gh=$(( ${scroll}+${sh} ))
+  if [ -n "${sw}" ] && [ -n "${sh}" ]
+  then
+    sw=$(( (31+sw)/32*32 ))
+    gw=$(( scroll+sw ))
+    gh=$(( scroll+sh ))
     geometry="-g ${gw}x${gh}"
     screensize="-sc ${sw}x${sh}"
   else
@@ -70,7 +74,7 @@ then
   fi
 else
   screensize="-sc 1440x900"
-  if [ ${noscroll} = false ];
+  if [ "${noscroll}" = false ];
   then
     geometry="-g 1462x922"
   else

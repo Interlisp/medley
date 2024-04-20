@@ -1,3 +1,4 @@
+#!/bin/sh
 ###############################################################################
 #
 #    medley_args.sh - script for processing the args to medley.sh script.
@@ -10,20 +11,20 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
+# shellcheck disable=SC2034,SC2154,SC2164
 
 # load usage function
-source ${SCRIPTDIR}/medley_usage.sh
+. "${SCRIPTDIR}/medley_usage.sh"
 
 # Defaults
 apps_flag=false
-err_msg=""
 full_flag=false
 geometry=""
 greet_specified=false
 lisp_flag=false
 noscroll=false
 pass_args=false
-run_args=()
+run_args=""
 run_id="default"
 screensize=""
 sysout_flag=false
@@ -44,7 +45,7 @@ do
         ;;
       -d | --display)
         check_for_dash_or_end "$1" "$2"
-        run_args+=(-d $2)
+        run_args="${run_args} -d \"$2\""
         shift
         ;;
       -e | --interlisp)
@@ -65,13 +66,13 @@ do
       -i | --id)
         if [ "$2" = "-" ];
         then
-          run_id=$( basename ${MEDLEYDIR} )
+          run_id=$( basename "${MEDLEYDIR}" )
         elif [ "$2" = "--" ];
         then
-          run_id=$(cd ${MEDLEYDIR}; cd ..; basename $(pwd))
+          run_id=$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")
         else
           check_for_dash_or_end "$1" "$2"
-          run_id=$(echo "$2" | sed s/[^A-Za-z0-9]//g)
+          run_id=$(echo "$2" | sed "s/[^A-Za-z0-9]//g")
         fi
         shift
         ;;
@@ -87,21 +88,21 @@ do
         ;;
       -m | --mem)
         check_for_dash_or_end "$1" "$2"
-        run_args+=(-m $2)
+        run_args="${run_args} -m \"$2\""
         shift
         ;;
       -n | --noscroll)
         noscroll=true
-        run_args+=("-noscroll")
+        run_args="${run_args} -noscroll"
         ;;
       -r | --greet)
-        if [[ "$2" = "-" || "$2" = "--" ]];
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
         then
-          run_args+=("--nogreet")
+          run_args="${run_args} --nogreet"
         else
           check_for_dash_or_end "$1" "$2"
           check_file_readable "$1" "$2"
-          run_args+=("-greet" "$2")
+          run_args="${run_args} -greet \"$2\""
         fi
         greet_specified='true'
         shift
@@ -117,7 +118,7 @@ do
         shift
         ;;
       -v | --vnc)
-        if [[ ${wsl} = true && $(uname -m) = x86_64 ]];
+        if [ "${wsl}" = true ] && [ "$(uname -m)" = x86_64 ]
         then
           use_vnc=true
         else
@@ -129,7 +130,7 @@ do
         fi
         ;;
       -x | --logindir)
-        if [[ "$2" = "-" || "$2" = "--" ]];
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
         then
           check_dir_writeable_or_creatable "$1" "${MEDLEYDIR}/logindir"
           LOGINDIR="${MEDLEYDIR}/logindir"
@@ -141,7 +142,7 @@ do
         shift
         ;;
       -z | --man)
-        if [ ${darwin} = true ];
+        if [ "${darwin}" = true ]
         then
           /usr/bin/man "${MEDLEYDIR}/docs/man-page/medley.1.gz"
         else
@@ -157,52 +158,47 @@ do
         pass_args=true
         ;;
       -*)
-        err_msg=("ERROR: Unknown flag: $1" )
-        usage "${err_msg[@]}"
+        usage "ERROR: Unknown flag: $1"
         ;;
       *)
         # if matched the empty string, just ignore
         if [ -n "$1" ];
         then
-          if [[ $# -eq 1 || "$2" = "--" ]];
+          if [ $# -eq 1 ] || [ "$2" = "--" ]
           then
             sysout_flag=true
             sysout_arg="$1"
           else
-            err_msg=(
-              "ERROR: sysout argument must be last argument"
-              "or last argument before the \"--\" flag"
-            )
-            usage "${err_msg[@]}"
+            err_msg="ERROR: sysout argument must be last argument
+or last argument before the \"--\" flag"
+            usage "${err_msg}"
           fi
         fi
         ;;
     esac
   else
-    run_args+=("$1")
+    run_args="${run_args} \"$1\""
   fi
   shift
 done
 
 # Figure out screensize and geometry based on arguments
-source ${SCRIPTDIR}/medley_geometry.sh
+. "${SCRIPTDIR}/medley_geometry.sh"
 
 # Figure out the sysout situation
 ctr=0
-for x in ${lisp_flag} ${full_flag} ${apps_flag} ${sysout_flag};
+for x in "${lisp_flag}" "${full_flag}" "${apps_flag}" "${sysout_flag}"
 do
   if [ "${x}" = "true" ];
   then
-    (( ctr++ ))
+    ctr=$(( ctr + 1 ))
   fi
 done
-if [ ${ctr} -gt 1 ];
+if [ "${ctr}" -gt 1 ];
 then
-  err_msg=(
-    "Error: only one sysout can be specified.  Two or more sysouts were specified"
-    "via the -l (--lisp), -f (--full), -a (--apps) flags and/or a sysout filename"
-  )
-  usage "${err_msg[@]}"
+    err_msg="Error: only one sysout can be specified.  Two or more sysouts were specified
+via the -l (--lisp), -f (--full), -a (--apps) flags and/or a sysout filename"
+    usage "${err_msg}"
 fi
 if [ "${sysout_arg}" = "apps" ];
 then
@@ -214,14 +210,14 @@ then
 else
   # pass on to run-medley
   unset LDESRCESYSOUT
-  if [ -n "${sysout_arg}" ];
+  if [ -n "${sysout_arg}" ]
   then
-    run_args+=("${sysout_arg}")
+    run_args="${run_args} \"${sysout_arg}\""
   fi
 fi
 
 # if running on WSL1, force use_vnc
-if [[ ${wsl} = true && ${wsl_ver} -eq 1 ]];
+if [ "${wsl}" = true ] && [ "${wsl_ver}" -eq 1 ]
 then
   use_vnc=true
 fi

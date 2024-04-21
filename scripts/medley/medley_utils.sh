@@ -15,12 +15,18 @@
 is_tput="$(which tput)"
 
 output_error_msg() {
-  if [ -n "${is_tput}" ];
-  then
-    echo "$(${is_tput} setab 1)$(${is_tput} setaf 7)$1$(${is_tput} sgr0)"
-  else
-    echo "$1"
-  fi
+  local_oem_file="${TMPDIR:-/tmp}"/oem_$$
+  echo "$1" >"${local_oem_file}"
+  while read -r line
+  do
+    if [ -n "${is_tput}" ];
+    then
+      echo "$(${is_tput} setab 1)$(${is_tput} setaf 7)${line}$(${is_tput} sgr0)"
+    else
+      echo "$1"
+    fi
+  done <"${local_oem_file}"
+  rm -f "${local_oem_file}"
 }
 
 check_for_dash_or_end() {

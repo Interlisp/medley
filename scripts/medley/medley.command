@@ -161,7 +161,8 @@ then
   fi
 fi
 
-# process args
+# process config file and args
+. "${SCRIPTDIR}"/medley_configfile.sh
 . "${SCRIPTDIR}"/medley_args.sh
 
 # Make sure that there is not another instance currently running with this same id

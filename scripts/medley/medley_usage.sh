@@ -48,7 +48,9 @@ usage() {
 
    if [ $# -ne 0 ];
    then
-     { echo; output_error_msg "$1"; echo; echo; } >> "${usage_msg_path}"
+     full_msg="In ${args_stage}:
+$1"
+     { echo; output_error_msg "${full_msg}"; echo; } >> "${usage_msg_path}"
    else
      touch "${usage_msg_path}"
    fi
@@ -69,6 +71,8 @@ flags:
     -h | --help                : print this usage information
 
     -z | --man                 : show the man page for medley
+
+    -c FILE | --config FILE    : use FILE as the config file (default: ~/.medley_config)
 
     -f | --full                : start Medley from the "full" sysout
 

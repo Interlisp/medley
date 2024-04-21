@@ -26,9 +26,8 @@ then
   gh=$(expr "${geometry}" : "[0-9]*x\([0-9]*\)$")
   if [ -z "${gw}" ] || [ -z "${gh}" ]
   then
-    echo "Error: Improperly formed -geometry or -dimension argument: ${geometry}"
-    echo "Exiting"
-    exit 7
+    err_msg="Error: Improperly formed -geometry or -dimension argument: ${geometry}"
+    usage "${err_msg}"
   fi
   geometry="-g ${geometry}"
   #
@@ -36,9 +35,8 @@ then
   sh=$(expr "${screensize}" : "[0-9]*x\([0-9]*\)$")
   if [ -z "${sw}" ] || [ -z "${sh}" ]
   then
-    echo "Error: Improperly formed -screensize argument: ${screensize}"
-    echo "Exiting"
-    exit 7
+    err_msg="Error: Improperly formed -screensize argument: ${screensize}"
+    usage "${err_msg}"
   fi
   screensize="-sc ${screensize}"
 elif [ -n "${geometry}" ]
@@ -52,9 +50,8 @@ then
     geometry="-g ${gw}x${gh}"
     screensize="-sc ${sw}x${sh}"
   else
-    echo "Error: Improperly formed -geometry or -dimension argument: ${geometry}"
-    echo "Exiting"
-    exit 7
+    err_msg="Error: Improperly formed -geometry or -dimension argument: ${geometry}"
+    usage "${err_msg}"
   fi
 elif [ -n "${screensize}" ]
 then
@@ -68,9 +65,8 @@ then
     geometry="-g ${gw}x${gh}"
     screensize="-sc ${sw}x${sh}"
   else
-    echo "Error: Improperly formed -screensize argument: ${screensize}"
-    echo "Exiting"
-    exit 7
+    err_msg="Error: Improperly formed -screensize argument: ${screensize}"
+    usage "${err_msg}"
   fi
 else
   screensize="-sc 1440x900"

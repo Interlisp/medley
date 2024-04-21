@@ -15,6 +15,7 @@
 
 # load usage function
 . "${SCRIPTDIR}/medley_usage.sh"
+args_stage="config file"
 
 # Defaults
 apps_flag=false
@@ -42,6 +43,10 @@ do
       -a | --apps)
         sysout_arg="apps"
         apps_flag=true
+        ;;
+      -c | --config)
+        # already handled so just skip both flag and value
+        shift;
         ;;
       -d | --display)
         check_for_dash_or_end "$1" "$2"
@@ -154,6 +159,10 @@ do
         # internal:  called from Windows medley.ps1 (via docker)
         windows=true
         ;;
+      --start_cl_args)
+        # internal: used to separate config file args from command line args
+        args_stage="command line arguments"
+        ;;
       --)
         pass_args=true
         ;;
@@ -169,8 +178,7 @@ do
             sysout_flag=true
             sysout_arg="$1"
           else
-            err_msg="ERROR: sysout argument must be last argument
-or last argument before the \"--\" flag"
+            err_msg="ERROR: unexpected argument \"$1\""
             usage "${err_msg}"
           fi
         fi

@@ -18,21 +18,21 @@
 args_stage="config file"
 
 # Defaults
-apps_flag=false
-full_flag=false
 geometry=""
 greet_specified=false
-lisp_flag=false
 noscroll=false
 pass_args=false
 run_args=""
 run_id="default"
 screensize=""
-sysout_flag=false
 sysout_arg=""
+sysout_stage=""
 title="Medley Interlisp"
 use_vnc=false
 windows=false
+maikodir_arg=""
+maikodir_stage=""
+maikoprog="lde"
 
 # Loop thru args and process
 while [ "$#" -ne 0 ];
@@ -42,7 +42,7 @@ do
     case "$1" in
       -a | --apps)
         sysout_arg="apps"
-        apps_flag=true
+        sysout_stage="${args_stage}"
         ;;
       -c | --config)
         # already handled so just skip both flag and value
@@ -57,8 +57,8 @@ do
         export MEDLEY_EXEC="inter"
         ;;
       -f | --full)
-        sysout_arg="-full"
-        full_flag=true
+        sysout_arg="full"
+        sysout_stage="${args_stage}"
         ;;
       -g | --geometry)
         check_for_dash_or_end "$1" "$2"
@@ -88,8 +88,8 @@ do
         shift
         ;;
       -l | --lisp)
-        sysout_arg="-lisp"
-        lisp_flag=true
+        sysout_arg="lisp"
+        sysout_stage="${args_stage}"
         ;;
       -m | --mem)
         check_for_dash_or_end "$1" "$2"
@@ -122,6 +122,10 @@ do
         if [ -n "$2" ]; then title="$2"; fi
         shift
         ;;
+      -u | --continue)
+        sysout_arg=""
+        sysout_stage="${args_stage}"
+        ;;
       -v | --vnc)
         if [ "${wsl}" = true ] && [ "$(uname -m)" = x86_64 ]
         then
@@ -146,6 +150,17 @@ do
         fi
         shift
         ;;
+      -y | --sysout)
+        if [ "$2" = "-" ]
+        then
+          sysout_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          sysout_arg="$2"
+        fi
+        sysout_stage="${args_stage}"
+        shift
+        ;;
       -z | --man)
         if [ "${darwin}" = true ]
         then
@@ -154,6 +169,18 @@ do
           /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
         fi
         exit 0
+        ;;
+      --maikodir)
+        check_for_dash_or_end "$1" "$2"
+        check_dir_exists "$1" "2"
+        maikodir_arg="$2"
+        maikodir_stage="${args_stage}"
+        shift;
+        ;;
+      --maikoprog)
+        check_for_dash_or_end "$1" "$2"
+        maikoprog="$2"
+        shift
         ;;
       --windows)
         # internal:  called from Windows medley.ps1 (via docker)
@@ -175,8 +202,8 @@ do
         then
           if [ $# -eq 1 ] || [ "$2" = "--" ]
           then
-            sysout_flag=true
             sysout_arg="$1"
+            sysout_stage="${args_stage}"
           else
             err_msg="ERROR: unexpected argument \"$1\""
             usage "${err_msg}"
@@ -192,37 +219,6 @@ done
 
 # Figure out screensize and geometry based on arguments
 . "${SCRIPTDIR}/medley_geometry.sh"
-
-# Figure out the sysout situation
-ctr=0
-for x in "${lisp_flag}" "${full_flag}" "${apps_flag}" "${sysout_flag}"
-do
-  if [ "${x}" = "true" ];
-  then
-    ctr=$(( ctr + 1 ))
-  fi
-done
-if [ "${ctr}" -gt 1 ];
-then
-    err_msg="Error: only one sysout can be specified.  Two or more sysouts were specified
-via the -l (--lisp), -f (--full), -a (--apps) flags and/or a sysout filename"
-    usage "${err_msg}"
-fi
-if [ "${sysout_arg}" = "apps" ];
-then
-  export LDESRCESYSOUT="${MEDLEYDIR}/loadups/apps.sysout"
-  if [ "${greet_specified}" = "false" ];
-  then
-    export LDEINIT="${MEDLEYDIR}/greetfiles/APPS-INIT.LCOM"
-  fi
-else
-  # pass on to run-medley
-  unset LDESRCESYSOUT
-  if [ -n "${sysout_arg}" ]
-  then
-    run_args="${run_args} \"${sysout_arg}\""
-  fi
-fi
 
 # if running on WSL1, force use_vnc
 if [ "${wsl}" = true ] && [ "${wsl_ver}" -eq 1 ]

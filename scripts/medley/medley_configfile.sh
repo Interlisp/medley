@@ -25,7 +25,7 @@ do
   then
     k=$(( j + 1 ))
     config_file="$(eval "echo \${${k}}")"
-    if [ ! -f "${config_file}" ]
+    if [ ! "${config_file}" = "-" ] && [ ! -f "${config_file}" ]
     then
       echo "Error: specified config file \"${config_file}\" not found."
       echo "Exiting."
@@ -36,12 +36,25 @@ do
   j=$(( j + 1 ))
 done
 
+# if no config file specified, use the defaults (if they exist)
+if [ -z "${config_file}" ]
+then
+  for f in "${HOME}/.medley_config" "${MEDLEYDIR}/.medley_config"
+  do
+    if [ -f "$f" ]
+    then
+      config_file="$f"
+    fi
+  done
+fi
+
 # add marker to separate config file args from command line args
 set -- "--start_cl_args" "--start_cl_args" "$@"
 
+# if there is a config file and its not been suppressed with "-",
 # read the config file (in reverse order) and add the first two items on each line
 # to the arguments array
-if [ -f "${config_file}" ]
+if [ -n "${config_file}" ] && [ ! "${config_file}" = "-" ]
 then
   rev_config_file="${TMPDIR:-/tmp}"/.medley_config_$$
   # reverse order of lines in medley config file

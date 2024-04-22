@@ -90,7 +90,7 @@ Exiting"
   fi
 }
 
-check_dir_writeable_or_creatable() {
+check_dir_exists() {
   local_msg_core="\"$2\" given as the value of the \"$1\" flag"
   if [ -e "$2" ]
   then
@@ -100,18 +100,9 @@ check_dir_writeable_or_creatable() {
 Exiting"
       output_error_msg "${local_err_msg}"
       exit 1
-    elif [ ! -w "$2" ]
+    elif [ ! -r "$2" ]
     then
-      local_err_msg="Error: Directory ${local_msg_core} exists but is not writeable.
-Exiting"
-      output_error_msg "${local_err_msg}"
-      exit 1
-    fi
-  else
-    if [ ! -w "$(dirname -- "$2")" ]
-    then
-      local_err_msg="Error: Directory ${local_msg_core} cannot be created because
-its parent directory either doesn't exist or is not writeable.
+      local_err_msg="Error: Directory ${local_msg_core} exists but is not readable.
 Exiting"
       output_error_msg "${local_err_msg}"
       exit 1

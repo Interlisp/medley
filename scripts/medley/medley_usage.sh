@@ -80,6 +80,8 @@ flags:
 
     -a | --apps                : start Medley  from the "apps" sysout
 
+    -y FILE | --sysout FILE    : start Medley using FILE as sysout
+
     -e | --interlisp           : (for apps.sysout only) Start in the Interlisp exec
 
     -n | --noscroll            : do not use scroll bars in Medley window

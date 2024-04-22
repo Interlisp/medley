@@ -41,6 +41,10 @@ Flags
 -z, \-\-man
 : Show the man page for medley
 
+-c [*FILE* | -], \-\-config [*FILE* | -]
+: Use *FILE* as the config file for this run of Medley. See information on *CONFIG FILE* below.  If *FILE* is "-",
+then suppress the use of a config file for this run of Medley. 
+
 -f, \-\-full
 : Start Medley from the standard "full" sysout. full.sysout includes a complete Interlisp and CommonLisp environment
 with a standard set of development tools.  It does not include any of the applications built using Medley.
@@ -57,6 +61,11 @@ applications including Notecards, Rooms and CLOS.  It also includes pre-installe
 documentation.
 (See *SYSOUT_FILE* below for more information on starting sysouts.)
 
+-y *SYSOUT_FILE*, \-\-sysout *SYSOUT-FILE*
+: Start Medley from the specified *SYSOUT-FILE*.  This is an alternative to specifying the *SYSOUT-FILE*
+as the last argument on the command line (but before any *PASS_ON_ARGS*).  It can be used to specify the
+*SYSOUT-FILE* in the config file (see information on *CONFIG FILE* below). 
+
 -e, \-\-interlisp (relevent only when \-\-apps is specified)
 : Make the initial Exec window within Medley be an Interlisp Exec.  Default is to start in an XCL Exec.
 
@@ -71,13 +80,15 @@ than the window, there will be no way to pan to the non-visible parts of the vir
 geomtery specification with +X+Y is not currently supported).  If \-\-geometry is not specified but \-\-screensize is,
 then the window size will be determined based on the \-\-screensize values and the \-\-noscroll flag.  If neither
 \-\-geometry nor \-\-screensize is provided, then the window size is set to 1440x900 if \-\-noscroll is set and 1462x922
-if \-\-noscroll is not set.
+if \-\-noscroll is not set.  (Also see note below under *CONFIG FILE* on the use of geometry and screensize
+in config files.)
 
 -s *WxH*, \-\-screensize *WxH*
 : Sets the size of the virtual display as seen from Medley's point of view.
 The Medley window is an unscaled viewport onto this virtual display. If \-\-screensize is not specified but
 \-\-geometry is, then the virtual display size will be set so that the entire virtual display fits into the given
 window geometry.  If neither \-\-screensize nor \-\-geometry is provided, then the screen size is set to 1440x900.
+(Also see note below under *CONFIG FILE* on the use of geometry and screensize in config files.)
 
 -t *STRING*, \-\-title *STRING*
 : Use STRING as title of Medley window.  Ignored when when the \-\-vnc flag is set or when running on Windows (Docker)
@@ -154,7 +165,7 @@ If no such virtual memory file exists, then Medley will start from the standard 
 specified in the Medley file system, not the host Windows file system.
 
 *PASS_ON_ARGS*
-: All arguments after the "\-\-" flag, are passed unaltered to lde via run-medley.
+: All arguments after the "\-\-" flag, are passed unaltered to the Maiko emulator.
 
 
 FILES
@@ -172,6 +183,27 @@ FILES
 \$MEDLEYDIR/greetfiles/MEDLEYDIR-INIT(.LCOM)
 :   Default Medley greetfile
 
+CONFIG FILE
+===========
+A config file can be used to "pre-specify" any of the above command line arguments.
+The config file consists of command line arguments (flags or flag-value pairs), *one per line*.
+These arguments are read from the config file and prepended to the arguments actually given on
+the command line.  Since later arguments override earlier arguments, any argument actually given
+on the command line will override a conflicting argument given in the config file.
+
+Unless specified using the -c (--config) argument, the default config file will be $MEDLEYDIR/.medley_config,
+if it exists, and $HOME/.medley_config, otherwise.
+
+Specifying, "-c -" or "--config -" on the command line will suppress the use of config files for the
+current run of Medley.
+
+*Note:* care must be taken when using -g (--geometry) and/or -s (--screensize) arguments in config files.
+If only one of these is specified, then the other is conputed.  But if both are specified, then the specified
+dimensions are used as given.  Unexpected results can arise if one is specified in the config file 
+but the other is specified on the command line. In this case, the two specified dimensions will be used as given.
+It will not be the case, as might be expected, that the dimension given in the config file will be overridden
+by a dimension computed from the dimension given on the command line.
+
 
 BUGS
 ====
@@ -181,4 +213,4 @@ See GitHub Issues: <https://github.com/Interlisp/medley/issues>
 COPYRIGHT
 =========
 
-Copyright(c) 2023 by Interlisp.org
+Copyright(c) 2023-2024 by Interlisp.org

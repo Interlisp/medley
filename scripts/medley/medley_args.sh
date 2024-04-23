@@ -33,6 +33,8 @@ windows=false
 maikodir_arg=""
 maikodir_stage=""
 maikoprog="lde"
+greet_arg=""
+noscroll=true
 
 # Loop thru args and process
 while [ "$#" -ne 0 ];
@@ -69,12 +71,15 @@ do
         usage
         ;;
       -i | --id)
-        if [ "$2" = "-" ];
+        if [ "$2" = "-" ]
         then
-          run_id=$( basename "${MEDLEYDIR}" )
-        elif [ "$2" = "--" ];
+          run_id="default"
+        elif [ "$2" = "--" ]
         then
-          run_id=$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")
+          run_id="$( basename "${MEDLEYDIR}" )"
+        elif [ "$2" = "---" ]
+        then
+          run_id="$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")"
         else
           check_for_dash_or_end "$1" "$2"
           run_id=$(echo "$2" | sed "s/[^A-Za-z0-9]//g")
@@ -96,18 +101,32 @@ do
         run_args="${run_args} -m \"$2\""
         shift
         ;;
-      -n | --noscroll)
-        noscroll=true
-        run_args="${run_args} -noscroll"
+      -n | --scroll)
+        case "$2" in
+          -)
+            noscroll=true
+            ;;
+          +)
+            noscroll=false
+            ;;
+          *)
+            err_msg="In ${arg_stage}:
+ERROR: Incorrect value (\"$2\") for -n (--scroll) argument.
+Exiting"
+            usage "${err_msg}"
+            exit 43
+            ;;
+        esac
+        shift
         ;;
       -r | --greet)
         if [ "$2" = "-" ] || [ "$2" = "--" ]
         then
-          run_args="${run_args} --nogreet"
+          greet_arg="--nogreet--"
         else
           check_for_dash_or_end "$1" "$2"
           check_file_readable "$1" "$2"
-          run_args="${run_args} -greet \"$2\""
+          greet_arg="$2"
         fi
         greet_specified='true'
         shift

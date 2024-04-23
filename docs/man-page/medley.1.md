@@ -61,18 +61,25 @@ applications including Notecards, Rooms and CLOS.  It also includes pre-installe
 documentation.
 (See *SYSOUT_FILE* below for more information on starting sysouts.)
 
--y *SYSOUT_FILE*, \-\-sysout *SYSOUT-FILE*
+-u
+:  Nullify any prior setting of the sysout file (e.g., from the config file).
+Equivalent to "-y -" or "--config -".  (See *SYSOUT FILE* section below.) 
+
+-y [*SYSOUT_FILE* | -], \-\-sysout [*SYSOUT-FILE* | -]
 : Start Medley from the specified *SYSOUT-FILE*.  This is an alternative to specifying the *SYSOUT-FILE*
 as the last argument on the command line (but before any *PASS_ON_ARGS*).  It can be used to specify the
-*SYSOUT-FILE* in the config file (see information on *CONFIG FILE* below). 
+*SYSOUT-FILE* in the config file (see information on *CONFIG FILE* below). If *SYSOUT-FILE* is "-", then
+any prior setting of the sysout file (e.g., from the config file) is nullified.
+(See *SYSOUT FILE* section below.) 
 
 -e, \-\-interlisp (relevent only when \-\-apps is specified)
 : Make the initial Exec window within Medley be an Interlisp Exec.  Default is to start in an XCL Exec.
 
--n, \-\-noscroll
-: Ordinarily Medley displays scroll bars to enable the user to pan the Medley virtual display within the
+-n [- | +], \-\-scroll [- | +]
+: Medley can display scroll bars to enable the user to pan the Medley virtual display within the
 Medley window.  This is true even when the entire virtual display fits within the window.  Specifying
-\-\-noscroll turns off the scroll bars.  Note: If \-\-noscroll is specified and the virtual screen is larger
+"-n +" (--scroll +) turns on scroll bars.  Specifying "-n -" (--scroll -) turns off scroll bars.  Default
+is scroll bars off. Note: If scroll bars are off and the virtual screen is larger
 than the window, there will be no way to pan to the non-visible parts of the virtual display.
 
 -g *WxH*, \-\-geometry *WxH*
@@ -129,28 +136,11 @@ is $MEDLEYDIR/greetfiles/MEDLEYDIR-INIT, except when the \-\-apps flag is used
 in which case it is $MEDLEYDIR/greetfiles/APPS-INIT. On Windows (Docker) installations, *FILE* is
 specified in the Medley file system, not the host Windows file system.
 
--x \[*DIR* | -], \-\-logindir \[*DIR* | -]&nbsp;&nbsp;&nbsp;&nbsp;\*\* **On Linux and WSL installations** \*\*
+-x \[*DIR* | -], \-\-logindir \[*DIR* | -]
 : Use DIR as LOGINDIR in Medley, unless DIR is "-", in which case use
 \$MEDLEYDIR/logindir.  DIR (or \$MEDLEYDIR/logindir) must be writeable by the current user.
 LOGINDIR defaults to \$HOME/il.  LOGINDIR is used by Medley as the working directory on start-up
 and where it loads any "personal" initialization file from.
-
--x \[*DIR* | -], \-\-logindir \[*DIR* | -]&nbsp;&nbsp;&nbsp;&nbsp;\*\* **On Windows (Docker) installations** \*\*
-: Map DIR in the Windows host file system to /home/medley/il in the Medley
-file system (in the Docker container).  LOGINDIR is always /home/medley/il from Medley's standpoint.  The "-" value is not valid in this case.
-
--u, \-\-update&nbsp;&nbsp;&nbsp;&nbsp;\*\* **Windows (Docker) installations only** \*\*
-: Before running Medley, do a pull to retrieve the latest interlisp/medley docker image from Docker Hub.
-
--b, \-\-background&nbsp;&nbsp;&nbsp;&nbsp;\*\* **Windows (Docker) installations only** \*\*
-: Run Medley in background rather than foreground.
-
--p *PORT*, \-\-port *PORT*&nbsp;&nbsp;&nbsp;&nbsp;\*\* **Windows (Docker) installations only** \*\*
-: Use *PORT* as the port that VNC viewer uses to contact the VNC server within the Docker container.  Default is 5900.
-
--w \[*DISTRO* | -], \-\-wsl \[*DISTRO* | -]&nbsp;&nbsp;&nbsp;&nbsp;\*\* **Windows (Docker) installations only** \*\*
-: Run Medley in the context of the named WSL *DISTRO* instead of within Docker.  If *DISTRO* is "-", used the default WSL distro.  Equivalent to typing "wsl -d *DISTRO* medley ..." into a Command or Powershell window.
-
 
 Other Options
 -------------

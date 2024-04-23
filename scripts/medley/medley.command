@@ -14,7 +14,7 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-# shellcheck disable=SC2164,SC2181,SC2009,SC2034
+# shellcheck disable=SC2164,SC2181,SC2009,SC2034,SC2154
 
 #set -x
 
@@ -119,42 +119,41 @@ SCRIPTDIR="$(get_script_dir "$0")"
 MEDLEYDIR="$(cd "${SCRIPTDIR}/../.."; pwd)"
 export MEDLEYDIR
 IL_DIR="$(cd "${MEDLEYDIR}/.."; pwd)"
-export LOGINDIR="${HOME}/il"
 
-# Are we running under Docker or WSL or Darwin or Cygwin?
+# Are we running under WSL or Darwin or Cygwin?
 #
-docker=false
 wsl=false
 darwin=false
+cygwin=false
 
-if [ "$(uname)" = "Darwin" ];
+if [ "$(uname)" = "Darwin" ]
 then
   darwin=true
-elif [ -n "${MEDLEY_DOCKER_BUILD_DATE}" ];
+elif [ "$(uname -s | head --bytes 6)" = "CYGWIN" ]
 then
-  docker='true'
-elif [ "$(uname -s | head --bytes 6)" != "CYGWIN" ];
+  cygwin=true
+elif [ -e "/proc/version" ] && grep Microsoft /proc/version
 then
+  wsl=true
   wsl_ver=0
   # WSL2
   grep --ignore-case --quiet wsl /proc/sys/kernel/osrelease
   if [ $? -eq 0 ];
   then
-    wsl='true'
     wsl_ver=2
   else
     # WSL1
     grep --ignore-case --quiet microsoft /proc/sys/kernel/osrelease
-    if [ $? -eq 0 ];
+    if [ $? -eq 0 ]
     then
       if [ "$(uname -m)" = "x86_64" ]
       then
-        wsl='true'
         wsl_ver=1
       else
-        echo "ERROR: Running Medley on WSL1 requires an x86_64-based PC."
-        echo "This is not an x86_64-based PC."
-        echo "Exiting"
+        err_msg="ERROR: Running Medley on WSL1 requires an x86_64-based PC.
+This is not an x86_64-based PC.
+Exiting"
+        output_error_msg "${err_msg}"
         exit 23
       fi
     fi
@@ -169,25 +168,21 @@ fi
 ps ax | grep ldex | grep --quiet "\-id ${run_id}"
 if [ $? -eq 0 ]
 then
-  echo "Another instance of Medley Interlisp is already running with the id \"${run_id}\"."
-  echo "Only a single instance with a given id can be run at the same time."
-  echo "Please retry using the \"--id <name>\" argument to give this new instance a different id."
-  echo "Exiting"
+  err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".
+Only a single instance with a given id can be run at the same time.
+Please retry using the \"--id <name>\" argument to give this new instance a different id.
+Exiting"
+  output_error_msg "${err_msg}"
   exit 3
 fi
 
-# Set LDEDESTSYSOUT env variable based on id
-if [ -z "${LDEDESTSYSOUT}" ]
+# Figure out LOGINDIR situation
+if [ -z "${LOGINDIR}" ]
 then
-  if [ "${run_id}" = "default" ]
-  then
-    export LDEDESTSYSOUT="${LOGINDIR}/vmem/lisp.virtualmem"
-  else
-    export LDEDESTSYSOUT="${LOGINDIR}/vmem/lisp_${run_id}.virtualmem"
-  fi
+  LOGINDIR="${HOME}/il"
 fi
+export LOGINDIR
 
-# Create LOGINDIR if necessary
 if [ ! -e "${LOGINDIR}" ];
 then
   mkdir -p "${LOGINDIR}"
@@ -200,14 +195,91 @@ then
 fi
 mkdir -p "${LOGINDIR}"/vmem
 
-# Call run-medley with or without vnc
-if [ "${darwin}" = true ] || { { [ "${wsl}" = false ] || [ "${use_vnc}" = false ] ; } && [ "${docker}" = false ] ; }
+# Set LDEDESTSYSOUT env variable based on id
+# if LDEDESRTSYSOUT has not already been set
+# during arg processing
+if [ -z "${LDEDESTSYSOUT}" ]
 then
-  # If not using vnc, just call run-medley
-  run="\"${MEDLEYDIR}/run-medley\" -id \"${run_id}\" -title \"${title}\" ${geometry} ${screensize} $run_args"
-  eval "${run}"
+  if [ "${run_id}" = "default" ]
+  then
+    LDEDESTSYSOUT="${LOGINDIR}/vmem/lisp.virtualmem"
+  else
+    LDEDESTSYSOUT="${LOGINDIR}/vmem/lisp_${run_id}.virtualmem"
+  fi
+fi
+export LDEDESTSYSOUT
+
+# Figure out the sysout situation
+
+loadups_dir="${MEDLEYDIR}/loadups"
+if [ -z "${sysout_arg}" ]
+then
+  if [ -f "${LDEDESTSYSOUT}" ]
+  then
+    src_sysout="${LDEDESTSYSOUT}"
+  else
+    src_sysout="${loadups_dir}/full.sysout"
+  fi
 else
-  # do the vnc thing on wsl or docker
-  . "${SCRIPTDIR}"/medley_vnc.sh
+  case "${sysout_arg}" in
+    lisp | full | apps)
+      if [ ! -d "${loadups_dir}" ]
+      then
+        err_msg="Error: The sysout argument --${sysout_arg} was specified in ${sysout_stage},
+but the directory \"${loadups_dir}\" where ${sysout_arg}.sysout is supposed to be located
+cannot be found.
+Exiting."
+        output_error_msg "${err_msg}"
+      fi
+      src_sysout="${loadups_dir}/${sysout_arg}.sysout"
+      ;;
+    *)
+      src_sysout="${sysout_arg}"
+      ;;
+  esac
+fi
+if [ ! -f "${src_sysout}" ]
+then
+    err_msg="Error: Cannot find the specified sysout file \"${src_sysout}\".
+Exiting."
+    output_error_msg "${err_msg}"
 fi
 
+# figure out greet files situation
+if [ -n "${greet_arg}" ]
+then
+  if [ "${greet_arg}" = "--nogreet--" ]
+  then
+    LDEINIT="${MEDLEYDIR}/greetfiles/NOGREET"
+  else
+    LDEINIT="${greet_arg}"
+  fi
+else
+  if [ -z "$LDEINIT" ]
+  then
+    if [ "${sysout_arg}" = "apps" ]
+    then
+      LDEINIT="${MEDLEYDIR}/greetfiles/APPS-INIT"
+    else
+      LDEINIT="${MEDLEYDIR}/greetfiles/MEDLEYDIR-INIT"
+    fi
+  fi
+fi
+
+# figure out noscroll situation
+noscroll_arg=""
+if [ "${noscroll}" = true ]
+then
+  noscroll_arg="-noscroll"
+fi
+
+# Call run-medley with or without vnc
+if [ "${wsl}" = true ] && [ "${use_vnc}" = true ]
+then
+  # do the vnc thing on wsl (if called for)
+  . "${SCRIPTDIR}"/medley_vnc.sh
+else
+  # If not using vnc, just call run-medley
+  run="\"${MEDLEYDIR}/run-medley\" -id \"${run_id}\" -title \"${title}\" ${noscroll_arg} ${geometry} ${screensize} $run_args \"${src_sysout}\""
+  eval "${run}"
+fi

@@ -165,7 +165,7 @@ fi
 . "${SCRIPTDIR}"/medley_args.sh
 
 # Make sure that there is not another instance currently running with this same id
-ps ax | grep ldex | grep --quiet "\-id ${run_id}"
+ps ax | grep ldex|ldesdl | grep --quiet "\-id ${run_id}"
 if [ $? -eq 0 ]
 then
   err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".
@@ -176,110 +176,5 @@ Exiting"
   exit 3
 fi
 
-# Figure out LOGINDIR situation
-if [ -z "${LOGINDIR}" ]
-then
-  LOGINDIR="${HOME}/il"
-fi
-export LOGINDIR
-
-if [ ! -e "${LOGINDIR}" ];
-then
-  mkdir -p "${LOGINDIR}"
-elif [ ! -d "${LOGINDIR}" ];
-then
-  echo "ERROR: Medley requires a directory named ${LOGINDIR}."
-  echo "But ${LOGINDIR} exists appears not be a directory."
-  echo "Exiting"
-  exit 2
-fi
-mkdir -p "${LOGINDIR}"/vmem
-
-# Set LDEDESTSYSOUT env variable based on id
-# if LDEDESRTSYSOUT has not already been set
-# during arg processing
-if [ -z "${LDEDESTSYSOUT}" ]
-then
-  if [ "${run_id}" = "default" ]
-  then
-    LDEDESTSYSOUT="${LOGINDIR}/vmem/lisp.virtualmem"
-  else
-    LDEDESTSYSOUT="${LOGINDIR}/vmem/lisp_${run_id}.virtualmem"
-  fi
-fi
-export LDEDESTSYSOUT
-
-# Figure out the sysout situation
-
-loadups_dir="${MEDLEYDIR}/loadups"
-if [ -z "${sysout_arg}" ]
-then
-  if [ -f "${LDEDESTSYSOUT}" ]
-  then
-    src_sysout="${LDEDESTSYSOUT}"
-  else
-    src_sysout="${loadups_dir}/full.sysout"
-  fi
-else
-  case "${sysout_arg}" in
-    lisp | full | apps)
-      if [ ! -d "${loadups_dir}" ]
-      then
-        err_msg="Error: The sysout argument --${sysout_arg} was specified in ${sysout_stage},
-but the directory \"${loadups_dir}\" where ${sysout_arg}.sysout is supposed to be located
-cannot be found.
-Exiting."
-        output_error_msg "${err_msg}"
-      fi
-      src_sysout="${loadups_dir}/${sysout_arg}.sysout"
-      ;;
-    *)
-      src_sysout="${sysout_arg}"
-      ;;
-  esac
-fi
-if [ ! -f "${src_sysout}" ]
-then
-    err_msg="Error: Cannot find the specified sysout file \"${src_sysout}\".
-Exiting."
-    output_error_msg "${err_msg}"
-fi
-
-# figure out greet files situation
-if [ -n "${greet_arg}" ]
-then
-  if [ "${greet_arg}" = "--nogreet--" ]
-  then
-    LDEINIT="${MEDLEYDIR}/greetfiles/NOGREET"
-  else
-    LDEINIT="${greet_arg}"
-  fi
-else
-  if [ -z "$LDEINIT" ]
-  then
-    if [ "${sysout_arg}" = "apps" ]
-    then
-      LDEINIT="${MEDLEYDIR}/greetfiles/APPS-INIT"
-    else
-      LDEINIT="${MEDLEYDIR}/greetfiles/MEDLEYDIR-INIT"
-    fi
-  fi
-fi
-
-# figure out noscroll situation
-noscroll_arg=""
-if [ "${noscroll}" = true ]
-then
-  noscroll_arg="-noscroll"
-fi
-
-# Call run-medley with or without vnc
-if [ "${wsl}" = true ] && [ "${use_vnc}" = true ]
-then
-  # do the vnc thing on wsl (if called for)
-  . "${SCRIPTDIR}"/medley_vnc.sh
-else
-  # If not using vnc, just call run-medley
-  run="\"${MEDLEYDIR}/run-medley\" -id \"${run_id}\" -title \"${title}\" ${noscroll_arg} ${geometry} ${screensize} $run_args \"${src_sysout}\""
-  eval "${run}"
-fi
+# Run medley
+. "${SCRIPTDIR}"/medley_run.sh

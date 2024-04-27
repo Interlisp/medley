@@ -29,7 +29,7 @@ then
     err_msg="Error: Improperly formed -geometry or -dimension argument: ${geometry}"
     usage "${err_msg}"
   fi
-  geometry="-g ${geometry}"
+  geometry="${geometry}"
   #
   sw=$(expr "${screensize}" : "\([0-9]*\)x[0-9]*$")
   sh=$(expr "${screensize}" : "[0-9]*x\([0-9]*\)$")
@@ -38,7 +38,7 @@ then
     err_msg="Error: Improperly formed -screensize argument: ${screensize}"
     usage "${err_msg}"
   fi
-  screensize="-sc ${screensize}"
+  screensize="${screensize}"
 elif [ -n "${geometry}" ]
 then
   gw=$(expr "${geometry}" : "\([0-9]*\)x[0-9]*$")
@@ -47,8 +47,8 @@ then
   then
     sw=$(( (((31+gw)/32)*32)-scroll ))
     sh=$(( gh - scroll ))
-    geometry="-g ${gw}x${gh}"
-    screensize="-sc ${sw}x${sh}"
+    geometry="${gw}x${gh}"
+    screensize="${sw}x${sh}"
   else
     err_msg="Error: Improperly formed -geometry or -dimension argument: ${geometry}"
     usage "${err_msg}"
@@ -62,18 +62,18 @@ then
     sw=$(( (31+sw)/32*32 ))
     gw=$(( scroll+sw ))
     gh=$(( scroll+sh ))
-    geometry="-g ${gw}x${gh}"
-    screensize="-sc ${sw}x${sh}"
+    geometry="${gw}x${gh}"
+    screensize="${sw}x${sh}"
   else
     err_msg="Error: Improperly formed -screensize argument: ${screensize}"
     usage "${err_msg}"
   fi
 else
-  screensize="-sc 1440x900"
+  screensize="1440x900"
   if [ "${noscroll}" = false ];
   then
-    geometry="-g 1462x922"
+    geometry="1462x922"
   else
-    geometry="-g 1440x900"
+    geometry="1440x900"
   fi
 fi

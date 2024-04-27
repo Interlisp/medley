@@ -110,4 +110,23 @@ Exiting"
   fi
 }
 
+parse_nethub_data() {
+  nh_host=""
+  nh_port=""
+  nh_mac=""
+  nh_debug=""
+  #
+  x="${1%:}:"
+  nh_host="${x%%:*}"
+  x="${x#"${nh_host}":*}"
+  nh_port="${x%%:*}"
+  if [ "${nh_port}" = "${x}" ]; then nh_port=""; return 0; fi
+  x="${x#"${nh_port}":*}"
+  nh_mac="${x%%:*}"
+  if [ "${nh_mac}" = "${x}" ]; then nh_mac=""; return 0; fi
+  nh_debug="${x#"${nh_mac}":*}"
+  if [ "${nh_debug}" = "${x}" ]; then nh_debug=""; return 0; fi
+  nh_debug="${nh_debug%:}"
+  return 0
+}
 

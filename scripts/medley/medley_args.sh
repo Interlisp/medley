@@ -20,9 +20,7 @@ args_stage="config file"
 # Defaults
 geometry=""
 greet_specified=false
-noscroll=false
 pass_args=false
-run_args=""
 run_id="default"
 screensize=""
 sysout_arg=""
@@ -32,9 +30,20 @@ use_vnc=false
 windows=false
 maikodir_arg=""
 maikodir_stage=""
-maikoprog="lde"
+maikoprog_arg=""
 greet_arg=""
-noscroll=true
+noscroll=false
+display_arg=""
+vmem_arg=""
+mem_arg=""
+pass_args=""
+logindir_arg=""
+nh_host_arg=""
+nh_port_arg=""
+nh_mac_arg=""
+nh_debug_arg=""
+pixelscale_arg=""
+borderwidth_arg=""
 
 # Loop thru args and process
 while [ "$#" -ne 0 ];
@@ -52,7 +61,7 @@ do
         ;;
       -d | --display)
         check_for_dash_or_end "$1" "$2"
-        run_args="${run_args} -d \"$2\""
+        display_arg="$2"
         shift
         ;;
       -e | --interlisp)
@@ -89,7 +98,7 @@ do
       -k | --vmem)
         check_for_dash_or_end "$1" "$2"
         check_file_writeable_or_creatable "$1" "$2"
-        export LDEDESTSYSOUT="$2"
+        vmem_arg="$2"
         shift
         ;;
       -l | --lisp)
@@ -98,26 +107,42 @@ do
         ;;
       -m | --mem)
         check_for_dash_or_end "$1" "$2"
-        run_args="${run_args} -m \"$2\""
+        mem_arg="$2"
         shift
         ;;
-      -n | --scroll)
+      -n | --noscroll)
         case "$2" in
           -)
-            noscroll=true
+            noscroll=false
+            shift
             ;;
           +)
-            noscroll=false
+            noscroll=true
             ;;
+            shift
           *)
-            err_msg="In ${arg_stage}:
-ERROR: Incorrect value (\"$2\") for -n (--scroll) argument.
-Exiting"
-            usage "${err_msg}"
-            exit 43
+            noscroll=true
             ;;
         esac
-        shift
+        ;;
+      -nh | --nethub)
+        case "$2" in
+          -:* | - )
+            true
+            ;;
+          *)
+            check_for_dash_or_end "$1" "$2"
+            ;;
+        esac
+        parse_nethub_data "$2"
+        if [ "${nh_host}" = "-" ]; then nh_host_arg=""; else nh_host_arg="${nh_host}"; fi
+        if [ "${nh_port}" = "-" ]; then nh_port_arg=""; else nh_port_arg="${nh_port}"; fi
+        if [ "${nh_mac}" = "-" ]; then nh_mac_arg=""; else nh_mac_arg="${nh_mac}"; fi
+        if [ "${nh_debug}" = "-" ]; then nh_debug_arg=""; else nh_debug_arg="${nh_debug}"; fi
+        ;;
+      -ps | --pixelscale)
+        check_for_dash_or_end "$1" "$2"
+        pixelscale_arg="$2"
         ;;
       -r | --greet)
         if [ "$2" = "-" ] || [ "$2" = "--" ]
@@ -146,9 +171,20 @@ Exiting"
         sysout_stage="${args_stage}"
         ;;
       -v | --vnc)
-        if [ "${wsl}" = true ] && [ "$(uname -m)" = x86_64 ]
-        then
-          use_vnc=true
+        case "$2" in
+          -)
+            use_vnc=false
+            shift
+            ;;
+          +)
+            use_vnc=true
+            shift
+            ;;
+          *)
+            use_vnc=true
+            ;;
+        esac
+        if [ "${use_vnc}" = true ] && { [ ! "${wsl}" = true ] || [ ! "$(uname -m)" = x86_64 ] }
         else
           echo "Warning: The -v or --vnc flag was set."
           echo "But the vnc option is only available when running on "
@@ -158,14 +194,17 @@ Exiting"
         fi
         ;;
       -x | --logindir)
-        if [ "$2" = "-" ] || [ "$2" = "--" ]
+        if [ "$2" = "-" ] 
+        then
+          logindir_arg=""
+        elif [ "$2" = "--" ]
         then
           check_dir_writeable_or_creatable "$1" "${MEDLEYDIR}/logindir"
-          LOGINDIR="${MEDLEYDIR}/logindir"
+          logindir_arg="${MEDLEYDIR}/logindir"
         else
           check_for_dash_or_end "$1" "$2"
           check_dir_writeable_or_creatable "$1" "$2"
-          LOGINDIR="$2"
+          logindir_arg="$2"
         fi
         shift
         ;;
@@ -189,7 +228,22 @@ Exiting"
         fi
         exit 0
         ;;
+      -nf | -NF | --nofork)
+        # for use in loadups
+        case $2 in
+          -)
+            nofork_arg=""
+            ;;
+          +)
+            nofork_arg="-NF"
+            ;;
+          *)
+            nofork_arg="-NF"
+            ;;
+        esac
+        ;;
       --maikodir)
+        # for use in loadups
         check_for_dash_or_end "$1" "$2"
         check_dir_exists "$1" "2"
         maikodir_arg="$2"
@@ -197,8 +251,9 @@ Exiting"
         shift;
         ;;
       --maikoprog)
+        # for use in loadups
         check_for_dash_or_end "$1" "$2"
-        maikoprog="$2"
+        maikoprog_arg="$2"
         shift
         ;;
       --windows)
@@ -208,6 +263,7 @@ Exiting"
       --start_cl_args)
         # internal: used to separate config file args from command line args
         args_stage="command line arguments"
+        pass_args=false
         ;;
       --)
         pass_args=true
@@ -231,13 +287,16 @@ Exiting"
         ;;
     esac
   else
-    run_args="${run_args} \"$1\""
+    if [ "$1" = "--start_cl_args" ]
+    then
+      args_stage="command line arguments"
+      pass_args=false
+    else
+      pass_args="${pass_args} \"$1\""
+    fi
   fi
   shift
 done
-
-# Figure out screensize and geometry based on arguments
-. "${SCRIPTDIR}/medley_geometry.sh"
 
 # if running on WSL1, force use_vnc
 if [ "${wsl}" = true ] && [ "${wsl_ver}" -eq 1 ]

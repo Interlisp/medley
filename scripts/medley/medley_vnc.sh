@@ -129,41 +129,35 @@
   #    set DISPLAY to :0
   #
   #set -x
-  if [ "${docker}" = "true" ];
+  # are we running in background - used for pretty-fying the echos
+  case $(ps -o stat= -p $$) in
+    *+*) bg=false ;;
+    *) bg=true ;;
+  esac
+  #
+  #    find an unused display and an available port
+  #
+  #set -x
+  OPEN_DISPLAY="$(find_open_display)"
+  if [ "${OPEN_DISPLAY}" -eq -1 ];
   then
-     export VNC_PORT=5900
-     export DISPLAY=:0
+    echo "Error: cannot find an unused DISPLAY between 1 and 63"
+    echo "Exiting"
+    exit 33
   else
-    # are we running in background - used for pretty-fying the echos
-    case $(ps -o stat= -p $$) in
-      *+*) bg=false ;;
-      *) bg=true ;;
-    esac
-    #  For not docker (i.e., for wsl/vnc)
-    #    find an unused display and an available port
-    #
-    #set -x
-    OPEN_DISPLAY="$(find_open_display)"
-    if [ "${OPEN_DISPLAY}" -eq -1 ];
-    then
-      echo "Error: cannot find an unused DISPLAY between 1 and 63"
-      echo "Exiting"
-      exit 33
-    else
-      if [ "${bg}" = true ]; then echo; fi
-      echo "Using DISPLAY=:${OPEN_DISPLAY}"
-    fi
-    export DISPLAY=":${OPEN_DISPLAY}"
-    VNC_PORT="$(find_open_port)"
-    export VNC_PORT
-    if [ "${VNC_PORT}" -eq -1 ];
-    then
-      echo "Error: cannot find an unused port between 5900 and 5999"
-      echo "Exiting"
-      exit 33
-    else
-      echo "Using VNC_PORT=${VNC_PORT}"
-    fi
+    if [ "${bg}" = true ]; then echo; fi
+    echo "Using DISPLAY=:${OPEN_DISPLAY}"
+  fi
+  export DISPLAY=":${OPEN_DISPLAY}"
+  VNC_PORT="$(find_open_port)"
+  export VNC_PORT
+  if [ "${VNC_PORT}" -eq -1 ];
+  then
+    echo "Error: cannot find an unused port between 5900 and 5999"
+    echo "Exiting"
+    exit 33
+  else
+    echo "Using VNC_PORT=${VNC_PORT}"
   fi
   #
   #  Start the Xvnc server
@@ -179,83 +173,49 @@
                 --MaxDisconnectionTime=10 \
                 >> "${LOG}" 2>&1 &
 
-  # Leaving pid wait for all but docker,
-  # which seems to need it.  For all others
-  # it seems like its not needed but we'll have
-  # to see how it runs on slower/faster machines
-  # FGH 2023-02-16
-  if [ "${docker}" = true ];
-  then
-    xvnc_pid=""
-    end_time=$(( "$(date +%s)" + 10 ))
-    while [ -z "${xvnc_pid}" ];
-    do
-      if [ "$(date +%s)" -gt "${end_time}" ];
-      then
-         echo "Xvnc server failed to start."
-         echo "See log file at ${LOG}"
-         echo "Exiting"
-         exit 3
-      fi
-      sleep .125
-      xvnc_pid=$(pgrep -f "Xvnc ${DISPLAY}")
-    done
-    # echo "XVNC_PID is ${xvnc_pid}"
-  fi
   #
-  # Run Medley in foreground if docker, else in background
+  # Run Maiko in background
   #
-  tmp_dir=$(if [ -d /run/shm ] && [ ! -h /run/shm ]; then echo "/run/shm"; else echo "/tmp"; fi)
-  medley_run=$(mktemp --tmpdir="${tmp_dir}" medley-XXXXX)
-  cat > "${medley_run}" <<..EOF
-    #!/bin/sh
-    "${MEDLEYDIR}"/run-medley -id '${run_id}' ${geometry} ${screensize} ${run_args} \
-         2>&1 | tee -a "${LOG}" | grep -v "broken (explicit kill"
-    if [ -n "\$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
-..EOF
-  #cat ${medley_run}
-  chmod +x "${medley_run}"
-  if [ "${docker}" = "true" ];
+  {
+    start_maiko
+    if [ -n "$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
+  } &
+
+  #
+  #  Start the vncviewer on the windows side
+  #
+
+  #  First give medley time to startup
+  #  sleep .25
+  #  SLeep appears not to be needed, but faster/slower machines ????
+  #  FGH 2023-02-08
+
+  #  Then start vnc viewer on Windows side
+  start_time=$(date +%s)
+  "${vnc_dir}"/${vnc_exe} \
+               -geometry "+50+50" \
+               -ReconnectOnError=off \
+               −AlertOnFatalError=off \
+               "$(ip_addr)":"${VNC_PORT}" \
+               >>"${LOG}" 2>&1 &
+  wait $!
+  if [ $(( $(date +%s) - start_time )) -lt 5 ];
   then
-    ${medley_run}; rm "${medley_run}"
-  else
-    (${medley_run}; rm "${medley_run}") &
-    #
-    #  If not docker (i.e., if wsl/vnc), start the vncviewer on the windows side
-    #
-
-    #  First give medley time to startup
-    #  sleep .25
-    #  SLeep appears not to be needed, but faster/slower machines ????
-    #  FGH 2023-02-08
-
-    #  Then start vnc viewer on Windows side
-    start_time=$(date +%s)
-    "${vnc_dir}"/${vnc_exe} \
-                 -geometry "+50+50" \
-                 -ReconnectOnError=off \
-                 −AlertOnFatalError=off \
-                 "$(ip_addr)":"${VNC_PORT}" \
-                 >>"${LOG}" 2>&1 &
-    wait $!
-    if [ $(( $(date +%s) - start_time )) -lt 5 ];
+    if [ -z "$(pgrep -f "Xvnc ${DISPLAY}")" ];
     then
-      if [ -z "$(pgrep -f "Xvnc ${DISPLAY}")" ];
-      then
-        echo "Xvnc server failed to start."
-        echo "See log file at ${LOG}"
-        echo "Exiting"
-        exit 3
-      else
-        echo "VNC viewer failed to start.";
-        echo "See log file at ${LOG}";
-        echo "Exiting" ;
-        exit 4;
-      fi
+      echo "Xvnc server failed to start."
+      echo "See log file at ${LOG}"
+      echo "Exiting"
+      exit 3
+    else
+      echo "VNC viewer failed to start.";
+      echo "See log file at ${LOG}";
+      echo "Exiting" ;
+      exit 4;
     fi
   fi
   #
-  #  Done, "Go back" to medley.sh
+  #  Done, "Go back" to medley_run.sh
   #
   true
 

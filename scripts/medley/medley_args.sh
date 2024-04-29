@@ -36,7 +36,7 @@ noscroll=false
 display_arg=""
 vmem_arg=""
 mem_arg=""
-pass_args=""
+maiko_args=""
 logindir_arg=""
 nh_host_arg=""
 nh_port_arg=""
@@ -48,7 +48,7 @@ borderwidth_arg=""
 # Loop thru args and process
 while [ "$#" -ne 0 ];
 do
-  if [ ${pass_args} = false ];
+  if [ "${pass_args}" = false ];
   then
     case "$1" in
       -a | --apps)
@@ -118,8 +118,8 @@ do
             ;;
           +)
             noscroll=true
-            ;;
             shift
+            ;;
           *)
             noscroll=true
             ;;
@@ -139,7 +139,8 @@ do
         if [ "${nh_port}" = "-" ]; then nh_port_arg=""; else nh_port_arg="${nh_port}"; fi
         if [ "${nh_mac}" = "-" ]; then nh_mac_arg=""; else nh_mac_arg="${nh_mac}"; fi
         if [ "${nh_debug}" = "-" ]; then nh_debug_arg=""; else nh_debug_arg="${nh_debug}"; fi
-        ;;
+        shift
+	;;
       -ps | --pixelscale)
         check_for_dash_or_end "$1" "$2"
         pixelscale_arg="$2"
@@ -184,8 +185,8 @@ do
             use_vnc=true
             ;;
         esac
-        if [ "${use_vnc}" = true ] && { [ ! "${wsl}" = true ] || [ ! "$(uname -m)" = x86_64 ] }
-        else
+        if [ "${use_vnc}" = true ] && { [ ! "${wsl}" = true ] || [ ! "$(uname -m)" = x86_64 ] ; }
+        then
           echo "Warning: The -v or --vnc flag was set."
           echo "But the vnc option is only available when running on "
           echo "Windows System for Linux (wsl) on x86_64 machines."
@@ -292,7 +293,7 @@ do
       args_stage="command line arguments"
       pass_args=false
     else
-      pass_args="${pass_args} \"$1\""
+      maiko_args="${maiko_args} \"$1\""
     fi
   fi
   shift

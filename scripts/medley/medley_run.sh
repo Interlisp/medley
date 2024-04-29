@@ -104,9 +104,9 @@ if [ -z "${greet_arg}" ]
 then
   if [ "${sysout_arg}" = "apps" ]
   then
-    LDEINIT="${MEDLEYDIR}/greetfiles/APPS-INIT"
+    LDEINIT="${MEDLEYDIR}/greetfiles/APPS-INIT.LCOM"
   else
-    LDEINIT="${MEDLEYDIR}/greetfiles/MEDLEYDIR-INIT"
+    LDEINIT="${MEDLEYDIR}/greetfiles/MEDLEYDIR-INIT.LCOM"
   fi
 else
  if [ "${greet_arg}" = "--nogreet--" ]
@@ -123,6 +123,15 @@ noscroll_arg=""
 if [ "${noscroll}" = true ]
 then
   noscroll_arg="-noscroll"
+fi
+
+# figure out -m situatiom
+mem_flag=""
+mem_value=""
+if [ -n "${mem_arg}" ]
+then
+  mem_flag="-m"
+  mem_value="${mem_arg}"
 fi
 
 # figure out the nethub situation
@@ -164,7 +173,7 @@ fi
 
 # Figure out the maiko directory maiko
 check_if_maiko_dir () {
-  if  ! command -v "$1"/bin/osversion || ! command -v "$1"/bin/machinetype || \
+  if  { !  command -v "$1"/bin/osversion || ! command -v "$1"/bin/machinetype ; } >/dev/null || \
       [ ! -x "$1"/"$("$1"/bin/osversion)"."$("$1"/bin/machinetype)"/"${maikoprog_arg}" ]
   then
     return 1
@@ -201,10 +210,29 @@ fi
 maiko="${maikodir_arg}/$("${maikodir_arg}"/bin/osversion).$("${maikodir_arg}"/bin/machinetype)/${maikoprog_arg}"
 
 
-# Run maiko either directly or with vnc
+# Define function to start up maiko given all arguments
 start_maiko() {
-  set -x
-  "${maiko}" "${sysout_arg}"                          \
+  echo \
+  \"${maiko}\" \"${src_sysout}\"                      \
+             -id \"${run_id}\"                        \
+             -title \"${title}\"                      \
+             -g ${geometry}                           \
+             -sc ${screensize}                        \
+             ${borderwidth_flag} ${borderwidth_value} \
+             ${pixelscale_flag} ${pixelscale_value}   \
+             ${noscroll_arg}                          \
+             ${mem_flag} ${mem_value}                 \
+             ${nh_host_flag} ${nh_host_value}         \
+             ${nh_port_flag} ${nh_port_value}         \
+             ${nh_mac_flag} ${nh_mac_value}           \
+             ${nh_debug_flag} ${nh_debug_value}       \
+             ${nofork_arg}                            \
+             ${maiko_args}                            ;
+  echo "MEDLEYDIR: \"${MEDLEYDIR}\""
+  echo "LOGINDIR: \"${LOGINDIR}\""
+  echo "GREET FILE: \"${LDEINIT}\""
+  echo "VMEM FILE: \"${LDEDESTSYSOUT}\""
+  "${maiko}" "${src_sysout}"                          \
              -id "${run_id}"                          \
              -title "${title}"                        \
              -g "${geometry}"                         \
@@ -212,21 +240,21 @@ start_maiko() {
              ${borderwidth_flag} ${borderwidth_value} \
              ${pixelscale_flag} ${pixelscale_value}   \
              ${noscroll_arg}                          \
-             -m "${mem_arg}"                          \
+             ${mem_flag} ${mem_value}                 \
              ${nh_host_flag} ${nh_host_value}         \
              ${nh_port_flag} ${nh_port_value}         \
              ${nh_mac_flag} ${nh_mac_value}           \
              ${nh_debug_flag} ${nh_debug_value}       \
              ${nofork_arg}                            \
-             ${pass_args}                             ;
-  set +x
+             ${maiko_args}                            ;
 }
 
+# Run maiko either directly or with vnc
 if [ "${wsl}" = true ] && [ "${use_vnc}" = true ]
 then
   # do the vnc thing on wsl (if called for)
   . "${SCRIPTDIR}"/medley_vnc.sh
 else
   # If not using vnc, just exec maiko directly
-  run_maiko
+  start_maiko
 fi

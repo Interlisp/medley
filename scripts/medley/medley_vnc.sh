@@ -124,9 +124,6 @@
   mkdir -p "$(dirname -- "${LOG}")"
   echo "START" >"${LOG}"
   #
-  # If we're running under docker:
-  #    set the VNC_PORT to the value of the --port flag (or its default value)
-  #    set DISPLAY to :0
   #
   #set -x
   # are we running in background - used for pretty-fying the echos
@@ -148,7 +145,8 @@
     if [ "${bg}" = true ]; then echo; fi
     echo "Using DISPLAY=:${OPEN_DISPLAY}"
   fi
-  export DISPLAY=":${OPEN_DISPLAY}"
+  DISPLAY=":${OPEN_DISPLAY}"
+  export DISPLAY
   VNC_PORT="$(find_open_port)"
   export VNC_PORT
   if [ "${VNC_PORT}" -eq -1 ];
@@ -173,11 +171,13 @@
                 --MaxDisconnectionTime=10 \
                 >> "${LOG}" 2>&1 &
 
+  sleep .5
   #
   # Run Maiko in background
   #
   {
     start_maiko
+    echo
     if [ -n "$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
   } &
 
@@ -199,9 +199,9 @@
                "$(ip_addr)":"${VNC_PORT}" \
                >>"${LOG}" 2>&1 &
   wait $!
-  if [ $(( $(date +%s) - start_time )) -lt 5 ];
+  if [ $(( $(date +%s) - start_time )) -lt 5 ]
   then
-    if [ -z "$(pgrep -f "Xvnc ${DISPLAY}")" ];
+    if [ -z "$(pgrep -f "Xvnc ${DISPLAY}")" ]
     then
       echo "Xvnc server failed to start."
       echo "See log file at ${LOG}"

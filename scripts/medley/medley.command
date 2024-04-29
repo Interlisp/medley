@@ -132,7 +132,7 @@ then
 elif [ "$(uname -s | head --bytes 6)" = "CYGWIN" ]
 then
   cygwin=true
-elif [ -e "/proc/version" ] && grep Microsoft /proc/version
+elif [ -e "/proc/version" ] && grep --ignore-case --quiet Microsoft /proc/version
 then
   wsl=true
   wsl_ver=0
@@ -165,7 +165,7 @@ fi
 . "${SCRIPTDIR}"/medley_args.sh
 
 # Make sure that there is not another instance currently running with this same id
-ps ax | grep ldex|ldesdl | grep --quiet "\-id ${run_id}"
+ps ax | grep "ldex|ldesdl" | grep --quiet "\-id ${run_id}"
 if [ $? -eq 0 ]
 then
   err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".

@@ -1,4 +1,5 @@
-#!/bin/sh
+#!only-to-be-sourced
+# shellcheck shell=sh
 ###############################################################################
 #
 #    medley_utils.sh - script containing various useful functions for medley.sh script.

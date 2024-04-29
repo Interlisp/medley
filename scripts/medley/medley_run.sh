@@ -1,4 +1,6 @@
-#!/bin/sh
+#!only-to-be-sourced
+# shellcheck shell=sh
+# shellcheck disable=SC2154,SC2164,SC2086
 ###############################################################################
 #
 #    medley_run.sh - script for processing actually running maiko/medley
@@ -12,7 +14,6 @@
 #   Copyright 2024 Interlisp.org
 #
 ###############################################################################
-# shellcheck disable=SC2154,SC2164,SC2086
 
 # Figure out LOGINDIR situation
 if [ -z "${logindir_arg}" ]
@@ -88,6 +89,7 @@ Exiting."
 fi
 
 # Figure out screensize and geometry based on arguments
+# shellcheck source=./medley_geometry.sh
 . "${SCRIPTDIR}/medley_geometry.sh"
 
 # Figure out border with situation
@@ -253,7 +255,8 @@ start_maiko() {
 if [ "${wsl}" = true ] && [ "${use_vnc}" = true ]
 then
   # do the vnc thing on wsl (if called for)
-  . "${SCRIPTDIR}"/medley_vnc.sh
+  # shellcheck source=./medley_vnc.sh
+  . "${SCRIPTDIR}/medley_vnc.sh"
 else
   # If not using vnc, just exec maiko directly
   start_maiko

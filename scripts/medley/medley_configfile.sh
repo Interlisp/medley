@@ -1,4 +1,5 @@
-#!/bin/sh
+#!only-to-be-sourced
+# shellcheck shell=sh
 ###############################################################################
 #
 #    medley_configfile.sh - script for processing the config file for the
@@ -12,7 +13,6 @@
 #   Copyright 2024 Interlisp.org
 #
 ###############################################################################
-# xshellcheck
 
 config_file="${HOME}/.medley_config"
 

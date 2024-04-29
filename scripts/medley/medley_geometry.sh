@@ -1,4 +1,6 @@
-#!/bin/sh
+#!only-to-be-sourced
+# shellcheck shell=sh
+# shellcheck disable=SC2154
 ###############################################################################
 #
 #    medley_geometry.sh - script for computing the geometry and screensize
@@ -12,7 +14,6 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-# shellcheck disable=SC2154
 
 if [ "${noscroll}" = false ];
 then

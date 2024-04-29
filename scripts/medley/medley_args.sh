@@ -1,4 +1,6 @@
-#!/bin/sh
+#!only-to-be-sourced
+# shellcheck shell=sh
+# shellcheck disable=SC2034,SC2154,SC2164
 ###############################################################################
 #
 #    medley_args.sh - script for processing the args to medley.sh script.
@@ -11,9 +13,9 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-# shellcheck disable=SC2034,SC2154,SC2164
 
 # load usage function
+# shellcheck source=./medley_usage.sh
 . "${SCRIPTDIR}/medley_usage.sh"
 args_stage="config file"
 

@@ -1,4 +1,6 @@
-#!/bin/sh
+#!only-to-be-sourced
+# shellcheck shell=sh
+# shellcheck disable=SC2154,SC2162
 ###############################################################################
 #
 #    medley_vnc.sh - script for running Medley Interlisp on WSL using Xvnc
@@ -14,7 +16,6 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-# shellcheck disable=SC2154,SC2162
 
   ip_addr() {
     ip -4 -br address show dev eth0 | awk '{print $3}' | sed 's-/.*$--'
@@ -23,7 +24,6 @@
   find_open_display() {
     local_ctr=1
     local_result=-1
-    local_locked_pid=0
     while [ ${local_ctr} -lt 64 ];
     do
       if [ ! -e /tmp/.X${local_ctr}-lock ];
@@ -31,15 +31,7 @@
         local_result=${local_ctr}
         break
       else
-        local_locked_pid=$(cat /tmp/.X${local_ctr}-lock)
-        ps lax | awk '{print $3}' | grep --quiet "${local_locked_pid}" >/dev/null
-        if [ $? -eq 1 ];
-        then
-          local_result=${local_ctr}
-          break
-        else
-          local_ctr=$(( local_ctr+1 ))
-        fi
+        local_ctr=$(( local_ctr+1 ))
       fi
     done
     echo ${local_result}
@@ -163,7 +155,7 @@
   mkdir -p "${LOGINDIR}"/logs
   /usr/bin/Xvnc "${DISPLAY}" \
                 -rfbport "${VNC_PORT}" \
-                -geometry "${geometry#-g }" \
+                -geometry "${geometry}" \
                 -SecurityTypes None \
                 -NeverShared \
                 -DisconnectClients=0 \
@@ -177,7 +169,6 @@
   #
   {
     start_maiko
-    echo
     if [ -n "$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
   } &
 
@@ -191,13 +182,14 @@
   #  FGH 2023-02-08
 
   #  Then start vnc viewer on Windows side
+  vncv_loc=$(( OPEN_DISPLAY * 50 ))
   start_time=$(date +%s)
-  "${vnc_dir}"/${vnc_exe} \
-               -geometry "+50+50" \
-               -ReconnectOnError=off \
-               −AlertOnFatalError=off \
-               "$(ip_addr)":"${VNC_PORT}" \
-               >>"${LOG}" 2>&1 &
+  "${vnc_dir}"/${vnc_exe}                           \
+               -geometry "+${vncv_loc}+${vncv_loc}" \
+               -ReconnectOnError=off                \
+               −AlertOnFatalError=off               \
+               "$(ip_addr)":"${VNC_PORT}"           \
+               >>"${LOG}" 2>&1                      &
   wait $!
   if [ $(( $(date +%s) - start_time )) -lt 5 ]
   then

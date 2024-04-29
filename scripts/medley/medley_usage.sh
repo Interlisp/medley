@@ -1,4 +1,6 @@
-#!/bin/sh
+#!only-to-be-sourced
+# shellcheck shell=sh
+# shellcheck disable=SC2154
 ###############################################################################
 #
 #    medley_useage.sh - script defining the "usage" for medley.sh script.
@@ -11,7 +13,6 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-# shellcheck disable=SC2154
 
 
 PAGER=$( if [ -n "$(which more)" ]; then echo "more"; else echo "cat"; fi)

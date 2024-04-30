@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 1-Oct-2023 19:33:26" {WMEDLEY}<lispusers>GITFNS.;489 124166 
+(FILECREATED "30-Apr-2024 14:30:11" {WMEDLEY}<lispusers>GITFNS.;498 123682 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS GIT-MAKE-PROJECT)
+      :CHANGES-TO (FNS GIT-PULL-REQUESTS PRC-COMMAND GIT-PRC-BRANCHES)
+                  (VARS GITFNSCOMS)
 
-      :PREVIOUS-DATE " 1-Oct-2023 19:27:42" {WMEDLEY}<lispusers>GITFNS.;488)
+      :PREVIOUS-DATE "29-Apr-2024 15:51:33" {WMEDLEY}<lispusers>GITFNS.;495)
 
 
 (PRETTYCOMPRINT GITFNSCOMS)
@@ -16,7 +17,7 @@
         (* ;; "Set up")
 
         (FILES (SYSLOAD FROM LISPUSERS)
-               COMPAREDIRECTORIES COMPARESOURCES COMPARETEXT PSEUDOHOSTS UNIXUTILS)
+               COMPAREDIRECTORIES COMPARESOURCES COMPARETEXT PSEUDOHOSTS JSON UNIXUTILS)
         
         (* ;; "")
 
@@ -68,7 +69,7 @@
 
         (FNS GIT-COMMIT GIT-PUSH GIT-PULL GIT-APPROVAL GIT-GET-FILE GIT-FILE-EXISTS? 
              GIT-REMOTE-UPDATE GIT-REMOTE-ADD GIT-FILE-DATE GIT-FILE-HISTORY GIT-PRINT-FILE-HISTORY 
-             GIT-FETCH GIT-PR-BRANCHES)
+             GIT-FETCH)
         
         (* ;; "Differences")
 
@@ -119,7 +120,7 @@
 
 
 (FILESLOAD (SYSLOAD FROM LISPUSERS)
-       COMPAREDIRECTORIES COMPARESOURCES COMPARETEXT PSEUDOHOSTS UNIXUTILS)
+       COMPAREDIRECTORIES COMPARESOURCES COMPARETEXT PSEUDOHOSTS JSON UNIXUTILS)
 
 
 
@@ -531,7 +532,12 @@
 (DEFINEQ
 
 (PRC-COMMAND
-  [LAMBDA (REMOTEBRANCH DRAFTS PROJECT)                      (* ; "Edited 28-Jul-2023 09:03 by rmk")
+  [LAMBDA (REMOTEBRANCH DRAFTS PROJECT)                      (* ; "Edited 30-Apr-2024 14:09 by rmk")
+                                                             (* ; "Edited  1-Apr-2024 20:24 by rmk")
+                                                             (* ; "Edited 28-Jul-2023 09:03 by rmk")
+
+    (* ;; "DRAFTS can be DRAFT(S), NODRAFTS, or NIL.  If DRAFTS, then only draft PR's are shown, of NODRAFTS then only nondrafts are shown.  Anything else, both drafts and nondrafts are shown in the menu.")
+
     (LET (PRS PRMENU)
          (IF PROJECT
              THEN (SETQ PROJECT (GIT-GET-PROJECT PROJECT))
@@ -541,12 +547,20 @@
            ELSEIF (GIT-GET-PROJECT DRAFTS NIL T)
              THEN (SETQ PROJECT DRAFTS)
                   (SETQ DRAFTS NIL))
-         (CL:WHEN (MEMB (U-CASE REMOTEBRANCH)
-                        '(DRAFT DRAFTS))
-             (SETQ REMOTEBRANCH NIL)
-             (SETQ DRAFTS T))
+         (SELECTQ (U-CASE REMOTEBRANCH)
+             ((DRAFT DRAFTS) 
+                  (SETQ REMOTEBRANCH NIL)
+                  (SETQ DRAFTS 'DRAFTS))
+             ((NODRAFT NODRAFTS) 
+                  (SETQ REMOTEBRANCH NIL)
+                  (SETQ DRAFTS 'NODRAFTS))
+             NIL)
          (GIT-FETCH PROJECT)
-         (SETQ PRS (GIT-PULL-REQUESTS T DRAFTS PROJECT))
+
+         (* ;; "Always include drafts??")
+
+         (SETQ PRS (GIT-PULL-REQUESTS (NEQ 'NODRAFTS DRAFTS)
+                          PROJECT))
          (CL:WHEN (AND REMOTEBRANCH (NEQ REMOTEBRANCH 'PinMenu))
              (for PR in PRS when (OR (STRPOS REMOTEBRANCH (fetch PRDESCRIPTION of PR)
                                             NIL NIL NIL NIL FILEDIRCASEARRAY)
@@ -1019,35 +1033,6 @@
 (GIT-FETCH
   [LAMBDA (PROJECT)                                          (* ; "Edited  8-Jul-2022 10:32 by rmk")
     (GIT-COMMAND "git fetch" T NIL PROJECT])
-
-(GIT-PR-BRANCHES
-  [LAMBDA (DRAFT PROJECT PRS)                                (* ; "Edited  8-Aug-2022 18:15 by rmk")
-                                                             (* ; "Edited  4-Aug-2022 18:55 by rmk")
-                                                             (* ; "Edited  9-Jul-2022 19:01 by rmk")
-                                                             (* ; "Edited 16-May-2022 19:44 by rmk")
-    (CL:UNLESS PRS
-        (SETQ PRS (GIT-PULL-REQUESTS T DRAFT PROJECT)))
-    (CL:WHEN PRS
-        (LET ((RELATIONS (GIT-BRANCH-RELATIONS (FOR PR IN PRS COLLECT (GITORIGIN (CADDR PR)))
-                                NIL T PROJECT)))
-             (SORT [FOR PR REL LABEL PRNAME (SUPERSETS _ (CAR RELATIONS))
-                        (EQUALS _ (CADR RELATIONS)) IN PRS
-                      COLLECT (SETQ PRNAME (fetch PRNAME of PR))
-                            (SETQ LABEL (CONCAT "#" (fetch (PULLREQUEST PRNUMBER) of PR)
-                                               " "
-                                               (IF [SETQ REL (CAR (CDR (SASSOC PRNAME SUPERSETS]
-                                                   THEN (CONCAT PRNAME " > " REL)
-                                                 ELSEIF [SETQ REL (CAR (CDR (SASSOC PRNAME EQUALS]
-                                                   THEN (CONCAT PRNAME " = " REL)
-                                                 ELSE PRNAME)))
-                            (LIST (CL:IF (EQ 'DRAFT (FETCH PRSTATUS OF PR))
-                                      (CONCAT LABEL " (draft)")
-                                      LABEL)
-                                  (GITORIGIN PRNAME)
-                                  (CONCAT " " (FETCH PRDESCRIPTION OF PR)
-                                         "  #"
-                                         (FETCH PRNUMBER OF PR]
-                   T)))])
 )
 
 
@@ -1385,35 +1370,40 @@
                MENUFONT _ DEFAULTFONT))])
 
 (GIT-PULL-REQUESTS
-  [LAMBDA (ALLINFO INCLUDEDRAFTS PROJECT)                    (* ; "Edited  8-Aug-2022 13:12 by rmk")
+  [LAMBDA (INCLUDEDRAFTS PROJECT)                            (* ; "Edited 30-Apr-2024 14:29 by rmk")
+                                                             (* ; "Edited  8-Aug-2022 13:12 by rmk")
                                                              (* ; "Edited  4-Aug-2022 19:01 by rmk")
                                                              (* ; "Edited 17-Jul-2022 11:12 by rmk")
                                                              (* ; "Edited  9-May-2022 16:54 by rmk")
                                                              (* ; "Edited 25-Feb-2022 09:26 by rmk")
-    (CL:UNLESS (EQ 0 (PROCESS-COMMAND "command -v gh"))
+    (CL:UNLESS (EQ 0 (PROCESS-COMMAND "command -v gh"))
            (ERROR "gh must be installed in order to enumerate pull requests:"))
-    (FOR LINE PR TAB1 TAB2 TAB3 VAL IN (GIT-COMMAND "gh pr list" T NIL PROJECT)
-       WHEN [AND (SETQ TAB1 (STRPOS "	" LINE))
-                 (SETQ TAB2 (STRPOS "	" LINE (ADD1 TAB1)))
-                 (SETQ TAB3 (STRPOS "	" LINE (ADD1 TAB2)))
-                 (OR INCLUDEDRAFTS (NEQ 'DRAFT (SUBATOM LINE (ADD1 TAB3]
-       COLLECT [SETQ PR (IF ALLINFO
-                            THEN (CREATE PULLREQUEST
-                                        PRNUMBER _ (SUBATOM LINE 1 (SUB1 TAB1))
-                                        PRDESCRIPTION _ (SUBSTRING LINE (ADD1 TAB1)
-                                                               (SUB1 TAB2))
-                                        PRNAME _ (SUBSTRING LINE (ADD1 TAB2)
-                                                        (SUB1 TAB3))
-                                        PRSTATUS _ (SUBATOM LINE (ADD1 TAB3)))
-                          ELSE (CREATE PULLREQUEST
-                                      PRNAME _ (SUBSTRING LINE (ADD1 TAB2)
-                                                      (SUB1 TAB3]
-             (CL:WHEN (STRPOS ":" (fetch (PULLREQUEST PRNAME) of PR))
-                 (PRINTOUT T "Ignoring PR for forked repo %%%"" (fetch (PULLREQUEST PRNAME)
-                                                                   of PR)
-                        "%"" T)
-                 (GO $$ITERATE))
-             PR])
+    (LET [(JPARSE (JSON-PARSE (CAR (GIT-COMMAND 
+                                  "gh pr list --json number,headRefName,title,isDraft,reviewDecision"
+                                          T NIL PROJECT]
+         (FOR JSOBJ DRAFT PR IN (SELECTQ (CAR JPARSE)
+                                    (ARRAY (CDR JPARSE))
+                                    (OBJECT JPARSE)
+                                    (ERROR "UNRECOGNIZED PRC LIST FROM GIT" JPARSE))
+            EACHTIME [SETQ DRAFT (EQ 'true (JSON-GET JSOBJ 'isDraft] WHEN (OR INCLUDEDRAFTS
+                                                                              (NOT DRAFT))
+            COLLECT [SETQ PR (CREATE PULLREQUEST
+                                    PRNUMBER _ (JSON-GET JSOBJ 'number)
+                                    PRNAME _ (JSON-GET JSOBJ 'headRefName)
+                                    PRDESCRIPTION _ (JSON-GET JSOBJ 'title)
+                                    PRSTATUS _ (CL:IF DRAFT
+                                                   'D
+                                                   (CL:IF (STREQUAL "REVIEW_REQUIRED"
+                                                                 (JSON-GET JSOBJ 'reviewDecision))
+                                                       " "
+                                                       'A))]
+                  (CL:WHEN (STRPOS ":" (fetch (PULLREQUEST PRNAME) of PR))
+                      (PRINTOUT T "Ignoring PR for forked repo %%%" #" (JSON-GET JSOBJ 'number)
+                             " "
+                             (fetch (PULLREQUEST PRNAME) of PR)
+                             "%"" T)
+                      (GO $$ITERATE))
+                  PR])
 
 (GIT-SHORT-BRANCH-NAME
   [LAMBDA (BRANCH)                                           (* ; "Edited 22-May-2022 22:36 by rmk")
@@ -1431,18 +1421,20 @@
     (FIND B IN (GIT-BRANCHES WHERE PROJECT EXCLUDEMERGED) SUCHTHAT (STRPOS BRANCH B])
 
 (GIT-PRC-BRANCHES
-  [LAMBDA (DRAFT PROJECT PRS)                                (* ; "Edited  8-Aug-2022 18:15 by rmk")
+  [LAMBDA (DRAFT PROJECT PRS)                                (* ; "Edited 30-Apr-2024 14:20 by rmk")
+                                                             (* ; "Edited  1-Apr-2024 17:09 by rmk")
+                                                             (* ; "Edited  8-Aug-2022 18:15 by rmk")
                                                              (* ; "Edited  4-Aug-2022 18:55 by rmk")
                                                              (* ; "Edited  9-Jul-2022 19:01 by rmk")
                                                              (* ; "Edited 16-May-2022 19:44 by rmk")
     (CL:UNLESS PRS
-        (SETQ PRS (GIT-PULL-REQUESTS T DRAFT PROJECT)))
+        (SETQ PRS (GIT-PULL-REQUESTS T PROJECT)))
     (CL:WHEN PRS
         (LET ((RELATIONS (GIT-BRANCH-RELATIONS (FOR PR IN PRS COLLECT (GITORIGIN (CADDR PR)))
                                 NIL T PROJECT)))
-             (SORT [FOR PR REL LABEL PRNAME (SUPERSETS _ (CAR RELATIONS))
+             (SORT [FOR PR REL LABEL PRNAME STATUS (SUPERSETS _ (CAR RELATIONS))
                         (EQUALS _ (CADR RELATIONS)) IN PRS
-                      COLLECT (SETQ PRNAME (fetch PRNAME of PR))
+                      EACHTIME (SETQ PRNAME (fetch PRNAME of PR))
                             (SETQ LABEL (CONCAT "#" (fetch (PULLREQUEST PRNUMBER) of PR)
                                                " "
                                                (IF [SETQ REL (CAR (CDR (SASSOC PRNAME SUPERSETS]
@@ -1450,13 +1442,15 @@
                                                  ELSEIF [SETQ REL (CAR (CDR (SASSOC PRNAME EQUALS]
                                                    THEN (CONCAT PRNAME " = " REL)
                                                  ELSE PRNAME)))
-                            (LIST (CL:IF (EQ 'DRAFT (FETCH PRSTATUS OF PR))
-                                      (CONCAT LABEL " (draft)")
-                                      LABEL)
-                                  (GITORIGIN PRNAME)
-                                  (CONCAT " " (FETCH PRDESCRIPTION OF PR)
-                                         "  #"
-                                         (FETCH PRNUMBER OF PR]
+                            (SETQ STATUS (FETCH PRSTATUS OF PR))
+                      WHEN (SELECTQ DRAFT
+                               (DRAFTS (EQ STATUS 'D))
+                               (NODRAFTS (NEQ STATUS 'D))
+                               T) COLLECT (LIST (CONCAT STATUS " " LABEL)
+                                                (GITORIGIN PRNAME)
+                                                (CONCAT " " STATUS " #" (FETCH PRNUMBER OF PR)
+                                                       " "
+                                                       (FETCH PRDESCRIPTION OF PR]
                    T)))])
 )
 
@@ -2300,33 +2294,32 @@
 
 (PUTPROPS GITFNS FILETYPE :TCOMPL)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4081 20660 (GIT-CLONEP 4091 . 5419) (GIT-INIT 5421 . 6051) (GIT-MAKE-PROJECT 6053 . 
-13718) (GIT-GET-PROJECT 13720 . 15645) (GIT-PUT-PROJECT-FIELD 15647 . 17288) (GIT-PROJECT-PATH 17290
- . 18334) (FIND-ANCESTOR-DIRECTORY 18336 . 18685) (GIT-FIND-CLONE 18687 . 19768) (GIT-MAINBRANCH 19770
- . 20165) (GIT-MAINBRANCH? 20167 . 20658)) (26068 28195 (PRC-COMMAND 26078 . 28193)) (28251 31039 (
-ALLSUBDIRS 28261 . 29547) (MEDLEYSUBDIRS 29549 . 30242) (GITSUBDIRS 30244 . 31037)) (31040 35830 (
-TOGIT 31050 . 32456) (FROMGIT 32458 . 33439) (GIT-DELETE-FILE 33441 . 34287) (MYMEDLEY-DELETE-FILES 
-34289 . 35828)) (35831 38834 (MYMEDLEYSUBDIR 35841 . 36297) (GITSUBDIR 36299 . 36742) (STRIPDIR 36744
- . 37115) (STRIPHOST 37117 . 37357) (STRIPNAME 37359 . 38112) (STRIPWHERE 38114 . 38832)) (38835 40737
- (GFILE4MFILE 38845 . 39208) (MFILE4GFILE 39210 . 39779) (GIT-REPO-FILENAME 39781 . 40735)) (40786 
-52616 (GIT-COMMIT 40796 . 41622) (GIT-PUSH 41624 . 42268) (GIT-PULL 42270 . 42882) (GIT-APPROVAL 42884
- . 43233) (GIT-GET-FILE 43235 . 45200) (GIT-FILE-EXISTS? 45202 . 45476) (GIT-REMOTE-UPDATE 45478 . 
-46202) (GIT-REMOTE-ADD 46204 . 46511) (GIT-FILE-DATE 46513 . 47444) (GIT-FILE-HISTORY 47446 . 49380) (
-GIT-PRINT-FILE-HISTORY 49382 . 50432) (GIT-FETCH 50434 . 50606) (GIT-PR-BRANCHES 50608 . 52614)) (
-52646 63239 (GIT-BRANCH-DIFF 52656 . 58996) (GIT-COMMIT-DIFFS 58998 . 59551) (GIT-BRANCH-RELATIONS 
-59553 . 63237)) (63284 76387 (GIT-BRANCH-NUM 63294 . 63867) (GIT-CHECKOUT 63869 . 64928) (
-GIT-WHICH-BRANCH 64930 . 65228) (GIT-MAKE-BRANCH 65230 . 67443) (GIT-BRANCHES 67445 . 69713) (
-GIT-BRANCH-EXISTS? 69715 . 70419) (GIT-PICK-BRANCH 70421 . 70911) (GIT-BRANCH-MENU 70913 . 71616) (
-GIT-PULL-REQUESTS 71618 . 73764) (GIT-SHORT-BRANCH-NAME 73766 . 74057) (GIT-LONG-NAME 74059 . 74376) (
-GIT-PRC-BRANCHES 74378 . 76385)) (76417 79752 (GIT-MY-CURRENT-BRANCH 76427 . 76797) (GIT-MY-BRANCHP 
-76799 . 77304) (GIT-MY-NEXT-BRANCH 77306 . 77800) (GIT-MY-BRANCHES 77802 . 79750)) (79798 83750 (
-GIT-ADD-WORKTREE 79808 . 81292) (GIT-REMOVE-WORKTREE 81294 . 82224) (GIT-LIST-WORKTREES 82226 . 83030)
- (WORKTREEDIR 83032 . 83748)) (83798 116000 (GIT-GET-DIFFERENT-FILES 83808 . 90232) (
-GIT-BRANCHES-COMPARE-DIRECTORIES 90234 . 96585) (GIT-WORKING-COMPARE-DIRECTORIES 96587 . 101983) (
-GIT-COMPARE-WORKTREE 101985 . 105963) (GITCDOBJBUTTONFN 105965 . 110455) (GIT-CD-LABELFN 110457 . 
-111539) (GIT-CD-MENUFN 111541 . 113981) (GIT-WORKING-COMPARE-FILES 113983 . 114603) (
-GIT-BRANCHES-COMPARE-FILES 114605 . 115769) (GIT-PR-COMPARE 115771 . 115998)) (116070 124099 (CDGITDIR
- 116080 . 116767) (GIT-COMMAND 116769 . 118327) (GITORIGIN 118329 . 119026) (GIT-INITIALS 119028 . 
-119332) (GIT-COMMAND-TO-FILE 119334 . 122823) (GIT-RESULT-TO-LINES 122825 . 123432) (STRIPLOCAL 123434
- . 124097)))))
+  (FILEMAP (NIL (4141 20720 (GIT-CLONEP 4151 . 5479) (GIT-INIT 5481 . 6111) (GIT-MAKE-PROJECT 6113 . 
+13778) (GIT-GET-PROJECT 13780 . 15705) (GIT-PUT-PROJECT-FIELD 15707 . 17348) (GIT-PROJECT-PATH 17350
+ . 18394) (FIND-ANCESTOR-DIRECTORY 18396 . 18745) (GIT-FIND-CLONE 18747 . 19828) (GIT-MAINBRANCH 19830
+ . 20225) (GIT-MAINBRANCH? 20227 . 20718)) (26128 28910 (PRC-COMMAND 26138 . 28908)) (28966 31754 (
+ALLSUBDIRS 28976 . 30262) (MEDLEYSUBDIRS 30264 . 30957) (GITSUBDIRS 30959 . 31752)) (31755 36545 (
+TOGIT 31765 . 33171) (FROMGIT 33173 . 34154) (GIT-DELETE-FILE 34156 . 35002) (MYMEDLEY-DELETE-FILES 
+35004 . 36543)) (36546 39549 (MYMEDLEYSUBDIR 36556 . 37012) (GITSUBDIR 37014 . 37457) (STRIPDIR 37459
+ . 37830) (STRIPHOST 37832 . 38072) (STRIPNAME 38074 . 38827) (STRIPWHERE 38829 . 39547)) (39550 41452
+ (GFILE4MFILE 39560 . 39923) (MFILE4GFILE 39925 . 40494) (GIT-REPO-FILENAME 40496 . 41450)) (41501 
+51323 (GIT-COMMIT 41511 . 42337) (GIT-PUSH 42339 . 42983) (GIT-PULL 42985 . 43597) (GIT-APPROVAL 43599
+ . 43948) (GIT-GET-FILE 43950 . 45915) (GIT-FILE-EXISTS? 45917 . 46191) (GIT-REMOTE-UPDATE 46193 . 
+46917) (GIT-REMOTE-ADD 46919 . 47226) (GIT-FILE-DATE 47228 . 48159) (GIT-FILE-HISTORY 48161 . 50095) (
+GIT-PRINT-FILE-HISTORY 50097 . 51147) (GIT-FETCH 51149 . 51321)) (51353 61946 (GIT-BRANCH-DIFF 51363
+ . 57703) (GIT-COMMIT-DIFFS 57705 . 58258) (GIT-BRANCH-RELATIONS 58260 . 61944)) (61991 75903 (
+GIT-BRANCH-NUM 62001 . 62574) (GIT-CHECKOUT 62576 . 63635) (GIT-WHICH-BRANCH 63637 . 63935) (
+GIT-MAKE-BRANCH 63937 . 66150) (GIT-BRANCHES 66152 . 68420) (GIT-BRANCH-EXISTS? 68422 . 69126) (
+GIT-PICK-BRANCH 69128 . 69618) (GIT-BRANCH-MENU 69620 . 70323) (GIT-PULL-REQUESTS 70325 . 72877) (
+GIT-SHORT-BRANCH-NAME 72879 . 73170) (GIT-LONG-NAME 73172 . 73489) (GIT-PRC-BRANCHES 73491 . 75901)) (
+75933 79268 (GIT-MY-CURRENT-BRANCH 75943 . 76313) (GIT-MY-BRANCHP 76315 . 76820) (GIT-MY-NEXT-BRANCH 
+76822 . 77316) (GIT-MY-BRANCHES 77318 . 79266)) (79314 83266 (GIT-ADD-WORKTREE 79324 . 80808) (
+GIT-REMOVE-WORKTREE 80810 . 81740) (GIT-LIST-WORKTREES 81742 . 82546) (WORKTREEDIR 82548 . 83264)) (
+83314 115516 (GIT-GET-DIFFERENT-FILES 83324 . 89748) (GIT-BRANCHES-COMPARE-DIRECTORIES 89750 . 96101) 
+(GIT-WORKING-COMPARE-DIRECTORIES 96103 . 101499) (GIT-COMPARE-WORKTREE 101501 . 105479) (
+GITCDOBJBUTTONFN 105481 . 109971) (GIT-CD-LABELFN 109973 . 111055) (GIT-CD-MENUFN 111057 . 113497) (
+GIT-WORKING-COMPARE-FILES 113499 . 114119) (GIT-BRANCHES-COMPARE-FILES 114121 . 115285) (
+GIT-PR-COMPARE 115287 . 115514)) (115586 123615 (CDGITDIR 115596 . 116283) (GIT-COMMAND 116285 . 
+117843) (GITORIGIN 117845 . 118542) (GIT-INITIALS 118544 . 118848) (GIT-COMMAND-TO-FILE 118850 . 
+122339) (GIT-RESULT-TO-LINES 122341 . 122948) (STRIPLOCAL 122950 . 123613)))))
 STOP

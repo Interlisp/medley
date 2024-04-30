@@ -135,11 +135,19 @@ then
 fi
 mkdir -p ${LOGINDIR}/vmem
 
+# temp fix for cygwin to workaround issue #1685
+# 2024-04-29
+MEDLEYDIR_BASE="${MEDLEYDIR}"
+if [ "$(uname -s | head --bytes 6)" = "CYGWIN" ]
+then
+  MEDLEYDIR="${MEDLEYDIR}/"
+fi
+
 # Call run-medley with or without vnc
 if [[ ( ${darwin} = true ) || (( ${wsl} = false || ${use_vnc} = false ) && ${docker} = false) ]];
 then
   # If not using vnc, just call run-medley
-  ${MEDLEYDIR}/run-medley -id "${run_id}" -title "${title}" ${geometry} ${screensize} ${run_args[@]}
+  ${MEDLEYDIR_BASE}/run-medley -id "${run_id}" -title "${title}" ${geometry} ${screensize} ${run_args[@]}
 else
   # do the vnc thing on wsl or docker
   source ${SCRIPTDIR}/medley_vnc.sh

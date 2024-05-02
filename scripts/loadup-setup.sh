@@ -1,19 +1,29 @@
 
-export MEDLEYDIR=`pwd`
+MEDLEYDIR="$(pwd)"
+export MEDLEYDIR
 
-if [ -z "${LOADUP_WORKDIR}" ];
+if [ -z "${LOADUP_WORKDIR}" ]
 then
-  export LOADUP_WORKDIR=/tmp/loadups-$$
+  LOADUP_WORKDIR=/tmp/loadups-$$
+  export LOADUP_WORKDIR
 fi
 
-if [ -z "${LOADUP_SOURCEDIR}" ];
+if [ -z "${LOADUP_SOURCEDIR}" ]
 then
-  export LOADUP_SOURCEDIR="${MEDLEYDIR}"/internal/loadups
+  LOADUP_SOURCEDIR="${MEDLEYDIR}/internal/loadups"
+  export LOADUP_SOURCEDIR
 fi
 
-if [ -z "${LOADUP_OUTDIR}" ];
+if [ -z "${LOADUP_OUTDIR}" ]
 then
-  export LOADUP_OUTDIR="${MEDLEYDIR}"/loadups
+  LOADUP_OUTDIR="${MEDLEYDIR}/loadups"
+  export LOADUP_OUTDIR
+fi
+
+if [ -z "${LOADUP_LOGINDIR}" ]
+then
+  LOADUP_LOGINDIR="${LOADUP_WORKDIR}/logindir"
+  export LOADUP_LOGINDIR
 fi
 
 if [ ! -d "${LOADUP_OUTDIR}" ];
@@ -37,7 +47,10 @@ then
 fi
 
 
+
+
 scr="-sc 1024x768 -g 1042x790"
+geometry=1024x768
 
 touch "${LOADUP_WORKDIR}"/loadup.timestamp
 
@@ -100,6 +113,20 @@ loadup_finish () {
   echo ""
   exit ${exit_code}
 }
+
+run_medley () {
+
+  ./medley --geometry "${geometry}"                   \
+           --noscroll                                 \
+           --logindir "${LOADUP_LOGINDIR}"            \
+           --greet "${cmfile}"                        \
+           --sysout "$1"                              \
+           "$2" "$3" "$4" "$5" "$6" "$7"              ;
+
+  #./run-medley ${scr} $2 $3 $4 $5 $6 $7 -loadup "${cmfile}" "$1"
+
+}
+
 
 ######################################################################
 

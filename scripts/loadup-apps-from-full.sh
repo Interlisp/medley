@@ -1,29 +1,37 @@
 #!/bin/sh
 
-if [ ! -x run-medley ] ; then
-    echo must run from MEDLEYDIR ;
-    exit 1 ;
+if [ ! -h ./medley ] || [ ! -d ./lispusers ]
+then
+    echo "*** ERROR ***"
+    echo "You must run $(basename $0) while the cwd is a Medley top-level directory."
+    echo "The cwd ($(pwd)) is not a Medley top-level directory."
+    echo "Exiting."
+    exit 1
 fi
 
 . scripts/loadup-setup.sh
 
 loadup_start
 
-export ROOMSDIR=${MEDLEYDIR}/rooms
-export CLOSDIR=${MEDLEYDIR}/clos
+export ROOMSDIR="${MEDLEYDIR}/rooms"
+export CLOSDIR="${MEDLEYDIR}/clos"
 
-export NOTECARDSDIR=${MEDLEYDIR}/notecards
-if [ ! -e ${NOTECARDSDIR} ]; then
-    NOTECARDSDIR=$(cd ${MEDLEYDIR}/../ && pwd)/notecards
-    if [ ! -e ${NOTECARDSDIR} ]; then
-        NOTECARDSDIR=$(cd ${MEDLEYDIR}/../../ && pwd)/notecards
-        if [ ! -e ${NOTECARDSDIR} ]; then
+export NOTECARDSDIR="${MEDLEYDIR}/notecards"
+if [ ! -e "${NOTECARDSDIR}" ]
+then
+    NOTECARDSDIR=$(cd "${MEDLEYDIR}/../" && pwd)/notecards
+    if [ ! -e "${NOTECARDSDIR}" ]
+    then
+        NOTECARDSDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/notecards
+        if [ ! -e "${NOTECARDSDIR}" ]
+        then
             NOTECARDSDIR=""
         fi
     fi
 fi
 
-if [ -z "${NOTECARDSDIR}" ]; then
+if [ -z "${NOTECARDSDIR}" ]
+then
     echo "Error: Cannot find the Notecards directory"
     echo "It should be located at ${MEDLEYDIR}/../notecards or"
     echo "${MEDLEYDIR}/../../notecards.  But its not."
@@ -62,6 +70,6 @@ SHH
 "
 EOF
 
-./run-medley ${scr} -loadup "${cmfile}" "${LOADUP_WORKDIR}/full.sysout"
+run_medley "${LOADUP_WORKDIR}/full.sysout"
 
 loadup_finish "apps.sysout" "apps.*"

@@ -224,6 +224,37 @@ Exiting"
   fi
 }
 
+check_dir_writeable_or_creatable() {
+  local_msg_core="\"$2\" given as the value of the \"$1\" flag"
+  local_err_msg=""
+  if [ -e "$%2" ]
+  then
+    if [ ! -d "$2" ]
+    then
+      local_err_msg="Error: ${local_msg_core} exists but is not a directory.
+Exiting"
+      output_error_msg "${local_err_msg}"
+      exit 1
+    elif [ ! -w "$2" ]
+    then
+      local_err_msg="Error: Directory ${local_msg_core} exists but is not writeable
+Exiting"
+      output_error_msg "${local_err_msg}"
+      exit 1
+    fi
+  else
+    if [ ! -w "$(dirname -- "$2")" ]
+    then
+      local_err_msg="Error: Directory ${local_msg_core} cannot be created because
+its directory either doesn't exist or is not writeable.
+Exiting"
+      output_error_msg "${local_err_msg}"
+      exit 1
+    fi
+  fi
+}
+
+
 check_file_readable() {
   local_msg_core="\"$2\" given as the value of the \"$1\" flag"
   if [ ! -r "$2" ]

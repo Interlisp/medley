@@ -251,6 +251,15 @@ start_maiko() {
              ${maiko_args}                            ;
 }
 
+
+# temp fix for cygwin to workaround issue #1685
+# 2024-04-29
+if [ "${cygwin}" = true ]
+then
+  MEDLEYDIR="${MEDLEYDIR}/"
+fi
+
+
 # Run maiko either directly or with vnc
 if [ "${wsl}" = true ] && [ "${use_vnc}" = true ]
 then

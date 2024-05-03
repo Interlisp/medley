@@ -14,7 +14,7 @@
 #
 ###############################################################################
 
-config_file="${HOME}/.medley_config"
+config_file=""
 
 # look thru args looking to see if a config file was specified
 j=1

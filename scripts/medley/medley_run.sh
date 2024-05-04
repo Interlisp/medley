@@ -73,6 +73,7 @@ but the directory \"${loadups_dir}\" where ${sysout_arg}.sysout is supposed to b
 cannot be found.
 Exiting."
         output_error_msg "${err_msg}"
+        exit 62
       fi
       src_sysout="${loadups_dir}/${sysout_arg}.sysout"
       ;;
@@ -175,13 +176,24 @@ fi
 
 # Figure out the maiko directory maiko
 check_if_maiko_dir () {
-  if  { !  command -v "$1"/bin/osversion || ! command -v "$1"/bin/machinetype ; } >/dev/null || \
-      [ ! -x "$1"/"$("$1"/bin/osversion)"."$("$1"/bin/machinetype)"/"${maikoprog_arg}" ]
+  if [ -d "$1/bin" ]
   then
-    return 1
+    cd "$1/bin"
   else
-    return 0
+    return 1
   fi
+  if [ -x ./osversion ] && [ -x ./machinetype ]
+  then
+    maiko_exe="$1/$(./osversion).$(./machinetype)/${maikoprog_arg}"
+    if [ -x "${maiko_exe}" ]
+    then
+      cd ${OLDPWD}
+      return 0
+    fi
+  fi
+  maiko_exe=""
+  cd ${OLDPWD}
+  return 1
 }
 
 if [ -z "${maikodir_arg}" ]
@@ -209,8 +221,7 @@ the Maiko emulator. Exiting."
   exit 53
 fi
 
-maiko="${maikodir_arg}/$("${maikodir_arg}"/bin/osversion).$("${maikodir_arg}"/bin/machinetype)/${maikoprog_arg}"
-
+maiko="${maiko_exe}"
 
 # Define function to start up maiko given all arguments
 start_maiko() {

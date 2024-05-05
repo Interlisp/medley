@@ -21,17 +21,17 @@ j=1
 jmax=$#
 while [ "$j" -le "$jmax" ]
 do
-  if [ "$(eval "echo \${${j}}")" = "-c" ] || [ "$(eval "echo \${${j}}")" = "--config" ]
+  if [ "$(eval "printf %s \${${j}}")" = "-c" ] || [ "$(eval "printf %s \${${j}}")" = "--config" ]
   then
     k=$(( j + 1 ))
-    config_file="$(eval "echo \${${k}}")"
+    config_file="$(eval "printf %s \${${k}}")"
     if [ ! "${config_file}" = "-" ] && [ ! -f "${config_file}" ]
     then
       echo "Error: specified config file \"${config_file}\" not found."
       echo "Exiting."
       exit 52
     fi
-    break
+    j=$(( j + 1 ))
   fi
   j=$(( j + 1 ))
 done

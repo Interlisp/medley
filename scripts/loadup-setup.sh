@@ -98,7 +98,11 @@ loadup_start () {
 
 loadup_finish () {
   rm -f "${cmfile}"
-  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ]
+# 2024-05-05 FGH
+# Can't use exit code for now since on MacOS exit codes appear to be inverted
+# Will restore once MacOS exit code are figured out
+#  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ]
+  if [ ! -f "${LOADUP_WORKDIR}/$1" ]
   then
     echo "----- FAILURE -----"
     exit_code=1

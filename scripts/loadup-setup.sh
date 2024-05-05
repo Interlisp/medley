@@ -116,7 +116,8 @@ loadup_finish () {
 
 run_medley () {
 
-  ./medley --geometry "${geometry}"                   \
+  ./medley --config -                                 \
+           --geometry "${geometry}"                   \
            --noscroll                                 \
            --logindir "${LOADUP_LOGINDIR}"            \
            --greet "${cmfile}"                        \

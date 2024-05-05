@@ -1,3 +1,5 @@
+#!sh
+# shellcheck shell=sh
 
 MEDLEYDIR="$(pwd)"
 export MEDLEYDIR
@@ -32,7 +34,8 @@ then
   then
     mkdir -p "${LOADUP_OUTDIR}"
   else
-    "Error: ${LOADUP_OUTDIR} exists but is not a directory. Exiting."
+    echo "Error: ${LOADUP_OUTDIR} exists but is not a directory. Exiting."
+    exit 1
   fi
 fi
 
@@ -42,7 +45,8 @@ then
   then
     mkdir -p "${LOADUP_WORKDIR}"
   else
-    "Error: ${LOADUP_WORKDIR} exists but is not a directory. Exiting."
+    echo "Error: ${LOADUP_WORKDIR} exists but is not a directory. Exiting."
+    exit 1
   fi
 fi
 
@@ -94,7 +98,7 @@ loadup_start () {
 
 loadup_finish () {
   rm -f "${cmfile}"
-  if [ ${exit_code} -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/${1}" ] || \
+  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/${1}" ] || \
      [ "${LOADUP_WORKDIR}"/loadup.timestamp -nt "${LOADUP_WORKDIR}/${1}"  ]
   then
     echo "----- FAILURE -----"
@@ -104,20 +108,22 @@ loadup_finish () {
     exit_code=0
   fi
   echo "..... files created ....."
+  if [ -f "${LOADUP_WORKDIR}/${1}" ]
+  then
     shift;
-    for f in ${*};
+    for f in "$@"
     do
-      if [ -f "${LOADUP_WORKDIR}/${1}" ]
-      then
-        for ff in $(ls -1 "${LOADUP_WORKDIR}"/$f);
-        do
-          if [ "${ff}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
-          then
-            ls -l "${ff}" 2>/dev/null | grep -v "^.*~[0-9]\+~$"
-          fi
-        done
-      fi
+      # shellcheck disable=SC2045
+      for ff in $(ls -1 "${LOADUP_WORKDIR}/$f");
+      do
+        if [ "${ff}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
+        then
+          # shellcheck disable=SC2010
+          ls -l "${ff}" 2>/dev/null | grep -v "^.*~[0-9]\+~$"
+        fi
+      done
     done
+  fi
   if [ "${TMP_PRE_EXISTS}" = "false" ];
   then
     rm -rf "${MEDLEYDIR}/tmp"
@@ -144,6 +150,7 @@ run_medley () {
              "$2" "$3" "$4" "$5" "$6" "$7"              ;
     exit_code=$?
   else
+    # shellcheck disable=SC2086
     ./run-medley ${scr} $2 $3 $4 $5 $6 $7 -loadup "${cmfile}" "$1"
     exit_code=$?
   fi

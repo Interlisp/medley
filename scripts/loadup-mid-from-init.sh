@@ -22,11 +22,6 @@ cat >"${cmfile}" <<"EOF"
 "
 EOF
 
-run_medley "${LOADUP_WORKDIR}/init.dlinit" -NF --maikoprog ldeinit --vmem "${LOADUP_WORKDIR}/init-mid.sysout"
-
-#./run-medley -prog "ldeinit" \
-#             -NF \
-#             -loadup "${cmfile}" ${scr} -vmem "${LOADUP_WORKDIR}/init-mid.sysout" \
-#            "${LOADUP_WORKDIR}/init.dlinit"
+run_medley "${LOADUP_WORKDIR}/init.dlinit" -NF -prog ldeinit --vmem "${LOADUP_WORKDIR}/init-mid.sysout"
 
 loadup_finish "init-mid.sysout" "init-mid.sysout"

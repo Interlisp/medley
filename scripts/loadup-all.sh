@@ -11,12 +11,22 @@ fi
 
 . scripts/loadup-setup.sh
 
-if [ "$1" = "-apps" ]; then
+# look thru args looking to see if -apps, --apps, or -a was specified in args
+apps=true
+j=1
+jmax=$#
+while [ "$j" -le "$jmax" ]
+do
+  if [ "$(eval "printf %s \${${j}}")" = "-a" ] || \
+     [ "$(eval "printf %s \${${j}}")" = "-apps" ] || \
+     [ "$(eval "printf %s \${${j}}")" = "--apps" ]
+  then
     apps="./scripts/loadup-apps-from-full.sh"
-else
-    apps="true"
-fi
+    break
+  fi
+done
 
+#  Do loadup components
 ./scripts/loadup-init.sh && \
     ./scripts/loadup-mid-from-init.sh && \
     ./scripts/loadup-lisp-from-mid.sh && \
@@ -25,7 +35,7 @@ fi
     ./scripts/loadup-aux.sh && \
     ./scripts/copy-all.sh $1
 
-if [ $? -eq 0 ];
+if [ $? -eq 0 ]
 then
   echo "+++++ loadup-all.sh: SUCCESS +++++"
 else

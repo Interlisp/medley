@@ -57,6 +57,21 @@ touch "${LOADUP_WORKDIR}"/loadup.timestamp
 script_name=$(basename "$0" ".sh")
 cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
 
+# look thru args looking to see if oldschool was specified in args
+j=1
+jmax=$#
+while [ "$j" -le "$jmax" ]
+do
+  if [ "$(eval "printf %s \${${j}}")" = "-os" ] || [ "$(eval "printf %s \${${j}}")" = "--oldschool" ]
+  then
+    LOADUP_OLDSCHOOL=true
+    export LOADUP_OLDSCHOOL
+    break
+  else
+    j=$(( j + 1 ))
+  fi
+done
+
 
 ######################################################################
 
@@ -78,9 +93,9 @@ loadup_start () {
 }
 
 loadup_finish () {
-  local exit_code
   rm -f "${cmfile}"
-  if [ "${LOADUP_WORKDIR}"/loadup.timestamp -nt "${LOADUP_WORKDIR}/${1}"  ];
+  if [ ${exit_code} -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/${1}" ] || \
+     [ "${LOADUP_WORKDIR}"/loadup.timestamp -nt "${LOADUP_WORKDIR}/${1}"  ]
   then
     echo "----- FAILURE -----"
     exit_code=1
@@ -92,13 +107,16 @@ loadup_finish () {
     shift;
     for f in ${*};
     do
-      for ff in $(ls -1 "${LOADUP_WORKDIR}"/$f);
-      do
-        if [ "${ff}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
-        then
-          ls -l ${ff} 2>/dev/null | grep -v "^.*~[0-9]\+~$"
-        fi
-      done
+      if [ -f "${LOADUP_WORKDIR}/${1}" ]
+      then
+        for ff in $(ls -1 "${LOADUP_WORKDIR}"/$f);
+        do
+          if [ "${ff}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
+          then
+            ls -l "${ff}" 2>/dev/null | grep -v "^.*~[0-9]\+~$"
+          fi
+        done
+      fi
     done
   if [ "${TMP_PRE_EXISTS}" = "false" ];
   then
@@ -115,19 +133,22 @@ loadup_finish () {
 }
 
 run_medley () {
-
-  ./medley --config -                                 \
-           --geometry "${geometry}"                   \
-           --noscroll                                 \
-           --logindir "${LOADUP_LOGINDIR}"            \
-           --greet "${cmfile}"                        \
-           --sysout "$1"                              \
-           "$2" "$3" "$4" "$5" "$6" "$7"              ;
-
-  #./run-medley ${scr} $2 $3 $4 $5 $6 $7 -loadup "${cmfile}" "$1"
+  if [ ! "${LOADUP_OLDSCHOOL}" = true ]
+  then
+    ./medley --config -                                 \
+             --geometry "${geometry}"                   \
+             --noscroll                                 \
+             --logindir "${LOADUP_LOGINDIR}"            \
+             --greet "${cmfile}"                        \
+             --sysout "$1"                              \
+             "$2" "$3" "$4" "$5" "$6" "$7"              ;
+    exit_code=$?
+  else
+    ./run-medley ${scr} $2 $3 $4 $5 $6 $7 -loadup "${cmfile}" "$1"
+    exit_code=$?
+  fi
 
 }
-
 
 ######################################################################
 

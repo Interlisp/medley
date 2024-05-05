@@ -260,6 +260,7 @@ start_maiko() {
              ${nh_debug_flag} ${nh_debug_value}       \
              ${nofork_arg}                            \
              ${maiko_args}                            ;
+  exit_code=$?
 }
 
 
@@ -281,3 +282,4 @@ else
   # If not using vnc, just exec maiko directly
   start_maiko
 fi
+exit ${exit_code}

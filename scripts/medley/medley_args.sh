@@ -253,7 +253,7 @@ do
         maikodir_stage="${args_stage}"
         shift;
         ;;
-      --maikoprog)
+      -prog | --maikoprog)
         # for use in loadups
         check_for_dash_or_end "$1" "$2"
         maikoprog_arg="$2"

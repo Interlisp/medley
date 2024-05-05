@@ -25,4 +25,6 @@ EOF
 
 run_medley "${LOADUP_WORKDIR}/init.dlinit" -NF -prog ldeinit --vmem "${LOADUP_WORKDIR}/init-mid.sysout"
 
+echo " "
+
 loadup_finish "init-mid.sysout" "init-mid.sysout"

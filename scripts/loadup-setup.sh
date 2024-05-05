@@ -98,8 +98,7 @@ loadup_start () {
 
 loadup_finish () {
   rm -f "${cmfile}"
-  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/${1}" ] || \
-     [ "${LOADUP_WORKDIR}"/loadup.timestamp -nt "${LOADUP_WORKDIR}/${1}"  ]
+  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ]
   then
     echo "----- FAILURE -----"
     exit_code=1
@@ -108,19 +107,16 @@ loadup_finish () {
     exit_code=0
   fi
   echo "..... files created ....."
-  if [ -f "${LOADUP_WORKDIR}/${1}" ]
+  if [ -f "${LOADUP_WORKDIR}/$1" ]
   then
     shift;
     for f in "$@"
     do
-      # shellcheck disable=SC2045
-      for ff in $(ls -1 "${LOADUP_WORKDIR}/$f");
+      # shellcheck disable=SC2045,SC2086
+      for ff in $(ls -1 "${LOADUP_WORKDIR}"/$f);
       do
-        if [ "${ff}" -nt "${LOADUP_WORKDIR}"/loadup.timestamp ];
-        then
-          # shellcheck disable=SC2010
-          ls -l "${ff}" 2>/dev/null | grep -v "^.*~[0-9]\+~$"
-        fi
+        # shellcheck disable=SC2010
+        ls -l "${ff}" 2>/dev/null | grep -v "^.*~[0-9]\+~$"
       done
     done
   fi

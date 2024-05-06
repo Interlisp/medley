@@ -532,7 +532,9 @@ flags:
 
     -l | --lisp                : start Medley from the "lisp" sysout
 
-    -a | --apps                : start Medley  from the "apps" sysout
+    -a | --apps                : start Medley from the "apps" sysout
+
+    -u | --continue            : start Medley from the vmem file from previous Medley run
 
     -y FILE | --sysout FILE    : start Medley using FILE as sysout
 
@@ -544,6 +546,8 @@ flags:
 
     -s WxH | --screensize WxH  : set the Medley screen size to be Width x Height
 
+    -ps N | --pixelscale N     : use N as the pixel scale factor - for SDL display only
+
     -t STRING | --title STRING : use STRING as title of window
 
     -d :N | --display :N       : use X display :N
@@ -552,42 +556,25 @@ flags:
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
-    -i - | --id -              : for id use the basename of MEDLEYDIR
-
-    -i -- | --id --            : for id use the basename of the parent directory of MEDLEYDIR
-
     -m N | --mem N             : set Medley memory size to N
 
     -k FILE | --vmem FILE      : use FILE as the Medley virtual memory store.
-+d                               FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).
 
     -r FILE | --greet FILE     : use FILE as the Medley greetfile.
-+d                               FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).
 
     -r - | --greet -           : do not use a greetfile
--d
--d  -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
--d
--d  -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
-+d
-+d  -x DIR | --logindir DIR    : use DIR (on the host) to map to LOGINDIR (/home/medley/il) in Medley
-+d
-+d  -p N | --port N            : use N as the port for connecting to the Xvnc server inside the Docker container
-+d
-+d  -u | --update              : first do a pull to get the latest medley Docker image
-+W
-+W  -w DISTRO | --wsl DISTRO   : run in WSL (on the named DISTRO) instead of in a Docker container
-+W
-+W  -b | --background          : run as background process
+
+    -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
+
+    -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
 sysout:
     The pathname of the file to use as a sysout for Medley to start from.
-+d  The pathname must be in the Medley file system under LOGINDIR (/home/medley/il).
     If sysout is not provided and none of the flags [-a, -f & -l] is used, then Medley will start from
     the saved virtual memory file for the previous run with the sane id as this run.
 
 pass_args:
-    All arguments after the "--" flag, are passed unaltered to lde via run-medley.
+    All arguments after the "--" flag, are passed unaltered to the Maiko emulator.
 
 EOF
 
@@ -640,20 +627,42 @@ do
         shift;
         ;;
       -d | --display)
-        check_for_dash_or_end "$1" "$2"
-        display_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          display=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          display_arg="$2"
+        fi
         shift
         ;;
       -e | --interlisp)
-        export MEDLEY_EXEC="inter"
+        case "$2" in
+          -)
+            MEDLEY_EXEC=""
+            shift
+            ;;
+          +)
+            export MEDLEY_EXEC="inter"
+            shift
+            ;;
+          *)
+            export MEDLEY_EXEC="inter"
+            ;;
+        esac
         ;;
       -f | --full)
         sysout_arg="full"
         sysout_stage="${args_stage}"
         ;;
       -g | --geometry)
-        check_for_dash_or_end "$1" "$2"
-        geometry="$2"
+        if [ "$2" = "-" ]
+        then
+          geometry=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          geometry="$2"
+        fi
         shift
         ;;
       -h | --help)
@@ -676,9 +685,14 @@ do
         shift
         ;;
       -k | --vmem)
-        check_for_dash_or_end "$1" "$2"
-        check_file_writeable_or_creatable "$1" "$2"
-        vmem_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          vmem_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_file_writeable_or_creatable "$1" "$2"
+          vmem_arg="$2"
+        fi
         shift
         ;;
       -l | --lisp)
@@ -686,8 +700,13 @@ do
         sysout_stage="${args_stage}"
         ;;
       -m | --mem)
-        check_for_dash_or_end "$1" "$2"
-        mem_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          mem_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          mem_arg="$2"
+        fi
         shift
         ;;
       -n | --noscroll)
@@ -722,8 +741,14 @@ do
         shift
 	;;
       -ps | --pixelscale)
-        check_for_dash_or_end "$1" "$2"
-        pixelscale_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          pixelscale_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          pixelscale_arg="$2"
+        fi
+        shift
         ;;
       -r | --greet)
         if [ "$2" = "-" ] || [ "$2" = "--" ]
@@ -738,13 +763,23 @@ do
         shift
         ;;
       -s | --screensize)
-        check_for_dash_or_end "$1" "$2"
-        screensize="$2"
+        if [ "$2" = "-" ]
+        then
+          screensize=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          screensize="$2"
+        fi
         shift
         ;;
       -t | --title)
-        check_for_dash_or_end "$1" "$2"
-        if [ -n "$2" ]; then title="$2"; fi
+        if [ "$2" = "-" ]
+        then
+          title=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          if [ -n "$2" ]; then title="$2"; fi
+        fi
         shift
         ;;
       -u | --continue)

@@ -1183,6 +1183,11 @@ then
   fi
 fi
 
+# firgure out the keyboard type
+if [ -z "${LDEKBDTYPE}" ]; then
+    export LDEKBDTYPE="X"
+fi
+
 # Figure out the maiko executable name
 # used for loadups (ldeinit)
 if [ -z "${maikoprog_arg}" ]

@@ -627,20 +627,42 @@ do
         shift;
         ;;
       -d | --display)
-        check_for_dash_or_end "$1" "$2"
-        display_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          display=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          display_arg="$2"
+        fi
         shift
         ;;
       -e | --interlisp)
-        export MEDLEY_EXEC="inter"
+        case "$2" in
+          -)
+            MEDLEY_EXEC=""
+            shift
+            ;;
+          +)
+            export MEDLEY_EXEC="inter"
+            shift
+            ;;
+          *)
+            export MEDLEY_EXEC="inter"
+            ;;
+        esac
         ;;
       -f | --full)
         sysout_arg="full"
         sysout_stage="${args_stage}"
         ;;
       -g | --geometry)
-        check_for_dash_or_end "$1" "$2"
-        geometry="$2"
+        if [ "$2" = "-" ]
+        then
+          geometry=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          geometry="$2"
+        fi
         shift
         ;;
       -h | --help)

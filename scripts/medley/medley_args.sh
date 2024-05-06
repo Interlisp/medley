@@ -98,9 +98,14 @@ do
         shift
         ;;
       -k | --vmem)
-        check_for_dash_or_end "$1" "$2"
-        check_file_writeable_or_creatable "$1" "$2"
-        vmem_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          vmem_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_file_writeable_or_creatable "$1" "$2"
+          vmem_arg="$2"
+        fi
         shift
         ;;
       -l | --lisp)
@@ -108,8 +113,13 @@ do
         sysout_stage="${args_stage}"
         ;;
       -m | --mem)
-        check_for_dash_or_end "$1" "$2"
-        mem_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          mem_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          mem_arg="$2"
+        fi
         shift
         ;;
       -n | --noscroll)
@@ -144,8 +154,14 @@ do
         shift
 	;;
       -ps | --pixelscale)
-        check_for_dash_or_end "$1" "$2"
-        pixelscale_arg="$2"
+        if [ "$2" = "-" ]
+        then
+          pixelscale_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          pixelscale_arg="$2"
+        fi
+        shift
         ;;
       -r | --greet)
         if [ "$2" = "-" ] || [ "$2" = "--" ]
@@ -160,13 +176,23 @@ do
         shift
         ;;
       -s | --screensize)
-        check_for_dash_or_end "$1" "$2"
-        screensize="$2"
+        if [ "$2" = "-" ]
+        then
+          screensize=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          screensize="$2"
+        fi
         shift
         ;;
       -t | --title)
-        check_for_dash_or_end "$1" "$2"
-        if [ -n "$2" ]; then title="$2"; fi
+        if [ "$2" = "-" ]
+        then
+          title=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          if [ -n "$2" ]; then title="$2"; fi
+        fi
         shift
         ;;
       -u | --continue)

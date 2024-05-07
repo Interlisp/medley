@@ -27,7 +27,7 @@ run_id="default"
 screensize=""
 sysout_arg=""
 sysout_stage=""
-title="Medley Interlisp"
+title="Medley Interlisp %i"
 use_vnc=false
 windows=false
 maikodir_arg=""
@@ -115,7 +115,7 @@ do
           run_id="$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")"
         else
           check_for_dash_or_end "$1" "$2"
-          run_id=$(echo "$2" | sed "s/[^A-Za-z0-9]//g")
+          run_id=$(echo "$2" | sed -e "s/++*\(.\)/\\1/g" -e "s/[^A-Za-z0-9+]//g")
         fi
         shift
         ;;

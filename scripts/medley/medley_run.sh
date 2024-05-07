@@ -172,6 +172,15 @@ if [ -z "${LDEKBDTYPE}" ]; then
     export LDEKBDTYPE="X"
 fi
 
+# figure out title situation
+if [ ! "${run_id}" = default ]
+then
+  title="$(printf %s "${title}" | sed -e "s/%i/:: ${run_id}/")"
+else
+  title="$(printf %s "${title}" | sed -e "s/%i//")"
+fi
+
+
 # Figure out the maiko executable name
 # used for loadups (ldeinit)
 if [ -z "${maikoprog_arg}" ]

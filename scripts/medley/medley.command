@@ -592,7 +592,7 @@ run_id="default"
 screensize=""
 sysout_arg=""
 sysout_stage=""
-title="Medley Interlisp"
+title="Medley Interlisp %i"
 use_vnc=false
 windows=false
 maikodir_arg=""
@@ -680,7 +680,7 @@ do
           run_id="$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")"
         else
           check_for_dash_or_end "$1" "$2"
-          run_id=$(echo "$2" | sed "s/[^A-Za-z0-9]//g")
+          run_id=$(echo "$2" | sed -e "s/++*\(.\)/\\1/g" -e "s/[^A-Za-z0-9+]//g")
         fi
         shift
         ;;
@@ -921,16 +921,37 @@ then
 fi
 
 
-# Make sure that there is not another instance currently running with this same id
-ps ax | grep "ldex|ldesdl" | grep --quiet "\-id ${run_id}"
-if [ $? -eq 0 ]
+# Process run_id
+# if it doesn't end in #, make sure that there is not another instance currently running with this same id
+# If it does end in #, find the right number to fill in for the #
+run_id_base="${run_id%+}"
+run_id_has_plus="${run_id#${run_id_base}}"
+if [ -z "${run_id_has_plus}" ]
 then
-  err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".
+  matching=$(ps ax | sed -e "/sed/d" -e "/ldex.*-id ${run_id_base}/p" -e "/ldesdl.*-id ${run_id_base}/p" -e d)
+  if [ -n "${matching}" ]
+  then
+    err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".
 Only a single instance with a given id can be run at the same time.
 Please retry using the \"--id <name>\" argument to give this new instance a different id.
 Exiting"
-  output_error_msg "${err_msg}"
-  exit 3
+    output_error_msg "${err_msg}"
+    exit 3
+  fi
+else
+  matching=$( \
+      ps ax | \
+      sed -e "/ldex.*-id ${run_id_base}[0-9]/s/^.*-id ${run_id_base}\([0-9]*\).*$/\\1/p" \
+          -e "/ldesdl.*-id ${run_id_base}[0-9]/s/^.*-id ${run_id_base}\([0-9]*\).*$/\\1/p" \
+          -e d \
+    )
+  max=0
+  for n in $matching
+  do
+    if [ "$n" -gt "$max" ]; then max=$n; fi
+  done
+  max=$(( max + 1 ))
+  run_id="${run_id_base}${max}"
 fi
 
 # Run medley
@@ -1187,6 +1208,15 @@ fi
 if [ -z "${LDEKBDTYPE}" ]; then
     export LDEKBDTYPE="X"
 fi
+
+# figure out title situation
+if [ ! "${run_id}" = default ]
+then
+  title="$(printf %s "${title}" | sed -e "s/%i/:: ${run_id}/")"
+else
+  title="$(printf %s "${title}" | sed -e "s/%i//")"
+fi
+
 
 # Figure out the maiko executable name
 # used for loadups (ldeinit)

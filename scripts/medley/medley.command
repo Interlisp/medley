@@ -925,7 +925,7 @@ fi
 # if it doesn't end in #, make sure that there is not another instance currently running with this same id
 # If it does end in #, find the right number to fill in for the #
 run_id_base="${run_id%+}"
-run_id_has_plus="${run_id#${run_id_base}}"
+run_id_has_plus="${run_id#"${run_id_base}"}"
 if [ -z "${run_id_has_plus}" ]
 then
   matching=$(ps ax | sed -e "/sed/d" -e "/ldex.*-id ${run_id_base}/p" -e "/ldesdl.*-id ${run_id_base}/p" -e d)

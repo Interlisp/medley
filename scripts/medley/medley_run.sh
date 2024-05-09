@@ -93,13 +93,22 @@ fi
 # shellcheck source=./medley_geometry.sh
 . "${SCRIPTDIR}/medley_geometry.sh"
 
-# Figure out border with situation
+# Figure out border width situation
 borderwidth_flag=""
 borderwidth_value=""
 if [ -n "${borderwidth_arg}" ]
 then
   borderwidth_flag="-bw"
   borderwidth_value="${borderwidth_arg}"
+fi
+
+# Figure out pixelscale situation
+pixelscale_flag=""
+pixelscale_value=""
+if [ -n "${pixelscale_arg}" ]
+then
+  pixelscale_flag="-pixelscale"
+  pixelscale_value="${pixelscale_arg}"
 fi
 
 # figure out greet files situation
@@ -167,7 +176,7 @@ then
   fi
 fi
 
-# firgure out the keyboard type
+# figure out the keyboard type
 if [ -z "${LDEKBDTYPE}" ]; then
     export LDEKBDTYPE="X"
 fi
@@ -238,6 +247,8 @@ fi
 maiko="${maiko_exe}"
 
 # Define function to start up maiko given all arguments
+# Arg to this function should be "$@", the main args
+# array that at this point should just include the pass-on args
 start_maiko() {
   echo \
   \"${maiko}\" \"${src_sysout}\"                      \
@@ -254,7 +265,7 @@ start_maiko() {
              ${nh_mac_flag} ${nh_mac_value}           \
              ${nh_debug_flag} ${nh_debug_value}       \
              ${nofork_arg}                            \
-             ${maiko_args}                            ;
+             "$@"                                     ;
   echo "MEDLEYDIR: \"${MEDLEYDIR}\""
   echo "LOGINDIR: \"${LOGINDIR}\""
   echo "GREET FILE: \"${LDEINIT}\""
@@ -273,7 +284,7 @@ start_maiko() {
              ${nh_mac_flag} ${nh_mac_value}           \
              ${nh_debug_flag} ${nh_debug_value}       \
              ${nofork_arg}                            \
-             ${maiko_args}                            ;
+             "$@"                                     ;
   exit_code=$?
 }
 
@@ -294,6 +305,7 @@ then
   . "${SCRIPTDIR}/medley_vnc.sh"
 else
   # If not using vnc, just exec maiko directly
-  start_maiko
+  # handing over the pass-on args which are all thats left in the main args array
+  start_maiko "$@"
 fi
 exit ${exit_code}

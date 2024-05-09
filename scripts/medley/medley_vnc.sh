@@ -165,10 +165,10 @@
 
   sleep .5
   #
-  # Run Maiko in background
+  # Run Maiko in background, handing over the pass-on args which are all thats left in the main args array
   #
   {
-    start_maiko
+    start_maiko "$@"
     if [ -n "$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
   } &
 

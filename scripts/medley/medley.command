@@ -1,6 +1,7 @@
 #!/bin/sh
 # shellcheck disable=SC2164,SC2181,SC2009,SC2034,SC2154
 # . ./medley_header.sh
+# shellcheck shell=sh
 ###############################################################################
 #
 #    medley.sh - script for running Medley Interlisp on
@@ -684,7 +685,7 @@ do
           run_id="$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")"
         else
           check_for_dash_or_end "$1" "$2"
-          run_id=$(echo "$2" | sed -e "s/++*\(.\)/\\1/g" -e "s/[^A-Za-z0-9+]//g")
+          run_id=$(echo "$2" | sed -e "s/++*\(.\)/\\1/g" -e "s/[^A-Za-z0-9+_]//g")
         fi
         shift
         ;;
@@ -1066,7 +1067,7 @@ fi
 # shellcheck source=./medley_geometry.sh
 # . "${SCRIPTDIR}/medley_geometry.sh"
 # shellcheck shell=sh
-# shellcheck disable=SC2154
+# shellcheck disable=SC2154,SC2269
 ###############################################################################
 #
 #    medley_geometry.sh - script for computing the geometry and screensize

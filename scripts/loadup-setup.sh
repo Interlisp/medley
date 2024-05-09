@@ -142,6 +142,7 @@ run_medley () {
   if [ ! "${LOADUP_OLDSCHOOL}" = true ]
   then
     ./medley --config -                                 \
+             --id loadup_+                                     \
              --geometry "${geometry}"                   \
              --noscroll                                 \
              --logindir "${LOADUP_LOGINDIR}"            \

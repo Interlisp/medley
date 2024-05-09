@@ -1,3 +1,5 @@
+#!only-to-be-sourced
+# shellcheck shell=sh
 ###############################################################################
 #
 #    medley.sh - script for running Medley Interlisp on

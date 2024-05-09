@@ -148,21 +148,21 @@ nh_debug_flag=""
 nh_debug_value=""
 if [ -n "${nh_host_arg}" ]
 then
-  nh_host_flag="-nethub-host"
+  nh_host_flag="-nh-host"
   nh_host_value="${nh_host_arg}"
   if [ -n "${nh_port_arg}" ]
   then
-    nh_port_flag="-nethub-port"
+    nh_port_flag="-nh-port"
     nh_port_value="${nh_port_arg}"
   fi
   if [ -n "${nh_mac_arg}" ]
   then
-    nh_mac_flag="-nethub-mac"
+    nh_mac_flag="-nh-mac"
     nh_mac_value="${nh_mac_arg}"
   fi
   if [ -n "${nh_debug_arg}" ]
   then
-    nh_debug_flag="-nethub-loglevel"
+    nh_debug_flag="-nh-loglevel"
     nh_debug_value="${nh_debug_arg}"
   fi
 fi

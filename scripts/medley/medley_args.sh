@@ -27,7 +27,7 @@ run_id="default"
 screensize=""
 sysout_arg=""
 sysout_stage=""
-title="Medley Interlisp"
+title="Medley Interlisp %i"
 use_vnc=false
 windows=false
 maikodir_arg=""
@@ -46,6 +46,10 @@ nh_mac_arg=""
 nh_debug_arg=""
 pixelscale_arg=""
 borderwidth_arg=""
+
+
+# Add marker at end of args so we can accumulate pass-on args in args array
+set -- "$@" "--start_of_pass_args"
 
 # Loop thru args and process
 while [ "$#" -ne 0 ];
@@ -115,7 +119,7 @@ do
           run_id="$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")"
         else
           check_for_dash_or_end "$1" "$2"
-          run_id=$(echo "$2" | sed "s/[^A-Za-z0-9]//g")
+          run_id=$(echo "$2" | sed -e "s/++*\(.\)/\\1/g" -e "s/[^A-Za-z0-9+]//g")
         fi
         shift
         ;;
@@ -316,6 +320,11 @@ do
         args_stage="command line arguments"
         pass_args=false
         ;;
+      --start_of_pass_args)
+        # internal: used to mark end of args and start of accumulated pass-on args
+        shift
+        break
+        ;;
       --)
         pass_args=true
         ;;
@@ -342,8 +351,14 @@ do
     then
       args_stage="command line arguments"
       pass_args=false
+    elif [ "$1" = "--start_of_pass_args" ]
+    then
+      shift
+      break
     else
-      maiko_args="${maiko_args} \"$1\""
+      # add pass-on args to end of args array
+      set -- "$@" "$1"
+      # maiko_args="${maiko_args} \"$1\""
     fi
   fi
   shift

@@ -592,7 +592,7 @@ run_id="default"
 screensize=""
 sysout_arg=""
 sysout_stage=""
-title="Medley Interlisp"
+title="Medley Interlisp %i"
 use_vnc=false
 windows=false
 maikodir_arg=""
@@ -611,6 +611,10 @@ nh_mac_arg=""
 nh_debug_arg=""
 pixelscale_arg=""
 borderwidth_arg=""
+
+
+# Add marker at end of args so we can accumulate pass-on args in args array
+set -- "$@" "--start_of_pass_args"
 
 # Loop thru args and process
 while [ "$#" -ne 0 ];
@@ -680,7 +684,7 @@ do
           run_id="$(cd "${MEDLEYDIR}/.."; basename "$(pwd)")"
         else
           check_for_dash_or_end "$1" "$2"
-          run_id=$(echo "$2" | sed "s/[^A-Za-z0-9]//g")
+          run_id=$(echo "$2" | sed -e "s/++*\(.\)/\\1/g" -e "s/[^A-Za-z0-9+]//g")
         fi
         shift
         ;;
@@ -881,6 +885,11 @@ do
         args_stage="command line arguments"
         pass_args=false
         ;;
+      --start_of_pass_args)
+        # internal: used to mark end of args and start of accumulated pass-on args
+        shift
+        break
+        ;;
       --)
         pass_args=true
         ;;
@@ -907,8 +916,14 @@ do
     then
       args_stage="command line arguments"
       pass_args=false
+    elif [ "$1" = "--start_of_pass_args" ]
+    then
+      shift
+      break
     else
-      maiko_args="${maiko_args} \"$1\""
+      # add pass-on args to end of args array
+      set -- "$@" "$1"
+      # maiko_args="${maiko_args} \"$1\""
     fi
   fi
   shift
@@ -921,16 +936,37 @@ then
 fi
 
 
-# Make sure that there is not another instance currently running with this same id
-ps ax | grep "ldex|ldesdl" | grep --quiet "\-id ${run_id}"
-if [ $? -eq 0 ]
+# Process run_id
+# if it doesn't end in #, make sure that there is not another instance currently running with this same id
+# If it does end in #, find the right number to fill in for the #
+run_id_base="${run_id%+}"
+run_id_has_plus="${run_id#"${run_id_base}"}"
+if [ -z "${run_id_has_plus}" ]
 then
-  err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".
+  matching=$(ps ax | sed -e "/sed/d" -e "/ldex.*-id ${run_id_base}/p" -e "/ldesdl.*-id ${run_id_base}/p" -e d)
+  if [ -n "${matching}" ]
+  then
+    err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".
 Only a single instance with a given id can be run at the same time.
 Please retry using the \"--id <name>\" argument to give this new instance a different id.
 Exiting"
-  output_error_msg "${err_msg}"
-  exit 3
+    output_error_msg "${err_msg}"
+    exit 3
+  fi
+else
+  matching=$( \
+      ps ax | \
+      sed -e "/ldex.*-id ${run_id_base}[0-9]/s/^.*-id ${run_id_base}\([0-9]*\).*$/\\1/p" \
+          -e "/ldesdl.*-id ${run_id_base}[0-9]/s/^.*-id ${run_id_base}\([0-9]*\).*$/\\1/p" \
+          -e d \
+    )
+  max=0
+  for n in $matching
+  do
+    if [ "$n" -gt "$max" ]; then max=$n; fi
+  done
+  max=$(( max + 1 ))
+  run_id="${run_id_base}${max}"
 fi
 
 # Run medley
@@ -1109,13 +1145,22 @@ else
   fi
 fi
 
-# Figure out border with situation
+# Figure out border width situation
 borderwidth_flag=""
 borderwidth_value=""
 if [ -n "${borderwidth_arg}" ]
 then
   borderwidth_flag="-bw"
   borderwidth_value="${borderwidth_arg}"
+fi
+
+# Figure out pixelscale situation
+pixelscale_flag=""
+pixelscale_value=""
+if [ -n "${pixelscale_arg}" ]
+then
+  pixelscale_flag="-pixelscale"
+  pixelscale_value="${pixelscale_arg}"
 fi
 
 # figure out greet files situation
@@ -1164,29 +1209,38 @@ nh_debug_flag=""
 nh_debug_value=""
 if [ -n "${nh_host_arg}" ]
 then
-  nh_host_flag="-nethub-host"
+  nh_host_flag="-nh-host"
   nh_host_value="${nh_host_arg}"
   if [ -n "${nh_port_arg}" ]
   then
-    nh_port_flag="-nethub-port"
+    nh_port_flag="-nh-port"
     nh_port_value="${nh_port_arg}"
   fi
   if [ -n "${nh_mac_arg}" ]
   then
-    nh_mac_flag="-nethub-mac"
+    nh_mac_flag="-nh-mac"
     nh_mac_value="${nh_mac_arg}"
   fi
   if [ -n "${nh_debug_arg}" ]
   then
-    nh_debug_flag="-nethub-loglevel"
+    nh_debug_flag="-nh-loglevel"
     nh_debug_value="${nh_debug_arg}"
   fi
 fi
 
-# firgure out the keyboard type
+# figure out the keyboard type
 if [ -z "${LDEKBDTYPE}" ]; then
     export LDEKBDTYPE="X"
 fi
+
+# figure out title situation
+if [ ! "${run_id}" = default ]
+then
+  title="$(printf %s "${title}" | sed -e "s/%i/:: ${run_id}/")"
+else
+  title="$(printf %s "${title}" | sed -e "s/%i//")"
+fi
+
 
 # Figure out the maiko executable name
 # used for loadups (ldeinit)
@@ -1245,6 +1299,8 @@ fi
 maiko="${maiko_exe}"
 
 # Define function to start up maiko given all arguments
+# Arg to this function should be "$@", the main args
+# array that at this point should just include the pass-on args
 start_maiko() {
   echo \
   \"${maiko}\" \"${src_sysout}\"                      \
@@ -1261,7 +1317,7 @@ start_maiko() {
              ${nh_mac_flag} ${nh_mac_value}           \
              ${nh_debug_flag} ${nh_debug_value}       \
              ${nofork_arg}                            \
-             ${maiko_args}                            ;
+             "$@"                                     ;
   echo "MEDLEYDIR: \"${MEDLEYDIR}\""
   echo "LOGINDIR: \"${LOGINDIR}\""
   echo "GREET FILE: \"${LDEINIT}\""
@@ -1280,7 +1336,7 @@ start_maiko() {
              ${nh_mac_flag} ${nh_mac_value}           \
              ${nh_debug_flag} ${nh_debug_value}       \
              ${nofork_arg}                            \
-             ${maiko_args}                            ;
+             "$@"                                     ;
   exit_code=$?
 }
 
@@ -1465,10 +1521,10 @@ then
 
   sleep .5
   #
-  # Run Maiko in background
+  # Run Maiko in background, handing over the pass-on args which are all thats left in the main args array
   #
   {
-    start_maiko
+    start_maiko "$@"
     if [ -n "$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
   } &
 
@@ -1514,6 +1570,7 @@ then
 #######################################
 else
   # If not using vnc, just exec maiko directly
-  start_maiko
+  # handing over the pass-on args which are all thats left in the main args array
+  start_maiko "$@"
 fi
 exit ${exit_code}

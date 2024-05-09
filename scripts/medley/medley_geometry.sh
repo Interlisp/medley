@@ -1,6 +1,6 @@
 #!only-to-be-sourced
 # shellcheck shell=sh
-# shellcheck disable=SC2154
+# shellcheck disable=SC2154,SC2269
 ###############################################################################
 #
 #    medley_geometry.sh - script for computing the geometry and screensize

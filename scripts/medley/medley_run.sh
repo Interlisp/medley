@@ -270,6 +270,15 @@ start_maiko() {
   echo "LOGINDIR: \"${LOGINDIR}\""
   echo "GREET FILE: \"${LDEINIT}\""
   echo "VMEM FILE: \"${LDEDESTSYSOUT}\""
+  #
+  # Temp workaround for issues in Maiko sysout arg
+  # processing. See Issue #1702.  FGH 2024-05-09
+  #
+  LDESRCSYSOUT="${src_sysout}"
+  export LDESRCSYSOUT
+  #
+  # End work around
+  #
   "${maiko}" "${src_sysout}"                          \
              -id "${run_id}"                          \
              -title "${title}"                        \

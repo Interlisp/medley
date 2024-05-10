@@ -274,8 +274,8 @@ start_maiko() {
   # Temp workaround for issues in Maiko sysout arg
   # processing. See Issue #1702.  FGH 2024-05-09
   #
-  LDESRCSYSOUT="${src_sysout}"
-  export LDESRCSYSOUT
+  LDESOURCESYSOUT="${src_sysout}"
+  export LDESOURCESYSOUT
   #
   # End work around
   #

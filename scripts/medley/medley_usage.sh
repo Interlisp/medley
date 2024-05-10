@@ -1,3 +1,6 @@
+#!only-to-be-sourced
+# shellcheck shell=sh
+# shellcheck disable=SC2154
 ###############################################################################
 #
 #    medley_useage.sh - script defining the "usage" for medley.sh script.
@@ -11,14 +14,13 @@
 #
 ###############################################################################
 
-PAGER=$( if [ -n $(which more) ]; then echo "more"; else echo "cat"; fi)
+
+PAGER=$( if [ -n "$(which more)" ]; then echo "more"; else echo "cat"; fi)
 
 usage() {
-   local err_msg
-   local msg_path=/tmp/msg-$$
-   local lines=("$@")
+   usage_msg_path=/tmp/msg-$$
 
-   if [ ${wsl} = true ];
+   if [ "${wsl}" = true ];
    then
      wsl_incl="+w"
      wsl_excl="-w"
@@ -27,7 +29,7 @@ usage() {
      wsl_excl="+w"
    fi
 
-   if [ ${docker} = true ];
+   if [ "${docker}" = true ];
    then
      docker_incl="+d"
      docker_excl="-d"
@@ -36,7 +38,7 @@ usage() {
      docker_excl="+d"
    fi
 
-   if [ ${windows} = true ];
+   if [ "${windows}" = true ];
    then
      windows_incl="+W"
      windows_excl="-W"
@@ -47,15 +49,14 @@ usage() {
 
    if [ $# -ne 0 ];
    then
-     echo > ${msg_path}
-     echo "$(output_error_msg "${lines[@]}")" >> ${msg_path}
-     echo >> ${msg_path}
-     echo >> ${msg_path}
+     full_msg="In ${args_stage}:
+$1"
+     { echo; output_error_msg "${full_msg}"; echo; } >> "${usage_msg_path}"
    else
-     touch ${msg_path}
+     touch "${usage_msg_path}"
    fi
 
-   cat ${msg_path} - <<EOF \
+   cat "${usage_msg_path}" - <<EOF \
        | sed -e "/^${docker_excl}/d" -e "s/^${docker_incl}/  /" \
        | sed -e "/^${wsl_excl}/d" -e "s/^${wsl_incl}/  /" \
        | sed -e "/^${windows_excl}/d" -e "s/^${windows_incl}/  /" \
@@ -72,11 +73,17 @@ flags:
 
     -z | --man                 : show the man page for medley
 
+    -c FILE | --config FILE    : use FILE as the config file (default: ~/.medley_config)
+
     -f | --full                : start Medley from the "full" sysout
 
     -l | --lisp                : start Medley from the "lisp" sysout
 
-    -a | --apps                : start Medley  from the "apps" sysout
+    -a | --apps                : start Medley from the "apps" sysout
+
+    -u | --continue            : start Medley from the vmem file from previous Medley run
+
+    -y FILE | --sysout FILE    : start Medley using FILE as sysout
 
     -e | --interlisp           : (for apps.sysout only) Start in the Interlisp exec
 
@@ -86,6 +93,8 @@ flags:
 
     -s WxH | --screensize WxH  : set the Medley screen size to be Width x Height
 
+    -ps N | --pixelscale N     : use N as the pixel scale factor - for SDL display only
+
     -t STRING | --title STRING : use STRING as title of window
 
     -d :N | --display :N       : use X display :N
@@ -94,42 +103,25 @@ flags:
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
-    -i - | --id -              : for id use the basename of MEDLEYDIR
-
-    -i -- | --id --            : for id use the basename of the parent directory of MEDLEYDIR
-
     -m N | --mem N             : set Medley memory size to N
 
     -k FILE | --vmem FILE      : use FILE as the Medley virtual memory store.
-+d                               FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).
 
     -r FILE | --greet FILE     : use FILE as the Medley greetfile.
-+d                               FILE must be a file in the Medley file system under LOGINDIR (/home/medley/il).
 
     -r - | --greet -           : do not use a greetfile
--d
--d  -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
--d
--d  -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
-+d
-+d  -x DIR | --logindir DIR    : use DIR (on the host) to map to LOGINDIR (/home/medley/il) in Medley
-+d
-+d  -p N | --port N            : use N as the port for connecting to the Xvnc server inside the Docker container
-+d
-+d  -u | --update              : first do a pull to get the latest medley Docker image
-+W
-+W  -w DISTRO | --wsl DISTRO   : run in WSL (on the named DISTRO) instead of in a Docker container
-+W
-+W  -b | --background          : run as background process
+
+    -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
+
+    -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
 sysout:
     The pathname of the file to use as a sysout for Medley to start from.
-+d  The pathname must be in the Medley file system under LOGINDIR (/home/medley/il).
     If sysout is not provided and none of the flags [-a, -f & -l] is used, then Medley will start from
     the saved virtual memory file for the previous run with the sane id as this run.
 
 pass_args:
-    All arguments after the "--" flag, are passed unaltered to lde via run-medley.
+    All arguments after the "--" flag, are passed unaltered to the Maiko emulator.
 
 EOF
 

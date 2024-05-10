@@ -1,10 +1,15 @@
 #!/bin/sh
 
-if [ ! -f run-medley ] ; then
-    echo run from MEDLEYDIR
+if [ ! -h ./medley ] || [ ! -d ./lispusers ]
+then
+    echo "*** ERROR ***"
+    echo "You must run $(basename "$0") while the cwd is a Medley top-level directory."
+    echo "The cwd ($(pwd)) is not a Medley top-level directory."
+    echo "Exiting."
     exit 1
 fi
 
+# shellcheck source=./loadup-setup.sh
 . scripts/loadup-setup.sh
 
 loadup_start
@@ -26,6 +31,6 @@ cat >"${cmfile}" <<"EOF"
 "
 EOF
 
-./run-medley ${scr} -loadup "${cmfile}" "${LOADUP_WORKDIR}"/full.sysout
+run_medley "${LOADUP_WORKDIR}/full.sysout"
 
 loadup_finish "whereis.hash" "whereis.hash" "exports.all"

@@ -184,7 +184,7 @@ fi
 # figure out title situation
 if [ -z "${title}" ]
 then
-  title="MedleyInterlisp %i"
+  title="Medley Interlisp %i"
 fi
 if [ ! "${run_id}" = default ]
 then

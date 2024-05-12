@@ -182,6 +182,10 @@ if [ -z "${LDEKBDTYPE}" ]; then
 fi
 
 # figure out title situation
+if [ -z "${title}" ]
+then
+  title="MedleyInterlisp %i"
+fi
 if [ ! "${run_id}" = default ]
 then
   title="$(printf %s "${title}" | sed -e "s/%i/:: ${run_id}/")"

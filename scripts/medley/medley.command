@@ -593,7 +593,7 @@ run_id="default"
 screensize=""
 sysout_arg=""
 sysout_stage=""
-title="Medley Interlisp %i"
+title=""
 use_vnc=false
 windows=false
 maikodir_arg=""
@@ -1235,6 +1235,10 @@ if [ -z "${LDEKBDTYPE}" ]; then
 fi
 
 # figure out title situation
+if [ -z "${title}" ]
+then
+  title="Medley Interlisp %i"
+fi
 if [ ! "${run_id}" = default ]
 then
   title="$(printf %s "${title}" | sed -e "s/%i/:: ${run_id}/")"

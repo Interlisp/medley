@@ -51,7 +51,7 @@ the value begins with a \"-\", which is not allowed."
 check_file_writeable_or_creatable() {
   local_msg_core="\"$2\" given as the value of the \"$1\" flag"
   local_err_msg=""
-  if [ -e "$%2" ]
+  if [ -e "$2" ]
   then
     if [ ! -f "$2" ]
     then
@@ -82,7 +82,7 @@ Exiting"
 check_dir_writeable_or_creatable() {
   local_msg_core="\"$2\" given as the value of the \"$1\" flag"
   local_err_msg=""
-  if [ -e "$%2" ]
+  if [ -e "$2" ]
   then
     if [ ! -d "$2" ]
     then

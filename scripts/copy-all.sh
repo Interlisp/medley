@@ -18,7 +18,7 @@ main() {
 
 	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
 	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv""${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"        \
+	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
 	    | sed -e "s#${MEDLEYDIR}/##g"
 
 	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/init.dribble "${LOADUP_OUTDIR}"      \

@@ -1,7 +1,7 @@
-#!sh
+#!to_be_sourced_only
 # shellcheck shell=sh
 
-MEDLEYDIR="$(pwd)"
+MEDLEYDIR=$(cd "${LOADUP_SCRIPTDIR}/.."; pwd)
 export MEDLEYDIR
 
 if [ -z "${LOADUP_WORKDIR}" ]
@@ -141,18 +141,19 @@ loadup_finish () {
 run_medley () {
   if [ ! "${LOADUP_OLDSCHOOL}" = true ]
   then
-    ./medley --config -                                 \
-             --id loadup_+                                     \
-             --geometry "${geometry}"                   \
-             --noscroll                                 \
-             --logindir "${LOADUP_LOGINDIR}"            \
-             --greet "${cmfile}"                        \
-             --sysout "$1"                              \
-             "$2" "$3" "$4" "$5" "$6" "$7"              ;
+    /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"  \
+             --config -                                          \
+             --id loadup_+                                       \
+             --geometry "${geometry}"                            \
+             --noscroll                                          \
+             --logindir "${LOADUP_LOGINDIR}"                     \
+             --greet "${cmfile}"                                 \
+             --sysout "$1"                                       \
+             "$2" "$3" "$4" "$5" "$6" "$7"                       ;
     exit_code=$?
   else
     # shellcheck disable=SC2086
-    ./run-medley ${scr} $2 $3 $4 $5 $6 $7 -loadup "${cmfile}" "$1"
+    "${MEDLEYDIR}/run-medley" ${scr} $2 $3 $4 $5 $6 $7 -loadup "${cmfile}" "$1"
     exit_code=$?
   fi
 

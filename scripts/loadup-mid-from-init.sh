@@ -16,6 +16,12 @@ main() {
 	EOF
 
 	run_medley "${LOADUP_WORKDIR}/init.dlinit" -NF -prog ldeinit --vmem "${LOADUP_WORKDIR}/init-mid.sysout"
+        if [ "${exit_code}" -eq 54 ]
+        then
+          echo "NOTE: The loadup script $0 requires the ldeinit executable"
+          echo "in addition to the lde executable be available in MAIKODIR."
+          echo "The ldeinit executable could not be found."
+	fi
 
 	echo " "
 

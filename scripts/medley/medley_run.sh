@@ -203,47 +203,63 @@ fi
 
 # Figure out the maiko directory maiko
 check_if_maiko_dir () {
-  if [ -d "$1/bin" ]
+  if [ -d "$1" ] \
+     && [ -d "$1/bin" ] \
+     && [ -x "$1/bin/osversion" ] \
+     && [ -x "$1/bin/machinetype" ]
   then
-    cd "$1/bin"
-  else
+    maiko_exe_subdir="$("$1/bin/osversion").$("$1/bin/machinetype")"
+    return 0
+  fi
+  return 1
+}
+
+check_for_maiko_exe () {
+  if ! check_if_maiko_dir "$1"
+  then
     return 1
   fi
-  if [ -x ./osversion ] && [ -x ./machinetype ]
+  maiko_exe="$1/${maiko_exe_subdir}/${maikoprog_arg}"
+  if [ -x "${maiko_exe}" ]
   then
-    maiko_exe="$1/$(./osversion).$(./machinetype)/${maikoprog_arg}"
-    if [ -x "${maiko_exe}" ]
-    then
-      cd ${OLDPWD}
-      return 0
-    fi
+    return 0
+  else
+    maiko_exe=""
+    return 1
   fi
-  maiko_exe=""
-  cd ${OLDPWD}
-  return 1
 }
 
 if [ -z "${maikodir_arg}" ]
 then
-  if [ -d "${MEDLEYDIR}/maiko" ] && check_if_maiko_dir "${MEDLEYDIR}/maiko"
+  if check_for_maiko_exe "${MEDLEYDIR}/maiko"
   then
     maikodir_arg="${MEDLEYDIR}/maiko"
-  elif [ -d "${MEDLEYDIR}/../maiko" ] && check_if_maiko_dir "${MEDLEYDIR}/../maiko"
+  elif check_for_maiko_exe "${MEDLEYDIR}/../maiko"
   then
     maikodir_arg="$(cd "${MEDLEYDIR}/../maiko"; pwd)"
   else
-    err_msg="ERROR: Cannot find the directory containing the Maiko emulator in either
+    if ! check_if_maiko_dir "${MEDLEYDIR}/maiko" && ! check_if_maiko_dir "${MEDLEYDIR}/../maiko"
+    then
+      err_msg="ERROR: Cannot find the Maiko directory at either
 \"${MEDLEYDIR}/maiko\" or \"${MEDLEYDIR}/../maiko\".
-Please use the --maikodir argument to specify the correct Maiko directory.
+You can use the --maikodir argument to specify the Maiko directory.
 Exiting."
-    output_error_msg "${err_msg}"
-    exit 53
+      output_error_msg "${err_msg}"
+      exit 53
+    else
+      err_msg="ERROR: Cannot find the Maiko executable (${maiko_exe_subdir}/${maikoprog_arg}) in either
+\"${MEDLEYDIR}/maiko\" or \"${MEDLEYDIR}/../maiko\".
+Exiting."
+      output_error_msg "${err_msg}"
+      exit 54
+    fi
   fi
-elif ! check_if_maiko_dir "${maikodir_arg}"
+elif ! check_if_maiko_dir "${maikodir_arg}" || ! check_for_maiko_exe "${maikodir_arg}"
 then
   err_msg="In ${maikodir_stage}:
 ERROR: The value of the --maikodir argument is not in fact a directory containing
-the Maiko emulator. Exiting."
+the Maiko emulator (${maiko_exe_subdir}/${maikoprog_arg}).
+Exiting."
   output_error_msg "${err_msg}"
   exit 53
 fi

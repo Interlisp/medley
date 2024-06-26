@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "20-Mar-2024 11:07:35" {WMEDLEY}<library>tedit>TEDIT-SCREEN.;645 189050 
+(FILECREATED "25-Jun-2024 18:37:55" {WMEDLEY}<library>tedit>TEDIT-SCREEN.;724 187534 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.DISPLAYLINE \TEDIT.RAISE.LINES)
+      :CHANGES-TO (VARS TEDIT-SCREENCOMS)
 
-      :PREVIOUS-DATE "20-Mar-2024 07:27:05" {WMEDLEY}<library>tedit>TEDIT-SCREEN.;644)
+      :PREVIOUS-DATE "25-Jun-2024 15:45:00" {WMEDLEY}<library>tedit>TEDIT-SCREEN.;723)
 
 
 (PRETTYCOMPRINT TEDIT-SCREENCOMS)
@@ -18,6 +18,7 @@
                             (RECORDS LINEDESCRIPTOR)
                             (I.S.OPRS inlines backlines)
                             (MACROS GETLD FGETLD SETLD FSETLD SETYPOS LINKLD))
+                      (MACROS \TEDIT.PLINE.LCHARLIM)
                       (MACROS HCSCALE HCUNSCALE)
                       (GLOBALVARS TEDIT.DONT.BREAK.CHARS TEDIT.DONT.LAST.CHARS)
                       (ALISTS (CHARACTERNAMES EM-DASH SOFT-HYPHEN NONBREAKING-HYPHEN 
@@ -59,11 +60,10 @@
                (* ;; "Machine independent version of \TEDIT.BLTCHAR")
 
                (MACROS MI-TEDIT.BLTCHAR))
-        (FNS \TEDIT.UPDATE.SCREEN \TEDIT.BACKFORMAT \TEDIT.PREVIOUS.LINEBREAK \TEDIT.FILLPANE 
-             \TEDIT.UPDATE.LINES \TEDIT.CREATEPLINE \TEDIT.FIND.DIRTYCHARS \TEDIT.LINES.BELOW 
-             \FORMAT.GAP.LINES \TEDIT.LOWER.LINES \TEDIT.RAISE.LINES \TEDIT.VALID.LINES 
-             \TEDIT.CLEARPANE.BELOW.LINE \TEDIT.INSERTLINE \TEDIT.INSURE.TRAILING.LINE 
-             \TEDIT.MARK.LINES.DIRTY \TEDIT.LINE.BOTTOM \TEDIT.NCONC.LINES)))
+        (FNS \TEDIT.BACKFORMAT \TEDIT.PREVIOUS.LINEBREAK \TEDIT.UPDATE.LINES \TEDIT.CREATEPLINE 
+             \TEDIT.LINES.BELOW \TEDIT.LOWER.LINES \TEDIT.RAISE.LINES \TEDIT.VALID.LINES 
+             \TEDIT.LASTVALIDLINE \TEDIT.NEXTVALIDLINE \TEDIT.CLEARPANE.BELOW.LINE \TEDIT.INSERTLINE
+             \TEDIT.INSURE.NEXTLINE \TEDIT.LINE.BOTTOM \TEDIT.NCONC.LINES)))
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE
 
@@ -153,8 +153,8 @@
                       "Was LDOBJ: The object which lies behind this line of text, for updating, etc.")
            LFMTSPEC                                          (* ; 
                                              "The format spec for this line's paragraph (eventually)")
-           (LDIRTY FLAG)                                     (* ; 
-                                            "T if this line has changed since it was last formatted.")
+           (NIL FLAG)                                        (* ; 
+                                "Was LDIRTY: T if this line has changed since it was last formatted.")
            (NIL FLAG)                                        (* ; "Was FORCED-END flag")
            (DELETED FLAG)                                    (* ; "T if this line has been completely deleted since it was last formatted or displayed.  (Used by deletion routines to detect garbage lines)")
            (LHASPROT FLAG)                                   (* ; 
@@ -174,7 +174,7 @@
                       (LTRUEYBOT (IDIFFERENCE (FGETLD DATUM YBASE)
                                         (FGETLD DATUM LTRUEDESCENT]
           LHEIGHT _ 0 LTRUEASCENT _ 0 LTRUEDESCENT _ 0 LCHARLIM _ 1000000 NEXTLINE _ NIL PREVLINE _ 
-          NIL LDIRTY _ NIL YBOT _ 0 YBASE _ 0 LEFTMARGIN _ 0 DELETED _ NIL)
+          NIL YBOT _ 0 YBASE _ 0 LEFTMARGIN _ 0 DELETED _ NIL)
 )
 
 (/DECLAREDATATYPE 'LINEDESCRIPTOR
@@ -251,6 +251,12 @@
 (PUTPROPS LINKLD MACRO (OPENLAMBDA (LINE1 LINE2)
                          (CL:WHEN LINE1 (SETLD LINE1 NEXTLINE LINE2))
                          (CL:WHEN LINE2 (SETLD LINE2 PREVLINE LINE1))))
+)
+(DECLARE%: EVAL@COMPILE 
+
+(PUTPROPS \TEDIT.PLINE.LCHARLIM MACRO ((PANE CHNO)
+                                       (FSETLD (PLINES PANE)
+                                              LCHARLIM CHNO)))
 )
 (DECLARE%: EVAL@COMPILE 
 
@@ -431,7 +437,8 @@
 (DEFINEQ
 
 (\TEDIT.LINEDESCRIPTOR.DEFPRINT
-  [LAMBDA (LINE STREAM)                                      (* ; "Edited  2-Dec-2023 23:05 by rmk")
+  [LAMBDA (LINE STREAM)                                      (* ; "Edited 10-May-2024 00:27 by rmk")
+                                                             (* ; "Edited  2-Dec-2023 23:05 by rmk")
                                                              (* ; "Edited  4-Oct-2023 21:18 by rmk")
                                                              (* ; "Edited  3-Jul-2023 22:02 by rmk")
                                                              (* ; "Edited 22-May-2023 14:42 by rmk")
@@ -450,10 +457,7 @@
                                " FE"
                                "")))
          (SETQ LOC (LOC LINE))
-         (CONS (CONCAT "{L" (CL:IF (GETLD LINE LDIRTY)
-                                "D"
-                                "")
-                      ":" INFO " " (CAR LOC)
+         (CONS (CONCAT "{L" ":" INFO " " (CAR LOC)
                       "/"
                       (CDR LOC)
                       "}"])
@@ -614,7 +618,11 @@
 (DEFINEQ
 
 (\TEDIT.FORMATLINE
-  [LAMBDA (TEXTOBJ CH#1 LINE REGION IMAGESTREAM FORMATTINGSTATE)
+  [LAMBDA (TSTREAM CH#1 LINE REGION IMAGESTREAM FORMATTINGSTATE)
+                                                             (* ; "Edited 25-Jun-2024 15:43 by rmk")
+                                                             (* ; "Edited 13-Jun-2024 17:26 by rmk")
+                                                             (* ; "Edited 21-May-2024 14:45 by rmk")
+                                                             (* ; "Edited 10-May-2024 12:11 by rmk")
                                                              (* ; "Edited 17-Mar-2024 00:27 by rmk")
                                                              (* ; "Edited 15-Mar-2024 19:43 by rmk")
                                                              (* ; "Edited 14-Mar-2024 12:53 by rmk")
@@ -626,10 +634,10 @@
                                                              (* ; "Edited 28-Oct-2023 13:14 by rmk")
                                                              (* ; "Edited 24-Jul-2023 23:13 by rmk")
                                                              (* ; "Edited 23-Oct-2022 09:11 by rmk")
-    (DECLARE (SPECVARS IMAGESTREAM FORMATTINGSTATE))
 
-    (* ;; 
- "Format the next line of text starting at CH#1.  Return the LINEDESCRIPTOR;  reusing LINE if given.")
+    (* ;; "Format the next line of text starting at CH#1.  Return the LINE")
+
+    (* ;; "DESCRIPTOR;  reusing LINE if given.")
 
     (* ;; "The SPECVARS are accessed and reset under the subfunctions, particularly \FORMATLINE.UPDATELOOKS.  IMAGESTREAM and FORMATTINGSTATE are passed only for hardcopy. ")
 
@@ -659,16 +667,8 @@
 
     (* ;; "If a (visible) word crosses the margin |, then the line ends at the space just before the beginning of that word.  For x==yz==ab|cd, LCHARLIM goes to the space before a, LXLIM is its right edge. The justifier will leave the spaces between z and a alone, but might fatten the spaces between x and y based on the SPACELEFT between z and margin |.  The spaces after z OVERHANG. An EOL or FORM force a line-end and also overhang with along with any immediately preceding spaces--they are essentially treated as line-breaking spaces.")
 
-    (* ;; "     abc123#45|6 => abc[123]#$|  (456 on next line--leading white space only after EOL)")
-
-    (CL:UNLESS LINE
-
-        (* ;; "Not needed until the end, but then we might not get the starting values for WRIGHT and WBOTTOM, if those change from piece to piece--check this.")
-
-        [SETQ LINE (create LINEDESCRIPTOR
-                          YBOT _ (SUB1 (ffetch (TEXTOBJ WBOTTOM) of TEXTOBJ])
-    (PROG ((TSTREAM (fetch (TEXTOBJ STREAMHINT) of TEXTOBJ))
-           (THISLINE (ffetch (TEXTOBJ THISLINE) of TEXTOBJ))
+    (DECLARE (SPECVARS TSTREAM))                             (* ; "For lower image objects?")
+    (PROG ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
            (OFFSET 0)
            (TRUEASCENT -1)
            (TRUEDESCENT -1)
@@ -679,11 +679,18 @@
            (OVERHANG 0)
            (SPACELEFT 0)
            (TX 0)
-           LINETYPE DISPLAYSTREAM WIDTH WMARGIN SCALE FMTSPEC RIGHTMARGIN TABSPEC KERN FIRSTWHITEX 
-           FIRSTWHITESLOT PC CHARSLOT PREVSP 1STLN PROTECTED CHNOB FORCED-END CHNO LX1 TX TXB FONT 
-           CHARSLOTB TABPENDING PREVHYPH PREVDHYPH START-OF-PIECE UNBREAKABLE JUSTIFIED)
+           TEXTOBJ THISLINE LINETYPE DISPLAYSTREAM WIDTH WMARGIN SCALE FMTSPEC RIGHTMARGIN TABSPEC 
+           KERN FIRSTWHITEX FIRSTWHITESLOT PC CHARSLOT PREVSP 1STLN PROTECTED CHNOB FORCED-END CHNO 
+           LX1 TX TXB FONT CHARSLOTB TABPENDING PREVHYPH PREVDHYPH START-OF-PIECE UNBREAKABLE 
+           JUSTIFIED OLDPIECE OLDPCCHARSLEFT OLDCARETLOOKS)
           (DECLARE (SPECVARS LINETYPE CHARSLOT CHNO OFFSET ASCENTC DESCENTC FONT START-OF-PIECE KERN
                           UNBREAKABLE))
+          (CL:UNLESS LINE
+
+              (* ;; "Not needed until the end, but then we might not get the starting values for WRIGHT and WBOTTOM, if those change from piece to piece--check this.")
+
+              (SETQ LINE (create LINEDESCRIPTOR)))
+          (SETQ THISLINE (FGETTOBJ TEXTOBJ THISLINE))
 
      (* ;; 
      "CHNO = Current character # in the text, CHNOB is the character at the last potential break")
@@ -712,6 +719,10 @@
 
      (* ;; "Start with LASTCHARSLOT just so STL debugger will show everything before the true end has been determined.")
 
+          (SETQ OLDCARETLOOKS (FGETTOBJ TEXTOBJ CARETLOOKS)) (* ; 
+                                                             "Restore at end--BIN changes things")
+          (SETQ OLDPIECE (ffetch (TEXTSTREAM PIECE) of TSTREAM))
+          (SETQ OLDPCCHARSLEFT (ffetch (TEXTSTREAM PCCHARSLEFT) of TSTREAM))
           (SETQ LINETYPE (if IMAGESTREAM
                              then 'TRUEHARDCOPY
                            else (SETQ DISPLAYSTREAM (WINDOWPROP (CAR (FGETTOBJ TEXTOBJ \WINDOW))
@@ -794,9 +805,8 @@
 
      (* ;; "The LOOKSUPDATEFN will initialize the character looks of the starting piece PC. It is also called at piece boundaries to reset the character-looks variables when BIN (=\TEXTBIN) moves from piece to piece.")
 
-          (freplace (TEXTSTREAM LOOKSUPDATEFN) of TSTREAM with (FUNCTION 
-                                                                \TEDIT.FORMATLINE.UPDATELOOKS))
-          (freplace (TEXTSTREAM CURRENTLOOKS) of TSTREAM with NIL)
+          (freplace (TEXTSTREAM APPLYLOOKSUPDATEFN) of TSTREAM with T)
+          (FSETTOBJ TEXTOBJ CARETLOOKS NIL)                  (* ; "Initialize variables to PC looks.")
           (SETQ CHARSLOT (FIRSTCHARSLOT THISLINE))
           (\TEDIT.INSTALL.PIECE TSTREAM PC (- CH#1 START-OF-PIECE))
 
@@ -839,12 +849,9 @@
                                                                   (CHARCODE FORM)
                                                                   (CHARCODE EOL))
                                               DX)
-                                       (CL:UNLESS (EQ CH (CHARCODE Meta,EOL))
-                                           (SETQ FORCED-END (CL:IF (MEMB CH (CHARCODE (LF CR)))
-                                                                (CHARCODE EOL)
-                                                                CH)))
-                                                             (* ; 
-                                                             "Remember whether EOL, FORM, but not")
+                                       (SETQ FORCED-END (CL:IF (MEMB CH (CHARCODE (LF CR)))
+                                                            (CHARCODE EOL)
+                                                            CH))
                                        (FORCEBREAK)
 
                                  (* ;; "The break does not set the ascent/descent, the rest of the line does that.  If the line is empty except for an EOL, the font's ASCENTC is stuck in at the end. This is important for hardcopydisplay.")
@@ -992,7 +999,8 @@
 
                                  (* ;; "We've seen at least one real character, line is not empty, but no good candidate break point. Back up to the last legal break (or add a real hyphenator). ")
 
-                                    (CL:UNLESS (\TEDIT.FORMATLINE.LASTLEGAL)
+                                    (CL:UNLESS (\TEDIT.FORMATLINE.LASTLEGAL THISLINE CH#1 LINETYPE 
+                                                      IMAGESTREAM)
 
                                         (* ;; "Didn't find one, the offender protrudes on this line")
 
@@ -1091,7 +1099,7 @@
      (* ;; "End of character loop.  ")
 
           (freplace (THISLINE NEXTAVAILABLECHARSLOT) of THISLINE with (NEXTCHARSLOT CHARSLOT))
-          (freplace (TEXTSTREAM LOOKSUPDATEFN) of TSTREAM with NIL)
+          (freplace (TEXTSTREAM APPLYLOOKSUPDATEFN) of TSTREAM with NIL)
 
      (* ;; "Fix up last tab?")
 
@@ -1180,6 +1188,13 @@
                WMARGIN)
           (add (FGETLD LINE LXLIM)
                WMARGIN)
+
+     (* ;; "Restore TSTREAM to its condition before any BIN's we might have done.")
+
+          (FSETTOBJ TEXTOBJ CARETLOOKS OLDCARETLOOKS)
+          (CL:WHEN OLDPIECE
+              (\TEDIT.INSTALL.PIECE TSTREAM OLDPIECE (IDIFFERENCE (PLEN OLDPIECE)
+                                                            OLDPCCHARSLEFT)))
           (RETURN LINE])
 
 (\TEDIT.FORMATLINE.SETUP
@@ -1542,7 +1557,9 @@
     PREVSP])
 
 (\TEDIT.FORMATLINE.EMPTY
-  [LAMBDA (TEXTOBJ CH#1 LINE)                                (* ; "Edited 15-Mar-2024 22:00 by rmk")
+  [LAMBDA (TEXTOBJ CH#1 LINE)                                (* ; "Edited 25-Jun-2024 14:51 by rmk")
+                                                             (* ; "Edited 10-May-2024 00:24 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 22:00 by rmk")
                                                              (* ; "Edited 26-Jan-2024 11:08 by rmk")
                                                              (* ; "Edited  6-Dec-2023 20:15 by rmk")
                                                              (* ; "Edited  3-Dec-2023 19:41 by rmk")
@@ -1561,23 +1578,20 @@
     (* ;; "Original code asked for the piece at TEXTLEN (last piece?) to get its looks, but those looks would be the TEXTOBJ default looks anyway. ")
 
     (CL:UNLESS LINE
-        [SETQ LINE (create LINEDESCRIPTOR
-                          RIGHTMARGIN _ (FGETTOBJ TEXTOBJ WRIGHT)
-                          YBOT _ (SUB1 (FGETTOBJ TEXTOBJ WBOTTOM])
+        (SETQ LINE (create LINEDESCRIPTOR
+                          RIGHTMARGIN _ (FGETTOBJ TEXTOBJ WRIGHT))))
     (\DTEST LINE 'LINEDESCRIPTOR)
     (LET (CHARSLOT FONT TRUEASCENT TRUEDESCENT LM FMTSPEC (THISLINE (FGETTOBJ TEXTOBJ THISLINE)))
-         (\TEDIT.FORMATLINE.SETUP TEXTOBJ NIL LINE (WINDOWPROP (CAR (FGETTOBJ TEXTOBJ \WINDOW))
+         (\TEDIT.FORMATLINE.SETUP TEXTOBJ NIL LINE (WINDOWPROP (\TEDIT.PRIMARYPANE TEXTOBJ)
                                                           'DSP))
          (SETQ FMTSPEC (FGETLD LINE LFMTSPEC))
          (SETQ CHARSLOT (FIRSTCHARSLOT THISLINE))
          (replace (THISLINE NEXTAVAILABLECHARSLOT) of THISLINE with (NEXTCHARSLOT CHARSLOT))
          (freplace (THISLINE DESC) of THISLINE with LINE)
 
-         (* ;; "Get looks from the TSTREAM, so that \DISPLAYLINE works.  ")
+         (* ;; "Get the current caret looks, so that \DISPLAYLINE works.  ")
 
-         (FILLCHARSLOT CHARSLOT NIL (OR (fetch (TEXTSTREAM CURRENTLOOKS) of (FGETTOBJ TEXTOBJ 
-                                                                                   STREAMHINT))
-                                        (FGETTOBJ TEXTOBJ CARETLOOKS)
+         (FILLCHARSLOT CHARSLOT NIL (OR (FGETTOBJ TEXTOBJ CARETLOOKS)
                                         (FGETTOBJ TEXTOBJ DEFAULTCHARLOOKS)))
 
          (* ;; "Not sure what might break if even an emptyTHISLINE doesn't start with charlooks.  ")
@@ -1601,7 +1615,6 @@
                (SETQ LX1 LM)
                (SETQ LXLIM LM)
                (SETQ FORCED-END (CHARCODE EOL))
-               (SETQ LDIRTY NIL)
                (SETQ LHASPROT NIL)
                (SETQ LFMTSPEC FMTSPEC)
                (SETQ LEFTMARGIN LM)
@@ -1620,7 +1633,8 @@
          LINE])
 
 (\TEDIT.FORMATLINE.UPDATELOOKS
-  [LAMBDA (TSTREAM PC)                                       (* ; "Edited 17-Mar-2024 11:08 by rmk")
+  [LAMBDA (TSTREAM PC)                                       (* ; "Edited  9-May-2024 10:28 by rmk")
+                                                             (* ; "Edited 17-Mar-2024 11:08 by rmk")
                                                              (* ; "Edited 15-Mar-2024 19:34 by rmk")
                                                              (* ; "Edited 24-Dec-2023 22:54 by rmk")
                                                              (* ; "Edited 23-Dec-2023 20:37 by rmk")
@@ -1658,8 +1672,10 @@
                   (* ;; "If the looks are the same as current looks, we don't need to change anything.  APPLY STYLES AT PIECE CREATION??")
 
                   (SETQ PLOOKS (PLOOKS PC))
-                  (CL:UNLESS (EQ PLOOKS (ffetch (TEXTSTREAM CURRENTLOOKS) of TSTREAM))
-                      (freplace (TEXTSTREAM CURRENTLOOKS) of TSTREAM with PLOOKS)
+                  (CL:UNLESS (EQ PLOOKS (FGETTOBJ (ffetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
+                                               CARETLOOKS))
+                      (FSETTOBJ (ffetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
+                             CARETLOOKS PLOOKS)
 
                       (* ;; "")
 
@@ -1686,7 +1702,7 @@
 
                       (* ;; "")
 
-                      (SETQ UNBREAKABLE (fetch (CHARLOOKS CLUNBREAKABLE) of PLOOKS))
+                      (SETQ UNBREAKABLE (ffetch (CHARLOOKS CLUNBREAKABLE) of PLOOKS))
                       (SETQ KERN (LISTGET (ffetch (CHARLOOKS CLUSERINFO) of PLOOKS)
                                         'KERN))
 
@@ -1716,7 +1732,8 @@
          PC])
 
 (\TEDIT.FORMATLINE.LASTLEGAL
-  [LAMBDA NIL                                                (* ; "Edited  1-Feb-2024 16:51 by rmk")
+  [LAMBDA (THISLINE CH#1 LINETYPE IMAGESTREAM)               (* ; "Edited 25-Jun-2024 15:44 by rmk")
+                                                             (* ; "Edited  1-Feb-2024 16:51 by rmk")
                                                              (* ; "Edited  2-Jul-2023 14:39 by rmk")
                                                              (* ; "Edited 17-Mar-2023 05:36 by rmk")
 
@@ -1729,8 +1746,7 @@
 
     (* ;; "Once we find the break point, we have to sweep through from the beginning in order to accurately know the lines ascent and descent at the break point.")
 
-    (DECLARE (USEDFREE THISLINE TX CHNO CHARSLOT TRUEASCENT TRUEDESCENT LINETYPE IMAGESTREAM 
-                    TABPENDING))
+    (DECLARE (USEDFREE TX CHNO CHARSLOT TRUEASCENT TRUEDESCENT TABPENDING))
     (LET [(BESTSLOT (find SLOT PCS backcharslots (PREVCHARSLOT! CHARSLOT)
                        suchthat (CL:WHEN (AND TABPENDING (EQ SLOT (fetch (PENDINGTAB PTCHARSLOT)
                                                                      of TABPENDING)))
@@ -1768,7 +1784,10 @@
              T)])
 
 (\TEDIT.LINES.ABOVE
-  [LAMBDA (TEXTOBJ CHN YBOTN)                                (* ; "Edited 15-Mar-2024 19:22 by rmk")
+  [LAMBDA (TSTREAM CHN YBOTN PREVBREAKCHNO)                  (* ; "Edited 13-Jun-2024 17:03 by rmk")
+                                                             (* ; "Edited 18-May-2024 10:10 by rmk")
+                                                             (* ; "Edited  3-May-2024 23:33 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 19:22 by rmk")
                                                              (* ; "Edited  5-Apr-2023 09:13 by rmk")
                                                              (* ; "Edited  1-Apr-2023 12:02 by rmk")
                                                              (* ; "Edited 30-May-91 23:02 by jds")
@@ -1777,27 +1796,27 @@
 
     (* ;; "We assume this is not called on an empty text (TEXTLEN = 0), since we wouldn't know what to return. Caller should check that.")
 
-    (CL:WHEN (IGREATERP CHN (TEXTLEN TEXTOBJ))
-        (SETQ CHN (TEXTLEN TEXTOBJ)))
     (CL:UNLESS YBOTN (SETQ YBOTN 0))
-    (bind L1 LN LINE HEIGHT (CHNO _ (\TEDIT.PREVIOUS.LINEBREAK TEXTOBJ CHN))
-       first (SETQ L1 (\TEDIT.FORMATLINE TEXTOBJ CHNO))      (* ; 
-                                                             "CHNO is the first char of the top line")
+    (bind L1 LN LINE HEIGHT CHNO (TEXTOBJ _ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
+       first (CL:WHEN (IGREATERP CHN (TEXTLEN TEXTOBJ))
+                 (SETQ CHN (TEXTLEN TEXTOBJ)))
+             (SETQ CHNO (OR PREVBREAKCHNO (\TEDIT.PREVIOUS.LINEBREAK TSTREAM CHN))) 
+                                                             (* ; "The end-of-line character")
+             (SETQ L1 (\TEDIT.FORMATLINE TSTREAM CHNO))      (* ; "A line containiing only the EOL")
              (SETQ LN L1)
-             (SETQ CHNO (ADD1 (GETLD L1 LCHARLIM))) until (IGREATERP CHNO CHN)
-       do (SETQ LINE (\TEDIT.FORMATLINE TEXTOBJ CHNO))       (* ; 
-                                                 "The line immediately after a preceding known break")
+             (SETQ CHNO (ADD1 (FGETLD L1 LCHARLIM))) until (IGREATERP CHNO CHN)
+       do (SETQ LINE (\TEDIT.FORMATLINE TSTREAM CHNO))
           (LINKLD LN LINE)
           (SETQ LN LINE)
-          (SETQ CHNO (ADD1 (GETLD LINE LCHARLIM))) finally 
+          (SETQ CHNO (ADD1 (FGETLD LINE LCHARLIM))) finally 
 
-                                                         (* ;; 
+                                                          (* ;; 
                                             "Fill in the YBOT's, given that YBOTN is the YBOT of LN.")
 
-                                                         (for L (YB _ YBOTN) backlines LN
-                                                            do (SETYPOS L YB)
-                                                               (add YB (GETLD L LHEIGHT)))
-                                                         (RETURN (LIST L1 LN])
+                                                          (for L (YB _ YBOTN) backlines LN
+                                                             do (SETYPOS L YB)
+                                                                (add YB (GETLD L LHEIGHT)))
+                                                          (RETURN (LIST L1 LN])
 )
 
 (RPAQ? TEDIT.LINELEADING.BELOW NIL)
@@ -1866,7 +1885,9 @@
 (DEFINEQ
 
 (\TEDIT.DISPLAYLINE
-  [LAMBDA (TEXTOBJ LINE PANE)                                (* ; "Edited 20-Mar-2024 10:57 by rmk")
+  [LAMBDA (TEXTOBJ LINE PANE)                                (* ; "Edited 13-Jun-2024 17:08 by rmk")
+                                                             (* ; "Edited 10-May-2024 00:24 by rmk")
+                                                             (* ; "Edited 20-Mar-2024 10:57 by rmk")
                                                              (* ; "Edited 15-Mar-2024 22:04 by rmk")
                                                              (* ; "Edited 24-Dec-2023 22:05 by rmk")
                                                              (* ; "Edited  2-Dec-2023 11:34 by rmk")
@@ -1928,7 +1949,8 @@
              (CL:UNLESS (EQ LINE (fetch (THISLINE DESC) of THISLINE))
                                                              (* ; 
                                                             "No image cache -- re-format and display")
-                 (\TEDIT.FORMATLINE TEXTOBJ (FGETLD LINE LCHAR1)
+                 (\TEDIT.FORMATLINE (FGETTOBJ TEXTOBJ STREAMHINT)
+                        (FGETLD LINE LCHAR1)
                         LINE))
              (MOVETO (FGETLD LINE LX1)
                     (FGETLD LINE DESCENT)
@@ -2042,7 +2064,6 @@
                            6 6 'PAINT))
              (BLTSHADE WHITESHADE WINDOWDS 0 (FGETLD LINE YBASE)
                     6 6 'PAINT))
-         (FSETLD LINE LDIRTY NIL)
          LINE])
 
 (\TEDIT.DISPLAYLINE.TABS
@@ -2171,30 +2192,9 @@
 )
 (DEFINEQ
 
-(\TEDIT.UPDATE.SCREEN
-  [LAMBDA (TEXTOBJ)                                          (* ; "Edited 15-Mar-2024 22:00 by rmk")
-                                                             (* ; "Edited 16-Dec-2023 23:52 by rmk")
-                                                             (* ; "Edited 12-Oct-2023 15:27 by rmk")
-                                                             (* ; "Edited 17-Sep-2023 11:50 by rmk")
-                                                             (* ; "Edited 22-May-2023 22:19 by rmk")
-                                                             (* ; "Edited 17-May-2023 08:58 by rmk")
-                                                             (* ; "Edited  5-May-2023 13:16 by rmk")
-                                                             (* ; "Edited  5-Oct-2022 21:30 by rmk")
-    (CL:UNLESS (GETTOBJ TEXTOBJ TXTDON'TUPDATE)
-        [LET ((DIRTYCHARS (\TEDIT.FIND.DIRTYCHARS TEXTOBJ)))
-             (if DIRTYCHARS
-                 then 
-                      (* ;; "As long as we have this path, we don't want the line updater to update the selection. Updating the looks affects the line (so we need to know what characters changed), but the characters don't move around.  We want the rest of the insertion callers to avoid this entry.")
-
-                      (\TEDIT.UPDATE.LINES TEXTOBJ 'APPEARANCE (CAR DIRTYCHARS)
-                             (CDR DIRTYCHARS))
-               else (for PANE inpanes TEXTOBJ do (\TEDIT.FILLPANE (fetch (TEXTWINDOW PLINES)
-                                                                     of PANE)
-                                                        TEXTOBJ PANE]
-        (FSETTOBJ TEXTOBJ TXTNEEDSUPDATE NIL))])
-
 (\TEDIT.BACKFORMAT
-  [LAMBDA (TEXTOBJ DY CH1 HEIGHT)                            (* ; "Edited 20-Mar-2024 06:46 by rmk")
+  [LAMBDA (TSTREAM DY CH1 HEIGHT)                            (* ; "Edited  3-May-2024 23:33 by rmk")
+                                                             (* ; "Edited 20-Mar-2024 06:46 by rmk")
                                                              (* ; "Edited 15-Mar-2024 19:44 by rmk")
                                                              (* ; "Edited 30-Nov-2023 21:16 by rmk")
                                                              (* ; "Edited  3-Nov-2023 12:02 by rmk")
@@ -2208,8 +2208,9 @@
 
     (* ;; "This computes block by block, where the first line of a block either starts a paragraph or comes immediately after a forced break.")
 
-    (bind L1 PAIR (CHNO _ CH1) until (IGREATERP HEIGHT DY) while (IGEQ CHNO 1)
-       do (SETQ PAIR (\TEDIT.LINES.ABOVE TEXTOBJ CHNO HEIGHT)) 
+    (bind L1 PAIR (TEXTOBJ _ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
+          (CHNO _ CH1) until (IGREATERP HEIGHT DY) while (IGEQ CHNO 1)
+       do (SETQ PAIR (\TEDIT.LINES.ABOVE TSTREAM CHNO HEIGHT)) 
                                                              (* ; "The block may go beyond DY")
           (LINKLD (CADR PAIR)
                  L1)                                         (* ; 
@@ -2222,96 +2223,52 @@
                                                        DY])
 
 (\TEDIT.PREVIOUS.LINEBREAK
-  [LAMBDA (TEXTOBJ CHNO)                                     (* ; "Edited 17-Mar-2024 12:05 by rmk")
+  [LAMBDA (TSTREAM CHNO)                                     (* ; "Edited 18-May-2024 18:53 by rmk")
+                                                             (* ; "Edited  3-May-2024 23:33 by rmk")
+                                                             (* ; "Edited 17-Mar-2024 12:05 by rmk")
                                                              (* ; "Edited 11-Dec-2023 21:59 by rmk")
                                                              (* ; "Edited 16-Oct-2023 23:19 by rmk")
                                                              (* ; "Edited 31-Mar-2023 17:44 by rmk")
                                                              (* ; "Edited 28-Mar-2023 09:03 by rmk")
                                                              (* ; "Edited 26-Mar-2023 12:55 by rmk")
 
-    (* ;; "Returns the character number of the first character at or before CHNO that would follow a forced line-end or a paragraph end.  Line-formatting from that character onward would be consistent with any earlier line-breaks (and wouldn't change if earlier breaks changed).")
+    (* ;; "Returns the character number of the first character at or before CHNO that FOLLOWS a forced line-end or a paragraph end.  Line-formatting from that character onward would be consistent with any earlier line-breaks (and wouldn't change if earlier breaks changed).")
 
     (if (ILEQ CHNO 1)
         then 1
-      elseif (AND NIL (FGETTOBJ TEXTOBJ FORMATTEDP))
-        then 
-             (* ;; "[Disabled] For a para-formatted object, back up to the prior linebreak (PPARALAST).  But if EOL's are not always paragraph boundaries, this might back up way too far.")
-
-             (CAR (\TEDIT.PARA.FIRST TEXTOBJ CHNO))
       else 
            (* ;; "Otherwise, move back thru the text until we find a for-sure line break. ")
 
-           (CL:WHEN (IGREATERP CHNO (FGETTOBJ TEXTOBJ TEXTLEN))
-               (SETQ CHNO (FGETTOBJ TEXTOBJ TEXTLEN)))
-           (LET ((TSTREAM (FGETTOBJ TEXTOBJ STREAMHINT))
+           (LET ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
                  NCHARS)
-                (\TEDIT.TEXTSETFILEPTR TSTREAM (SUB1 CHNO))  (* ; 
-                                 "Start at (SUB1 CHNO) because fileptrs are one back from characters")
-                [SETQ NCHARS (find I from 1
-                                suchthat (MEMB (\TEDIT.TEXTBACKFILEPTR TSTREAM)
-                                               (CHARCODE (EOL FORM %#EOL Meta,EOL CR LF NIL]
+                (if (AND NIL (FGETTOBJ TEXTOBJ FORMATTEDP))
+                    then 
+                         (* ;; "[Disabled] For a para-formatted object, back up to the prior linebreak (PPARALAST).  But if EOL's are not always paragraph boundaries, this might back up way too far.")
 
-                (* ;; 
+                         (CAR (\TEDIT.PARA.FIRST TEXTOBJ CHNO))
+                  else (CL:WHEN (IGREATERP CHNO (FGETTOBJ TEXTOBJ TEXTLEN))
+                           (SETQ CHNO (FGETTOBJ TEXTOBJ TEXTLEN)))
+                       (\TEDIT.TEXTSETFILEPTR TSTREAM (SUB1 CHNO)) 
+                                                             (* ; 
+                                 "Start at (SUB1 CHNO) because fileptrs are one back from characters")
+                       [SETQ NCHARS (find I from 1
+                                       suchthat (MEMB (\TEDIT.TEXTBACKFILEPTR TSTREAM)
+                                                      (CHARCODE (EOL FORM %#EOL Meta,EOL CR LF NIL] 
+
+                       (* ;; 
          "If we didn't find a preceding EOL, we must have backed to the beginning of the file (NIL).")
 
-                (CL:IF NCHARS
-                    (ADD1 (IDIFFERENCE CHNO NCHARS))
-                    1)])
-
-(\TEDIT.FILLPANE
-  [LAMBDA (PREVLINE TEXTOBJ PANE)                            (* ; "Edited 20-Mar-2024 06:43 by rmk")
-                                                             (* ; "Edited 15-Mar-2024 14:39 by rmk")
-                                                             (* ; "Edited 11-Jan-2024 19:32 by rmk")
-                                                             (* ; "Edited  2-Jan-2024 12:45 by rmk")
-                                                             (* ; "Edited 24-Dec-2023 22:00 by rmk")
-                                                             (* ; "Edited  2-Dec-2023 23:05 by rmk")
-                                                             (* ; "Edited  3-Nov-2023 12:03 by rmk")
-                                                             (* ; "Edited 17-Sep-2023 14:51 by rmk")
-                                                             (* ; "Edited  8-May-2023 21:59 by rmk")
-                                                             (* ; "Edited  5-May-2023 10:54 by rmk")
-                                                             (* ; "Edited 26-Apr-2023 21:02 by rmk")
-
-    (* ;; "This executes whether or not TXTNEEDSUPDATE, callers decide that.")
-
-    (LET (LINE)
-
-         (* ;; "")
-
-         (* ;; "Find the first on-screen line after PREVLINE, if any.  If the scrolling and other algorithms are tidy, we shouldn't expect to find any lines hanging around above the pane.  If none, start with PREVLINE, maybe the dummy. ")
-
-         (SETQ LINE (find L (PHEIGHT _ (fetch HEIGHT of (DSPCLIPPINGREGION NIL PANE)))
-                       inlines (GETLD PREVLINE NEXTLINE) suchthat (ILESSP (FGETLD L YBOT)
-                                                                         PHEIGHT)))
-
-         (* ;; "")
-
-         (CL:WHEN LINE
-             (SETQ PREVLINE (GETLD LINE PREVLINE)))
-
-         (* ;; "")
-
-         (* ;; "Format and display any lines that are still needed to fill out the pane.   ")
-
-         (SETQ PREVLINE (\TEDIT.LINES.BELOW PREVLINE NIL PANE TEXTOBJ))
-
-         (* ;; "")
-
-         (CL:WHEN (\TEDIT.INSURE.TRAILING.LINE TEXTOBJ PREVLINE)
-             (\TEDIT.DISPLAYLINE TEXTOBJ (GETLD PREVLINE NEXTLINE)
-                    PANE))
-
-         (* ;; "")
-
-         (\TEDIT.CLEARPANE.BELOW.LINE PREVLINE PANE TEXTOBJ)
-         (\TEDIT.SET.WINDOW.EXTENT TEXTOBJ PANE)
-         (FSETTOBJ TEXTOBJ TXTNEEDSUPDATE NIL])
+                       (CL:IF NCHARS
+                           (ADD1 (IDIFFERENCE CHNO NCHARS))
+                           1)])
 
 (\TEDIT.UPDATE.LINES
   [LAMBDA (TEXTOBJ REASON FIRSTCHANGEDCHNO NCHARSCHANGED DONTDISPLAY)
+                                                             (* ; "Edited 24-Jun-2024 21:44 by rmk")
+                                                             (* ; "Edited 16-Jun-2024 23:56 by rmk")
+                                                             (* ; "Edited 12-Jun-2024 23:49 by rmk")
+                                                             (* ; "Edited  7-May-2024 10:41 by rmk")
                                                              (* ; "Edited 20-Mar-2024 06:43 by rmk")
-                                                             (* ; "Edited 24-Dec-2023 22:00 by rmk")
-                                                             (* ; "Edited 18-Dec-2023 00:12 by rmk")
-                                                             (* ; "Edited 16-Dec-2023 13:43 by rmk")
                                                              (* ; "Edited  4-Dec-2023 20:37 by rmk")
                                                              (* ; "Edited 22-Jun-2023 15:50 by rmk")
                                                              (* ; "Edited 11-Jun-2023 18:34 by rmk")
@@ -2322,27 +2279,48 @@
     (* ;; "See line-segmentation comments in \TEDIT.VALID.LINES.")
 
     (CL:UNLESS (GETTOBJ TEXTOBJ TXTDON'TUPDATE)
-        (CL:WHEN (type? SELECTION FIRSTCHANGEDCHNO)
-            (SETQ NCHARSCHANGED (FGETSEL FIRSTCHANGEDCHNO DCH))
-            (SETQ FIRSTCHANGEDCHNO (FGETSEL FIRSTCHANGEDCHNO CH#)))
+        [if (type? SELECTION FIRSTCHANGEDCHNO)
+            then (SETQ NCHARSCHANGED (FGETSEL FIRSTCHANGEDCHNO DCH))
+                 (SETQ FIRSTCHANGEDCHNO (FGETSEL FIRSTCHANGEDCHNO CH#))
+          elseif (type? SELPIECES FIRSTCHANGEDCHNO)
+            then [SETQ NCHARSCHANGED (ADD1 (IDIFFERENCE (fetch (SELPIECES SPLASTCHAR) of 
+                                                                                     FIRSTCHANGEDCHNO
+                                                               )
+                                                  (fetch (SELPIECES SPFIRSTCHAR) of FIRSTCHANGEDCHNO]
+                 (SETQ FIRSTCHANGEDCHNO (fetch (SELPIECES SPFIRSTCHAR) of FIRSTCHANGEDCHNO))
+          else (CL:UNLESS FIRSTCHANGEDCHNO (SETQ FIRSTCHANGEDCHNO 1))
+               (CL:UNLESS NCHARSCHANGED
+                   (SETQ NCHARSCHANGED (FGETTOBJ TEXTOBJ TEXTLEN)))]
 
         (* ;; 
       "If DONTDISPLAY, we ensure lines that are properly formatted and positioned but not displayed.")
 
-        (for PANE VALIDS NEXTVALID LASTGAPLINE DELTA inpanes TEXTOBJ as VALIDS
-           in (\TEDIT.VALID.LINES TEXTOBJ FIRSTCHANGEDCHNO NCHARSCHANGED REASON) when VALIDS
+        [for PANE VALIDS LASTVALID NEXTVALID GAPLINES LASTGAPLINE DELTA inpanes TEXTOBJ as VALIDS
+           in (\TEDIT.VALID.LINES FIRSTCHANGEDCHNO NCHARSCHANGED REASON (FGETTOBJ TEXTOBJ STREAMHINT)
+                     ) when VALIDS
            do 
-              (* ;; "Create/format/display new lines between LASTVALID=(CAR VALIDS) and NEXTVALID  ")
+              (* ;; 
+              "Create/format/position/display new lines between LASTVALID and NEXTVALID exclusive")
 
+              (SETQ LASTVALID (CAR VALIDS))
               (SETQ NEXTVALID (CDR VALIDS))
-              (SETQ LASTGAPLINE (\TEDIT.LINES.BELOW (CAR VALIDS)
-                                       (AND NEXTVALID (SUB1 (FGETLD NEXTVALID LCHAR1)))
-                                       PANE TEXTOBJ DONTDISPLAY))
+              (SETQ GAPLINES (\TEDIT.LINES.BELOW LASTVALID (AND NEXTVALID (SUB1 (FGETLD NEXTVALID 
+                                                                                       LCHAR1)))
+                                    PANE TEXTOBJ DONTDISPLAY))
+              (CL:UNLESS GAPLINES (GO $$ITERATE))
+              (CL:WHEN (IGEQ (FGETLD LASTVALID YBOT)
+                             (FGETLD (PLINES PANE)
+                                    YBOT))                   (* ; 
+                                                             "LASTVALID was a fake just above PANE")
+                  (LINKLD (PLINES PANE)
+                         (CAR GAPLINES)))
+              (SETQ LASTGAPLINE (CDR GAPLINES))
               (LINKLD LASTGAPLINE NEXTVALID) 
 
-              (* ;; "The chain that ended at LASTVALID now continues thru LASTGAPLINE to NEXVALID and below.  But the Ypositions of NEXTVALID lines have not yet been adjusted, and their images have not been displayed. The top of NEXTVALID should align with the bottom of LASTGAPLINE: their Y positions are changed by DELTA.  DELTA is positive if NEXTVALID is moving up (deletion ), otherwise insertion. Appearance can go either way.")
+              (* ;; "The chain that ended at LASTVALID now continues thru LASTGAPLINE to NEXVALID and below.  But the Ypositions of NEXTVALID lines have not yet been adjusted, and their images have not been displayed. The top of NEXTVALID should align with the bottom of LASTGAPLINE: their Y positions are changed by DELTA.  DELTA is positive if NEXTVALID is moving up (deletion ), otherwise insertion. Appearance or replacement changes can go can go either way.")
 
-              (if NEXTVALID
+              (if [AND NEXTVALID (IGEQ (FGETLD NEXTVALID YBOT)
+                                       (fetch (REGION BOTTOM) of (DSPCLIPPINGREGION NIL PANE]
                   then (SETQ DELTA (IDIFFERENCE (FGETLD LASTGAPLINE YBOT)
                                           (FGETLD NEXTVALID YTOP))) 
 
@@ -2361,34 +2339,45 @@
                        (* ;; "")
 
                        (if DONTDISPLAY
-                           then (for L inlines NEXTVALID do (\TEDIT.LINE.BOTTOM L))
+                           then (for L inlines NEXTVALID do (\TEDIT.LINE.BOTTOM (GETLD L PREVLINE)
+                                                                   L))
                          elseif (IGREATERP DELTA 0)
                            then 
-                                (* ;; "Deletion/appearance")
+                                (* ;; "Deletion/change")
 
                                 (\TEDIT.RAISE.LINES NEXTVALID (FGETLD LASTGAPLINE YBOT)
                                        PANE TEXTOBJ)
                          elseif (ILESSP DELTA 0)
                            then 
-                                (* ;; 
-                                "Insertion/appearance: bitmaps of NEXTVALID can be shifted down")
+                                (* ;; "Insertion/change: bitmaps of NEXTVALID can be shifted down")
 
                                 (\TEDIT.LOWER.LINES NEXTVALID LASTGAPLINE PANE TEXTOBJ))
-                else (\TEDIT.CLEARPANE.BELOW.LINE LASTGAPLINE PANE TEXTOBJ)
-                     (\TEDIT.INSURE.TRAILING.LINE TEXTOBJ LASTGAPLINE)))
-        (FSETTOBJ TEXTOBJ TXTNEEDSUPDATE NIL))])
+                else 
+                     (* ;; "No point in clearing below the last line of the document, and it takes a lot of time when printing to an append stream.  But it does run the OVERFLOWFN.  Is this the right situation for that function?")
+
+                     (* ;; "If NEXTVALID, it must have been below the pane, need to clear.  I don't understand why it doesn't work to have \TEDIT.NEXTVALIDLINE return NIL in this case, so the BOTTOM test above is there.")
+
+                     (CL:WHEN (OR NEXTVALID (IGEQ (FGETLD LASTGAPLINE LCHARLIM)
+                                                  (FGETTOBJ TEXTOBJ TEXTLEN)))
+                            (\TEDIT.CLEARPANE.BELOW.LINE LASTGAPLINE PANE TEXTOBJ))
+                     (CL:WHEN (FGETLD LASTGAPLINE FORCED-END)
+                            (\TEDIT.INSURE.NEXTLINE TEXTOBJ LASTGAPLINE])])
 
 (\TEDIT.CREATEPLINE
-  [LAMBDA (TEXTOBJ PANE FIRSTLINE)                           (* ; "Edited 13-Mar-2024 17:02 by rmk")
+  [LAMBDA (TEXTOBJ PANE LCHARLIM)                            (* ; "Edited 21-Jun-2024 22:25 by rmk")
+                                                             (* ; "Edited 19-Jun-2024 08:26 by rmk")
+                                                             (* ; "Edited 17-Jun-2024 08:52 by rmk")
+                                                             (* ; "Edited 13-Mar-2024 17:02 by rmk")
                                                              (* ; "Edited 21-Feb-2024 23:36 by rmk")
                                                              (* ; "Edited  2-Jan-2024 13:04 by rmk")
                                                              (* ; "Edited 29-Dec-2023 15:48 by rmk")
 
-    (* ;; "Creates the initial dummy line PLINES for PANE.  Connects it to FIRSTLINE if provided.")
+    (* ;; "Creates the initial dummy line PLINES for PANE.  This covers all of the characters before the first character visible in PANE, which is LCHARLIM+1.  LCHARLIM defaults to 0. The bottom of the dummy line is the top of PANE.")
 
     (LET (DUMMYLINE)
 
-         (* ;; "Initialize with a dummy empty first line with LCHAR1 and LCHARLIM=0 above the pane top. 0 means in particular that the LCHARLIM is just before the first character of the file (if there is one).  ")
+         (* ;; 
+   "Initialize with a dummy empty first line with LCHAR1 and LCHARLIM=LASTCHAR above the pane top.  ")
 
          (* ;; 
          "1STLN and LSTLN are NIL, since we don't want to make end paragraph-boundary inferences")
@@ -2398,7 +2387,7 @@
                  LDUMMY _ T
                  YBOT _ (fetch HEIGHT of (DSPCLIPPINGREGION NIL PANE))
                  LCHAR1 _ 0
-                 LCHARLIM _ 0
+                 LCHARLIM _ (OR LCHARLIM 0)
                  RIGHTMARGIN _ (SUB1 (FGETTOBJ TEXTOBJ WRIGHT))
                  LHEIGHT _ 0
                  LX1 _ 0
@@ -2412,42 +2401,26 @@
                  1STLN _ NIL
                  LSTLN _ NIL))
          (replace (TEXTWINDOW PLINES) of PANE with DUMMYLINE)(* ; "Install PANE's new dummy line")
-         (LINKLD DUMMYLINE FIRSTLINE)                        (* ; "Link the possible first line")
+         (\TEDIT.INSURE.NEXTLINE TEXTOBJ DUMMYLINE)
          DUMMYLINE])
 
-(\TEDIT.FIND.DIRTYCHARS
-  [LAMBDA (TEXTOBJ)                                          (* ; "Edited  4-Jan-2024 23:34 by rmk")
-                                                             (* ; "Edited  2-Jan-2024 12:15 by rmk")
-                                                             (* ; "Edited  2-Dec-2023 23:06 by rmk")
-                                                             (* ; "Edited  3-Nov-2023 12:04 by rmk")
-                                                             (* ; "Edited  8-May-2023 13:18 by rmk")
-                                                             (* ; "Edited 28-Apr-2023 15:30 by rmk")
-
-    (* ;; "Returns a pair (firstdirty . ndirties)  figuring the first and maxium range of dirty characters. For programs that mark DIRTY when they modify lines.  The dirty LCHAR*'s are the same in all panes where they exist.")
-
-    (for PANE PLINES FIRSTDIRTYLINE (LASTDIRTYCHAR _ 1) inpanes (PROGN TEXTOBJ)
-       eachtime (SETQ PLINES (fetch (TEXTWINDOW PLINES) of PANE))
-       when (SETQ FIRSTDIRTYLINE (find L inlines (GETLD PLINES NEXTLINE)
-                                    suchthat (FGETLD L LDIRTY)))
-       do 
-          (* ;; "Some panes may have more lines than others--we want to get the largest dirty range.")
-
-          [SETQ LASTDIRTYCHAR (IMAX LASTDIRTYCHAR (for L (PREV _ FIRSTDIRTYLINE) inlines 
-                                                                                       FIRSTDIRTYLINE
-                                                     while (FGETLD L LDIRTY) do (SETQ PREV L)
-                                                     finally (RETURN (FGETLD PREV LCHARLIM]
-       finally (RETURN (CL:WHEN FIRSTDIRTYLINE
-                           (CONS (GETLD FIRSTDIRTYLINE LCHAR1)
-                                 (IDIFFERENCE (ADD1 LASTDIRTYCHAR)
-                                        (FGETLD FIRSTDIRTYLINE LCHAR1))))])
-
 (\TEDIT.LINES.BELOW
-  [LAMBDA (PREVLINE LASTCHAR PANE TEXTOBJ DONTDISPLAY)       (* ; "Edited 15-Mar-2024 19:22 by rmk")
+  [LAMBDA (PREVLINE LASTCHAR PANE TEXTOBJ DONTDISPLAY VBOTTOM)
+                                                             (* ; "Edited 24-Jun-2024 21:38 by rmk")
+                                                             (* ; "Edited 20-Jun-2024 16:45 by rmk")
+                                                             (* ; "Edited 17-Jun-2024 09:22 by rmk")
+                                                             (* ; "Edited 13-Jun-2024 17:18 by rmk")
+                                                             (* ; "Edited 10-May-2024 00:20 by rmk")
+                                                             (* ; "Edited  2-May-2024 00:03 by rmk")
+                                                             (* ; "Edited  9-Apr-2024 10:13 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 19:22 by rmk")
                                                              (* ; "Edited 23-Dec-2023 23:38 by rmk")
                                                              (* ; "Edited 17-Dec-2023 15:56 by rmk")
                                                              (* ; "Edited 14-Dec-2023 12:46 by rmk")
 
-    (* ;; "Formats lines after PREVLINE down to the one that contains LASTCHAR and/or does not run off the bottom of PANE.  ")
+    (* ;; "Formats lines after PREVLINE down to the one that contains LASTCHAR and/or does not run off the bottom of PANE.  Returns a pair (FIRSTNEWLINE . LASTNEWLINE) where FIRSTNEWLINE is a line that logically comes after PREVLINE (but may need to be linked in) and LASTNEWLINE is the new line just before the line containing LASTCHAR.")
+
+    (* ;; "The line containing LASTCHAR is presumed to be valid, its bitmap can be reused without reformatting.  This is the way it is used from \TEDIT.UPDATE.LINES  Otherwise, it formats to the end of PANE.")
 
     (* ;; "Assumes that PREVLINE is correctly formatted and Y-positioned, and already displayed in PANE (if desired).")
 
@@ -2455,98 +2428,60 @@
 
     (* ;; "Also displays the lines, unless DONTDISPLAY. This is an optimization: THISLINE caches the just formatted line, doesn't have to be formatted again if it is immediately displayed.  Calling it with DONTDISPLAY NIL followed by DONTDISPLAY T gives exactly the same result as calling it once with DONTDISPLAY T.")
 
-    (CL:WHEN PREVLINE
-        (SETQ LASTCHAR (CL:IF LASTCHAR
-                           (IMIN LASTCHAR (FGETTOBJ TEXTOBJ TEXTLEN))
-                           (FGETTOBJ TEXTOBJ TEXTLEN)))
-
-        (* ;; "If PREVLINE is LDUMMY (= PLINES of PANE), we pretend it has an LCHARLIM one before the LCHAR1 of its nextline, otherwise 0.")
-
-        (for L NEXT (LCHARLIM _ (CL:IF (AND (FGETLD PREVLINE LDUMMY)
-                                            (FGETLD PREVLINE NEXTLINE))
-                                    (SUB1 (FGETLD (FGETLD PREVLINE NEXTLINE)
-                                                 LCHAR1))
-                                    (FGETLD PREVLINE LCHARLIM)))
-             (YBOT _ (FGETLD PREVLINE YBOT))
-             (PBOTTOM _ (fetch (REGION BOTTOM) of (DSPCLIPPINGREGION NIL PANE))) inlines PREVLINE
-           first (CL:WHEN (OR (IGREATERP LCHARLIM LASTCHAR)
-                              (ILEQ YBOT PBOTTOM))
-                     (FSETLD PREVLINE NEXTLINE NIL)          (* ; "Eliminate dangling garbage")
-                     (RETURN PREVLINE)) while (SETQ NEXT (\TEDIT.FORMATLINE TEXTOBJ (ADD1 LCHARLIM)))
-           do 
-              (* ;; 
+    (CL:UNLESS PREVLINE
+        (SETQ PREVLINE (PLINES PANE)))
+    (SELECTQ VBOTTOM
+        (NIL (SETQ VBOTTOM (\TEDIT.ONSCREEN? PANE 'BOTTOM)))
+        (T                                                   (* ; "Find LASTCHAR anywhere below")
+           (SETQ VBOTTOM MIN.SMALLP))
+        NIL)
+    (SETQ LASTCHAR (CL:IF LASTCHAR
+                       (IMIN LASTCHAR (FGETTOBJ TEXTOBJ TEXTLEN))
+                       (FGETTOBJ TEXTOBJ TEXTLEN)))
+    (for L NEXT FIRSTNEWLINE (TSTREAM _ (FGETTOBJ TEXTOBJ STREAMHINT))
+         (LCHARLIM _ (FGETLD PREVLINE LCHARLIM))
+         (YBOT _ (FGETLD PREVLINE YBOT)) inlines PREVLINE first (CL:WHEN (OR (IGREATERP LCHARLIM 
+                                                                                    LASTCHAR)
+                                                                             (ILEQ YBOT VBOTTOM))
+                                                                    (FSETLD PREVLINE NEXTLINE NIL)
+                                                             (* ; "Eliminate dangling garbage")
+                                                                    (RETURN NIL))
+       while (SETQ NEXT (\TEDIT.FORMATLINE TSTREAM (ADD1 LCHARLIM)))
+       do 
+          (* ;; 
        "L is formatted, positioned, linked, displayed. Next is the following line unless at the end.")
 
-              (LINKLD L NEXT)                                (* ; "Put NEXT into the iteration")
-              (SETQ YBOT (\TEDIT.LINE.BOTTOM NEXT))          (* ; "Link needed for Y position")
-              (SETQ LCHARLIM (FGETLD NEXT LCHARLIM))
-              (CL:WHEN (OR (IGREATERP LCHARLIM LASTCHAR)
-                           (ILEQ YBOT PBOTTOM))
-                  (FSETLD L NEXTLINE NIL)                    (* ; "Overshot, flush link")
-                  (RETURN L))
-              (CL:UNLESS DONTDISPLAY                         (* ; 
+          (CL:UNLESS FIRSTNEWLINE (SETQ FIRSTNEWLINE NEXT))
+          (LINKLD L NEXT)                                    (* ; "Put NEXT into the iteration")
+          (SETQ YBOT (\TEDIT.LINE.BOTTOM L NEXT))            (* ; "Link needed for Y position")
+          (SETQ LCHARLIM (FGETLD NEXT LCHARLIM))
+          (CL:WHEN (OR (IGREATERP LCHARLIM LASTCHAR)
+                       (ILESSP YBOT VBOTTOM))
+
+              (* ;; "Overshot, flush line. There may be an inconsistency with \TEDIT.RAISE.LINES when YBOT is 0.  With ILESSP here the line is visible and we go around once more, ILEQ would suppress it.  ")
+
+              (if (AND (IGEQ LCHARLIM (FGETTOBJ TEXTOBJ TEXTLEN))
+                       (FGETLD L FORCED-END))
+                  then (\TEDIT.INSURE.NEXTLINE TEXTOBJ L)
+                else (FSETLD L NEXTLINE NIL))
+              (RETURN (CONS FIRSTNEWLINE L)))
+          (CL:UNLESS DONTDISPLAY                             (* ; 
                                                              "Cached formatting is good for display")
-                  (\TEDIT.DISPLAYLINE TEXTOBJ NEXT PANE)) finally 
+              (\TEDIT.DISPLAYLINE TEXTOBJ NEXT PANE))
+       finally 
 
-                                                                (* ;; "Ran out of lines")
+             (* ;; "Ran out of lines")
 
-                                                                (RETURN (OR L PREVLINE))))])
-
-(\FORMAT.GAP.LINES
-  [LAMBDA (VALIDS PANE TEXTOBJ DONTDISPLAY)                  (* ; "Edited 15-Mar-2024 19:23 by rmk")
-                                                             (* ; "Edited  4-Dec-2023 20:42 by rmk")
-                                                             (* ; "Edited 20-Nov-2023 10:47 by rmk")
-                                                             (* ; "Edited  3-Nov-2023 12:05 by rmk")
-                                                             (* ; "Edited 15-May-2023 17:31 by rmk")
-                                                             (* ; "Edited 28-Apr-2023 17:35 by rmk")
-                                                             (* ; "Edited 26-Apr-2023 18:39 by rmk")
-
-    (* ;; "VALIDS is a pair (LASTVALID . NEXTVALID) as described in \TEDIT.VALID.LINES. Our job is to format and display the lines between LASTVALID and NEXTVALID, laying them out in the region starting below the given LASTVALID.")
-
-    (* ;; "The screen has valid images for  lines from the top down to LASTVALID (segment 1 as described in \TEDIT.VALID.LINES). We don't touch those lines or their bitmaps.")
-
-    (* ;; "We also don't smash the bitmaps for NEXTVALID lines whose initial YTOP is below the YBOT of the last formatted valid line.  This is guaranteed for deletions, maybe not for insertions where the gap displaying can encroach on the valid bitmaps.  The caller has to sort the bitmap overlaps.")
-
-    (* ;; "Returns the new LASTVALID whose NEXTLINE is the given NEXTVALID.")
-
-    (CL:UNLESS PANE (SETQ DONTDISPLAY T))
-    (for L LASTINVALIDCHNO PBOTTOM LCHARLIM YBOT (LASTVALID _ (CAR VALIDS))
-         (NEXTVALID _ (CDR VALIDS))
-         [PBOTTOM _ (CL:UNLESS DONTDISPLAY
-                        (fetch BOTTOM of (DSPCLIPPINGREGION NIL PANE)))] inlines LASTVALID
-       first (SETQ YBOT (GETLD LASTVALID YBOT))
-             (SETQ LCHARLIM (FGETLD LASTVALID LCHARLIM))     (* ; 
-                                                      "LCHARLIM=0 if change in document's first line")
-             (SETQ LASTINVALIDCHNO (CL:IF NEXTVALID
-                                       (SUB1 (FGETLD NEXTVALID LCHAR1))
-                                       (FGETTOBJ TEXTOBJ TEXTLEN))) eachtime (SETQ LCHARLIM
-                                                                              (FGETLD L LCHARLIM))
-       until (OR (AND PBOTTOM (ILEQ YBOT PBOTTOM))
-                 (IEQP LCHARLIM LASTINVALIDCHNO))
-       do (if (AND PBOTTOM (ILEQ YBOT PBOTTOM))
-              then (LINKLD LASTVALID NIL)                    (* ; 
-                                            "Insertion ran off the bottom, flush now-invisible lines")
-                   (RETURN LASTVALID)
-            elseif (IEQP LCHARLIM LASTINVALIDCHNO)
-              then 
-                   (* ;; "We reached the end of the gap. But we may have smashed the bitmaps of the initial NEXTVALID lines, so we have to format/display a little bit more until we clear the overlap.  If we are displaying, we first move the non-overlapping bitmap downwards on the screen, out of danger, then reformat and provide fresh images for the overlapping lines.")
-
-                   (CL:WHEN (IGREATERP (FGETLD NEXTVALID YTOP)
-                                   (FGETLD LASTVALID YBOT))
-                          (BITBLT)))
-          (SETQ LASTVALID (\TEDIT.FORMATLINE TEXTOBJ (ADD1 LCHARLIM)))
-          (LINKLD L LASTVALID)
-          (SETQ YBOT (\TEDIT.LINE.BOTTOM LASTVALID))
-          (SETQ LCHARLIM (FGETLD LASTVALID LCHARLIM))
-          (CL:UNLESS DONTDISPLAY
-
-              (* ;; "The THISLINE cache for  NEXT is good if we display immediately after formatting")
-
-              (\TEDIT.DISPLAYLINE TEXTOBJ LASTVALID PANE)) finally (LINKLD LASTVALID NEXTVALID)
-                                                                 (RETURN LASTVALID])
+             (CL:WHEN (AND L (IGEQ LCHARLIM (FGETTOBJ TEXTOBJ TEXTLEN))
+                           (FGETLD L FORCED-END))
+                    (\TEDIT.INSURE.NEXTLINE TEXTOBJ L))
+             (RETURN (CONS FIRSTNEWLINE (OR L FIRSTNEWLINE])
 
 (\TEDIT.LOWER.LINES
-  [LAMBDA (NEXTVALID LASTVALID PANE TEXTOBJ)                 (* ; "Edited 15-Mar-2024 14:40 by rmk")
+  [LAMBDA (NEXTVALID LASTVALID PANE TEXTOBJ)                 (* ; "Edited 13-Jun-2024 21:46 by rmk")
+                                                             (* ; "Edited 27-Apr-2024 10:37 by rmk")
+                                                             (* ; "Edited  9-Apr-2024 10:25 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 14:40 by rmk")
                                                              (* ; "Edited 20-Jan-2024 23:15 by rmk")
                                                              (* ; "Edited  2-Jan-2024 00:26 by rmk")
                                                              (* ; "Edited  4-Dec-2023 11:25 by rmk")
@@ -2556,69 +2491,65 @@
 
     (* ;; "NEXTVALID is the top line of a region in PANE that extends to the pane-bottom or text end--that is, the pane bitmap in that region correctly reflects the lines (and possibly empty space at text-end).")
 
-    (* ;; "Insertion case.  The inserted gap lines may cover some of the bitmap of the nextvalid lines.  In that case NEXTVALID:YBOT is greater than the new LASTVALID:YBOT")
+    (* ;; "Insertion case.  The inserted gap lines may cover some of the bitmap of the nextvalid lines.  In that case NEXTVALID's YBOT is greater than the new LASTVALID's YBOT")
 
-    (* ;; "If PANE has been moved so that it is not entirely within the screen, then don't try to find the relevant bits, just repaint the whole window.")
+    (PROG ((NEWTOP (GETLD LASTVALID YBOT))
+           (PWIDTH (fetch (REGION WIDTH) of (DSPCLIPPINGREGION NIL PANE)))
+           (VLEFT (\TEDIT.ONSCREEN? PANE 'LEFT))
+           (LTOP (GETLD NEXTVALID YTOP))
+           (LVBOT 0)
+           DELTA LASTVISIBLE)
+          (SETQ DELTA (IDIFFERENCE LTOP NEWTOP))             (* ; "How far down to go")
+          (CL:UNLESS (IGREATERP DELTA 0)                     (* ; "Maybe it's not moving")
+              (RETURN))
 
-    (CL:UNLESS (\TEDIT.OFFSCREEN.SCROLL TEXTOBJ PANE 'VERTICAL)
+     (* ;; "Make the YPOS of the lowered lines consistent with the intended positions of their images.  LASTVISIBLE is the last line that was previously visible (and whose image will be lowered). ")
 
-        (* ;; "Completely on screen, we can take advantage of screen bitmap.")
+          (for L (VBOTTOM _ (\TEDIT.ONSCREEN? PANE 'BOTTOM)) inlines NEXTVALID
+             while (IGEQ (IDIFFERENCE (FGETLD L YBOT)
+                                DELTA)
+                         VBOTTOM) do (SETQ LASTVISIBLE L))
 
-        [PROG ((NEWTOP (GETLD LASTVALID YBOT))
-               (PREG (DSPCLIPPINGREGION NIL PANE))
-               (LTOP (GETLD NEXTVALID YTOP))
-               (LVBOT 0)
-               LOWER PWIDTH LASTVISIBLE)
-              (SETQ LOWER (IDIFFERENCE LTOP NEWTOP))         (* ; "How far down to go")
-              (CL:UNLESS (IGREATERP LOWER 0)                 (* ; "Maybe it's not moving")
-                  (RETURN))
+     (* ;; "")
 
-         (* ;; "Make the YPOS of the lowered lines consistent with the intended positions of their images.  LASTVISIBLE is the last line that was previously visible (and whose image will be lowered). ")
+     (* ;; "Lower what we think is the image of NEXTVALID and all visible lines below it. This may lower some garbage, if  the LASTVALID display encroached on NEXTVALID's image.")
 
-              (for L (PBOTTOM _ (fetch BOTTOM of PREG)) inlines NEXTVALID
-                 while (IGEQ (IDIFFERENCE (FGETLD L YBOT)
-                                    LOWER)
-                             PBOTTOM) do (SETQ LASTVISIBLE L))
+          (CL:WHEN LASTVISIBLE
+              (SETQ LVBOT (IDIFFERENCE (FGETLD LASTVISIBLE YBOT)
+                                 DELTA)))
+          (BITBLT PANE VLEFT (IPLUS LVBOT DELTA)
+                 PANE VLEFT LVBOT PWIDTH (IDIFFERENCE (IDIFFERENCE LTOP LVBOT)
+                                                DELTA)
+                 'INPUT
+                 'REPLACE)
 
-         (* ;; "")
+     (* ;; "")
 
-              (SETQ PWIDTH (fetch WIDTH of PREG))            (* ; "Width of the pane")
+     (* ;; "The bottom of the pane is good.  But if LASTVALID encroached into the bitmap of some of NEXTVALID and some of its descendants, those need to be redisplayed.   And the ypositions of NEXTVALID and all lines down to LASTVISIBLE have to be lowered.  ")
 
-         (* ;; "Lower what we think is the image of NEXTVALID and all visible lines below it. This may lower some garbage, if  the LASTVALID printer encroached on NEXTVALID's image.")
+     (* ;; "")
 
-              (CL:WHEN LASTVISIBLE
-                  (SETQ LVBOT (IDIFFERENCE (GETLD LASTVISIBLE YBOT)
-                                     LOWER)))
-              (BITBLT PANE 0 (IPLUS LVBOT LOWER)
-                     PANE 0 LVBOT PWIDTH (IDIFFERENCE (IDIFFERENCE LTOP LVBOT)
-                                                LOWER)
-                     'INPUT
-                     'REPLACE)
+          (CL:WHEN LASTVISIBLE                               (* ; "Smash the invisible tail")
+              (SETLD LASTVISIBLE NEXTLINE NIL))
+          (for L YBOT inlines NEXTVALID do (SETQ YBOT (IDIFFERENCE (FGETLD L YBOT)
+                                                             DELTA))
+                                           (if (IGEQ (FGETLD L YTOP)
+                                                     NEWTOP)
+                                               then (SETYPOS L YBOT)
+                                                    (\TEDIT.DISPLAYLINE TEXTOBJ L PANE)
+                                             else (SETYPOS L YBOT)))
 
-         (* ;; "")
+     (* ;; "Clear whatever might be left over below the last visible line")
 
-         (* ;; "The bottom of the pane is good.  But if LASTVALID encroached into the bitmap of some of NEXTVALID and some of its descendants, those need to be redisplayed.   And the ypositions of NEXTVALID and all lines down to LASTVISIBLE have to be lowered.  ")
-
-         (* ;; "")
-
-              (CL:WHEN LASTVISIBLE                           (* ; "Smash the invisible tail")
-                  (SETLD LASTVISIBLE NEXTLINE NIL))
-              (for L YBOT inlines NEXTVALID do (SETQ YBOT (IDIFFERENCE (FGETLD L YBOT)
-                                                                 LOWER))
-                                               (if (IGEQ (FGETLD L YTOP)
-                                                         NEWTOP)
-                                                   then (SETYPOS L YBOT)
-                                                        (\TEDIT.DISPLAYLINE TEXTOBJ L PANE)
-                                                 else (SETYPOS L YBOT)))
-
-         (* ;; "Clear whatever might be left over below the last visible line")
-
-              (CL:WHEN LASTVISIBLE
-                  (BLTSHADE WHITESHADE PANE 0 0 PWIDTH (GETLD LASTVISIBLE YBOT)
-                         'REPLACE))])])
+          (CL:WHEN LASTVISIBLE
+              (BLTSHADE WHITESHADE PANE 0 0 PWIDTH (GETLD LASTVISIBLE YBOT)
+                     'REPLACE))])
 
 (\TEDIT.RAISE.LINES
-  [LAMBDA (LINE NEWTOP PANE TEXTOBJ)                         (* ; "Edited 20-Mar-2024 10:57 by rmk")
+  [LAMBDA (LINE NEWTOPY PANE TEXTOBJ)                        (* ; "Edited 13-Jun-2024 22:14 by rmk")
+                                                             (* ; "Edited 22-May-2024 09:42 by rmk")
+                                                             (* ; "Edited 27-Apr-2024 07:57 by rmk")
+                                                             (* ; "Edited 20-Mar-2024 10:57 by rmk")
                                                              (* ; "Edited 20-Jan-2024 23:14 by rmk")
                                                              (* ; "Edited  2-Jan-2024 00:31 by rmk")
                                                              (* ; "Edited 14-Dec-2023 17:20 by rmk")
@@ -2628,41 +2559,36 @@
                                                              (* ; "Edited 11-May-2023 11:34 by rmk")
                                                              (* ; "Edited 28-Apr-2023 08:51 by rmk")
 
-    (* ;; "LINE is the top line of a region in PANE that extends to the pane-bottom or text end--that is, the pane bitmap in that region correctly reflects the lines (and possibly empty space at text-end).")
-
-    (* ;; "This raises the image of that region so that its new top is at NEWTOP. It then fills in and displays lines below the region's new location that may be neeeded to fill in the pane.")
-
-    (* ;; "If PANE has been moved so that it is not entirely within the screen, then don't try to find the relevant bits, just repaint the whole window.")
+    (* ;; "LINE is the top line of a region somewhere in PANE that extends to the onscreen bottom of PANE or to text end--that is, the pane bitmap in that region correctly reflects the lines (and possibly empty space at text-end).")
 
     (TEXTOBJ! TEXTOBJ)
-    (PROG ((PREG (DSPCLIPPINGREGION NIL PANE))
-           (LTOP (GETLD LINE YTOP))
-           RAISE PWIDTH PBOTTOM LASTVISIBLE)
-          (SETQ RAISE (IDIFFERENCE NEWTOP (FGETLD LINE YTOP)))
-          (CL:UNLESS (IGREATERP RAISE 0)                     (* ; "Maybe it's not moving")
+    (PROG ((PWIDTH (fetch (REGION WIDTH) of (DSPCLIPPINGREGION NIL PANE)))
+           (VBOTTOM (\TEDIT.ONSCREEN? PANE 'BOTTOM))
+           (VLEFT (\TEDIT.ONSCREEN? PANE 'LEFT))
+           (DELTA (IDIFFERENCE NEWTOPY (FGETLD LINE YTOP)))
+           LASTVISIBLE)
+          (CL:UNLESS (IGREATERP DELTA 0)                     (* ; "Maybe it's not moving")
               (RETURN))
 
-     (* ;; "Make the YPOS of the raised lines consistent with the new positions of their images.  LASTVISIBLE is the last line that was previously visible (and whose image has been raised).  ")
+     (* ;; "Make the YPOS of the raised lines consistent with the new positions of their images.  LASTVISIBLE is the last line that was previously visible (and whose image will be raised).  ")
 
-          (SETQ PBOTTOM (fetch BOTTOM of PREG))
           (for L inlines LINE while (IGEQ (FGETLD L YBOT)
-                                          PBOTTOM) do (SETYPOS L (IPLUS RAISE (FGETLD L YBOT)))
+                                          VBOTTOM) do (SETYPOS L (IPLUS DELTA (FGETLD L YBOT)))
                                                       (SETQ LASTVISIBLE L))
 
-     (* ;; " ")
+     (* ;; "VLEFT is the visible left, the left in window coordinates of the visible region of an off-screen window.")
 
-          (CL:UNLESS (\TEDIT.OFFSCREEN.SCROLL TEXTOBJ PANE 'VERTICAL)
+     (* ;; "Lines are positioned, but images may not exist. Raise the image of LINE and all visible lines below it.")
 
-              (* ;; "Completely on screen, we can work with  screen bitmap.  But first, are we at the end of the text?  Just clear.")
+          (BITBLT PANE VLEFT VBOTTOM PANE VLEFT (IPLUS VBOTTOM DELTA)
+                 PWIDTH
+                 (IDIFFERENCE (FGETLD LINE YTOP)
+                        DELTA)
+                 'INPUT
+                 'REPLACE)
+          (CL:WHEN LASTVISIBLE
 
-              (* ;; "Lines are positioned, but images may not exist. Raise the image of LINE and all visible lines below it.")
-
-              (SETQ PWIDTH (fetch WIDTH of PREG))
-              (BITBLT PANE 0 0 PANE 0 RAISE PWIDTH LTOP 'INPUT 'REPLACE)
-
-              (* ;; "")
-
-              (* ;; "Now for the bottom of the pane.  First clear it.")
+              (* ;; "Clear any garbage left over below the (repositioned) LASTVISIBLELINE, and display new lines needed to fill the space")
 
               (BLTSHADE WHITESHADE PANE 0 0 PWIDTH (FGETLD LASTVISIBLE YBOT)
                      'REPLACE)
@@ -2671,12 +2597,16 @@
 
               (* ;; "If the last visible line in the pane (whose image is now elevated) is not the last line of the text, we build and display new lines to fill out the pane.")
 
-              (\TEDIT.LINES.BELOW LASTVISIBLE NIL PANE TEXTOBJ)
-              (RETURN))])
+              (\TEDIT.LINES.BELOW LASTVISIBLE NIL PANE TEXTOBJ NIL VBOTTOM))
+          (\TEDIT.SET.WINDOW.EXTENT TEXTOBJ PANE)
+          (RETURN LASTVISIBLE])
 
 (\TEDIT.VALID.LINES
-  [LAMBDA (TEXTOBJ FIRSTCHANGEDCHNO NCHARSCHANGED REASON)    (* ; "Edited 20-Mar-2024 06:46 by rmk")
-                                                             (* ; "Edited 15-Mar-2024 19:44 by rmk")
+  [LAMBDA (FIRSTCHANGEDCHNO NCHARSCHANGED REASON TSTREAM)    (* ; "Edited 15-Jun-2024 17:32 by rmk")
+                                                             (* ; "Edited 12-Jun-2024 23:59 by rmk")
+                                                             (* ; "Edited 23-May-2024 12:48 by rmk")
+                                                             (* ; "Edited 20-Apr-2024 22:11 by rmk")
+                                                             (* ; "Edited 20-Mar-2024 06:46 by rmk")
                                                              (* ; "Edited 22-Feb-2024 01:05 by rmk")
                                                              (* ; "Edited  3-Nov-2023 12:07 by rmk")
                                                              (* ; "Edited 14-Jun-2023 15:55 by rmk")
@@ -2716,84 +2646,126 @@
 
     (* ;; "Note that this is mostly an optimization to avoid unnecessary reformatting and redisplaying of still-valid lines in favor of bitbltting a block of their currently visible images.  Smashing all lines to NIL and refilling each pane would also give the correct behavior, but slower.  Intermediate would be smashing all lines below the last valid.")
 
-    (* ;; "")
+    (LET ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM)))
+         (if (IGREATERP (FGETTOBJ TEXTOBJ TEXTLEN)
+                    0)
+             then [for PANE PLINES FIRSTCHANGEDLINE LASTCHANGEDLINE LASTVALIDLINE NEXTVALIDLINE
+                       (LASTCHANGEDCHNO _ (SUB1 (IPLUS FIRSTCHANGEDCHNO NCHARSCHANGED))) inpanes
+                                                                                         TEXTOBJ
+                     eachtime (SETQ PLINES (\DTEST (fetch (TEXTWINDOW PLINES) of PANE)
+                                                  'LINEDESCRIPTOR))
+                           (SETQ LASTVALIDLINE NIL)
+                           (SETQ NEXTVALIDLINE NIL)
+                     collect [SETQ FIRSTCHANGEDLINE
+                              (find L inlines (FGETLD PLINES NEXTLINE)
+                                 suchthat 
 
-    (for PANE PLINES FIRSTCHANGEDLINE LASTCHANGEDLINE LASTVALIDLINE NEXTVALIDLINE
-         (LASTCHANGEDCHNO _ (SUB1 (IPLUS FIRSTCHANGEDCHNO NCHARSCHANGED))) inpanes TEXTOBJ
-       eachtime (SETQ PLINES (\DTEST (fetch (TEXTWINDOW PLINES) of PANE)
-                                    'LINEDESCRIPTOR))
-             (SETQ LASTVALIDLINE PLINES)
-             (SETQ NEXTVALIDLINE NIL)
-       collect [SETQ FIRSTCHANGEDLINE (find L inlines (FGETLD PLINES NEXTLINE)
-                                         suchthat 
-
-                                               (* ;; 
+                                       (* ;; 
                       "Either within a line or immediately after a line that did not end with an EOL")
 
-                                               (OR (LINESELECTEDP L FIRSTCHANGEDCHNO LASTCHANGEDCHNO)
-                                                   (AND (NOT (FGETLD L FORCED-END))
-                                                        (IEQP FIRSTCHANGEDCHNO
-                                                              (ADD1 (FGETLD L LCHARLIM]
-             [SETQ LASTCHANGEDLINE (find L inlines (OR FIRSTCHANGEDLINE (FGETLD PLINES NEXTLINE))
-                                      suchthat (OR (WITHINLINEP LASTCHANGEDCHNO L)
-                                                   (AND (NOT (FGETLD L FORCED-END))
-                                                        (IEQP LASTCHANGEDCHNO (ADD1 (FGETLD L 
-                                                                                           LCHARLIM]
-             (CL:WHEN (OR FIRSTCHANGEDLINE LASTCHANGEDLINE)  (* ; 
-                                                             "The change is visible in this pane.  ")
+                                       (OR (LINESELECTEDP L FIRSTCHANGEDCHNO LASTCHANGEDCHNO)
+                                           (AND (NOT (FGETLD L FORCED-END))
+                                                (IEQP FIRSTCHANGEDCHNO (ADD1 (FGETLD L LCHARLIM]
+                           (CL:WHEN FIRSTCHANGEDLINE         (* ; "Change is visible in this PANE")
+                               [SETQ LASTCHANGEDLINE
+                                (find L inlines (OR FIRSTCHANGEDLINE (FGETLD PLINES NEXTLINE))
+                                   suchthat (OR (WITHINLINEP LASTCHANGEDCHNO L)
+                                                (AND (NOT (FGETLD L FORCED-END))
+                                                     (IEQP LASTCHANGEDCHNO (ADD1 (FGETLD L LCHARLIM]
+                               (CL:WHEN LASTCHANGEDLINE
 
-                 (* ;; "Figure out the LASTVALIDLINE--somewhere before the FIRSTCHANGEDLINE.  Could be PLINES as initialized above")
+                                   (* ;; 
+     "Last changed line is visible, its changes may cause character to shift to or from lower lines.")
 
-                 (CL:WHEN FIRSTCHANGEDLINE
+                                   (SETQ NEXTVALIDLINE (\TEDIT.NEXTVALIDLINE LASTCHANGEDLINE TSTREAM)
+                                    ))
+                               (CL:WHEN (AND NEXTVALIDLINE (NEQ REASON 'CHANGED))
 
-                     (* ;; "First changed line is visible.  Rejustification could propagate changes backwards until a forced-end, so that's the clear last valid. That may overshoot and cause to much action on redisplaying.  The only way we can tighten up is to then format lines forward from the break, stopping before the first line whose LCHARLIM would change.")
+                                 (* ;; "If the modification added or substracted to the number of characters, translate the character positions of the still-valid lines that are visible later than the change.  ")
 
-                     (SETQ LASTVALIDLINE (find L backlines (FGETLD FIRSTCHANGEDLINE PREVLINE)
-                                            suchthat (FGETLD L FORCED-END)))
-                     (CL:WHEN (AND (EQ LASTVALIDLINE PLINES)
-                                   (IGREATERP (FGETLD FIRSTCHANGEDLINE LCHAR1)
-                                          1))
+                                   (for L (DELTA _ (SELECTQ REASON
+                                                       (INSERTION NCHARSCHANGED)
+                                                       (DELETION (IMINUS NCHARSCHANGED))
+                                                       (SHOULDNT "BAD REASONS FOR VALID LINES")))
+                                      inlines NEXTVALIDLINE do (add (FGETLD L LCHAR1)
+                                                                    DELTA)
+                                                               (add (FGETLD L LCHARLIM)
+                                                                    DELTA)))
 
-                         (* ;; "We ran back to the top of the pane without finding a forced-end. If it's not the beginning of the document, we need to insert a new line with the proper LCHARLIM and YBOT just above the pane.  ")
+                               (* ;; 
+                       "First changed line is visible, its changes may cause changes in prior lines.")
 
-                         [SETQ LASTVALIDLINE (CADR (\TEDIT.LINES.ABOVE TEXTOBJ
-                                                          (SUB1 (FGETLD FIRSTCHANGEDLINE LCHAR1))
-                                                          (FGETLD FIRSTCHANGEDLINE YTOP]
-                         (\TEDIT.INSERTLINE LASTVALIDLINE PLINES T)))
+                               (SETQ LASTVALIDLINE (\TEDIT.LASTVALIDLINE FIRSTCHANGEDLINE 
+                                                          FIRSTCHANGEDCHNO PANE TSTREAM))
 
-                 (* ;; "")
+                               (* ;; "")
 
-                 (* ;; "The next valid must be somewhere after the last changed line, and after a stable line break. But we will run out of lines if there is no visible paragraph break: the change reached the bottom, or the paragraph break after the change is below the pane, or the document ended.  In that case the last line in the chain is not valid and presumably the gap filler will fill to the end of the window.   ")
+                               (CL:WHEN LASTVALIDLINE
+                                   (SETLD LASTVALIDLINE NEXTLINE NIL)
+                                                             (* ; "Chop off the useless lines")
+                                   (CONS LASTVALIDLINE NEXTVALIDLINE)))]
+           else (for P inpanes TEXTOBJ collect (CONS (PLINES P])
 
-                 [SETQ NEXTVALIDLINE (for L inlines LASTCHANGEDLINE
-                                        when (OR (FGETLD L FORCED-END)
-                                                 (GETLD L LSTLN))
-                                        do (RETURN (FGETLD L NEXTLINE]
+(\TEDIT.LASTVALIDLINE
+  [LAMBDA (FIRSTCHANGEDLINE FIRSTCHANGEDCHNO PANE TSTREAM)   (* ; "Edited 16-Jun-2024 08:27 by rmk")
+                                                             (* ; "Edited 13-Jun-2024 22:09 by rmk")
+                                                             (* ; "Edited 25-May-2024 00:28 by rmk")
+                                                             (* ; "Edited 23-May-2024 12:47 by rmk")
+                                                             (* ; "Edited 18-May-2024 10:13 by rmk")
 
-                 (* ;; "Translate the character positions of the still-valid lines that are visible later than the change.  ")
+    (* ;; "We hope to return an existing line in PANE that is impervious to the change at FIRSTCHARCHANGECHNO.  This would be the impervious line closest to FIRSTCHANGEDLINE, usually the immediately preceding line.  That line is valid: it and lines above it do not need reformatting or redisplay. But if PANE does not contain an impervious line, and we are not at the beginning of the document, we have to construct lines above PANE until we get to an impervious line, so that we can format forwards.")
 
-                 (for L DELTA inlines NEXTVALIDLINE first (SETQ DELTA (SELECTQ REASON
-                                                                          (INSERTION NCHARSCHANGED)
-                                                                          (DELETION (IMINUS 
-                                                                                        NCHARSCHANGED
-                                                                                           ))
-                                                                          (APPEARANCE (RETURN))
-                                                                          (SHOULDNT 
-                                                                        "BAD REASONS FOR VALID LINES"
-                                                                                 )))
-                    do (add (FGETLD L LCHAR1)
-                            DELTA)
-                       (add (FGETLD L LCHARLIM)
-                            DELTA))
+    (* ;; "A line L is impervious to a change in L+1 if it has a forced end, or if L has at least one separator (space, tab) prior to a change point.  The change point is FIRSTCHANGEDCHNO for the first line.  If we have to go to earlier lines, then any separator anywhere on the line (at or before LCHARLIM) will stop the back-propagation.")
 
-                 (* ;; "")
+    (LET* ((PLINES (PLINES PANE))
+           (FIRSTPANECHAR (AND (FGETLD PLINES NEXTLINE)
+                               (FGETLD (FGETLD PLINES NEXTLINE)
+                                      LCHAR1)))
+           PREV)
+          (if (bind (L _ FIRSTCHANGEDLINE)
+                    (LIMCHAR _ (SUB1 FIRSTCHANGEDCHNO)) while (SETQ PREV (FGETLD L PREVLINE))
+                 do 
+                    (* ;; "The previous line is valid if its ending was forced, or if L has at least one space/tab earlier then the limit.  Note that the PLINES dummy is always force, it stops the iteration..")
 
-                 (CL:WHEN LASTVALIDLINE
-                     (SETLD LASTVALIDLINE NEXTLINE NIL)      (* ; "Chop off the useless lines")
-                     (CONS LASTVALIDLINE NEXTVALIDLINE)))])
+                    (CL:WHEN (FGETLD PREV FORCED-END)
+                        (RETURN (if (NEQ PLINES PREV)
+                                    then PREV
+                                  elseif (EQ 1 FIRSTPANECHAR)
+                                    then                     (* ; "PANE is at the top")
+                                         PLINES)))
+                    (\TEDIT.TEXTSETFILEPTR TSTREAM (SUB1 (FGETLD L LCHAR1)))
+                    (CL:WHEN [find I from 1 to (IDIFFERENCE LIMCHAR (FGETLD L LCHAR1))
+                                suchthat (MEMB (BIN TSTREAM)
+                                               (CHARCODE (SPACE TAB]
+                           (RETURN PREV))
+                    (SETQ L PREV)
+                    (SETQ LIMCHAR (FGETLD L LCHARLIM)) repeatwhile L)
+            else 
+                 (* ;; "None of the existing lines above FIRSTCHANGEDLINE are valid.  We return a valid line that is positioned just above PANE such that everything past its LCHARLIM is valid.   That line has not current bitmap and will not be displayed, but it signals where the gap begins.")
+
+                 (* ;; 
+                 "Note that that line is not linked into the chain, PLINES doesn't know about it.")
+
+                 (* ;; "We could go forward from the CAR or backwards from the CADR to find the valid line just above the pane. Maybe fewer lines backwards, if we're working at the bottom of a paragraph?")
+
+                 (find L (PTOP _ (fetch TOP of (DSPCLIPPINGREGION NIL PANE)))
+                    backlines (CADR (\TEDIT.LINES.ABOVE TSTREAM (SUB1 FIRSTPANECHAR)
+                                           (FGETLD FIRSTCHANGEDLINE YTOP)))
+                    suchthat (IGREATERP (FGETLD L YBOT)
+                                    PTOP])
+
+(\TEDIT.NEXTVALIDLINE
+  [LAMBDA (LASTCHANGEDLINE TSTREAM)                          (* ; "Edited 12-Jun-2024 23:56 by rmk")
+
+    (* ;; "The line after a forced end is valid.  But maybe we can figure out how to stop sooner?")
+
+    (for L inlines (FGETLD LASTCHANGEDLINE NEXTLINE) when (OR (FGETLD L FORCED-END)
+                                                              (FGETLD L LSTLN))
+       do (RETURN (FGETLD L NEXTLINE])
 
 (\TEDIT.CLEARPANE.BELOW.LINE
-  [LAMBDA (LINE PANE TEXTOBJ)                                (* ; "Edited 20-Nov-2023 14:02 by rmk")
+  [LAMBDA (LINE PANE TEXTOBJ)                                (* ; "Edited 13-Jun-2024 21:51 by rmk")
+                                                             (* ; "Edited 20-Nov-2023 14:02 by rmk")
                                                              (* ; "Edited 22-Sep-2023 20:33 by rmk")
                                                              (* ; "Edited 25-Apr-2023 23:06 by rmk")
                                                              (* ; "Edited 30-May-91 15:59 by jds")
@@ -2807,14 +2779,15 @@
         (* ;; "Clears the  pane below LINE to white.")
 
         (LET ((PREG (DSPCLIPPINGREGION NIL PANE)))
-             (BLTSHADE WHITESHADE PANE 0 (fetch BOTTOM of PREG)
-                    (fetch WIDTH of PREG)
+             (BLTSHADE WHITESHADE PANE 0 (fetch (REGION BOTTOM) of PREG)
+                    (fetch (REGION WIDTH) of PREG)
                     (IDIFFERENCE (GETLD LINE YBOT)
-                           (fetch BOTTOM of PREG))
+                           (fetch (REGION BOTTOM) of PREG))
                     'REPLACE)))])
 
 (\TEDIT.INSERTLINE
-  [LAMBDA (NEWLINE OLDLINE AFTER)                            (* ; "Edited 31-May-2023 00:18 by rmk")
+  [LAMBDA (NEWLINE OLDLINE AFTER)                            (* ; "Edited 17-May-2024 22:49 by rmk")
+                                                             (* ; "Edited 31-May-2023 00:18 by rmk")
                                                              (* ; "Edited 26-Feb-2023 22:36 by rmk")
                                                              (* ; "Edited 24-Feb-2023 23:12 by rmk")
                                                              (* ; "Edited 23-Feb-2023 22:41 by rmk")
@@ -2834,83 +2807,57 @@
                 (CL:WHEN LINE (SETLD LINE NEXTLINE NEWLINE))
                 (SETLD NEWLINE PREVLINE LINE)
                 (SETLD NEWLINE NEXTLINE OLDLINE)
-                (SETLD OLDLINE PREVLINE NEWLINE])
+                (SETLD OLDLINE PREVLINE NEWLINE))
+         NEWLINE])
 
-(\TEDIT.INSURE.TRAILING.LINE
-  [LAMBDA (TEXTOBJ LASTLINE)                                 (* ; "Edited 15-Mar-2024 19:31 by rmk")
+(\TEDIT.INSURE.NEXTLINE
+  [LAMBDA (TEXTOBJ PREVLINE)                                 (* ; "Edited 15-Jun-2024 15:32 by rmk")
+                                                             (* ; "Edited 13-Jun-2024 18:02 by rmk")
+                                                             (* ; "Edited 21-May-2024 09:49 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 19:31 by rmk")
                                                              (* ; "Edited 16-Dec-2023 00:12 by rmk")
                                                              (* ; "Edited 15-Jul-2023 13:53 by rmk")
                                                              (* ; "Edited  8-May-2023 22:00 by rmk")
                                                              (* ; "Edited  5-May-2023 10:54 by rmk")
 
-    (* ;; "Fabricates a final line to insure that there is a place for the caret to blink after the last EOL of the text.  Something for \FIXSEL to move to.")
+    (* ;; "PREVLINE may not have a next line if it is the last line of a pane or the last line of the document.  In either case, this creates and installs a line that would be appropriate for scrolling and for \TEDIT.FIXSEL to move to after a pane-bottom EOL.")
 
-    (* ;; "\TEDIT.FORMATLINE may be overkill--maybe we really want to construct exactly what we want.  But \TEDIT.FORMATLINE does get the LHEIGHT.")
-
-    (CL:WHEN (AND (GETLD LASTLINE FORCED-END)
-                  (IEQP (FGETLD LASTLINE LCHARLIM)
-                        (FGETTOBJ TEXTOBJ TEXTLEN)))
-        (LET [(LINE (\TEDIT.FORMATLINE.EMPTY TEXTOBJ (ADD1 (FGETTOBJ TEXTOBJ TEXTLEN]
-             (SETYPOS LINE (IDIFFERENCE (FGETLD LASTLINE YBOT)
-                                  (FGETLD LINE LHEIGHT)))
-             (LINKLD LASTLINE LINE)
-             LINE))])
-
-(\TEDIT.MARK.LINES.DIRTY
-  [LAMBDA (TEXTOBJ FIRSTCHAR LASTCHAR)                       (* ; "Edited 11-Dec-2023 10:43 by rmk")
-                                                             (* ; "Edited  2-Dec-2023 23:07 by rmk")
-                                                             (* ; "Edited  3-Nov-2023 12:07 by rmk")
-                                                             (* ; "Edited 28-May-2023 14:05 by rmk")
-                                                             (* ; "Edited 20-May-2023 16:44 by rmk")
-                                                             (* ; "Edited  7-Apr-2023 19:25 by rmk")
-                                                             (* ; "Edited 30-May-91 16:05 by jds")
-
-    (* ;; "Mark as dirty the lines that intersect the range FIRSTCHAR to LASTCHAR  inclusive, and assert that all panes need to be updated.")
-
-    [if (type? SELECTION FIRSTCHAR)
-        then (SETQ LASTCHAR (SUB1 (GETSEL FIRSTCHAR CHLIM)))
-             (SETQ FIRSTCHAR (GETSEL FIRSTCHAR CH#))
-      elseif (type? SELPIECES FIRSTCHAR)
-        then (SETQ LASTCHAR (ffetch (SELPIECES SPLASTCHAR) of FIRSTCHAR))
-             (SETQ FIRSTCHAR (ffetch (SELPIECES SPFIRSTCHAR) of FIRSTCHAR))
-      else (SETQ FIRSTCHAR (IMIN FIRSTCHAR (TEXTLEN TEXTOBJ)))
-           (SETQ LASTCHAR (CL:IF (EQ LASTCHAR -1)
-                              (TEXTLEN TEXTOBJ TEXTOBJ)
-                              (IMIN LASTCHAR (TEXTLEN TEXTOBJ)))]
-    (for PANE inpanes TEXTOBJ do (for LINES inlines (find L inlines (fetch (TEXTWINDOW PLINES)
-                                                                       of PANE)
-                                                       suchthat 
-
-                                                             (* ;; 
-                                                             "The first line ending after FIRSTCHAR")
-
-                                                             (IGEQ (FGETLD L LCHARLIM)
-                                                                   FIRSTCHAR))
-                                    do (FSETTOBJ TEXTOBJ TXTNEEDSUPDATE T)
-                                       (for L inlines LINES while (ILEQ (FGETLD L LCHAR1)
-                                                                        LASTCHAR)
-                                          do 
-                                             (* ;; "All the lines that begin before LASTCHAR")
-
-                                             (FSETLD L LDIRTY T))
-                                       (RETURN])
+    (OR (FGETLD PREVLINE NEXTLINE)
+        (LET ((NEXTCHAR1 (ADD1 (FGETLD PREVLINE LCHARLIM)))
+              LINE)
+             [if (IGEQ NEXTCHAR1 (FGETTOBJ TEXTOBJ TEXTLEN))
+                 then (SETQ LINE (\TEDIT.FORMATLINE.EMPTY TEXTOBJ NEXTCHAR1))
+                      (CL:UNLESS (FGETLD PREVLINE LDUMMY)
+                          (FSETLD LINE LTRUEASCENT (FGETLD PREVLINE LTRUEASCENT))
+                          (FSETLD LINE LTRUEDESCENT (FGETLD PREVLINE LTRUEDESCENT))
+                          (FSETLD LINE ASCENT (FGETLD PREVLINE ASCENT))
+                          (FSETLD LINE DESCENT (FGETLD PREVLINE DESCENT)))
+                      (FSETLD LINE LHEIGHT (IPLUS (FGETLD LINE ASCENT)
+                                                  (FGETLD LINE DESCENT)))
+                      (SETYPOS LINE (IDIFFERENCE (FGETLD PREVLINE YBOT)
+                                           (FGETLD LINE LHEIGHT)))
+               else (SETQ LINE (\TEDIT.FORMATLINE (FGETTOBJ TEXTOBJ STREAMHINT)
+                                      NEXTCHAR1))
+                    (SETYPOS LINE (IDIFFERENCE (FGETLD PREVLINE YBOT)
+                                         (FGETLD LINE LHEIGHT]
+             (LINKLD PREVLINE LINE)
+             LINE])
 
 (\TEDIT.LINE.BOTTOM
-  [LAMBDA (LINE)                                             (* ; "Edited  4-Dec-2023 13:59 by rmk")
+  [LAMBDA (PREVLINE LINE)                                    (* ; "Edited 16-Jun-2024 23:43 by rmk")
+                                                             (* ; "Edited  4-Dec-2023 13:59 by rmk")
                                                              (* ; "Edited 25-Apr-2023 23:00 by rmk")
                                                              (* ; "Edited 23-Apr-2023 00:05 by rmk")
                                                              (* ; "Edited 24-Sep-87 10:00 by jds")
 
-    (* ;; "Computes LINE's YBOT value relative to the Y position of the line before.  Takes into account the (undocumented) BASETOBASE leading, as well as paragraph leadings.")
+    (* ;; "Computes LINE's YBOT value relative to the Y position of PREVLINE.  Takes into account the (undocumented) BASETOBASE leading, as well as paragraph leadings.")
 
     (* ;; "BASETOBASE leading differs from normal LINELEADING in that the distance between the baselines of adjacent within-paragraph lines should be the given constant, whether or not the previous line has a non standard descent (a subscript) or the next line has a nonstandard ascent.")
 
     (* ;; "We can't fetch the YBASE of PREV directly, since we")
 
     (\DTEST LINE 'LINEDESCRIPTOR)
-    (LET* ((PREV (\DTEST (FGETLD LINE PREVLINE)
-                        'LINEDESCRIPTOR))
-           (PREVYBOT (FGETLD PREV YBOT))
+    (LET* ((PREVYBOT (FGETLD PREVLINE YBOT))
            (FMTSPEC (GETLD LINE LFMTSPEC))
            (BASETOBASE (fetch (FMTSPEC FMTBASETOBASE) of FMTSPEC))
            NEWYBOT)
@@ -2925,23 +2872,24 @@
                                  (* ;; "This is the first line of a new paragraph, and the previous line must therefore have been a last.  Both paragraph leadings apply in the gap, but the line leading is irrelevant.")
 
                                  (IDIFFERENCE PREVYBOT (IPLUS (fetch (FMTSPEC LEADAFTER)
-                                                                 of (FGETLD PREV LFMTSPEC))
+                                                                 of (FGETLD PREVLINE LFMTSPEC))
                                                               (fetch (FMTSPEC LEADBEFORE)
                                                                  of FMTSPEC)
                                                               (FGETLD LINE LTRUEHEIGHT)))
                           else 
                                (* ;; "Between lines inside a paragraph, make the baselines BASETOBASE apart.  Oldcode subtracted paragraph leading")
 
-                               (IDIFFERENCE (IDIFFERENCE (FGETLD PREV YBASE)
+                               (IDIFFERENCE (IDIFFERENCE (FGETLD PREVLINE YBASE)
                                                    BASETOBASE)
                                       (FGETLD LINE DESCENT]
           (SETYPOS LINE NEWYBOT)
           NEWYBOT])
 
 (\TEDIT.NCONC.LINES
-  [LAMBDA (HEADLINE TAILLINE HEADYTOP LASTBOTTOM)            (* ; "Edited  1-Dec-2023 11:45 by rmk")
+  [LAMBDA (HEADLINE TAILLINE HEADYTOP LASTBOTTOM)            (* ; "Edited  8-Apr-2024 22:43 by rmk")
+                                                             (* ; "Edited  1-Dec-2023 11:45 by rmk")
 
-    (* ;; "The lines headed by HEADLINE and TAILLINE are linked in a single chain, and their Y positions are adjusted so that the top of HEADLINE is at HEADYTOP (if given) and it and all other lines are positioned relative to that, based on their LHEIGHTs.  If LASTBOTTOM is provided, then lines below it will be chopped off.  Returns the last line in the chain.")
+    (* ;; "Links the lines headed by HEADLINE and TAILLINE into a single chain, and their Y positions are adjusted so that the top of HEADLINE is at HEADYTOP (if given) and it and all other lines are positioned relative to that, based on their LHEIGHTs.  If LASTBOTTOM is provided, then lines below it will be chopped off.  Returns the last line in the chain.")
 
     (CL:WHEN HEADLINE
         (CL:UNLESS HEADYTOP
@@ -2966,22 +2914,21 @@
                                                          (SETQ TAILLINE NIL))))])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (24497 25906 (\TEDIT.LINEDESCRIPTOR.DEFPRINT 24507 . 25904)) (33264 111915 (
-\TEDIT.FORMATLINE 33274 . 68334) (\TEDIT.FORMATLINE.SETUP 68336 . 71727) (\TEDIT.FORMATLINE.HORIZONTAL
- 71729 . 76125) (\TEDIT.FORMATLINE.VERTICAL 76127 . 78330) (\TEDIT.FORMATLINE.JUSTIFY 78332 . 84272) (
-\TEDIT.FORMATLINE.TABS 84274 . 91761) (\TEDIT.FORMATLINE.SCALETABS 91763 . 92766) (
-\TEDIT.FORMATLINE.PURGE.SPACES 92768 . 94078) (\TEDIT.FORMATLINE.EMPTY 94080 . 98910) (
-\TEDIT.FORMATLINE.UPDATELOOKS 98912 . 106178) (\TEDIT.FORMATLINE.LASTLEGAL 106180 . 109662) (
-\TEDIT.LINES.ABOVE 109664 . 111913)) (112032 114453 (\CLEARTHISLINE 112042 . 112711) (\TLVALIDATE 
-112713 . 114451)) (114647 134704 (\TEDIT.DISPLAYLINE 114657 . 126997) (\TEDIT.DISPLAYLINE.TABS 126999
- . 129622) (\TEDIT.LINECACHE 129624 . 130352) (\TEDIT.CREATE.LINECACHE 130354 . 131190) (
-\TEDIT.BLTCHAR 131192 . 133819) (\TEDIT.DIACRITIC.SHIFT 133821 . 134702)) (135319 189027 (
-\TEDIT.UPDATE.SCREEN 135329 . 137153) (\TEDIT.BACKFORMAT 137155 . 139197) (\TEDIT.PREVIOUS.LINEBREAK 
-139199 . 141502) (\TEDIT.FILLPANE 141504 . 144053) (\TEDIT.UPDATE.LINES 144055 . 149043) (
-\TEDIT.CREATEPLINE 149045 . 150888) (\TEDIT.FIND.DIRTYCHARS 150890 . 152902) (\TEDIT.LINES.BELOW 
-152904 . 156386) (\FORMAT.GAP.LINES 156388 . 160379) (\TEDIT.LOWER.LINES 160381 . 164748) (
-\TEDIT.RAISE.LINES 164750 . 168177) (\TEDIT.VALID.LINES 168179 . 177573) (\TEDIT.CLEARPANE.BELOW.LINE 
-177575 . 178893) (\TEDIT.INSERTLINE 178895 . 180153) (\TEDIT.INSURE.TRAILING.LINE 180155 . 181470) (
-\TEDIT.MARK.LINES.DIRTY 181472 . 184183) (\TEDIT.LINE.BOTTOM 184185 . 187025) (\TEDIT.NCONC.LINES 
-187027 . 189025)))))
+  (FILEMAP (NIL (24648 26045 (\TEDIT.LINEDESCRIPTOR.DEFPRINT 24658 . 26043)) (33403 113393 (
+\TEDIT.FORMATLINE 33413 . 69270) (\TEDIT.FORMATLINE.SETUP 69272 . 72663) (\TEDIT.FORMATLINE.HORIZONTAL
+ 72665 . 77061) (\TEDIT.FORMATLINE.VERTICAL 77063 . 79266) (\TEDIT.FORMATLINE.JUSTIFY 79268 . 85208) (
+\TEDIT.FORMATLINE.TABS 85210 . 92697) (\TEDIT.FORMATLINE.SCALETABS 92699 . 93702) (
+\TEDIT.FORMATLINE.PURGE.SPACES 93704 . 95014) (\TEDIT.FORMATLINE.EMPTY 95016 . 99765) (
+\TEDIT.FORMATLINE.UPDATELOOKS 99767 . 107242) (\TEDIT.FORMATLINE.LASTLEGAL 107244 . 110784) (
+\TEDIT.LINES.ABOVE 110786 . 113391)) (113510 115931 (\CLEARTHISLINE 113520 . 114189) (\TLVALIDATE 
+114191 . 115929)) (116125 136412 (\TEDIT.DISPLAYLINE 116135 . 128705) (\TEDIT.DISPLAYLINE.TABS 128707
+ . 131330) (\TEDIT.LINECACHE 131332 . 132060) (\TEDIT.CREATE.LINECACHE 132062 . 132898) (
+\TEDIT.BLTCHAR 132900 . 135527) (\TEDIT.DIACRITIC.SHIFT 135529 . 136410)) (137027 187511 (
+\TEDIT.BACKFORMAT 137037 . 139258) (\TEDIT.PREVIOUS.LINEBREAK 139260 . 141983) (\TEDIT.UPDATE.LINES 
+141985 . 149323) (\TEDIT.CREATEPLINE 149325 . 151507) (\TEDIT.LINES.BELOW 151509 . 156828) (
+\TEDIT.LOWER.LINES 156830 . 161065) (\TEDIT.RAISE.LINES 161067 . 164626) (\TEDIT.VALID.LINES 164628 . 
+172916) (\TEDIT.LASTVALIDLINE 172918 . 176815) (\TEDIT.NEXTVALIDLINE 176817 . 177276) (
+\TEDIT.CLEARPANE.BELOW.LINE 177278 . 178732) (\TEDIT.INSERTLINE 178734 . 180120) (
+\TEDIT.INSURE.NEXTLINE 180122 . 182537) (\TEDIT.LINE.BOTTOM 182539 . 185403) (\TEDIT.NCONC.LINES 
+185405 . 187509)))))
 STOP

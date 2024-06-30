@@ -3,71 +3,65 @@ HCFILES writes in {MEDLEYDIR} but it should write in something like (SRCDIR)
 
 # setup
 
- github pages are maintained in the 'src' repository as a forked repo
- If you don't have a clone of src: 
-```
-   gh repo clone interlisp/src # make one
-   cd src                      # all other commands 
-```
-the first time once you've cloned, point the 'src' clone 
-```
-   gh remote add upstream https://github.com/interlisp/medley
+## Remove extraneous files
+
+There are lots of ways to get there but basically set up the execution environment with everything clean but notecards loops, test are copied in. If you don't make fresh, at least 'git clean'.
 
 ```
-now update src repository to match 'medley'
-Run these in the 'src' repository!
+gh repo clone interlisp/medley
+gh repo clone interlisp/notecards
+gh repo clone interlisp/loops
+gh repo clone interlisp/test
 
-```
-   git fetch upstream                # pull down remote branches
-   git checkout master               # make sure you're in master
-   git rebase upstream/master        # update src's master
-                                      # to latest medley's master
-   git push -f origin master          # push back go sfc
+cp -r notecards loops test medley
+rm -rf notecards/.git loops/.git test/.git
 ```
 
-# Run Medly to create PDFs.
+# making the .pdfs and index.html files
 
-Start with the apps sysout to spare yourself package problems
-In an Interlisp exec:
+## best start with a fresh loadup
 ```
-  (FILESLOAD PDFSTREAM GITFNS MEDLEY-UTILS)
-  (HCFILES)
-  (MAKE-INDEX-HTMLS)
-```
-check out that it looks right if you point your browser the index/index.hrml at the top level
-
-# deploying
-
-* find the current release tags
-Not sure how to do that.
-
-```
-   wget -l 1 https://github.com/interlisp/medley/releases/latest
-```
-will retrieve a 3xx redirect from the web server;
-But all you need is the name, not the web page.
-anyway, assuming the release is medley-YYMMDD-xxxxxxx. 
-
-put release name in variable
-```
-  export release=medley-240420-1234567
-```
-## make a new branch
-```
-   git checkout -b pages-$release
-```
-*temporarily* change .gitignore to allow checkin of pdfs and index.html
-```
-cp .gitignore /tmp/save$release
-cp .gitignore.for.pages .gitignore
-```
-Now you can push this to the github-pages
-```
-	git add .
-	git commit -m "rerun making ghpages and index"
-	git push
+./scripts/loadup-all.sh
 ```
 
+# Now run in Medley "apps" loadup 
+```
+  ./medley -a &
+```
+and enter the following to make the PDFs and the index.html files that links them.
 
+```
+(DRIBBLE "medley/loadups/hcfiles.dribble")
 
+(FILESLOAD MEDLEY-UTILS PDFSTREAM GITFNS)
+
+(SETQ NO-HELP NIL)
+ADVISE(HELP :BEFORE (IF NO-HELP THEN ( (ERROR MESS1 MESS2)))
+    (LET ((NO-HELP T)) (DECLARE (SPECIAL NO-HELP)) (HCFILES)))
+
+(MAKE-INDEX-HTML)
+```
+# Deploying
+
+The trick is to take a repository based on the master branch of medley and produce a gh-pages branch in the Interlisp/src reposiory.
+
+```
+git remote set-url --push https://github.com/Interlisp/src
+git branch -D gh-pages  ## if necessary
+git checkout -b gh-pages ## make the current directory content the same
+
+## make sure the .gitignore DOESN'T ignore .pdf and index.html files
+
+git add .
+git commit -m "add created pdf's and index.html's"
+git push --force
+
+# Put it all back
+
+after you've done this, you can clean up (from the medley folder):
+```
+find . -iname "*.pdf" -exec rm {} \;
+git remote set-url --push https://github.com/Interlisp/medley
+rm -rf loops notecards test
+```
 

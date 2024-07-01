@@ -28,7 +28,7 @@ main() {
              --noscroll                                          \
              --logindir "${logindir}"                            \
              --greet "${cmfile}"                                 \
-             --full
+             --apps
 }
 
 

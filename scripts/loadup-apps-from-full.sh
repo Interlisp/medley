@@ -37,7 +37,7 @@ main() {
 
 	(PROGN
 	   (IL:MEDLEY-INIT-VARS 'IL:GREET)
-	   (IL:DRIBBLE (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /apps.dribble))))
+	   (IL:DRIBBLE (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /apps.dribble))) T)
 	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE ROOMSDIR))(QUOTE /ROOMS)) 'IL:SYSLOAD)
 	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE NOTECARDSDIR))(QUOTE |/system/NOTECARDS.LCOM|)) 'IL:SYSLOAD)
 	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE CLOSDIR))(QUOTE /DEFSYS.DFASL)) 'IL:SYSLOAD)
@@ -62,6 +62,24 @@ main() {
 
 	"
 	EOF
+
+    if [ -f $(which git) ];
+    then
+      if [ -x $(which git) ];
+      then
+        # These do NOT indicate if there are any modified files!
+        LOADUP_ROOMS_COMMIT_ID=$(git -C "${ROOMSDIR}" rev-parse --short HEAD)
+        LOADUP_CLOS_COMMIT_ID=$(git -C "${CLOSDIR}" rev-parse --short HEAD)
+        LOADUP_NOTECARDS_COMMIT_ID=$(git -C "${NOTECARDSDIR}" rev-parse --short HEAD)
+      fi
+    fi
+
+    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/apps.dribble"
+    echo "The MEDLEY git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
+    echo "The ROOMS git commit ID is: ${LOADUP_ROOMS_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
+    echo "The CLOS git commit ID is: ${LOADUP_CLOS_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
+    echo "The NOTECARDS git commit ID is: ${LOADUP_NOTECARDS_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
+    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/apps.dribble"
 
 	run_medley "${LOADUP_WORKDIR}/full.sysout"
 

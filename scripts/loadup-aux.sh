@@ -21,11 +21,16 @@ main() {
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.dribble)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash-tmp)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash)))
+        NIL NIL T
 	  )
 	  (IL:LOGOUT T)
 	)
 	"
 	EOF
+
+    echo "This whereis.hash was made $(date)" > "${LOADUP_WORKDIR}/whereis.dribble"
+    echo "The git commit ID of the loadup SYSOUT is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/whereis.dribble"
+    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/whereis.dribble"
 
 	run_medley "${LOADUP_WORKDIR}/full.sysout"
 

@@ -25,12 +25,17 @@ main() {
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.dribble)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.database)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.sysout)))
+        T
 	  )
 	  (IL:LOGOUT T)
 	)
 
 	"
 	EOF
+
+    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/fuller.dribble"
+    echo "The git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/fuller.dribble"
+    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/fuller.dribble"
 
 	run_medley "${SYSOUT}"
 

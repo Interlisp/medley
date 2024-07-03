@@ -51,6 +51,15 @@ then
 fi
 
 
+if [ -f $(which git) ];
+then
+  if [ -x $(which git) ];
+  then
+    # This does NOT indicate if there are any modified files!
+    LOADUP_COMMIT_ID=$(git -C "${LOADUP_SOURCEDIR}" rev-parse --short HEAD)
+    export LOADUP_COMMIT_ID
+  fi
+fi
 
 
 scr="-sc 1024x768 -g 1042x790"

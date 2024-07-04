@@ -68,16 +68,12 @@ main() {
       if [ -x $(which git) ];
       then
         # These do NOT indicate if there are any modified files!
-        LOADUP_ROOMS_COMMIT_ID=$(git -C "${ROOMSDIR}" rev-parse --short HEAD)
-        LOADUP_CLOS_COMMIT_ID=$(git -C "${CLOSDIR}" rev-parse --short HEAD)
         LOADUP_NOTECARDS_COMMIT_ID=$(git -C "${NOTECARDSDIR}" rev-parse --short HEAD)
       fi
     fi
 
     echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/apps.dribble"
     echo "The MEDLEY git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
-    echo "The ROOMS git commit ID is: ${LOADUP_ROOMS_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
-    echo "The CLOS git commit ID is: ${LOADUP_CLOS_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
     echo "The NOTECARDS git commit ID is: ${LOADUP_NOTECARDS_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
     echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/apps.dribble"
 

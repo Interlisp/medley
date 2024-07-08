@@ -13,7 +13,7 @@ main() {
 	(LOAD (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
 	(MEDLEY-INIT-VARS)
 	(CNDIR (UNIX-GETENV "LOADUP_WORKDIR"))
-	(DRIBBLE "init.dribble")
+	(DRIBBLE "init.dribble" T)
 
 	(UNADVISE)
 	(ADVISE 'PAGEFULLFN '(RETURN))
@@ -36,6 +36,10 @@ main() {
 	(LOGOUT T)
 	STOP
 	EOF
+    
+    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/init.dribble"
+    echo "The git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/init.dribble"
+    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/init.dribble"
 
 	run_medley "${LOADUP_SOURCEDIR}/starter.sysout"
 

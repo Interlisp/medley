@@ -2,14 +2,8 @@
 # doHCFILES.yml
 #
 # Interlisp workflow to run HCFILES.  HCFILES prints out PDF files for all of the
-# files in the Medley directory and posts them on interlisp.org.
+# files in the Medley directory and posts them on files.interlisp.org.
 #  
-# This workflow is designed to run in the "src" repo - which is clone of the Medley
-# repo in which the HCFILES are created.  HCFILES is done in a clone so as the
-# generated PDF files don't "pollute" the working Medley repo.
-#
-# HCFILES pdf output is posted on interlisp.org via github pages on the src directory.
-#
 # This workflow is designed to be kickjed off by the buildReleaseInclDocker
 # workflow running in the Medley repo, once the release has been completed successfully
 #
@@ -48,22 +42,8 @@ jobs:
 
     steps:
 
-      - name: Update src repo
-        run: gh repo sync ${{ github.repository_owner }}/src --branch master --source ${{ github.repository_owner }}/medley
-        env:
-          GITHUB_TOKEN: ${{ secrets.MU_TOKEN }}
-
-      - name: Checkout updated src repo
+      - name: Checkout Medley repo
         uses: actions/checkout@v4
-
-      - name: (Re)create gh-pages branch
-        run: |
-           git fetch origin gh-pages
-           git branch -D gh-pages
-           git checkout -b gh-pages
-           git push origin gh-pages
-        env:
-          GITHUB_TOKEN: ${{ secrets.MU_TOKEN }}
 
       - name: Checkout notecards
         uses: actions/checkout@v4
@@ -98,7 +78,7 @@ jobs:
       - name: Install vnc
         run: sudo apt-get update && sudo apt-get install -y tightvncserver
 
-      - name: Build full.sysout
+      - name: Build apps.sysout
         run: |
           Xvnc -geometry 1280x720 :0 &
           export DISPLAY=":0"
@@ -109,12 +89,31 @@ jobs:
           export DISPLAY=":0"
           scripts/do_hcfiles.sh
 
-      - name: Commit and push created pdf files
-        uses: EndBug/add-and-commit@v9
-        with:
-          add: '.'
-          message: 'HCFILES for new release'
-          committer_name: 'Github Action'
-          committer_email: 'github_actions@interlisp.org'
+      - name: Push Medley files (including created pdf files) to files.interlisp.org
+        run: |
+            # create a tar file of all of the directories to be pushed
+            tarfile=/tmp/source-$$.tgz
+            tar -c -z -f ${tarfile} --exclude=.git .
+            # set up ssh identity
+            eval $(ssh-agent)
+            ssh-add - <<< "${SSH_KEY}"
+            # set destination directory on files.interlisp.org
+            dest=/srv/oio/source
+            # Push tar file up to files.interlisp.org
+            batchfile=/tmp/batch-$$
+            echo "-put ${tarfile} ${dest}.tgz" > ${batchfile}
+            sftp -o StrictHostKeyChecking=no -b ${batchfile} ubuntu@files.interlisp.org
+            # now tar is up, untar it and juggle backups
+            scriptfile=/tmp/script-$$
+            echo "rm -rf ${dest}.new" > ${scriptfile}
+            echo "mkdir -p ${dest}.new" >> ${scriptfile}
+            echo "tar -C ${dest}.new -x -z -f ${dest}.tgz" >> ${scriptfile}
+            echo "rm -rf ${dest}.oldold" >> ${scriptfile}
+            echo "mv ${dest}.old ${dest}.oldold" >> ${scriptfile}
+            echo "mv ${dest} ${dest}.old" >> ${scriptfile}
+            echo "mv ${dest}.new ${dest}" >> ${scriptfile}
+            ssh -aTxo BatchMode=yes ubuntu@files.interlisp.org /bin/sh -s < ${scriptfile}
+        env:
+            SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
 
 

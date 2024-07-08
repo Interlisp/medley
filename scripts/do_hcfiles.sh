@@ -11,9 +11,10 @@ main() {
 	"
 
 	(PROGN
-	  (IL:FILESLOAD (QUOTE MEDLEY-UTILS))
+	  (IL:FILESLOAD MEDLEY-UTILS PDFSTREAM GITFNS))
           (IL:DRIBBLE '{DSK}${logindir}/hcfiles.dribble)
 	  (IL:HCFILES NIL NIL '(IL:PRETTY IL:INDEX IL:HRULE))
+          (IL:MAKE-INDEX-HTML)
           (IL:DRIBBLE)
 	  (IL:LOGOUT T)
 	)

@@ -15,7 +15,7 @@ main() {
           (IL:DRIBBLE '{DSK}${logindir}/hcfiles.dribble)
           (IL:SETQ IL:NO-HELP NIL)
           (IL:ADVISE 'IL:HELP :BEFORE (IF IL:NO-HELP THEN (IL:ERROR IL:MESS1 IL:MESS2)))
-	  (IL:LET ((IL:NO-HELP T)) (IL:HCFILES NIL NIL '(IL:PRETTY IL:INDEX IL:HRULE)))
+	  (IL:LET ((IL:NO-HELP T)) (IL:HCFILES))
           (IL:MAKE-INDEX-HTMLS)
           (IL:DRIBBLE)
           (IL:LOGOUT T)
@@ -33,7 +33,7 @@ main() {
              --greet "${cmfile}"                                 \
              --apps
 }
-
+#  NIL NIL '(IL:PRETTY IL:INDEX IL:HRULE)
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${SCRIPTDIR}" ]

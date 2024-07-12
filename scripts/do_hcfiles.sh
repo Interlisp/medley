@@ -33,7 +33,6 @@ main() {
              --greet "${cmfile}"                                 \
              --apps
 }
-#  NIL NIL '(IL:PRETTY IL:INDEX IL:HRULE)
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${SCRIPTDIR}" ]

@@ -17,7 +17,10 @@ main() {
           (IL:SETQ IL:NO-HELP NIL)
           (IL:ADVISE 'IL:HELP :BEFORE (IF IL:NO-HELP THEN (IL:ERROR IL:MESS1 IL:MESS2)))
 	  (IL:LET ((IL:NO-HELP T)) (IL:HCFILES))
-          (IL:MAKE-INDEX-HTMLS)
+          (IL:RESETLST
+             (IL:RESETSAVE IL:*UPPER-CASE-FILE-NAMES* NIL)
+             (IL:MAKE-INDEX-HTMLS)
+          )
           (IL:DRIBBLE)
           (IL:LOGOUT T)
 	)

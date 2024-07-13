@@ -11,6 +11,7 @@ main() {
 	"
 
 	(PROGN
+          (IL:MEDLEY-INIT-VARS 'IL:GREET)
 	  (IL:FILESLOAD MEDLEY-UTILS PDFSTREAM GITFNS))
           (IL:DRIBBLE '{DSK}${logindir}/hcfiles.dribble)
           (IL:SETQ IL:NO-HELP NIL)
@@ -32,6 +33,7 @@ main() {
              --logindir "${logindir}"                            \
              --greet "${cmfile}"                                 \
              --apps
+
 }
 
 # shellcheck disable=SC2164,SC2034

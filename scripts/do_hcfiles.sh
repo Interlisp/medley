@@ -14,19 +14,19 @@ main() {
           (IL:MEDLEY-INIT-VARS 'IL:GREET)
 	  (IL:FILESLOAD MEDLEY-UTILS PDFSTREAM GITFNS))
           (IL:DRIBBLE '{DSK}${logindir}/hcfiles.dribble)
+          (IL:SETQ IL:*UPPER-CASE-FILE-NAMES* NIL)
           (IL:SETQ IL:NO-HELP NIL)
-          (IL:ADVISE 'IL:HELP :BEFORE (IF IL:NO-HELP THEN (IL:ERROR IL:MESS1 IL:MESS2)))
-	  (IL:LET ((IL:NO-HELP T)) (IL:HCFILES))
-          (IL:RESETLST
-             (IL:RESETSAVE IL:*UPPER-CASE-FILE-NAMES* NIL)
-             (IL:MAKE-INDEX-HTMLS)
-          )
+          (IL:ADVISE 'IL:UNSAFE.TO.MODIFY :BEFORE '(RETURN NIL))
+          (IL:ADVISE 'IL:HELP :BEFORE '(IL:COND (IL:NO-HELP (IL:ERROR IL:MESS1 IL:MESS2 T))))
+          (IL:LET ((IL:NO-HELP T)) (DECLARE (SPECIAL IL:NO-HELP)) (IL:HCFILES))
+          (IL:MAKE-INDEX-HTMLS)
           (IL:DRIBBLE)
           (IL:LOGOUT T)
 	)
 
 	"
 	EOF
+
 
         /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"     \
              --config -                                          \

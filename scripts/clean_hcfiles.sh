@@ -14,12 +14,30 @@
 #
 
 main() {
+
     MEDLEYDIR=$(cd "${SCRIPTDIR}/.." && pwd)
     export MEDLEYDIR
     cd "${MEDLEYDIR}"
-    git clean -f
-    find . -iname index.html.~\*~ -exec rm {} \;
-    find . -iname \*.pdf.~\*~ -exec rm {} \;
+
+    shellfile=/tmp/checkgit-$$.sh
+
+    cat >"${shellfile}" <<-'EOF'
+    #!/bin/sh
+    git status --porcelain "$1" | grep "??"
+    if [ $? -eq 0 ]
+    then
+      rm -f "$1"
+      rm -f "$1".~*~
+    fi
+    EOF
+
+    chmod +x "${shellfile}"
+
+    find . -iname index.html -exec "${shellfile}" {} \;
+    find . -iname \*.pdf -exec "${shellfile}" {} \;
+
+    rm -f "${shellfile}"
+
 }
 
 

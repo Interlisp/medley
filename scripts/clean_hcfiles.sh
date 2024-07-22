@@ -17,19 +17,19 @@ main() {
 
     MEDLEYDIR=$(cd "${SCRIPTDIR}/.." && pwd)
     export MEDLEYDIR
-    cd "${MEDLEYDIR}"
+    cd "${MEDLEYDIR}" || exit
 
     shellfile=/tmp/checkgit-$$.sh
 
     cat >"${shellfile}" <<-'EOF'
-    #!/bin/sh
-    git status --porcelain "$1" | grep "??"
-    if [ $? -eq 0 ]
-    then
-      rm -f "$1"
-      rm -f "$1".~*~
-    fi
-    EOF
+	#!/bin/sh
+	git status --porcelain "$1" | grep --quiet --no-messages "??"
+	if [ $? -eq 0 ]
+	then
+	rm -f "$1"
+	rm -f "$1".~*~
+	fi
+	EOF
 
     chmod +x "${shellfile}"
 

@@ -17,20 +17,17 @@ main() {
           (DRIBBLE (QUOTE {DSK}<TMP>FOOBAR))
 	  (IL:MAKE-EXPORTS-ALL (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.all))))
 	  (DRIBBLE)
+	  (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
 	  (IL:MAKE-WHEREIS-HASH
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.dribble)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash-tmp)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash)))
-        NIL NIL T
+        NIL NIL
 	  )
 	  (IL:LOGOUT T)
 	)
 	"
 	EOF
-
-    echo "This whereis.hash was made $(date)" > "${LOADUP_WORKDIR}/whereis.dribble"
-    echo "The git commit ID of the loadup SYSOUT is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/whereis.dribble"
-    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/whereis.dribble"
 
 	run_medley "${LOADUP_WORKDIR}/full.sysout"
 

@@ -11,7 +11,8 @@ main() {
 
 	(PROGN
 	  (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR))(QUOTE /LOADUP-FULL.LCOM)))
-	  (IL:LOADUP-FULL (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.dribble))) T)
+	  (IL:LOADUP-FULL (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.dribble))))
+	  (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
 	  (IL:HARDRESET)
 	)
 	SHH
@@ -23,10 +24,6 @@ main() {
 
 	"
 	EOF
-
-    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/full.dribble"
-    echo "The git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/full.dribble"
-    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/full.dribble"
 
 	run_medley "${LOADUP_WORKDIR}/lisp.sysout"
 

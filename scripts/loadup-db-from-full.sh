@@ -18,6 +18,7 @@ main() {
 
 	(PROG
 	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
+	  (SETQ IL:SYSOUTCOMMITS (LIST (LIST (QUOTE IL:MEDLEY) (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID)))))
 	  (IL:MEDLEY-INIT-VARS)
 	  (IL:FILESLOAD MEDLEY-UTILS)
 	  (SETQ IL:DIRECTORIES (CONS (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) IL:DIRECTORIES))
@@ -25,17 +26,12 @@ main() {
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.dribble)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.database)))
 	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.sysout)))
-        T
 	  )
 	  (IL:LOGOUT T)
 	)
 
 	"
 	EOF
-
-    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/fuller.dribble"
-    echo "The git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/fuller.dribble"
-    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/fuller.dribble"
 
 	run_medley "${SYSOUT}"
 

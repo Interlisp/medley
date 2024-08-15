@@ -5,7 +5,7 @@ main() {
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
 	loadup_start
-
+    
 	cat >"${cmfile}" <<-"EOF"
 	"
 
@@ -13,7 +13,8 @@ main() {
 	  (LOAD (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE MEDLEYDIR)) (QUOTE /sources/MEDLEYDIR.LCOM)))
 	  (MEDLEY-INIT-VARS)
 	  (LOAD (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) (QUOTE /LOADUP-LISP.LCOM)))
-	  (LOADUP-LISP (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /lisp.dribble)) T)
+	  (LOADUP-LISP (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /lisp.dribble)))
+	  (PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)
 	  (HARDRESET)
 	)
 	SHH
@@ -25,10 +26,6 @@ main() {
 
 	"
 	EOF
-
-    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/lisp.dribble"
-    echo "The git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/lisp.dribble"
-    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/lisp.dribble"
 
 	run_medley "${LOADUP_WORKDIR}/init-mid.sysout"
 

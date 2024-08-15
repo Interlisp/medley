@@ -32,20 +32,25 @@ main() {
 	    exit 1
 	fi
 
+    git_commit_ID "${NOTECARDSDIR}"
+    NOTECARDS_COMMIT_ID="${COMMIT_ID}"
+    export NOTECARDS_COMMIT_ID
+
 	cat >"${cmfile}" <<-"EOF"
 	"
 
 	(PROGN
 	   (IL:MEDLEY-INIT-VARS 'IL:GREET)
-	   (IL:DRIBBLE (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /apps.dribble))) T)
+	   (IL:DRIBBLE (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /apps.dribble))))
 	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE ROOMSDIR))(QUOTE /ROOMS)) 'IL:SYSLOAD)
 	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE NOTECARDSDIR))(QUOTE |/system/NOTECARDS.LCOM|)) 'IL:SYSLOAD)
 	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE CLOSDIR))(QUOTE /DEFSYS.DFASL)) 'IL:SYSLOAD)
 	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE MEDLEYDIR))(QUOTE |lispusers/BUTTONS.LCOM|)) 'IL:SYSLOAD)
-	   (IL:LOAD
-	       (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) (QUOTE /LOADUP-APPS.LCOM))
-	       'IL:SYSLOAD
-	   )
+	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) (QUOTE /LOADUP-APPS.LCOM)) 'IL:SYSLOAD)
+       (IL:PRINT (IL:UNIX-GETENV (QUOTE NOTECARDS_COMMIT_ID)))
+       (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
+       (IL:PUTASSOC (QUOTE IL:NOTECARDS) (LIST (IL:UNIX-GETENV (QUOTE NOTECARDS_COMMIT_ID))) IL:SYSOUTCOMMITS)
+       (IL:PRINT IL:SYSOUTCOMMITS)
 	   (IL:HARDRESET)
 	)
 	SHH
@@ -62,20 +67,6 @@ main() {
 
 	"
 	EOF
-
-    if [ -f $(which git) ];
-    then
-      if [ -x $(which git) ];
-      then
-        # These do NOT indicate if there are any modified files!
-        LOADUP_NOTECARDS_COMMIT_ID=$(git -C "${NOTECARDSDIR}" rev-parse --short HEAD)
-      fi
-    fi
-
-    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/apps.dribble"
-    echo "The MEDLEY git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
-    echo "The NOTECARDS git commit ID is: ${LOADUP_NOTECARDS_COMMIT_ID}" >> "${LOADUP_WORKDIR}/apps.dribble"
-    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/apps.dribble"
 
 	run_medley "${LOADUP_WORKDIR}/full.sysout"
 

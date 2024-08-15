@@ -12,8 +12,9 @@ main() {
 	(SETQ MEDLEYDIR NIL)
 	(LOAD (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
 	(MEDLEY-INIT-VARS)
+	(PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)
 	(CNDIR (UNIX-GETENV "LOADUP_WORKDIR"))
-	(DRIBBLE "init.dribble" T)
+	(DRIBBLE "init.dribble")
 
 	(UNADVISE)
 	(ADVISE 'PAGEFULLFN '(RETURN))
@@ -28,19 +29,18 @@ main() {
 	   (LOADUP-SOURCE-DIR (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_SOURCEDIR") "/"))
 	  )
 	  (SETQ DIRECTORIES (CONS LOADUP-SOURCE-DIR DIRECTORIES))
+      (PRINT (DATE))
+	  (PRINT (SETQ SYSOUTCOMMITS (LIST (LIST (QUOTE MEDLEY) (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))))))
 	  (RESETLST (RESETSAVE OK.TO.MODIFY.FNS T)
 	    (MAKEINITGREET (CONCAT WORKDIR "init.sysout") (CONCAT WORKDIR "init.dlinit"))
 	  )
 	)
+
 	(DRIBBLE)
 	(LOGOUT T)
 	STOP
 	EOF
     
-    echo "This loadup SYSOUT was made $(date)" > "${LOADUP_WORKDIR}/init.dribble"
-    echo "The git commit ID is: ${LOADUP_COMMIT_ID}" >> "${LOADUP_WORKDIR}/init.dribble"
-    echo " - - - - - - - - - - - - - - -" >> "${LOADUP_WORKDIR}/init.dribble"
-
 	run_medley "${LOADUP_SOURCEDIR}/starter.sysout"
 
 	loadup_finish "init.dlinit" "init.*" "RDSYS*" "I-NEW*"

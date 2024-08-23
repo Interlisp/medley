@@ -1,0 +1,228 @@
+(DEFINE-FILE-INFO PACKAGE (DEFPACKAGE "BDF" (USE "XCL" "LISP") (EXPORT "READ-BDF")) READTABLE 
+"XCL" BASE 10)
+
+(IL:FILECREATED "22-Aug-2024 20:54:00" IL:|{DSK}<home>matt>Interlisp>bdf-parser>READ-BDF.;27| 12518  
+
+      :EDIT-BY "mth"
+
+      :CHANGES-TO (IL:FUNCTIONS READ-GLYPH READ-BDF)
+                  (IL:VARS IL:READ-BDFCOMS)
+
+      :PREVIOUS-DATE "22-Aug-2024 16:28:52" IL:|{DSK}<home>matt>Interlisp>bdf-parser>READ-BDF.;22|)
+
+
+(IL:PRETTYCOMPRINT IL:READ-BDFCOMS)
+
+(IL:RPAQQ IL:READ-BDFCOMS ((IL:STRUCTURES BDF-FONT GLYPH)
+                           (IL:FUNCTIONS READ-BDF READ-DELIMITED-LIST-FROM-STRING READ-GLYPH)
+                           (FILE-ENVIRONMENTS "READ-BDF")))
+
+(DEFSTRUCT (BDF-FONT (:CONC-NAME "BF-"))
+   (NAME NIL :TYPE STRING)
+   (SIZE NIL :TYPE LIST)
+   (BOUNDINGBOX NIL :TYPE LIST)
+   (METRICSSET 0 :TYPE (INTEGER 0 2))
+   (PROPERTIES NIL :TYPE LIST)
+   SWIDTH DWIDTH SWIDTH1 DWIDTH1 VVECTOR (GLYPHS NIL :TYPE LIST))
+
+(DEFSTRUCT GLYPH
+   (NAME NIL :TYPE STRING)
+   ENCODING SWIDTH DWIDTH SWIDTH1 DWIDTH1 VVECTOR BBW BBH BBXOFF0 BBYOFF0 BITMAP)
+
+(DEFUN READ-BDF (PATH)                                (IL:* IL:\; "Edited 22-Aug-2024 16:43 by mth")
+                                                      (IL:* IL:\; "Edited 17-Jul-2024 14:45 by mth")
+                                                      (IL:* IL:\; "Edited 12-Jul-2024 23:02 by mth")
+   (LET
+    (PROPS PROPS-COMPLETE CHARS-COUNT FONT-COMPLETE FONT POS KEY V VV LINE ITEMS (NGLYPHS 0)
+           (*PACKAGE* (FIND-PACKAGE "BDF")))
+    (WITH-OPEN-FILE
+     (FILE-STREAM PATH :ELEMENT-TYPE 'CHARACTER :DIRECTION :INPUT)
+     (UNLESS (STRING-EQUAL "STARTFONT" (READ FILE-STREAM))
+            (ERROR "Invalid BDF file - must begin with STARTFONT."))
+
+     (IL:* IL:|;;| "ignore the file format version number")
+
+     (READ-LINE FILE-STREAM)
+     (SETQ FONT (MAKE-BDF-FONT))
+     (LOOP
+      :UNTIL FONT-COMPLETE :DO (SETQ LINE (READ-LINE FILE-STREAM))
+      (WHEN LINE                                             (IL:* IL:\; "Ignore blank lines")
+          (MULTIPLE-VALUE-SETQ (KEY POS)
+                 (READ-FROM-STRING LINE))
+          (UNLESS (MEMBER KEY '(COMMENT CONTENTVERSION))
+
+              (IL:* IL:|;;| 
+      "mth:bug in READ-FROM-STRING: returned position value is BYTE position, not character position")
+
+              (SETQ POS (/ POS 2))
+              (WHEN (<= POS (LENGTH LINE))
+                  (SETQ LINE (SUBSEQ LINE POS)))
+              (SETQ ITEMS (READ-DELIMITED-LIST-FROM-STRING LINE))
+              (CASE KEY
+                  (FONT (SETF (BF-NAME FONT)
+                              LINE))
+                  (METRICSSET (IF (AND (INTEGERP (SETQ V (FIRST ITEMS)))
+                                       (<= 0 V 2))
+                                  (SETF (BF-METRICSSET FONT)
+                                        V)
+                                  (ERROR 
+                                     "Invalid BDF file - METRICSSET (~A) is invalid or out of range."
+                                         V)))
+                  (SIZE (SETF (BF-SIZE FONT)
+                              ITEMS))
+                  (FONTBOUNDINGBOX (SETF (BF-BOUNDINGBOX FONT)
+                                         ITEMS))
+                  (SWIDTH (SETF (BF-SWIDTH FONT)
+                                ITEMS))
+                  (DWIDTH (SETF (BF-DWIDTH FONT)
+                                ITEMS))
+                  (SWIDTH1 (SETF (BF-SWIDTH1 FONT)
+                                 ITEMS))
+                  (DWIDTH1 (SETF (BF-DWIDTH1 FONT)
+                                 ITEMS))
+                  (VVECTOR (SETF (BF-VVECTOR FONT)
+                                 ITEMS))
+                  (STARTPROPERTIES 
+                     (IF (AND (INTEGERP (SETQ V (FIRST ITEMS)))
+                              (PLUSP V))
+                         (SETQ PROPS (LOOP :UNTIL PROPS-COMPLETE :APPEND
+                                           (WITH-INPUT-FROM-STRING
+                                            (SI (SETQ LINE (READ-LINE FILE-STREAM)))
+                                            (UNLESS (SETQ PROPS-COMPLETE
+                                                          (STRING-EQUAL "ENDPROPERTIES"
+                                                                 (STRING-TRIM '(#\Space #\Tab)
+                                                                        LINE)))
+                                                (SETQ KEY (READ SI))
+                                                (IF (AND KEY (SYMBOLP KEY)
+                                                         (SETQ VV (READ SI))
+                                                         (OR (STRINGP VV)
+                                                             (INTEGERP VV)))
+                                                    (LIST (INTERN (STRING KEY)
+                                                                 "KEYWORD")
+                                                          VV)
+                                                    (ERROR 
+                                                        "Invalid BDF file - malformed PROPERTY (~A)."
+                                                           LINE))))))
+                         (ERROR 
+                               "Invalid BDF file - STARTPROPERTIES count (~A) is invalid or missing."
+                                V))
+                     (IF (EQL V (SETQ VV (/ (LENGTH PROPS)
+                                            2)))
+                         (SETF (BF-PROPERTIES FONT)
+                               PROPS)
+                         (ERROR 
+                          "Invalid BDF file - STARTPROPERTIES count (~D) does not match actual (~D)."
+                                V VV)))
+                  (CHARS 
+                     (SETQ NGLYPHS (FIRST ITEMS))
+                     (UNLESS (AND NGLYPHS (INTEGERP NGLYPHS)
+                                  (PLUSP NGLYPHS))
+                            (ERROR "Invalid BDF file - CHARS count (~A) is invalid or missing." 
+                                   NGLYPHS))
+                     (SETF (BF-GLYPHS FONT)
+                           (LOOP :REPEAT NGLYPHS :COLLECT (READ-GLYPH FILE-STREAM FONT))))
+                  (ENDFONT (SETQ FONT-COMPLETE T))))))
+     FONT)))
+
+(DEFUN READ-DELIMITED-LIST-FROM-STRING (INPUT-STRING &OPTIONAL (DELIMIT #\]))
+                                                      (IL:* IL:\; "Edited 20-Aug-2024 16:46 by mth")
+   (WITH-INPUT-FROM-STRING (SI (CONCATENATE 'STRING INPUT-STRING " " (STRING DELIMIT)))
+          (READ-DELIMITED-LIST DELIMIT SI)))
+
+(DEFUN READ-GLYPH (FILE-STREAM FONT)                  (IL:* IL:\; "Edited 22-Aug-2024 20:53 by mth")
+                                                      (IL:* IL:\; "Edited 21-Aug-2024 01:10 by mth")
+   (LET ((GLYPH (MAKE-GLYPH :SWIDTH (COPY-LIST (BF-SWIDTH FONT))
+                       :DWIDTH
+                       (COPY-LIST (BF-DWIDTH FONT))
+                       :SWIDTH1
+                       (COPY-LIST (BF-SWIDTH1 FONT))
+                       :DWIDTH1
+                       (COPY-LIST (BF-DWIDTH1 FONT))
+                       :VVECTOR
+                       (COPY-LIST (BF-VVECTOR FONT))))
+         CHAR-COMPLETE LINE ITEMS V KEY POS STARTED BBW BBH)
+        (LOOP :UNTIL CHAR-COMPLETE :DO (SETQ LINE (READ-LINE FILE-STREAM))
+              (WHEN LINE                                     (IL:* IL:\; "Ignore blank lines")
+                  (MULTIPLE-VALUE-SETQ (KEY POS)
+                         (READ-FROM-STRING LINE))
+
+                  (IL:* IL:|;;| 
+      "mth:bug in READ-FROM-STRING: returned position value is BYTE position, not character position")
+
+                  (SETQ POS (/ POS 2))
+                  (WHEN (<= POS (LENGTH LINE))
+                      (SETQ LINE (SUBSEQ LINE POS)))
+                  (SETQ ITEMS (READ-DELIMITED-LIST-FROM-STRING LINE))
+                  (COND
+                     ((EQ KEY 'STARTCHAR)
+                      (WHEN STARTED (ERROR "Invalid BDF file - STARTCHAR inside glyph."))
+                      (SETF STARTED T)
+                      (SETF (GLYPH-NAME GLYPH)
+                            (STRING LINE)))
+                     (T (UNLESS STARTED (ERROR "Invalid BDF file - glyph has ben started."))
+                        (CASE KEY
+                            (ENCODING (SETF (GLYPH-ENCODING GLYPH)
+                                            (IF (EQUAL -1 (FIRST ITEMS))
+                                                ITEMS
+                                                (FIRST ITEMS))))
+                            (SWIDTH (SETF (GLYPH-SWIDTH GLYPH)
+                                          ITEMS))
+                            (DWIDTH (SETF (GLYPH-DWIDTH GLYPH)
+                                          ITEMS))
+                            (SWIDTH1 (SETF (GLYPH-SWIDTH1 GLYPH)
+                                           ITEMS))
+                            (DWIDTH1 (SETF (GLYPH-DWIDTH1 GLYPH)
+                                           ITEMS))
+                            (VVECTOR (SETF (GLYPH-VVECTOR GLYPH)
+                                           ITEMS))
+                            (BBX (SETF (GLYPH-BBW GLYPH)
+                                       (SETQ BBW (FIRST ITEMS))
+                                       (GLYPH-BBH GLYPH)
+                                       (SETQ BBH (SECOND ITEMS))
+                                       (GLYPH-BBXOFF0 GLYPH)
+                                       (THIRD ITEMS)
+                                       (GLYPH-BBYOFF0 GLYPH)
+                                       (FOURTH ITEMS)))
+                            (BITMAP (LET* ((BM (IL:BITMAPCREATE BBW BBH 1))
+                                           (BM.BASE (IL:|fetch| IL:BITMAPBASE IL:|of| BM))
+                                           (BM.RASTERWIDTH (IL:|fetch| IL:BITMAPRASTERWIDTH
+                                                              IL:|of| BM))
+                                           (NBYTES (CEILING BBW 8))
+                                           (NCHARS (* 2 NBYTES))
+                                           (NWORDS (CEILING BBW 16))
+                                           BITS BYTEPOS WORDINDEX)
+                                          (LOOP :WITH BITROW = 0 :REPEAT BBH :DO
+                                                (SETQ LINE (STRING-TRIM '(#\Space #\Tab)
+                                                                  (READ-LINE FILE-STREAM)))
+                                                (UNLESS (AND (EQUAL NCHARS (LENGTH LINE))
+                                                             (SETQ BITS
+                                                                   (PARSE-INTEGER LINE :RADIX 16 
+                                                                          :JUNK-ALLOWED T)))
+                                                       (ERROR 
+                                                          "Invalid BDF file - bad line in BITMAP: ~A"
+                                                              LINE))
+                                                (WHEN (ODDP NBYTES)
+                                                    (SETQ BITS (ASH BITS 8)))
+                                                (SETQ WORDINDEX (* BITROW BM.RASTERWIDTH))
+                                                (SETQ BYTEPOS (* 16 (1- NWORDS)))
+                                                (LOOP :REPEAT NWORDS :DO
+                                                      (IL:\\PUTBASE BM.BASE WORDINDEX
+                                                             (LDB (BYTE 16 BYTEPOS)
+                                                                  BITS))
+                                                      (INCF WORDINDEX)
+                                                      (DECF BYTEPOS 16))
+                                                (INCF BITROW))
+                                          (SETF (GLYPH-BITMAP GLYPH)
+                                                BM)))
+                            (ENDCHAR (SETQ CHAR-COMPLETE T)))))))
+        GLYPH))
+
+(DEFINE-FILE-ENVIRONMENT "READ-BDF" :PACKAGE (DEFPACKAGE "BDF" (:USE "XCL" "LISP")
+                                                    (:EXPORT "READ-BDF"))
+   :READTABLE "XCL"
+   :COMPILER :COMPILE-FILE)
+(IL:PUTPROPS IL:READ-BDF IL:COPYRIGHT (IL:NONE))
+(IL:DECLARE\: IL:DONTCOPY
+  (IL:FILEMAP (NIL (1097 6349 (READ-BDF 1097 . 6349)) (6351 6674 (READ-DELIMITED-LIST-FROM-STRING 6351
+ . 6674)) (6676 12230 (READ-GLYPH 6676 . 12230)))))
+IL:STOP

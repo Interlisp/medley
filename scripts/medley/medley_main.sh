@@ -128,15 +128,20 @@ IL_DIR="$(cd "${MEDLEYDIR}/.."; pwd)"
 wsl=false
 darwin=false
 cygwin=false
+linux=false
+platform=unknown
 
 if [ "$(uname)" = "Darwin" ]
 then
   darwin=true
+  platform=darwin
 elif [ "$(uname -s | head --bytes 6)" = "CYGWIN" ]
 then
   cygwin=true
+  platform=cgwin
 elif [ -e "/proc/version" ] && grep --ignore-case --quiet Microsoft /proc/version
 then
+  platform=wsl
   wsl=true
   wsl_ver=0
   # WSL2
@@ -161,7 +166,19 @@ Exiting"
       fi
     fi
   fi
+else
+  linux=true
+  platform=linux
 fi
+#################### TEST CODE ####################
+
+#wsl=false
+#darwin=false
+#cygwin=false
+#linux=true
+#platform=linux
+
+#################### TEST CODE ####################
 
 # process config file and args
 # shellcheck source=./medley_configfile.sh

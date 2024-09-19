@@ -16,9 +16,14 @@
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-
+#set -x
   ip_addr() {
-    ip -4 -br address show dev eth0 | awk '{print $3}' | sed 's-/.*$--'
+    if [ "${wsl}" = true ]
+    then
+      ip -4 -br address show dev eth0 | awk '{print $3}' | sed 's-/.*$--'
+    else
+      echo "127.0.0.1"
+    fi
   }
 
   find_open_display() {
@@ -60,21 +65,39 @@
   }
 
   #
-  # Make sure prequisites for vnc support in wsl are in place
+  # Make sure prequisites for vnc support are in place
   #
-  if [ "${use_vnc}" = "true" ];
+  if [ -z "$(which Xvnc)" ] || [ "$(Xvnc -version 2>&1 | grep -iq tigervnc; echo $?)" -eq 1 ]
+  then
+    echo "Error: The -v or --vnc flag was set."
+    echo "But it appears that that TigerVNC server \(Xvnc\) has not been installed."
+    echo "Please install the TigerVNC server and try again.  On Debian and Ubuntu, use:"
+    echo "\"sudo apt install tigervnc-standalone-server\". On most other Linux distros, use the"
+    echo "distro's package manager to install the \"tigervnc-server\" package."
+    echo "Exiting."
+    exit 4
+  fi
+  if [ "${linux}" = "true" ]
+  then
+    if [ -z "$(which vncviewer)" ] || [ "$(vncviewer -v 2>&1 | head -2 | grep -iq tigervnc; echo $?)" -eq 1 ]
+    then
+      echo "Error: The -v or --vnc flag was set."
+      echo "But it appears that that the TigerVNC viewer \(vncviewer\) is not installed on your system."
+      echo "Please install the TigerVNC viewer and try again.  On Debian and Ubuntu, use:"
+      echo "\"sudo apt install tigervnc-viewer\".  On most other Linux distros, use the"
+      echo "the distro's package manager to install the \"tigervnc-viewer\" (or sometimes just \"tigervnc\")"
+      echo "package."
+      echo "Exiting."
+      exit 5
+    else
+       vncviewer="$(which vncviewer)"
+    fi
+  elif [ "${wsl}" = "true" ]
   then
     win_userprofile="$(cmd.exe /c "<nul set /p=%UserProfile%" 2>/dev/null)"
     vnc_dir="$(wslpath "${win_userprofile}")/AppData/Local/Interlisp"
     vnc_exe="vncviewer64-1.12.0.exe"
-    if [ "$(which Xvnc)" = "" ] || [ "$(Xvnc -version 2>&1 | grep -iq tigervnc; echo $?)" -eq 1 ]
-    then
-      echo "Error: The -v or --vnc flag was set."
-      echo "But it appears that that TigerVNC \(Xvnc\) has not been installed."
-      echo "Please install TigerVNC using \"sudo apt install tigervnc-standalone-server tigervnc-xorg-extension\""
-      echo "Exiting."
-      exit 4
-    elif [ ! -e "${vnc_dir}/${vnc_exe}" ];
+    if [ ! -e "${vnc_dir}/${vnc_exe}" ];
     then
       if [ -e "${IL_DIR}/wsl/${vnc_exe}" ];
       then
@@ -108,6 +131,7 @@
         done
       fi
     fi
+    vncviewer="${vnc_dir}/${vnc_exe}"
   fi
   #
   #  Start the log file so we can trace any issues with vnc, etc
@@ -127,6 +151,7 @@
   #    find an unused display and an available port
   #
   #set -x
+  ORIGINAL_DISPLAY="${DISPLAY}"
   OPEN_DISPLAY="$(find_open_display)"
   if [ "${OPEN_DISPLAY}" -eq -1 ];
   then
@@ -153,15 +178,15 @@
   #  Start the Xvnc server
   #
   mkdir -p "${LOGINDIR}"/logs
-  /usr/bin/Xvnc "${DISPLAY}" \
-                -rfbport "${VNC_PORT}" \
-                -geometry "${geometry}" \
-                -SecurityTypes None \
-                -NeverShared \
-                -DisconnectClients=0 \
-                -desktop "${title}" \
-                --MaxDisconnectionTime=10 \
-                >> "${LOG}" 2>&1 &
+  Xvnc "${DISPLAY}" \
+       -rfbport "${VNC_PORT}" \
+       -geometry "${geometry}" \
+       -SecurityTypes None \
+       -NeverShared \
+       -DisconnectClients=0 \
+       -desktop "${title}" \
+       --MaxDisconnectionTime=10 \
+       >> "${LOG}" 2>&1 &
 
   sleep .5
   #
@@ -171,25 +196,24 @@
     start_maiko "$@"
     if [ -n "$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
   } &
-
   #
-  #  Start the vncviewer on the windows side
+  #  Start the vncviewer
   #
 
   #  First give medley time to startup
   #  sleep .25
-  #  SLeep appears not to be needed, but faster/slower machines ????
+  #  Sleep appears not to be needed, but faster/slower machines ????
   #  FGH 2023-02-08
 
-  #  Then start vnc viewer on Windows side
+  #  Then start vnc viewer
   vncv_loc=$(( OPEN_DISPLAY * 50 ))
   start_time=$(date +%s)
-  "${vnc_dir}"/${vnc_exe}                           \
-               -geometry "+${vncv_loc}+${vncv_loc}" \
-               -ReconnectOnError=off                \
-               −AlertOnFatalError=off               \
-               "$(ip_addr)":"${VNC_PORT}"           \
-               >>"${LOG}" 2>&1                      &
+  export DISPLAY="${ORIGINAL_DISPLAY}"
+  "${vncviewer}" -geometry "+${vncv_loc}+${vncv_loc}"  \
+                 −AlertOnFatalError=0                  \
+                 -ReconnectOnError=0                   \
+                 "$(ip_addr)":"${VNC_PORT}"            \
+                 >>"${LOG}" 2>&1                       &
   wait $!
   if [ $(( $(date +%s) - start_time )) -lt 5 ]
   then

@@ -98,8 +98,8 @@ flags:
     -t STRING | --title STRING : use STRING as title of window
 
     -d :N | --display :N       : use X display :N
-+w
-+w  -v | --vnc                 : (WSL only) Use a VNC window instead of an X window
+
+    -v | --vnc                 : Use a VNC window instead of an X window (Not available: MacOS & Windows/Cygwin)
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 

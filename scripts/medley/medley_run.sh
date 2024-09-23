@@ -327,9 +327,9 @@ fi
 
 
 # Run maiko either directly or with vnc
-if [ "${wsl}" = true ] && [ "${use_vnc}" = true ]
+if [ "${use_vnc}" = true ]
 then
-  # do the vnc thing on wsl (if called for)
+  # do the vnc thing - if called for
   # shellcheck source=./medley_vnc.sh
   . "${SCRIPTDIR}/medley_vnc.sh"
 else

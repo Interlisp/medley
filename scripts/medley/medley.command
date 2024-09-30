@@ -1489,10 +1489,10 @@ then
   #
   # Make sure prequisites for vnc support are in place
   #
-  if [ -z "$(which Xvnc)" ] || [ "$(Xvnc -version 2>&1 | grep -iq tigervnc; echo $?)" -eq 1 ]
+  if [ -z "$(which Xtigervnc)" ]
   then
     echo "Error: The -v or --vnc flag was set."
-    echo "But it appears that that TigerVNC server \(Xvnc\) has not been installed."
+    echo "But it appears that the TigerVNC server (Xtigervnc) has not been installed."
     echo "Please install the TigerVNC server and try again.  On Debian and Ubuntu, use:"
     echo "\"sudo apt install tigervnc-standalone-server\". On most other Linux distros, use the"
     echo "distro's package manager to install the \"tigervnc-server\" package."
@@ -1501,10 +1501,10 @@ then
   fi
   if [ "${linux}" = "true" ]
   then
-    if [ -z "$(which vncviewer)" ] || [ "$(vncviewer -v 2>&1 | head -2 | grep -iq tigervnc; echo $?)" -eq 1 ]
+    if [ -z "$(which xtigervncviewer)" ]
     then
       echo "Error: The -v or --vnc flag was set."
-      echo "But it appears that that the TigerVNC viewer \(vncviewer\) is not installed on your system."
+      echo "But it appears that that the TigerVNC viewer (xtigervncviewer) is not installed on your system."
       echo "Please install the TigerVNC viewer and try again.  On Debian and Ubuntu, use:"
       echo "\"sudo apt install tigervnc-viewer\".  On most other Linux distros, use the"
       echo "the distro's package manager to install the \"tigervnc-viewer\" (or sometimes just \"tigervnc\")"
@@ -1512,7 +1512,7 @@ then
       echo "Exiting."
       exit 5
     else
-       vncviewer="$(which vncviewer)"
+       vncviewer="$(which xtigervncviewer)"
     fi
   elif [ "${wsl}" = "true" ]
   then
@@ -1537,7 +1537,7 @@ then
           if [ -z "${resp}" ]; then resp=n; fi
           case "${resp}" in
             n* | N* )
-              echo "Ok.  You can download the Tiger VNC viewer \(v1.12.0\) .exe yourself and "
+              echo "Ok.  You can download the Tiger VNC viewer (v1.12.0) .exe yourself and "
               echo "place it in ${vnc_dir}/${vnc_exe}.  Then retry."
               echo "Exiting."
               exit 5

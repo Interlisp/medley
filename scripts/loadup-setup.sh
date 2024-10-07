@@ -50,8 +50,20 @@ then
   fi
 fi
 
+HAS_GIT= [ -f $(which git) ] && [ -x $(which git) ]
+export HAS_GIT
 
+git_commit_ID () {
+  if ${HAS_GIT};
+  then
+    # This does NOT indicate if there are any modified files!
+    COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+  fi
+}
 
+git_commit_ID "${LOADUP_SOURCEDIR}"
+LOADUP_COMMIT_ID="${COMMIT_ID}"
+export LOADUP_COMMIT_ID
 
 scr="-sc 1024x768 -g 1042x790"
 geometry=1024x768

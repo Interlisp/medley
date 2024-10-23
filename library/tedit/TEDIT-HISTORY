@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "20-Mar-2024 11:05:20" {WMEDLEY}<library>tedit>TEDIT-HISTORY.;154 33348  
+(FILECREATED "21-Oct-2024 00:28:11" {WMEDLEY}<library>tedit>TEDIT-HISTORY.;206 49962  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS TEDIT.UNDO)
+      :CHANGES-TO (FNS \TEDIT.REDO.COMPOSITE)
 
-      :PREVIOUS-DATE "15-Mar-2024 13:55:42" {WMEDLEY}<library>tedit>TEDIT-HISTORY.;153)
+      :PREVIOUS-DATE "29-Sep-2024 13:51:41" {WMEDLEY}<library>tedit>TEDIT-HISTORY.;205)
 
 
 (PRETTYCOMPRINT TEDIT-HISTORYCOMS)
@@ -23,13 +23,16 @@
         (COMS 
               (* ;; "History-list maintenance functions")
 
-              (FNS \TEDIT.HISTORYADD \TEDIT.CUMULATE.EVENTS))
+              (FNS \TEDIT.HISTORYADD \TEDIT.CUMULATE.EVENTS \TEDIT.COMPOSITE.EVENT 
+                   \TEDIT.HISTORY.PROP \TEDIT.HISTORY.EVENT))
         (COMS 
               (* ;; "Specialized UNDO & REDO functions.")
 
               (FNS TEDIT.UNDO \TEDIT.UNDO1 TEDIT.REDO \TEDIT.UNDO.UNDO)
-              (FNS \TEDIT.UNDO.INSERTION \TEDIT.UNDO.DELETION \TEDIT.UNDO.MOVE \TEDIT.UNDO.REPLACE)
-              (FNS \TEDIT.REDO.INSERTION \TEDIT.REDO.REPLACE \TEDIT.REDO.MOVE))))
+              (FNS \TEDIT.UNDO.INSERT \TEDIT.UNDO.DELETE \TEDIT.UNDO.MOVE \TEDIT.UNDO.REPLACE 
+                   \TEDIT.UNDO.CHARLOOKS \TEDIT.UNDO.PARALOOKS \TEDIT.UNDO.PAGELOOKS 
+                   \TEDIT.UNDO.COMPOSITE \TEDIT.UNDO.REPLACECODE)
+              (FNS \TEDIT.REDO.INSERT \TEDIT.REDO.REPLACE \TEDIT.REDO.COMPOSITE))))
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE
 
@@ -47,16 +50,16 @@
                              NIL                             (* ; 
                                   "Was THAUXINFO: Auxiliary info about the event, primarily for redo")
                              THDELETEDPIECES)
-                            [ACCESSFNS TEDITHISTORYEVENT ((THCHLIM (AND (fetch (TEDITHISTORYEVENT
-                                                                                THCH#) of DATUM)
-                                                                        (IPLUS (fetch (
+                            [ACCESSFNS TEDITHISTORYEVENT ((THCHLIM (IPLUS (OR (fetch (
                                                                                     TEDITHISTORYEVENT
-                                                                                       THCH#)
-                                                                                  of DATUM)
-                                                                               (fetch (
+                                                                                      THCH#)
+                                                                                 of DATUM)
+                                                                              0)
+                                                                          (OR (fetch (
                                                                                     TEDITHISTORYEVENT
-                                                                                       THLEN)
-                                                                                  of DATUM]
+                                                                                      THLEN)
+                                                                                 of DATUM)
+                                                                              0]
                             (INIT (DEFPRINT 'TEDITHISTORYEVENT (FUNCTION \TEDIT.HISTORYEVENT.DEFPRINT
                                                                 )))
                             THPOINT _ 'LEFT)
@@ -144,7 +147,10 @@
 (DEFINEQ
 
 (\TEDIT.HISTORYADD
-  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited  3-Mar-2024 12:15 by rmk")
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 29-Aug-2024 12:30 by rmk")
+                                                             (* ; "Edited 11-Aug-2024 21:57 by rmk")
+                                                             (* ; "Edited 30-Apr-2024 22:51 by rmk")
+                                                             (* ; "Edited  3-Mar-2024 12:15 by rmk")
                                                              (* ; "Edited 19-Feb-2024 12:09 by rmk")
                                                              (* ; "Edited 30-Dec-2023 22:19 by rmk")
                                                              (* ; "Edited 11-Aug-2023 14:25 by rmk")
@@ -158,51 +164,57 @@
 
     (* ;; "Not sure what should happen if the second one is to the right of the first, deleting forwards.  Old code seemed to treat those as separate events, and  only the second/right one could be undone.")
 
-    (CL:UNLESS (EQ 'DON'T (GETTOBJ TEXTOBJ TXTHISTORY))
-        (if (type? TEDITHISTORYEVENT EVENT)
-            then (CL:WHEN (MEMB (GETTH EVENT THACTION)
-                                (CONSTANT (LIST :Put :Get))) (* ; 
+    (if (GETTOBJ TEXTOBJ TXTHISTORYINACTIVE)
+        then 
+             (* ;; "Maybe the first event after setting the textprop--now's the time to flush")
+
+             (FSETTOBJ TEXTOBJ TXTHISTORY NIL)
+             (FSETTOBJ TEXTOBJ TXTHISTORYUNDONE NIL)
+      else (if (type? TEDITHISTORYEVENT EVENT)
+               then (CL:WHEN (MEMB (GETTH EVENT THACTION)
+                                   (CONSTANT (LIST :Put :Get)))
+                                                             (* ; 
                                                      "Can't back up over Put/Get, flush the history.")
-                     (FSETTOBJ TEXTOBJ TXTHISTORY NIL)) 
+                        (FSETTOBJ TEXTOBJ TXTHISTORY NIL)) 
 
-                 (* ;; "Somebody may have already done there own fixup.")
+                    (* ;; "Somebody may have already done there own fixup.")
 
-                 (LET ((OLDEVENT (\TEDIT.LASTEVENT TEXTOBJ)))
-                      (CL:WHEN (AND (type? TEDITHISTORYEVENT OLDEVENT)
-                                    (EQ :Delete (GETTH EVENT THACTION))
-                                    (EQ :Delete (GETTH OLDEVENT THACTION)))
+                    (LET ((OLDEVENT (\TEDIT.LASTEVENT TEXTOBJ)))
+                         (CL:WHEN (AND (type? TEDITHISTORYEVENT OLDEVENT)
+                                       (EQ :Delete (GETTH EVENT THACTION))
+                                       (EQ :Delete (GETTH OLDEVENT THACTION)))
 
-                          (* ;; 
-                          "Repeated successive deletions, we can combine them if they are adjacent.")
+                             (* ;; 
+                           "Repeated successive deletions, we can combine them if they are adjacent.")
 
-                          (CL:WHEN (IEQP (GETTH EVENT THCHLIM)
-                                         (GETTH OLDEVENT THCH#))
+                             (CL:WHEN (IEQP (GETTH EVENT THCHLIM)
+                                            (GETTH OLDEVENT THCH#))
                                                              (* ; 
                                                            "OLDEVENT is first, EVENT is still delete")
-                              (SETQ EVENT (\TEDIT.CUMULATE.EVENTS EVENT OLDEVENT TEXTOBJ))
-                              (\TEDIT.POPEVENT TEXTOBJ)      (* ; "Pop OLDEVENT before repushing")
-                              (SETQ OLDEVENT (\TEDIT.LASTEVENT TEXTOBJ)))
+                                 (SETQ EVENT (\TEDIT.CUMULATE.EVENTS EVENT OLDEVENT TEXTOBJ))
+                                 (\TEDIT.POPEVENT TEXTOBJ)   (* ; "Pop OLDEVENT before repushing")
+                                 (SETQ OLDEVENT (\TEDIT.LASTEVENT TEXTOBJ)))
 
-                          (* ;; "This may have created a new adjacency, if the accumulation of later deletes comes into with an earlier accumulation")
+                             (* ;; "This may have created a new adjacency, if the accumulation of later deletes comes into with an earlier accumulation")
 
-                          (CL:WHEN [AND OLDEVENT (type? TEDITHISTORYEVENT OLDEVENT)
-                                        (EQ :Delete (GETTH OLDEVENT THACTION))
-                                        (IEQP (GETTH OLDEVENT THCHLIM)
-                                              (IPLUS (GETTH EVENT THCH#)
-                                                     (GETTH OLDEVENT THLEN]
+                             (CL:WHEN [AND OLDEVENT (type? TEDITHISTORYEVENT OLDEVENT)
+                                           (EQ :Delete (GETTH OLDEVENT THACTION))
+                                           (IEQP (GETTH OLDEVENT THCHLIM)
+                                                 (IPLUS (GETTH EVENT THCH#)
+                                                        (GETTH OLDEVENT THLEN]
 
-                              (* ;; "The OLDEEVENT deleted in front of EVENT, and itsTCHLIM are in its original coordinates.  EVENT came later, with its TCH# in a coordinate system reduced by THLEN.  So we have to add it back.")
+                                 (* ;; "The OLDEEVENT deleted in front of EVENT, and itsTCHLIM are in its original coordinates.  EVENT came later, with its TCH# in a coordinate system reduced by THLEN.  So we have to add it back.")
 
-                              (SETQ EVENT (\TEDIT.CUMULATE.EVENTS OLDEVENT EVENT))
-                              (\TEDIT.POPEVENT TEXTOBJ)))
-                      (push (GETTOBJ TEXTOBJ TXTHISTORY)
-                            EVENT))
-          elseif (LISTP EVENT)
-            then 
-                 (* ;; "A monolithic sequence of undoable events")
+                                 (SETQ EVENT (\TEDIT.CUMULATE.EVENTS OLDEVENT EVENT))
+                                 (\TEDIT.POPEVENT TEXTOBJ)))
+                         (push (GETTOBJ TEXTOBJ TXTHISTORY)
+                               EVENT))
+             elseif (LISTP EVENT)
+               then 
+                    (* ;; "A monolithic sequence of undoable events")
 
-                 (push (GETTOBJ TEXTOBJ TXTHISTORY)
-                       EVENT)))
+                    (push (GETTOBJ TEXTOBJ TXTHISTORY)
+                          EVENT)))
     EVENT])
 
 (\TEDIT.CUMULATE.EVENTS
@@ -224,6 +236,66 @@
                                          TEXTOBJ))
     (SETTH EVENT1 THLEN (fetch (SELPIECES SPLEN) of (GETTH EVENT1 THDELETEDPIECES)))
     EVENT1])
+
+(\TEDIT.COMPOSITE.EVENT
+  [LAMBDA (TEXTOBJ PREVEVENTS ACTION)                        (* ; "Edited 22-Sep-2024 18:47 by rmk")
+                                                             (* ; "Edited  3-Jul-2024 08:02 by rmk")
+                                                             (* ; "Edited  8-May-2024 12:34 by rmk")
+
+    (* ;; "Makes sure that all the events in TEXTOBJ in front of PREVEVENTS show up as a single event, so they will undo as a unitary action.  Nothing happens if there is only one, otherwise they are collected into a single ACTION (or  :Composite) event.")
+
+    (LET ((NEWEVENTS (LDIFF (GETTOBJ TEXTOBJ TXTHISTORY)
+                            PREVEVENTS)))
+         (if (CDR NEWEVENTS)
+             then (CAR (FSETTOBJ TEXTOBJ TXTHISTORY (CONS (\TEDIT.HISTORY.EVENT TEXTOBJ
+                                                                 (OR ACTION :Composite)
+                                                                 NIL NIL NIL NIL NEWEVENTS)
+                                                          PREVEVENTS)))
+           else (CAR NEWEVENTS])
+
+(\TEDIT.HISTORY.PROP
+  [LAMBDA (TEXTOBJ SETNEWVALUE NEWVALUE)                     (* ; "Edited 22-Sep-2024 08:42 by rmk")
+
+    (* ;; "Called fromTEDIT.TEXT.PROP to manage the history list.  History is ON by default, and the events always correspond to the current state of the document.  If it's OFF, the next document-changing event will cause HISTORYADD to flush the past and no further events will be recorded until it is turned ON again to start a new epoch.  CLEAR flushes old events but then turns on collection.")
+
+    (PROG1 (CL:IF (FGETTOBJ TEXTOBJ TXTHISTORYINACTIVE)
+               'OFF
+               'ON)
+        (CL:WHEN SETNEWVALUE
+            (SELECTQ NEWVALUE
+                ((ON T) 
+                     (FSETTOBJ TEXTOBJ TXTHISTORYINACTIVE NIL))
+                ((OFF NIL) 
+                           (* ;; 
+   "HISTORYADD will wipe out everything the next time it is called event--gives a chance to back out")
+
+                     (FSETTOBJ TEXTOBJ TXTHISTORYINACTIVE T))
+                (CLEAR                                       (* ; 
+                                             "Wipes out current history now, then resumes collection")
+                       (FSETTOBJ TEXTOBJ TXTHISTORY NIL)
+                       (FSETTOBJ TEXTOBJ TXTHISTORYINACTIVE NIL))
+                (\ILLEGAL.ARG NEWVALUE))))])
+
+(\TEDIT.HISTORY.EVENT
+  [LAMBDA (TEXTOBJ ACTION CH# LEN POINT FIRSTPIECE OLDINFO DELETEDPIECES)
+                                                             (* ; "Edited 26-Sep-2024 15:44 by rmk")
+                                                             (* ; "Edited 23-Sep-2024 16:47 by rmk")
+
+    (* ;; "Don't create if it's inactive")
+
+    (CL:UNLESS (GETTOBJ TEXTOBJ TXTHISTORYINACTIVE)
+        (CL:WHEN (AND (NULL LEN)
+                      (type? SELPIECES CH#))
+            (SETQ LEN (fetch (SELPIECES SPLEN) of CH#))
+            (SETQ CH# (fetch (SELPIECES SPFIRSTCHAR) of CH#)))
+        (create TEDITHISTORYEVENT
+               THACTION _ ACTION
+               THCH# _ CH#
+               THLEN _ LEN
+               THPOINT _ (OR POINT 'LEFT)
+               THFIRSTPIECE _ FIRSTPIECE
+               THOLDINFO _ OLDINFO
+               THDELETEDPIECES _ DELETEDPIECES))])
 )
 
 
@@ -233,7 +305,12 @@
 (DEFINEQ
 
 (TEDIT.UNDO
-  [LAMBDA (TEXTOBJ)                                          (* ; "Edited 20-Mar-2024 11:04 by rmk")
+  [LAMBDA (TSTREAM NOUNDOUNDO)                               (* ; "Edited 12-Aug-2024 10:49 by rmk")
+                                                             (* ; "Edited  3-Jul-2024 21:21 by rmk")
+                                                             (* ; "Edited 18-May-2024 16:23 by rmk")
+                                                             (* ; "Edited 12-May-2024 21:08 by rmk")
+                                                             (* ; "Edited 20-Mar-2024 11:04 by rmk")
+                                                             (* ; "Edited  8-May-2024 11:16 by rmk")
                                                              (* ; "Edited 15-Mar-2024 13:36 by rmk")
                                                              (* ; "Edited  7-Mar-2024 12:48 by rmk")
                                                              (* ; "Edited  3-Mar-2024 20:02 by rmk")
@@ -246,75 +323,86 @@
 
     (* ;; "We push information for undoing the undo onto the TXTHISTORYUNDO list.")
 
-    (TEXTOBJ! TEXTOBJ)
-    (CL:UNLESS (FGETTOBJ TEXTOBJ TXTREADONLY)
-
-        (* ;; "Only undo things if the document is allowed to change.")
-
-        (TEDIT.PROMPTPRINT TEXTOBJ "" T)
-        (PROG ((SEL (TEXTSEL TEXTOBJ))
-               (EVENT (\TEDIT.POPEVENT TEXTOBJ))
-               PREVEVENTS UNDOEVENT)
-              (CL:UNLESS EVENT
-                  (TEDIT.PROMPTPRINT TEXTOBJ "Nothing to undo" T)
+    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (PROG* ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
+            (SEL (TEXTSEL TEXTOBJ))
+            EVENT PREVEVENTS UNDOEVENT)
+           (CL:WHEN (FGETTOBJ TEXTOBJ TXTREADONLY)
                   (RETURN))
+           (SETQ EVENT (\TEDIT.LASTEVENT TEXTOBJ))
+           (CL:UNLESS EVENT
+               (TEDIT.PROMPTPRINT TEXTOBJ "Nothing to undo" T)
+               (RETURN))
+           (CL:WHEN (MEMB (GETTH EVENT THACTION)
+                          '(:Get :Put))
+               (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "You can't undo a " (GETTH EVENT THACTION))
+                      T)
+               (RETURN))
+           (SETQ EVENT (\TEDIT.POPEVENT TEXTOBJ))
+           (CL:UNLESS EVENT
+               (TEDIT.PROMPTPRINT TSTREAM "Nothing to undo" T)
+               (RETURN))
 
-         (* ;; "Each main event was popped.  Each subfunction must put back on the history-undo  list one or more new events that would undo its undoing.  ")
+     (* ;; "Each main event was popped.  Each subfunction must put back on the history-undo  list one or more new events that would undo its undoing.  ")
 
-         (* ;; "We can get into trouble if there is an interrupt in the middle of undoing the full set of events for a previous action, or even in the middle of a singleton event.")
+     (* ;; "We can get into trouble if there is an interrupt in the middle of undoing the full set of events for a previous action, or even in the middle of a singleton event.")
 
-              (SETQ PREVEVENTS (FGETTOBJ TEXTOBJ TXTHISTORY))
-              (\TEDIT.SHOWSEL SEL NIL)
-              (\TEDIT.UNDO1 TEXTOBJ EVENT)
+           (TEDIT.PROMPTCLEAR TSTREAM)
+           (SETQ PREVEVENTS (FGETTOBJ TEXTOBJ TXTHISTORY))
+           (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)
+           (\TEDIT.UNDO1 TEXTOBJ EVENT)
 
-         (* ;; "Get the event that undid EVENT")
+     (* ;; "Get the event that undid EVENT ")
 
-              (SETQ UNDOEVENT (\TEDIT.POPEVENT TEXTOBJ))
-              (FSETTOBJ TEXTOBJ TXTHISTORY PREVEVENTS)
-              (CL:WHEN [OR (NULL PREVEVENTS)
-                           (AND (type? TEDITHISTORYEVENT (CAR (LISTP PREVEVENTS)))
-                                (MEMB (GETTH (CAR PREVEVENTS)
-                                             THACTION)
-                                      (CONSTANT (LIST :Get :Put]
-                     (SETTOBJ TEXTOBJ \DIRTY NIL))
+           (\TEDIT.COMPOSITE.EVENT TEXTOBJ PREVEVENTS)
+           (SETQ UNDOEVENT (\TEDIT.POPEVENT TEXTOBJ))
+           (CL:WHEN [OR (NULL PREVEVENTS)
+                        (AND (type? TEDITHISTORYEVENT (CAR (LISTP PREVEVENTS)))
+                             (MEMB (GETTH (CAR PREVEVENTS)
+                                          THACTION)
+                                   (CONSTANT (LIST :Get :Put]
+                  (SETTOBJ TEXTOBJ \DIRTY NIL))
+           (CL:UNLESS NOUNDOUNDO
 
-         (* ;; "The undone list keeps the event that would undo the undoing, the event that was just undone, and the history event that would be undone next (by M-u).  This is so that M-U can undo the undoing.")
+               (* ;; "The undone list keeps the event that would undo the undoing, the event that was just undone, and the history event that would be undone next (by M-u).  This is so that M-U can undo the undoing.")
 
-              (push (FGETTOBJ TEXTOBJ TXTHISTORYUNDONE TEXTOBJ)
-                    (LIST (CAR PREVEVENTS)
-                          UNDOEVENT EVENT))
-              (\TEDIT.FIXSEL SEL TEXTOBJ)
-              (\TEDIT.SHOWSEL SEL T)))])
+               (push (FGETTOBJ TEXTOBJ TXTHISTORYUNDONE TEXTOBJ)
+                     (LIST (CAR PREVEVENTS)
+                           UNDOEVENT EVENT)))
+           (\TEDIT.FIXSEL SEL TEXTOBJ)
+           (\TEDIT.SHOWSEL SEL T TEXTOBJ])
 
 (\TEDIT.UNDO1
-  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited  4-Mar-2024 14:55 by rmk")
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 29-Sep-2024 13:51 by rmk")
+                                                             (* ; "Edited 22-Sep-2024 21:41 by rmk")
+                                                             (* ; "Edited 19-Aug-2024 00:11 by rmk")
+                                                             (* ; "Edited 12-Aug-2024 23:42 by rmk")
+                                                             (* ; "Edited  7-May-2024 23:10 by rmk")
+                                                             (* ; "Edited  4-Mar-2024 14:55 by rmk")
                                                              (* ; "Edited 16-Jul-2023 11:14 by rmk")
                                                              (* ; "Edited 30-May-2023 23:50 by rmk")
                                                              (* ; "Edited 25-May-2023 00:33 by rmk")
     (SELECTC (GETTH EVENT THACTION)
         ((LIST :Insert :Copy) 
-             (\TEDIT.UNDO.INSERTION TEXTOBJ EVENT))
+             (\TEDIT.UNDO.INSERT TEXTOBJ EVENT))
         (:Move (\TEDIT.UNDO.MOVE TEXTOBJ EVENT))
         (:Delete                                             (* ; "Deletion or case-shift")
-                 (\TEDIT.UNDO.DELETION TEXTOBJ EVENT))
-        (:Move (\TEDIT.UNDO.MOVE TEXTOBJ EVENT))
-        (:Looks                                              (* ; "Character-looks change")
-                (\TEDIT.UNDO.LOOKS TEXTOBJ EVENT))
+                 (\TEDIT.UNDO.DELETE TEXTOBJ EVENT))
+        (:CharLooks                                          (* ; "Character-looks change")
+                    (\TEDIT.UNDO.CHARLOOKS TEXTOBJ EVENT))
         (:ParaLooks                                          (* ; "PARA looks change")
-                    (\TEDIT.UNDO.PARALOOKS TEXTOBJ EVENT))
+                    (\TEDIT.UNDO.PARALOOKS TEXTOBJ EVENT))
         (:PageFormat                                         (* ; "Pageframe change")
-                     [SETTOBJ TEXTOBJ TXTPAGEFRAMES (PROG1 (GETTH EVENT THOLDINFO)
-                                                        (SETTH EVENT THOLDINFO (GETTOBJ TEXTOBJ 
-                                                                                      TXTPAGEFRAMES)))
-                            ]
-                     (\TEDIT.HISTORYADD TEXTOBJ EVENT))
+                     (\TEDIT.UNDO.PAGELOOKS TEXTOBJ EVENT))
         ((LIST :Replace :LowerCase :UpperCase) 
                                                (* ;; "He replaced one piece of text with another ; Lower-casing and upper-casing have the same undo event.")
 
              (\TEDIT.UNDO.REPLACE TEXTOBJ EVENT (GETTH EVENT THACTION)))
+        (:ReplaceCode (\TEDIT.UNDO.REPLACECODE TEXTOBJ EVENT))
         (:Closefile                                          (* ; "Closes an included file")
                     (CL:WHEN (STREAMP (GETTH EVENT THOLDINFO))
                         (CLOSEF? (GETTH EVENT THOLDINFO))))
+        (:Composite (\TEDIT.UNDO.COMPOSITE TEXTOBJ EVENT))
         ((LIST :Get :Put)                                    (* ; 
                                                              "He did a GET or PUT-- not undoable.")
              (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "You can't undo a " (GETTH EVENT THACTION))
@@ -334,7 +422,13 @@
                           T])
 
 (TEDIT.REDO
-  [LAMBDA (TEXTOBJ)                                          (* ; "Edited 15-Mar-2024 13:36 by rmk")
+  [LAMBDA (TSTREAM)                                          (* ; "Edited 26-Sep-2024 16:49 by rmk")
+                                                             (* ; "Edited 29-Jul-2024 23:58 by rmk")
+                                                             (* ; "Edited  3-Jul-2024 07:41 by rmk")
+                                                             (* ; "Edited 18-May-2024 16:23 by rmk")
+                                                             (* ; "Edited 12-May-2024 21:08 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 13:36 by rmk")
+                                                             (* ; "Edited  7-May-2024 23:13 by rmk")
                                                              (* ; "Edited  4-Mar-2024 21:33 by rmk")
                                                              (* ; "Edited  2-Mar-2024 09:41 by rmk")
                                                              (* ; "Edited 21-Dec-2023 11:57 by rmk")
@@ -343,71 +437,80 @@
 
     (* ;; "REDO the last thing this guy did.")
 
-    (CL:UNLESS (GETTOBJ TEXTOBJ TXTREADONLY)
-        (PROG ((SEL (GETTOBJ TEXTOBJ SEL))
-               (EVENT (\TEDIT.LASTEVENT TEXTOBJ))
-               CH)
-              (CL:UNLESS EVENT
-                  (TEDIT.PROMPTPRINT TEXTOBJ "Nothing to redo" T)
-                  (RETURN))
-              (CL:UNLESS (GETSEL SEL SET)
-                  (TEDIT.PROMPTPRINT TEXTOBJ "Please select a target for the repeated action" T)
-                  (RETURN))
+    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (PROG* ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
+            (SEL (GETTOBJ TEXTOBJ SEL))
+            (EVENT (\TEDIT.LASTEVENT TEXTOBJ))
+            CH)
+           (CL:WHEN (\TEDIT.READONLY TEXTOBJ)
+                  (RETURN NIL))
+           (CL:UNLESS EVENT
+               (TEDIT.PROMPTPRINT TEXTOBJ "Nothing to redo" T)
+               (RETURN))
+           (CL:UNLESS (GETSEL SEL SET)
+               (TEDIT.PROMPTPRINT TEXTOBJ "Please select a target for the repeated action" T)
+               (RETURN))
 
-         (* ;; "There really is something to redo and something to do it to.")
+     (* ;; "There really is something to redo and something to do it to.")
 
-              (\TEDIT.SHOWSEL SEL NIL)
-              (SELECTC (GETTH EVENT THACTION)
-                  ((LIST :Insert :Copy :Move)                (* ; "It was an insertion")
-                       (\TEDIT.REDO.INSERTION TEXTOBJ EVENT SEL))
-                  (:Delete                                   (* ; "It was a deletion")
-                           (\TEDIT.DELETE TEXTOBJ SEL))
-                  (:Replace                                  (* ; 
+           (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)
+           (SELECTC (GETTH EVENT THACTION)
+               ((LIST :Insert :Copy :Move)                   (* ; "It was an insertion")
+                    (\TEDIT.REDO.INSERTION TEXTOBJ EVENT SEL))
+               (:Delete                                      (* ; "It was a deletion")
+                        (\TEDIT.DELETE TEXTOBJ SEL))
+               (:Replace                                     (* ; 
                                                           "It was a replacement (a del/insert combo)")
-                            (\TEDIT.REDO.REPLACE TEXTOBJ EVENT (GETTH EVENT THACTION)))
-                  (:LowerCase                                (* ; "He lower-cased something")
-                              (\TEDIT.LCASE.SEL TEXTOBJ TEXTOBJ SEL))
-                  (:UpperCase                                (* ; "He upper-cased something")
-                              (\TEDIT.UCASE.SEL TEXTOBJ TEXTOBJ SEL))
-                  (:Looks                                    (* ; "It was a character looks change")
-                          (TEDIT.LOOKS TEXTOBJ (PLOOKS (GETTH EVENT THFIRSTPIECE))
-                                 SEL))
-                  (:ParaLooks                                (* ; "It was a Paragraph looks change")
-                              (TEDIT.PARALOOKS TEXTOBJ (PPARALOOKS (GETTH EVENT THFIRSTPIECE))
-                                     SEL))
-                  (:PageFormat (TEDIT.PROMPTPRINT TEXTOBJ "You can't redo a page-format change" T T))
-                  (:Find                                     (* ; "EXACT-MATCH SEARCH COMMAND")
+                         (\TEDIT.REDO.REPLACE TEXTOBJ EVENT (GETTH EVENT THACTION)))
+               (:LowerCase                                   (* ; "He lower-cased something")
+                           (\TEDIT.LCASE.SEL TEXTOBJ TEXTOBJ SEL))
+               (:UpperCase                                   (* ; "He upper-cased something")
+                           (\TEDIT.UCASE.SEL TEXTOBJ TEXTOBJ SEL))
+               (:CharLooks                                   (* ; "It was a character looks change")
+                           (\TEDIT.CHANGE.CHARLOOKS TEXTOBJ (CAR (GETTH EVENT THOLDINFO))
+                                  SEL))
+               (:ParaLooks                                   (* ; "It was a Paragraph looks change")
+                           (\TEDIT.CHANGE.PARALOOKS TEXTOBJ (CAR (GETTH EVENT THOLDINFO))
+                                  SEL))
+               (:PageFormat (TEDIT.PROMPTPRINT TEXTOBJ "You can't redo a page-format change" T T))
+               (:Find                                        (* ; "EXACT-MATCH SEARCH COMMAND")
                                                              (* (* ;; "RESTLST ?")
                                                              (AND NIL (RESETSAVE (CURSOR 
                                                              WAITINGCURSOR))) (TEDIT.PROMPTPRINT 
                                                              TEXTOBJ "Searching..." T)
                                                              (SETQ SEL (fetch (TEXTOBJ SEL) of 
-                                                             TEXTOBJ)) (\TEDIT.SHOWSEL SEL NIL)
-                                                             (SETQ CH (TEDIT.FIND TEXTOBJ
+                                                             TEXTOBJ)) (\TEDIT.SHOWSEL SEL NIL NIL 
+                                                             TEXTOBJ) (SETQ CH (TEDIT.FIND TEXTOBJ
                                                              (GETTH EVENT THAUXINFO)))
                                                              (COND (CH (TEDIT.PROMPTPRINT TEXTOBJ 
                                                              "done.") (\TEDIT.UPDATE.SEL SEL CH
                                                              (NCHARS (GETTH EVENT THAUXINFO))
                                                              (QUOTE RIGHT)) (\TEDIT.FIXSEL SEL 
                                                              TEXTOBJ) (TEDIT.NORMALIZECARET TEXTOBJ)
-                                                             (\TEDIT.SHOWSEL SEL T))
+                                                             (\TEDIT.SHOWSEL SEL T NIL TEXTOBJ))
                                                              (T (TEDIT.PROMPTPRINT TEXTOBJ 
                                                              "[Not found]"))))
-                         )
-                  (:Move                                     (* ; "He moved some text")
-                         (\TEDIT.REDO.MOVE TEXTOBJ EVENT (GETTH EVENT THLEN)
-                                (IMAX 1 (TEDIT.GETPOINT NIL SEL))
-                                (GETTH EVENT THFIRSTPIECE)))
-                  ((LIST :Get :Put)                          (* ; "Why can't you redo a get or put ?")
-                       (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "You can't redo a " (GETTH EVENT THACTION))
-                              T T))
-                  (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "Redoing the action " (GETTH EVENT THACTION)
-                                                    " isn't implemented.")
-                         T))
-              (\TEDIT.SHOWSEL SEL T)))])
+                      )
+               (:Move 
+                      (* ;; "It doesn't make sense to do the deletion part of a move in the same place or a different place.  The insert part is probably OK--that maps to the :Insert clause above.")
+
+                      (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "You can't redo a " (GETTH EVENT THACTION))
+                             T T))
+               (:Composite (\TEDIT.REDO.COMPOSITE TEXTOBJ EVENT SEL))
+               ((LIST :Get :Put NIL)                         (* ; "Why can't you redo a get or put ?")
+                    (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "You can't redo a " (GETTH EVENT THACTION))
+                           T T))
+               (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT "Redoing the action " (GETTH EVENT THACTION)
+                                                 " isn't implemented.")
+                      T))
+           (\TEDIT.SHOWSEL SEL T TEXTOBJ])
 
 (\TEDIT.UNDO.UNDO
-  [LAMBDA (TEXTOBJ)                                          (* ; "Edited  3-Mar-2024 21:27 by rmk")
+  [LAMBDA (TSTREAM)                                          (* ; "Edited 26-Sep-2024 22:57 by rmk")
+                                                             (* ; "Edited 22-Sep-2024 11:08 by rmk")
+                                                             (* ; "Edited 12-Aug-2024 23:45 by rmk")
+                                                             (* ; "Edited  3-Jul-2024 09:50 by rmk")
+                                                             (* ; "Edited  3-Mar-2024 21:27 by rmk")
                                                              (* ; "Edited 13-Jun-2023 15:05 by rmk")
                                                              (* ; "Edited  3-Jun-2023 23:04 by rmk")
                                                              (* ; "Edited  1-Jun-2023 23:53 by rmk")
@@ -419,33 +522,36 @@
 
     (* ;; "This makes sense only if the document is now in the state immediately after the undoing--if any other events have intervened, the character positions and the general state of the document are unrelated. So the elements of the undo list also contain the state of the (forward) history list after the undoing was undone.  If we have moved back to the same point in history, we can do the undoing.")
 
-    (SETQ TEXTOBJ (TEXTOBJ TEXTOBJ))
-    (TEDIT.PROMPTPRINT TEXTOBJ "" T)
-    (LET [(LASTUNDONE (pop (FGETTOBJ TEXTOBJ TXTHISTORYUNDONE]
-         (if (NULL LASTUNDONE)
-             then (TEDIT.PROMPTPRINT TEXTOBJ "There is no action whose undoing can be reversed" T)
-           elseif (EQ (CAR LASTUNDONE)
-                      (\TEDIT.LASTEVENT TEXTOBJ))
-             then 
-                  (* ;; "We tell TEDIT.UNDO that LASTUNDONE is the one we now want to undo.")
+    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (LET* [(TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
+           (LASTUNDONE (pop (FGETTOBJ TEXTOBJ TXTHISTORYUNDONE]
+          (TEDIT.PROMPTCLEAR TSTREAM)
+          (if (NULL LASTUNDONE)
+              then (TEDIT.PROMPTPRINT TSTREAM "There is no action whose undoing can be reversed")
+            elseif (EQ (CAR LASTUNDONE)
+                       (\TEDIT.LASTEVENT TEXTOBJ))
+              then 
+                   (* ;; "We tell TEDIT.UNDO that LASTUNDONE is the one we now want to undo.")
 
-                  (push (FGETTOBJ TEXTOBJ TXTHISTORY)
-                        (CADR LASTUNDONE))
-                  (TEDIT.UNDO TEXTOBJ) 
+                   (push (FGETTOBJ TEXTOBJ TXTHISTORY)
+                         (CADR LASTUNDONE))
+                   (TEDIT.UNDO TSTREAM)
+                   (TEDIT.PROMPTPRINT TSTREAM "Undo undone" T) 
 
-                  (* ;; "This saved what we just undid, don't want to keep reundoing it.")
+                   (* ;; "This saved what we just undid, don't want to keep reundoing it.")
 
-                  (pop (FGETTOBJ TEXTOBJ TXTHISTORYUNDONE))
-                  (push (FGETTOBJ TEXTOBJ TXTHISTORY)
-                        (CADDR LASTUNDONE))
-           else (SETTOBJ TEXTOBJ TXTHISTORYUNDONE NIL)       (* ; 
+                   (pop (FGETTOBJ TEXTOBJ TXTHISTORYUNDONE))
+                   (push (FGETTOBJ TEXTOBJ TXTHISTORY)
+                         (CADDR LASTUNDONE))
+            else (SETTOBJ TEXTOBJ TXTHISTORYUNDONE NIL)      (* ; 
                                         "If something else has happened, there are no undos to undo.")
-                (TEDIT.PROMPTPRINT TEXTOBJ "Cannot undo the previous undo" T])
+                 (TEDIT.PROMPTPRINT TSTREAM "Cannot undo the previous undo" T])
 )
 (DEFINEQ
 
-(\TEDIT.UNDO.INSERTION
-  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 30-May-2023 22:54 by rmk")
+(\TEDIT.UNDO.INSERT
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited  8-Jul-2024 00:07 by rmk")
+                                                             (* ; "Edited 30-May-2023 22:54 by rmk")
                                                              (* ; "Edited 26-May-2023 23:49 by rmk")
                                                              (* ; "Edited 24-May-2023 23:53 by rmk")
                                                              (* ; "Edited  2-May-2023 23:26 by rmk")
@@ -453,11 +559,13 @@
 
     (* ;; "UNDO a prior Insert, Copy, or Include. ")
 
-    (\TEDIT.DELETE TEXTOBJ (\TEDIT.UPDATE.SEL (fetch (TEXTOBJ SEL) of TEXTOBJ)
-                                  EVENT])
+    (\TEDIT.DELETE TEXTOBJ (\TEDIT.FIXSEL (\TEDIT.UPDATE.SEL (TEXTSEL TEXTOBJ)
+                                                 EVENT)
+                                  TEXTOBJ])
 
-(\TEDIT.UNDO.DELETION
-  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 15-Mar-2024 13:54 by rmk")
+(\TEDIT.UNDO.DELETE
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 29-Sep-2024 00:23 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 13:54 by rmk")
                                                              (* ; "Edited 30-May-2023 23:31 by rmk")
                                                              (* ; "Edited 27-May-2023 23:39 by rmk")
                                                              (* ; "Edited 21-Apr-93 12:01 by jds")
@@ -470,35 +578,34 @@
            (GETTH EVENT THCH#])
 
 (\TEDIT.UNDO.MOVE
-  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 15-Mar-2024 13:54 by rmk")
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 29-Sep-2024 00:23 by rmk")
+                                                             (* ; "Edited  7-Jul-2024 11:50 by rmk")
+                                                             (* ; "Edited  3-Jul-2024 10:17 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 13:54 by rmk")
                                                              (* ; "Edited  4-Mar-2024 16:08 by rmk")
 
-    (* ;; "If the deletion from TEDIT.MOVE was not in TEXTOBJ, the FOBJ must have been a separate document. If FOBJ is still in the state just after that deletion, it can be undone there. But if FOBJ is not in that state, undoing doesn't there make sense.  The deleted string would reappear in some random place.")
+    (* ;; "This event includes a deletion and an insert/replace both within TEXTOBJ. (The deletion from a from a foreign textobj is in that document's history.)")
 
-    (LET ((DELEVENT (CAR (GETTH EVENT THOLDINFO)))
-          (FOBJ (CDR (GETTH EVENT THOLDINFO)))
+    (LET ((SUBEVENTS (GETTH EVENT THOLDINFO))
+          (TOSEL (GETTH EVENT THPOINT))
           (SEL (FGETTOBJ TEXTOBJ SEL)))
-         (\TEDIT.DELETE TEXTOBJ (\TEDIT.UPDATE.SEL SEL EVENT))
-                                                             (* ; "Undo the insert in this document")
-         (CL:WHEN (GETTH EVENT THDELETEDPIECES)              (* ; 
-                                                             ":Move must have started as :Replace")
-             (\TEDIT.INSERT.SELPIECES (\TEDIT.SELPIECES.COPY (GETTH EVENT THDELETEDPIECES)
-                                             'INSERT TEXTOBJ)
-                    TEXTOBJ
-                    (GETTH EVENT THCH#)))
-         (if FOBJ
-             then (CL:WHEN (EQ DELEVENT (\TEDIT.LASTEVENT FOBJ))
+         (for E in SUBEVENTS do (\TEDIT.UNDO1 TEXTOBJ E)
+                                (\TEDIT.SHOWSEL SEL NIL TEXTOBJ))
                                                              (* ; 
-                                                             "Delete is last event in other document")
-                      (TEDIT.UNDO FOBJ))
-           else (\TEDIT.UNDO1 TEXTOBJ DELEVENT))
-
-         (* ;; "Put the point back after the original target. Caller wil fix it.")
-
-         (\TEDIT.UPDATE.SEL SEL EVENT 0 'LEFT T])
+                                                          "We don't want the intermediate selections")
+         (\TEDIT.UPDATE.SEL SEL EVENT)
+         (\TEDIT.FIXSEL SEL TEXTOBJ)
+         (if (EQ :Replace (GETTH (CAR SUBEVENTS)
+                                 THACTION))
+             then (\TEDIT.SET.SEL.LOOKS SEL 'PENDINGDEL)
+                  (FSETTOBJ TEXTOBJ BLUEPENDINGDELETE T)
+           else (\TEDIT.SET.SEL.LOOKS SEL 'NORMAL))
+         (\TEDIT.SHOWSEL SEL T TEXTOBJ])
 
 (\TEDIT.UNDO.REPLACE
-  [LAMBDA (TEXTOBJ EVENT ACTION)                             (* ; "Edited 15-Mar-2024 13:54 by rmk")
+  [LAMBDA (TEXTOBJ EVENT ACTION)                             (* ; "Edited 13-Sep-2024 23:50 by rmk")
+                                                             (* ; "Edited  7-Jul-2024 11:59 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 13:54 by rmk")
                                                              (* ; "Edited 30-May-2023 23:10 by rmk")
                                                              (* ; "Edited 27-May-2023 16:49 by rmk")
                                                              (* ; "Edited 24-May-2023 22:43 by rmk")
@@ -508,27 +615,170 @@
     (\TEDIT.REPLACE.SELPIECES (\TEDIT.SELPIECES.COPY (GETTH EVENT THDELETEDPIECES)
                                      NIL TEXTOBJ)
            TEXTOBJ
-           (\TEDIT.UPDATE.SEL (fetch (TEXTOBJ SEL) of TEXTOBJ)
+           (\TEDIT.UPDATE.SEL (TEXTSEL TEXTOBJ)
                   EVENT))
     (SETTH (\TEDIT.LASTEVENT TEXTOBJ)
            THACTION ACTION])
+
+(\TEDIT.UNDO.CHARLOOKS
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 28-Sep-2024 22:37 by rmk")
+                                                             (* ; "Edited 26-Sep-2024 16:06 by rmk")
+                                                             (* ; "Edited 11-Aug-2024 22:11 by rmk")
+                                                             (* ; "Edited  5-Jul-2024 22:54 by rmk")
+                                                             (* ; "Edited 18-May-2024 16:21 by rmk")
+                                                             (* ; "Edited 19-Feb-2024 11:32 by rmk")
+                                                             (* ; "Edited 14-Dec-2023 21:01 by rmk")
+                                                             (* ; "Edited 30-May-2023 22:56 by rmk")
+                                                             (* ; "Edited 18-Apr-2023 23:56 by rmk")
+                                                             (* ; "Edited 30-May-91 21:44 by jds")
+
+    (* ;; "Undo the setting of character looks. The undolist is a list of (NEXTCHNO . OLDCHARLOOKS) pairs, where OLDCHARLOOKS NIL means nothing changed.  We have to track the character numbers because pieces may have been split by future events that were then undone. NEXTCHNO is the first character number of the next original piece")
+
+    (for U OLDLOOKS NEWUNDOLIST NEXTCHNO (PC _ (\TEDIT.CHTOPC (GETTH EVENT THCH#)
+                                                      TEXTOBJ))
+         (CHNO _ (GETTH EVENT THCH#))
+         (SEL _ (FGETTOBJ TEXTOBJ SEL))
+         (CARETPC _ (\TEDIT.CARETPIECE TEXTOBJ)) in (CDR (GETTH EVENT THOLDINFO))
+       do 
+          (* ;; "Revert changes until we see the character number of the next changed piece. The initial NEXTCHNO is ")
+
+          (* ;; "Perhaps we should also save the CHNO of the CARETPC")
+
+          (SETQ NEXTCHNO (CAR U))
+          (SETQ OLDLOOKS (CDR U))
+          (CL:WHEN (AND OLDLOOKS (EQ PC CARETPC))
+              (FSETTOBJ TEXTOBJ CARETLOOKS (\TEDIT.CARETLOOKS.VERIFY TEXTOBJ OLDLOOKS)))
+          [push NEWUNDOLIST (CONS NEXTCHNO (CL:IF OLDLOOKS (PLOOKS PC] 
+
+          (* ;; "U starts at the first piece.  We want CHNO to be the start of the next piece, i.e. initialize to (CAR(CDR ...))  But then, what about the last piece.  Maybe we have to do our own popping, or look at UTAIL.  Or end in (NEXTPC-CHNO . NIL ).  Or text for IGEQ THCHLIM")
+
+          (for P inpieces PC do (FSETPC P PLOOKS OLDLOOKS)
+                                (add CHNO (PLEN P))
+                                (CL:WHEN (IEQP CHNO NEXTCHNO)(* ; "First piece of the next run")
+                                    (SETQ PC P)
+                                    (RETURN))) finally 
+
+                                                     (* ;; 
+                     "Remember the previous looks in case we UNDO the UNDO. (CAR DATUM) is for redo.")
+
+                                                     (CL:WHEN NEWUNDOLIST
+                                                         (change (GETTH EVENT THOLDINFO)
+                                                                (CONS (CAR DATUM)
+                                                                      (DREVERSE NEWUNDOLIST)))
+                                                         (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)
+                                                         (\TEDIT.UPDATE.LINES TEXTOBJ 'LOOKS
+                                                                (GETTH EVENT THCH#)
+                                                                (GETTH EVENT THLEN))
+                                                         (\TEDIT.UPDATE.SEL SEL EVENT NIL NIL
+                                                                'NORMAL)
+                                                         (\TEDIT.FIXSEL SEL TEXTOBJ)
+                                                         (\TEDIT.SHOWSEL SEL T TEXTOBJ)
+                                                         (TEDIT.PROMPTPRINT TEXTOBJ 
+                                                                "Character looks restored" T)) 
+
+                                                     (* ;; 
+                                        "Save the event for REDO, even if these pieces didn't change")
+
+                                                     (\TEDIT.HISTORYADD TEXTOBJ EVENT])
+
+(\TEDIT.UNDO.PARALOOKS
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 28-Sep-2024 22:38 by rmk")
+                                                             (* ; "Edited 27-Sep-2024 12:23 by rmk")
+                                                             (* ; "Edited 11-Aug-2024 22:10 by rmk")
+                                                             (* ; "Edited  5-Jul-2024 22:54 by rmk")
+                                                             (* ; "Edited 18-May-2024 16:22 by rmk")
+                                                             (* ; "Edited 19-Feb-2024 11:32 by rmk")
+                                                             (* ; "Edited 11-Dec-2023 11:10 by rmk")
+                                                             (* ; "Edited 21-Sep-2023 23:51 by rmk")
+                                                             (* ; "Edited 30-May-2023 22:55 by rmk")
+                                                             (* ; "Edited 18-Apr-2023 23:57 by rmk")
+                                                             (* ; "Edited 30-May-91 21:44 by jds")
+
+    (* ;; "Undo the setting of paragraph looks.")
+
+    (for U OLDLOOKS NEWUNDOLIST (PC _ (\TEDIT.CHTOPC (GETTH EVENT THCH#)
+                                             TEXTOBJ))
+         (CHNO _ (GETTH EVENT THCH#))
+         (SEL _ (FGETTOBJ TEXTOBJ SEL)) in (CDR (GETTH EVENT THOLDINFO))
+       do 
+          (* ;; "Find the first piece of the next changed paragraph")
+
+          (for P inpieces PC do (CL:WHEN (IEQP CHNO (CAR U))
+                                    (SETQ PC P)
+                                    (RETURN))
+                                (add CHNO (PLEN P)))
+          (SETQ OLDLOOKS (CDR U))
+          (push NEWUNDOLIST (CONS CHNO (PPARALOOKS PC)))     (* ; "Save for UNDO UNDO")
+
+          (* ;; "Change all the pieces in this paragraph")
+
+          (for P inpieces PC do (FSETPC P PPARALOOKS OLDLOOKS)
+                                (CL:WHEN (PPARALAST P)
+                                    (SETQ PC P)
+                                    (RETURN))
+                                (add CHNO (PLEN P))) finally 
+
+                                                           (* ;; 
+                     "Remember the previous looks in case we UNDO the UNDO. (CAR DATUM) is for redo.")
+
+                                                           (CL:WHEN NEWUNDOLIST
+                                                               (change (GETTH EVENT THOLDINFO)
+                                                                      (CONS (CAR DATUM)
+                                                                            (DREVERSE NEWUNDOLIST)))
+                                                               (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)
+                                                               (\TEDIT.UPDATE.LINES TEXTOBJ
+                                                                      'LOOKS
+                                                                      (GETTH EVENT THCH#)
+                                                                      (GETTH EVENT THLEN))
+                                                               (\TEDIT.UPDATE.SEL SEL EVENT NIL NIL
+                                                                      'NORMAL)
+                                                               (\TEDIT.FIXSEL SEL TEXTOBJ)
+                                                               (\TEDIT.SHOWSEL SEL T TEXTOBJ)
+                                                               (TEDIT.PROMPTPRINT TEXTOBJ 
+                                                                      "Paragraph looks restored" T))
+                                                           
+                                                           (* ;; 
+                                        "Save the event for REDO, even if these pieces didn't change")
+
+                                                           (\TEDIT.HISTORYADD TEXTOBJ EVENT])
+
+(\TEDIT.UNDO.PAGELOOKS
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 12-Aug-2024 10:28 by rmk")
+    [SETTOBJ TEXTOBJ TXTPAGEFRAMES (PROG1 (COPYALL (GETTH EVENT THOLDINFO))
+                                       (SETTH EVENT THOLDINFO (GETTOBJ TEXTOBJ TXTPAGEFRAMES)))]
+    (TEDIT.PROMPTPRINT TEXTOBJ "Page formats restored" T)
+    (\TEDIT.HISTORYADD TEXTOBJ EVENT])
+
+(\TEDIT.UNDO.COMPOSITE
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 15-Aug-2024 10:14 by rmk")
+                                                             (* ; "Edited  7-May-2024 23:17 by rmk")
+
+    (* ;; "A composite event is a group of other events that are to be undone at the same time.  Only show the selection of the last undo event")
+
+    (for E (SEL _ (TEXTSEL TEXTOBJ)) in (GETTH EVENT THOLDINFO) do (\TEDIT.UNDO1 TEXTOBJ E)
+                                                                   (\TEDIT.SHOWSEL SEL NIL TEXTOBJ))
+    (TEDIT.NORMALIZECARET TEXTOBJ])
+
+(\TEDIT.UNDO.REPLACECODE
+  [LAMBDA (TEXTOBJ EVENT)                                    (* ; "Edited 23-Sep-2024 00:45 by rmk")
+    (TEDIT.RPLCHARCODE TEXTOBJ (GETTH EVENT THCH#)
+           (GETTH EVENT THOLDINFO])
 )
 (DEFINEQ
 
-(\TEDIT.REDO.INSERTION
-  [LAMBDA (TEXTOBJ EVENT SEL)                                (* ; "Edited 15-Mar-2024 13:54 by rmk")
+(\TEDIT.REDO.INSERT
+  [LAMBDA (TEXTOBJ EVENT SEL)                                (* ; "Edited 15-Aug-2024 10:47 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 13:54 by rmk")
                                                              (* ; "Edited 31-May-2023 10:26 by rmk")
                                                              (* ; "Edited 18-May-2023 19:24 by rmk")
                                                              (* ; "Edited 21-Apr-93 01:06 by jds")
-
-    (* ;; "Copies of the pieces inserted at the previous insertion EVENT are inserted at SEL's caret.  We can extract the relevant pieces from the event's text position, because we know that either EVENT was the last event or other events after it have been undone, and the pieces are back to their original state.")
-
     (\TEDIT.INSERT.SELPIECES (\TEDIT.SELPIECES.COPY (\TEDIT.SELPIECES EVENT NIL TEXTOBJ)
                                     'INSERT TEXTOBJ)
            TEXTOBJ SEL])
 
 (\TEDIT.REDO.REPLACE
-  [LAMBDA (TEXTOBJ EVENT ACTION)                             (* ; "Edited 15-Mar-2024 13:54 by rmk")
+  [LAMBDA (TEXTOBJ EVENT ACTION)                             (* ; "Edited  7-Jul-2024 11:59 by rmk")
+                                                             (* ; "Edited 15-Mar-2024 13:54 by rmk")
                                                              (* ; "Edited  2-Oct-2023 11:43 by rmk")
                                                              (* ; "Edited 31-May-2023 10:25 by rmk")
                                                              (* ; "Edited 27-May-2023 11:16 by rmk")
@@ -540,31 +790,25 @@
     (\TEDIT.REPLACE.SELPIECES (\TEDIT.SELPIECES.COPY (\TEDIT.SELPIECES EVENT NIL TEXTOBJ)
                                      NIL TEXTOBJ)
            TEXTOBJ
-           (\TEDIT.UPDATE.SEL (fetch (TEXTOBJ SEL) of TEXTOBJ)
+           (\TEDIT.UPDATE.SEL (GETTOBJ TEXTOBJ SEL)
                   EVENT))
     (SETTH (\TEDIT.LASTEVENT TEXTOBJ)
            THACTION ACTION])
 
-(\TEDIT.REDO.MOVE
-  [LAMBDA (TEXTOBJ EVENT LEN CH# FIRSTPIECE)                 (* ; "Edited 15-Mar-2024 13:36 by rmk")
-                                                             (* ; "Edited 16-Feb-2024 23:36 by rmk")
-                                                             (* ; "Edited  7-Jun-2023 23:19 by rmk")
-                                                             (* ; "Edited 27-May-2023 11:18 by rmk")
-                                                             (* ; "Edited 23-May-2023 12:54 by rmk")
-                                                             (* ; "Edited 30-May-91 21:28 by jds")
-    (LET ((SCR2 (GETTOBJ TEXTOBJ SCRATCHSEL2)))
-         (\TEDIT.UPDATE.SEL SCR2 (GETTH EVENT THCH#)
-                LEN)
-         (SETSEL SCR2 SET T)
-         (\TEDIT.FIXSEL SCR2 TEXTOBJ)
-         (\TEDIT.SET.SEL.LOOKS SCR2 'MOVE)
-         (TEDIT.MOVE SCR2 (FGETTOBJ TEXTOBJ SEL])
+(\TEDIT.REDO.COMPOSITE
+  [LAMBDA (TEXTOBJ EVENT SEL)                                (* ; "Edited 21-Oct-2024 00:26 by rmk")
+                                                             (* ; "Edited  7-May-2024 23:12 by rmk")
+    (\TEDIT.THELP 'Redo-composite])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4834 5855 (\TEDIT.HISTORYEVENT.DEFPRINT 4844 . 5853)) (6621 12187 (\TEDIT.HISTORYADD 
-6631 . 10707) (\TEDIT.CUMULATE.EVENTS 10709 . 12185)) (12240 26023 (TEDIT.UNDO 12250 . 15439) (
-\TEDIT.UNDO1 15441 . 18506) (TEDIT.REDO 18508 . 23783) (\TEDIT.UNDO.UNDO 23785 . 26021)) (26024 30162 
-(\TEDIT.UNDO.INSERTION 26034 . 26791) (\TEDIT.UNDO.DELETION 26793 . 27480) (\TEDIT.UNDO.MOVE 27482 . 
-29257) (\TEDIT.UNDO.REPLACE 29259 . 30160)) (30163 33325 (\TEDIT.REDO.INSERTION 30173 . 31123) (
-\TEDIT.REDO.REPLACE 31125 . 32366) (\TEDIT.REDO.MOVE 32368 . 33323)))))
+  (FILEMAP (NIL (5031 6052 (\TEDIT.HISTORYEVENT.DEFPRINT 5041 . 6050)) (6818 16511 (\TEDIT.HISTORYADD 
+6828 . 11599) (\TEDIT.CUMULATE.EVENTS 11601 . 13077) (\TEDIT.COMPOSITE.EVENT 13079 . 14213) (
+\TEDIT.HISTORY.PROP 14215 . 15578) (\TEDIT.HISTORY.EVENT 15580 . 16509)) (16564 33142 (TEDIT.UNDO 
+16574 . 20753) (\TEDIT.UNDO1 20755 . 24144) (TEDIT.REDO 24146 . 30317) (\TEDIT.UNDO.UNDO 30319 . 33140
+)) (33143 47578 (\TEDIT.UNDO.INSERT 33153 . 34066) (\TEDIT.UNDO.DELETE 34068 . 34862) (
+\TEDIT.UNDO.MOVE 34864 . 36430) (\TEDIT.UNDO.REPLACE 36432 . 37528) (\TEDIT.UNDO.CHARLOOKS 37530 . 
+42080) (\TEDIT.UNDO.PARALOOKS 42082 . 46296) (\TEDIT.UNDO.PAGELOOKS 46298 . 46707) (
+\TEDIT.UNDO.COMPOSITE 46709 . 47350) (\TEDIT.UNDO.REPLACECODE 47352 . 47576)) (47579 49939 (
+\TEDIT.REDO.INSERT 47589 . 48322) (\TEDIT.REDO.REPLACE 48324 . 49655) (\TEDIT.REDO.COMPOSITE 49657 . 
+49937)))))
 STOP

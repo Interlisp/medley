@@ -318,15 +318,20 @@ IL_DIR="$(cd "${MEDLEYDIR}/.."; pwd)"
 wsl=false
 darwin=false
 cygwin=false
+linux=false
+platform=unknown
 
 if [ "$(uname)" = "Darwin" ]
 then
   darwin=true
+  platform=darwin
 elif [ "$(uname -s | head --bytes 6)" = "CYGWIN" ]
 then
   cygwin=true
+  platform=cgwin
 elif [ -e "/proc/version" ] && grep --ignore-case --quiet Microsoft /proc/version
 then
+  platform=wsl
   wsl=true
   wsl_ver=0
   # WSL2
@@ -351,7 +356,19 @@ Exiting"
       fi
     fi
   fi
+else
+  linux=true
+  platform=linux
 fi
+#################### TEST CODE ####################
+
+#wsl=false
+#darwin=false
+#cygwin=false
+#linux=true
+#platform=linux
+
+#################### TEST CODE ####################
 
 # process config file and args
 # shellcheck source=./medley_configfile.sh
@@ -552,8 +569,8 @@ flags:
     -t STRING | --title STRING : use STRING as title of window
 
     -d :N | --display :N       : use X display :N
-+w
-+w  -v | --vnc                 : (WSL only) Use a VNC window instead of an X window
+
+    -v | --vnc                 : Use a VNC window instead of an X window (Not available: MacOS & Windows/Cygwin)
 
     -i STRING | --id STRING    : use STRING as the id for this run of Medley (default: default)
 
@@ -805,13 +822,32 @@ do
             use_vnc=true
             ;;
         esac
-        if [ "${use_vnc}" = true ] && { [ ! "${wsl}" = true ] || [ ! "$(uname -m)" = x86_64 ] ; }
+        if [ "${use_vnc}" = true ]
         then
-          echo "Warning: The -v or --vnc flag was set."
-          echo "But the vnc option is only available when running on "
-          echo "Windows System for Linux (wsl) on x86_64 machines."
-          echo "Ignoring the -v or --vnc flag."
-          use_vnc=false
+          case ${platform} in
+            darwin)
+              echo "Warning The -v (--vnc) flag was set, but the vnc option is"
+              echo "not available on MacOS.  Ignoring the -v (--vnc) flag."
+              use_vnc=false
+              ;;
+            cygwin)
+              echo "Warning The -v (--vnc) flag was set, but the vnc option is"
+              echo "not available on Windows (Cygwin).  Ignoring the -v (--vnc) flag."
+              use_vnc=false
+              ;;
+	    wsl)
+              if [ ! "$(uname -m)" = x86_64 ]
+              then
+                echo "Warning: The -v or --vnc flag was set."
+                echo "But the vnc option is only available when running on "
+                echo "Windows System for Linux (wsl) on x86_64 machines."
+                echo "Ignoring the -v or --vnc flag."
+                use_vnc=false
+              fi
+              ;;
+            linux)
+              ;;
+          esac
         fi
         ;;
       -x | --logindir)
@@ -1380,9 +1416,9 @@ fi
 
 
 # Run maiko either directly or with vnc
-if [ "${wsl}" = true ] && [ "${use_vnc}" = true ]
+if [ "${use_vnc}" = true ]
 then
-  # do the vnc thing on wsl (if called for)
+  # do the vnc thing - if called for
   # shellcheck source=./medley_vnc.sh
 #   . "${SCRIPTDIR}/medley_vnc.sh"
 # shellcheck shell=sh
@@ -1402,9 +1438,14 @@ then
 #   Copyright 2023 Interlisp.org
 #
 ###############################################################################
-
+#set -x
   ip_addr() {
-    ip -4 -br address show dev eth0 | awk '{print $3}' | sed 's-/.*$--'
+    if [ "${wsl}" = true ]
+    then
+      ip -4 -br address show dev eth0 | awk '{print $3}' | sed 's-/.*$--'
+    else
+      echo "127.0.0.1"
+    fi
   }
 
   find_open_display() {
@@ -1446,21 +1487,39 @@ then
   }
 
   #
-  # Make sure prequisites for vnc support in wsl are in place
+  # Make sure prequisites for vnc support are in place
   #
-  if [ "${use_vnc}" = "true" ];
+  if [ -z "$(which Xtigervnc)" ]
+  then
+    echo "Error: The -v or --vnc flag was set."
+    echo "But it appears that the TigerVNC server (Xtigervnc) has not been installed."
+    echo "Please install the TigerVNC server and try again.  On Debian and Ubuntu, use:"
+    echo "\"sudo apt install tigervnc-standalone-server\". On most other Linux distros, use the"
+    echo "distro's package manager to install the \"tigervnc-server\" package."
+    echo "Exiting."
+    exit 4
+  fi
+  if [ "${linux}" = "true" ]
+  then
+    if [ -z "$(which xtigervncviewer)" ]
+    then
+      echo "Error: The -v or --vnc flag was set."
+      echo "But it appears that that the TigerVNC viewer (xtigervncviewer) is not installed on your system."
+      echo "Please install the TigerVNC viewer and try again.  On Debian and Ubuntu, use:"
+      echo "\"sudo apt install tigervnc-viewer\".  On most other Linux distros, use the"
+      echo "the distro's package manager to install the \"tigervnc-viewer\" (or sometimes just \"tigervnc\")"
+      echo "package."
+      echo "Exiting."
+      exit 5
+    else
+       vncviewer="$(which xtigervncviewer)"
+    fi
+  elif [ "${wsl}" = "true" ]
   then
     win_userprofile="$(cmd.exe /c "<nul set /p=%UserProfile%" 2>/dev/null)"
     vnc_dir="$(wslpath "${win_userprofile}")/AppData/Local/Interlisp"
     vnc_exe="vncviewer64-1.12.0.exe"
-    if [ "$(which Xvnc)" = "" ] || [ "$(Xvnc -version 2>&1 | grep -iq tigervnc; echo $?)" -eq 1 ]
-    then
-      echo "Error: The -v or --vnc flag was set."
-      echo "But it appears that that TigerVNC \(Xvnc\) has not been installed."
-      echo "Please install TigerVNC using \"sudo apt install tigervnc-standalone-server tigervnc-xorg-extension\""
-      echo "Exiting."
-      exit 4
-    elif [ ! -e "${vnc_dir}/${vnc_exe}" ];
+    if [ ! -e "${vnc_dir}/${vnc_exe}" ];
     then
       if [ -e "${IL_DIR}/wsl/${vnc_exe}" ];
       then
@@ -1478,7 +1537,7 @@ then
           if [ -z "${resp}" ]; then resp=n; fi
           case "${resp}" in
             n* | N* )
-              echo "Ok.  You can download the Tiger VNC viewer \(v1.12.0\) .exe yourself and "
+              echo "Ok.  You can download the Tiger VNC viewer (v1.12.0) .exe yourself and "
               echo "place it in ${vnc_dir}/${vnc_exe}.  Then retry."
               echo "Exiting."
               exit 5
@@ -1494,6 +1553,7 @@ then
         done
       fi
     fi
+    vncviewer="${vnc_dir}/${vnc_exe}"
   fi
   #
   #  Start the log file so we can trace any issues with vnc, etc
@@ -1513,6 +1573,7 @@ then
   #    find an unused display and an available port
   #
   #set -x
+  ORIGINAL_DISPLAY="${DISPLAY}"
   OPEN_DISPLAY="$(find_open_display)"
   if [ "${OPEN_DISPLAY}" -eq -1 ];
   then
@@ -1539,15 +1600,15 @@ then
   #  Start the Xvnc server
   #
   mkdir -p "${LOGINDIR}"/logs
-  /usr/bin/Xvnc "${DISPLAY}" \
-                -rfbport "${VNC_PORT}" \
-                -geometry "${geometry}" \
-                -SecurityTypes None \
-                -NeverShared \
-                -DisconnectClients=0 \
-                -desktop "${title}" \
-                --MaxDisconnectionTime=10 \
-                >> "${LOG}" 2>&1 &
+  Xvnc "${DISPLAY}" \
+       -rfbport "${VNC_PORT}" \
+       -geometry "${geometry}" \
+       -SecurityTypes None \
+       -NeverShared \
+       -DisconnectClients=0 \
+       -desktop "${title}" \
+       --MaxDisconnectionTime=10 \
+       >> "${LOG}" 2>&1 &
 
   sleep .5
   #
@@ -1557,25 +1618,24 @@ then
     start_maiko "$@"
     if [ -n "$(pgrep -f "${vnc_exe}.*:${VNC_PORT}")" ]; then vncconfig -disconnect; fi
   } &
-
   #
-  #  Start the vncviewer on the windows side
+  #  Start the vncviewer
   #
 
   #  First give medley time to startup
   #  sleep .25
-  #  SLeep appears not to be needed, but faster/slower machines ????
+  #  Sleep appears not to be needed, but faster/slower machines ????
   #  FGH 2023-02-08
 
-  #  Then start vnc viewer on Windows side
+  #  Then start vnc viewer
   vncv_loc=$(( OPEN_DISPLAY * 50 ))
   start_time=$(date +%s)
-  "${vnc_dir}"/${vnc_exe}                           \
-               -geometry "+${vncv_loc}+${vncv_loc}" \
-               -ReconnectOnError=off                \
-               −AlertOnFatalError=off               \
-               "$(ip_addr)":"${VNC_PORT}"           \
-               >>"${LOG}" 2>&1                      &
+  export DISPLAY="${ORIGINAL_DISPLAY}"
+  "${vncviewer}" -geometry "+${vncv_loc}+${vncv_loc}"  \
+                 −AlertOnFatalError=0                  \
+                 -ReconnectOnError=0                   \
+                 "$(ip_addr)":"${VNC_PORT}"            \
+                 >>"${LOG}" 2>&1                       &
   wait $!
   if [ $(( $(date +%s) - start_time )) -lt 5 ]
   then

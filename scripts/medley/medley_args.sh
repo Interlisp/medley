@@ -239,13 +239,32 @@ do
             use_vnc=true
             ;;
         esac
-        if [ "${use_vnc}" = true ] && { [ ! "${wsl}" = true ] || [ ! "$(uname -m)" = x86_64 ] ; }
+        if [ "${use_vnc}" = true ]
         then
-          echo "Warning: The -v or --vnc flag was set."
-          echo "But the vnc option is only available when running on "
-          echo "Windows System for Linux (wsl) on x86_64 machines."
-          echo "Ignoring the -v or --vnc flag."
-          use_vnc=false
+          case ${platform} in
+            darwin)
+              echo "Warning The -v (--vnc) flag was set, but the vnc option is"
+              echo "not available on MacOS.  Ignoring the -v (--vnc) flag."
+              use_vnc=false
+              ;;
+            cygwin)
+              echo "Warning The -v (--vnc) flag was set, but the vnc option is"
+              echo "not available on Windows (Cygwin).  Ignoring the -v (--vnc) flag."
+              use_vnc=false
+              ;;
+	    wsl)
+              if [ ! "$(uname -m)" = x86_64 ]
+              then
+                echo "Warning: The -v or --vnc flag was set."
+                echo "But the vnc option is only available when running on "
+                echo "Windows System for Linux (wsl) on x86_64 machines."
+                echo "Ignoring the -v or --vnc flag."
+                use_vnc=false
+              fi
+              ;;
+            linux)
+              ;;
+          esac
         fi
         ;;
       -x | --logindir)

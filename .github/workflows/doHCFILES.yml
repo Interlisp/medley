@@ -1,0 +1,139 @@
+#*******************************************************************************
+# doHCFILES.yml
+#
+# Interlisp workflow to run HCFILES.  HCFILES prints out PDF files for all of the
+# files in the Medley directory and posts them on files.interlisp.org.
+#  
+# This workflow is designed to be kickjed off by the buildReleaseInclDocker
+# workflow running in the Medley repo, once the release has been completed successfully
+#
+# Copyright 2024 by Interlisp.org
+#
+# ******************************************************************************
+
+name: Run HCFILES
+
+# Run this workflow on ...
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Mark this as a draft release"
+        type: choice
+        options:
+        - 'false'
+        - 'true'
+
+  workflow_call:
+    inputs:
+      draft:
+        description: "Mark this as a draft release"
+        required: false
+        type: string
+        default: 'false'
+    secrets:
+      OIO_SSH_KEY:
+        required: true
+      MU_TOKEN:
+        required: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  run_HCFILES:
+
+    runs-on: ubuntu-24.04
+
+    steps:
+
+      - name: Checkout Medley repo
+        uses: actions/checkout@v4
+
+      - name: Checkout notecards
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/notecards
+          path: ./notecards
+
+      - name: Checkout loops
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/loops
+          path: ./loops
+
+      - name: Checkout test
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/test
+          path: ./test
+
+      - name: Cleanup .git for notecards, loops, test
+        run: rm -rf ./notecards/.git ./loops/.git ./test/.git
+
+      - name: Download Maiko
+        run: |
+          gh release download --output /tmp/maiko.tgz \
+                              --repo ${{ github.repository_owner }}/maiko \
+                              --pattern '*-linux.x86_64.tgz'
+          tar -xzf /tmp/maiko.tgz
+        env:
+          GH_TOKEN: ${{ secrets.MU_TOKEN }}
+
+      - name: Install vnc & ghostscript (ps2pdf)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tightvncserver
+          sudo apt-get install -y ghostscript
+
+      - name: Build apps.sysout
+        run: |
+          Xvnc -geometry 1280x720 :0 &
+          export DISPLAY=":0"
+          scripts/loadup-all.sh -apps
+
+      - name: Run HCFILES
+        run: |
+          export DISPLAY=":0"
+          scripts/do_hcfiles.sh
+
+      - name: Push Medley files (including created pdf files) to files.interlisp.org
+        run: |
+            # create a tar file of all of the directories to be pushed
+            tarfile=/tmp/source-$$.tgz
+            tar -c -z -f ${tarfile} --exclude=.git .
+            # set up ssh identity
+            eval $(ssh-agent)
+            ssh-add - <<< "${SSH_KEY}"
+            # set destination directory on files.interlisp.org
+            if [ "${{ inputs.draft }}" = "true" ]
+            then
+              dest=/srv/oio/files/development/medley
+            else
+              dest=/srv/oio/files/production/medley
+            fi
+            # Push tar file up to files.interlisp.org
+            batchfile=/tmp/batch-$$
+            echo "-put ${tarfile} ${dest}.tgz" > ${batchfile}
+            sftp -o StrictHostKeyChecking=no -b ${batchfile} ubuntu@files.interlisp.org
+            # now tar is up, untar it and juggle backups
+            scriptfile=/tmp/script-$$
+            # create script file to do the work
+            cat > ${scriptfile} <<EOF
+            rm -rf ${dest}.new
+            mkdir -p ${dest}.new
+            tar -C ${dest}.new -x -z -f ${dest}.tgz
+            rm -f ${dest}.tgz
+            rm -rf ${dest}.oldold
+            if [ -e ${dest}.old ]; then mv ${dest}.old ${dest}.oldold; fi
+            if [ -e ${dest} ]; then mv ${dest} ${dest}.old; fi
+            mv ${dest}.new ${dest}
+            EOF
+            # execute the script file via ssh
+            ssh -aTxo BatchMode=yes ubuntu@files.interlisp.org /bin/sh -s < ${scriptfile}
+        env:
+            SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
+
+

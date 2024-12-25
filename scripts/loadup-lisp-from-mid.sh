@@ -5,7 +5,7 @@ main() {
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
 	loadup_start
-
+    
 	cat >"${cmfile}" <<-"EOF"
 	"
 
@@ -14,6 +14,7 @@ main() {
 	  (MEDLEY-INIT-VARS)
 	  (LOAD (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) (QUOTE /LOADUP-LISP.LCOM)))
 	  (LOADUP-LISP (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /lisp.dribble)))
+	  (PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)
 	  (HARDRESET)
 	)
 	SHH

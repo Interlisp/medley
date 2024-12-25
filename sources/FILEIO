@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 8-Dec-2023 15:17:12" {WMEDLEY}<sources>FILEIO.;124 163555 
+(FILECREATED "25-Dec-2024 10:56:37" {WMEDLEY}<sources>FILEIO.;138 166550 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \GENERIC.CHARSET CHARSET ACCESS-CHARSET)
+      :CHANGES-TO (FNS SETFILEINFO \DO.PARAMS.AT.OPEN \RENAMEFILE)
 
-      :PREVIOUS-DATE " 7-Dec-2023 23:54:02" {WMEDLEY}<sources>FILEIO.;121)
+      :PREVIOUS-DATE "18-Dec-2024 21:08:09" {WMEDLEY}<sources>FILEIO.;135)
 
 
 (PRETTYCOMPRINT FILEIOCOMS)
@@ -1446,13 +1446,17 @@
                 (GO RETRY])
 
 (\DO.PARAMS.AT.OPEN
-  [LAMBDA (STREAM ACCESS PARAMETERS)                         (* ; "Edited 25-Aug-2023 08:43 by rmk")
+  [LAMBDA (STREAM ACCESS PARAMETERS)                         (* ; "Edited 25-Dec-2024 10:54 by rmk")
+                                                             (* ; "Edited 15-Jul-2024 22:29 by rmk")
+                                                             (* ; "Edited 25-Aug-2023 08:43 by rmk")
                                                              (* ; "Edited  6-Jul-2022 00:00 by rmk")
                                                              (* ; "Edited 19-Dec-2021 09:30 by rmk")
                                                              (* ; "Edited 14-Dec-2021 16:10 by rmk")
                                                              (* ; "Edited 13-Dec-2021 15:20 by rmk")
                                                             (* ; "Edited 29-Jun-2021 17:07 by rmk:")
                                                              (* ; "Edited  5-Oct-92 13:45 by jds")
+
+    (* ;; "RMK: July 2024:  Default EOL to ANY on input streams, allow EXTERNAL FORMAT to be a (FORMAT EOL) list so CL:OPEN can get the EOL")
 
     (* ;; "Does generic parameters when a file/stream is open.  Called by \OPENFILE and OPENSTREAM")
 
@@ -1465,31 +1469,60 @@
 
     (DECLARE (USEDFREE STREAM-AFTER-OPEN-FNS))
     (\EXTERNALFORMAT STREAM :DEFAULT)
-    (for X ATTR VAL in PARAMETERS do (COND
-                                        [(LISTP X)
-                                         (SETQ ATTR (CAR X))
-                                         (SETQ VAL (CAR (LISTP (CDR X]
-                                        (T (SETQ ATTR X)
-                                           (SETQ VAL T)))
-                                     (SELECTQ ATTR
-                                         (BUFFERS (SETFILEINFO STREAM 'BUFFERS VAL))
-                                         (ENDOFSTREAMOP (SETFILEINFO STREAM 'ENDOFSTREAMOP VAL))
-                                         (CHARSET (CHARSET STREAM VAL))
-                                         ((FORMAT EXTERNALFORMAT :EXTERNAL-FORMAT) 
-                                              (\EXTERNALFORMAT STREAM VAL))
-                                         (CONVHANKAKU (CONVHANKAKU STREAM VAL))
-                                         ((EOL EOLCONVENTION EOLC) 
-                                              (SETFILEINFO STREAM 'EOL VAL))
-                                         (PUTSTREAMPROP STREAM ATTR VAL)))
+    [for X ATTR VAL EOL in PARAMETERS do [(COND
+                                             [(LISTP X)
+                                              (SETQ ATTR (CAR X))
+                                              (SETQ VAL (CAR (LISTP (CDR X]
+                                             (T (SETQ ATTR X)
+                                                (SETQ VAL T)))
+                                          (SELECTQ ATTR
+                                              (BUFFERS (SETFILEINFO STREAM 'BUFFERS VAL))
+                                              (ENDOFSTREAMOP (SETFILEINFO STREAM 'ENDOFSTREAMOP VAL))
+                                              (CHARSET (CHARSET STREAM VAL))
+                                              ((FORMAT EXTERNALFORMAT :EXTERNAL-FORMAT) 
+
+                                                                   (* ;; 
+                                 "VAL can be :UTF-8, CR, (UTF:8 CR), i.e. specify either one or both")
+
+                                                   (if (LISTP VAL)
+                                                       then  (* ; 
+                                                         "VAL could be (:UTF-8 CR) e.g. from CL:OPEN")
+                                                            (\EXTERNALFORMAT STREAM (CAR VAL)) 
+                                                             (* ; 
+                                                             "Can override the EOL of the format")
+                                                            (SETQ EOL (CADR VAL))
+                                                     elseif (SETQ EOL (CAR)
+                                                             VAL)
+                                                     else (\EXTERNALFORMAT STREAM VAL)))
+                                              (CONVHANKAKU (CONVHANKAKU STREAM VAL))
+                                              ((EOL EOLCONVENTION EOLC)
+                                               (SETQ EOL VAL] finally 
+
+                                                              (* ;; 
+                        "If not specified, default EOL to ANY--SETFILEINFO checks for output streams")
+
+                                                                    (SETFILEINFO STREAM 'EOL
+                                                                           (OR EOL 'ANY]
     (FOR FN IN STREAM-AFTER-OPEN-FNS DO (APPLY* FN STREAM ACCESS PARAMETERS])
 
 (\RENAMEFILE
-  [LAMBDA (OLDFILE NEWFILE)                              (* hdj " 7-May-86 12:22")
+  [LAMBDA (OLDFILE NEWFILE)                                  (* ; "Edited 25-Dec-2024 10:14 by rmk")
+                                                             (* ; "Edited 16-Dec-2024 21:07 by rmk")
+                                                             (* hdj " 7-May-86 12:22")
     (SETQ OLDFILE (\ADD.CONNECTED.DIR OLDFILE))
     (SETQ NEWFILE (\ADD.CONNECTED.DIR NEWFILE))
-    (LET ((OLD-DEVICE (\GETDEVICEFROMNAME OLDFILE T))
-          (NEW-DEVICE (\GETDEVICEFROMNAME NEWFILE T)))
-         (AND OLD-DEVICE (FDEVOP 'RENAMEFILE OLD-DEVICE OLD-DEVICE OLDFILE NEW-DEVICE NEWFILE])
+
+    (* ;; "\GETDEVICEFROMNAME errors if the devices don't exist")
+
+    (LET ((OLD-DEVICE (TRUEDEVICE OLDFILE))
+          (NEW-DEVICE (TRUEDEVICE NEWFILE))
+          NEWFULLNAME)
+         (CL:WHEN (SETQ NEWFULLNAME (FDEVOP 'RENAMEFILE OLD-DEVICE OLD-DEVICE (TRUEFILENAME OLDFILE)
+                                           NEW-DEVICE
+                                           (TRUEFILENAME NEWFILE)))
+             (CL:IF (PSEUDOHOSTP NEWFILE)
+                 (PSEUDOFILENAME NEWFULLNAME)
+                 NEWFULLNAME))])
 
 (\REVALIDATEFILE
   [LAMBDA (STREAM)                                       (* bvm%: "30-DEC-81 17:45")
@@ -2250,27 +2283,32 @@ update the map")
     T])
 
 (COPYFILE
-  [LAMBDA (FROMFILE TOFILE DESTPARAMETERS SOURCEPARAMETERS)
+  [LAMBDA (FROMFILE TOFILE)
 
-    (* ;; 
- "Edited  8-Jul-2022 10:54 by rmk:  Added SOURCEPARAMETERS, in particular to declare external format")
+    (* ;; "Edited 18-Dec-2024 21:07 by rmk")
 
     (* ;; "Edited  8-Jul-2022 10:41 by rmk")
 
     (* ;; "Edited  2-Jan-93 13:35 by jds")
 
-(* ;;; "DESTPARAMETERS is like PARAMETERS arg to OPENSTREAM -- overrides default parameters")
-
-    [AND (DIRECTORYNAMEP (PACKFILENAME 'HOST NIL 'BODY TOFILE)
-                (UNPACKFILENAME TOFILE 'HOST))
-         (SETQ TOFILE (PACKFILENAME 'DIRECTORY TOFILE 'BODY (PACKFILENAME 'HOST NIL 'DIRECTORY NIL
-                                                                   'BODY FROMFILE]
+    (CL:WHEN (DIRECTORYNAMEP (PACKFILENAME 'HOST NIL 'BODY TOFILE)
+                    (UNPACKFILENAME TOFILE 'HOST))
+        (SETQ TOFILE (PACKFILENAME 'DIRECTORY TOFILE 'BODY (PACKFILENAME 'HOST NIL 'DIRECTORY NIL
+                                                                  'BODY FROMFILE))))
     (RESETLST
-        [RESETSAVE [SETQ FROMFILE (OPENSTREAM FROMFILE 'INPUT 'OLD `((SEQUENTIAL T)
-                                                                     (DON'TCACHE T)
-                                                                     ,@SOURCEPARAMETERS]
-               '(PROGN (CLOSEF OLDVALUE]
-        (\COPYOPENFILE FROMFILE TOFILE DESTPARAMETERS))])
+        (LET (FROMSTREAM TOSTREAM)
+             [RESETSAVE [SETQ FROMSTREAM (OPENSTREAM FROMFILE 'INPUT 'OLD `((SEQUENTIAL T)
+                                                                            (DON'TCACHE T]
+                    '(PROGN (CLOSEF? OLDVALUE]
+             [RESETSAVE [SETQ TOSTREAM (OPENSTREAM TOFILE 'OUTPUT 'NEW
+                                              `((SEQUENTIAL T)
+                                                (DON'TCACHE T)
+                                                (CREATIONDATE ,(GETFILEINFO FROMSTREAM 'CREATIONDATE]
+                    '(AND RESETSTATE (SETQ OLDVALUE (CLOSEF OLDVALUE))
+                          (DELFILE OLDVALUE]
+             (COPYBYTES FROMSTREAM TOSTREAM)
+             (CLOSEF FROMSTREAM)
+             (CLOSEF TOSTREAM)))])
 
 (\COPYOPENFILE
   [LAMBDA (INSTREAM NEWNAME DESTPARAMETERS)
@@ -2487,8 +2525,9 @@ update the map")
                          STREAM])
 
 (SETFILEINFO
-  [LAMBDA (FILE ATTRIB VALUE)                                (* ; "Edited 19-Dec-2021 09:30 by rmk")
-                                                             (* ; "Edited 29-Jun-2021 17:05 by rmk:")
+  [LAMBDA (FILE ATTRIB VALUE)                                (* ; "Edited 25-Dec-2024 10:56 by rmk")
+                                                             (* ; "Edited 19-Dec-2021 09:30 by rmk")
+                                                            (* ; "Edited 29-Jun-2021 17:05 by rmk:")
                                                              (* ; "Edited 11-Dec-95 11:08 by ")
                                                              (* ; "Edited 27-Mar-89 15:33 by bvm")
     (LET (FULLNAME DEV)
@@ -2503,8 +2542,8 @@ update the map")
                                                               (CR CR.EOLC)
                                                               (CRLF CRLF.EOLC)
                                                               (LF LF.EOLC)
-                                                              (ANY (CL:WHEN (\GETSTREAM FILE
-                                                                                   'OUTPUT T)
+                                                              (ANY (CL:UNLESS (EQ 'INPUT (\GETACCESS
+                                                                                          FILE))
                                                                           (ERROR 
                                                "EOL convention ANY is not allowed for output streams"
                                                                                  FILE))
@@ -2605,30 +2644,38 @@ update the map")
            (add OFF 1])
 
 (\GENERIC.RENAMEFILE
-  [LAMBDA (OLDDEVICE OLDFILE NEWDEVICE NEWFILE)          (* ; "Edited  2-Jul-90 16:03 by nm")
-    (if (NOT (FDEVOP 'OPENP OLDDEVICE (FULLNAME OLDFILE)
-                        NIL OLDDEVICE))
-        then (RESETLST
-                     [RESETSAVE [SETQ OLDFILE (OPENSTREAM OLDFILE 'INPUT 'OLD '((SEQUENTIAL T)
-                                                                                DON'TCACHE]
-                            '(AND RESETSTATE (CLOSEF? OLDVALUE]
-                     [COND
-                        ((SETQ NEWFILE (\COPYOPENFILE OLDFILE NEWFILE))
-                         (if (\DELETEFILE (CLOSEF OLDFILE))
-                             then NEWFILE
-                           else (CONDITIONS:RESTART-CASE (CL:ERROR 
-                                                                    '
-                                                             XCL::FS-RENAMEFILE-SOURCE-COULDNT-DELETE
-                                                                    :PATHNAME OLDFILE)
-                                           (DELETE-DESTINATION NIL :CONDITION 
-                                                  XCL::FS-RENAMEFILE-SOURCE-COULDNT-DELETE :REPORT 
-                                                  "Delete the destination file too." (DELFILE NEWFILE
-                                                                                            )
-                                                  NIL)
-                                           (DONT-DELETE-DESTINATION NIL :CONDITION 
-                                                  XCL::FS-RENAMEFILE-SOURCE-COULDNT-DELETE :REPORT 
+  [LAMBDA (OLDDEVICE OLDFILE NEWDEVICE NEWFILE)              (* ; "Edited 16-Dec-2024 21:52 by rmk")
+
+    (* ;; "Names and devices are true, not pseudo")
+                                                             (* ; "Edited  2-Jul-90 16:03 by nm")
+    (CL:UNLESS (FDEVOP 'OPENP OLDDEVICE (FULLNAME OLDFILE)
+                      NIL OLDDEVICE)                         (* ; "Can't rename an open file")
+        (RESETLST
+            [LET (INSTREAM OUTSTREAM)
+                 [RESETSAVE [SETQ INSTREAM (OPENSTREAM OLDFILE 'INPUT 'OLD '((SEQUENTIAL T)
+                                                                             (DON'TCACHE T]
+                        '(PROGN (CLOSEF? OLDVALUE]
+                 [RESETSAVE [SETQ OUTSTREAM (OPENSTREAM NEWFILE 'OUTPUT 'NEW
+                                                   `((SEQUENTIAL T)
+                                                     (DON'TCACHE T)
+                                                     (CREATIONDATE ,(GETFILEINFO OLDFILE 
+                                                                           'CREATIONDATE]
+                        '(AND RESETSTATE (SETQ OLDVALUE (CLOSEF OLDVALUE))
+                              (DELFILE OLDVALUE]
+                 (COPYBYTES INSTREAM OUTSTREAM)
+                 (CLOSEF OUTSTREAM)
+                 (if (\DELETEFILE (CLOSEF INSTREAM))
+                     then (FULLNAME OUTSTREAM)
+                   else (CONDITIONS:RESTART-CASE (CL:ERROR 'XCL::FS-RENAMEFILE-SOURCE-COULDNT-DELETE
+                                                        :PATHNAME OLDFILE)
+                               (DELETE-DESTINATION NIL :CONDITION 
+                                      XCL::FS-RENAMEFILE-SOURCE-COULDNT-DELETE :REPORT 
+                                      "Delete the destination file too." (DELFILE NEWFILE)
+                                      NIL)
+                               (DONT-DELETE-DESTINATION NIL :CONDITION 
+                                      XCL::FS-RENAMEFILE-SOURCE-COULDNT-DELETE :REPORT 
                          "Don't delete the destination file.  Just returns the destination filename."
-                                                  NEWFILE])])
+                                      NEWFILE]))])
 
 (\GENERIC.OPENP
   [LAMBDA (FILENAME ACCESS DEVICE)                       (* hdj " 6-Oct-86 17:07")
@@ -3115,39 +3162,39 @@ update the map")
 (ADDTOVAR LAMA \IS.NOT.RANDACCESSP \ILLEGAL.DEVICEOP STREAMPROP)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (27732 31848 (STREAMPROP 27742 . 28176) (GETSTREAMPROP 28178 . 28927) (PUTSTREAMPROP 
-28929 . 31696) (STREAMP 31698 . 31846)) (31891 35270 (\DEFPRINT.BY.NAME 31901 . 33053) (
-\STREAM.DEFPRINT 33055 . 34963) (\FDEV.DEFPRINT 34965 . 35268)) (35528 40569 (\GETACCESS 35538 . 35992
-) (\SETACCESS 35994 . 40567)) (60795 66764 (\DEFINEDEVICE 60805 . 63121) (\GETDEVICEFROMNAME 63123 . 
-63596) (\GETDEVICEFROMHOSTNAME 63598 . 64642) (\REMOVEDEVICE 64644 . 65767) (\REMOVEDEVICE.NAMES 65769
- . 66762)) (66804 92336 (\CLOSEFILE 66814 . 67639) (\DELETEFILE 67641 . 67935) (\DEVICEEVENT 67937 . 
-69707) (\GENERATEFILES 69709 . 70656) (\GENERATENEXTFILE 70658 . 71309) (\GENERATEFILEINFO 71311 . 
-71772) (\GETFILENAME 71774 . 72163) (\GENERIC.OUTFILEP 72165 . 72635) (\OPENFILE 72637 . 75215) (
-\DO.PARAMS.AT.OPEN 75217 . 77746) (\RENAMEFILE 77748 . 78172) (\REVALIDATEFILE 78174 . 80776) (
-\PAGED.REVALIDATEFILELST 80778 . 82336) (\PAGED.REVALIDATEFILES 82338 . 84057) (\PAGED.REVALIDATEFILE 
-84059 . 86342) (\BUFFERED.REVALIDATEFILE 86344 . 88630) (\BUFFERED.REVALIDATEFILELST 88632 . 89816) (
-\PRINT-REVALIDATION-RESULT 89818 . 90660) (\TRUNCATEFILE 90662 . 91053) (\FILE-CONFLICT 91055 . 92334)
-) (92372 97035 (\GENERATENOFILES 92382 . 94478) (\NULLFILEGENERATOR 94480 . 94724) (\NOFILESNEXTFILEFN
- 94726 . 96717) (\NOFILESINFOFN 96719 . 97033)) (97154 99062 (\FILE.NOT.OPEN 97164 . 97677) (
-\FILE.WONT.OPEN 97679 . 98007) (\ILLEGAL.DEVICEOP 98009 . 98291) (\IS.NOT.RANDACCESSP 98293 . 98739) (
-\STREAM.NOT.OPEN 98741 . 99060)) (99197 101495 (\FDEVINSTANCE 99207 . 101493)) (102697 110071 (CNDIR 
-102707 . 104012) (DIRECTORYNAME 104014 . 108197) (DIRECTORYNAMEP 108199 . 108815) (HOSTNAMEP 108817 . 
-109624) (\ADD.CONNECTED.DIR 109626 . 110069)) (110116 138395 (\BACKFILEPTR 110126 . 110314) (
-\BACKPEEKBIN 110316 . 110677) (\BACKBIN 110679 . 111030) (BIN 111032 . 111249) (\BIN 111251 . 111528) 
-(\BINS 111530 . 111816) (BOUT 111818 . 112180) (\BOUT 112182 . 112497) (\BOUTS 112499 . 112810) (
-COPYBYTES 112812 . 116144) (COPYCHARS 116146 . 119812) (COPYFILE 119814 . 120878) (\COPYOPENFILE 
-120880 . 124079) (\INFER.FILE.TYPE 124081 . 125035) (EOFP 125037 . 125334) (FORCEOUTPUT 125336 . 
-125583) (\FLUSH.OPEN.STREAMS 125585 . 125941) (CHARSET 125943 . 127302) (ACCESS-CHARSET 127304 . 
-127832) (GETEOFPTR 127834 . 128084) (GETFILEINFO 128086 . 131279) (\TYPE.FROM.FILETYPE 131281 . 131751
-) (\FILETYPE.FROM.TYPE 131753 . 131932) (GETFILEPTR 131934 . 132186) (SETFILEINFO 132188 . 136294) (
-SETFILEPTR 136296 . 138015) (BOUT16 138017 . 138202) (BIN16 138204 . 138393)) (138498 145152 (
-\GENERIC.BINS 138508 . 138788) (\GENERIC.BOUTS 138790 . 139055) (\GENERIC.RENAMEFILE 139057 . 140888) 
-(\GENERIC.OPENP 140890 . 142205) (\GENERIC.READP 142207 . 143359) (\GENERIC.CHARSET 143361 . 145150)) 
-(145153 145492 (\MAP-OPEN-STREAMS 145163 . 145490)) (147347 149427 (\EOF.ACTION 147357 . 147608) (
-\EOSERROR 147610 . 147803) (\GETEOFPTR 147805 . 147987) (\INCFILEPTR 147989 . 148339) (\PEEKBIN 148341
- . 148532) (\SETCLOSEDFILELENGTH 148534 . 148868) (\SETEOFPTR 148870 . 149058) (\SETFILEPTR 149060 . 
-149425)) (149428 149970 (\FIXPOUT 149438 . 149738) (\FIXPIN 149740 . 149968)) (149971 150537 (\BOUTEOL
- 149981 . 150535)) (153433 163297 (\BUFFERED.BIN 153443 . 154295) (\BUFFERED.PEEKBIN 154297 . 155079) 
-(\BUFFERED.BOUT 155081 . 155941) (\BUFFERED.BINS 155943 . 159628) (\BUFFERED.BOUTS 159630 . 161431) (
-\BUFFERED.COPYBYTES 161433 . 163295)))))
+  (FILEMAP (NIL (27735 31851 (STREAMPROP 27745 . 28179) (GETSTREAMPROP 28181 . 28930) (PUTSTREAMPROP 
+28932 . 31699) (STREAMP 31701 . 31849)) (31894 35273 (\DEFPRINT.BY.NAME 31904 . 33056) (
+\STREAM.DEFPRINT 33058 . 34966) (\FDEV.DEFPRINT 34968 . 35271)) (35531 40572 (\GETACCESS 35541 . 35995
+) (\SETACCESS 35997 . 40570)) (60798 66767 (\DEFINEDEVICE 60808 . 63124) (\GETDEVICEFROMNAME 63126 . 
+63599) (\GETDEVICEFROMHOSTNAME 63601 . 64645) (\REMOVEDEVICE 64647 . 65770) (\REMOVEDEVICE.NAMES 65772
+ . 66765)) (66807 94538 (\CLOSEFILE 66817 . 67642) (\DELETEFILE 67644 . 67938) (\DEVICEEVENT 67940 . 
+69710) (\GENERATEFILES 69712 . 70659) (\GENERATENEXTFILE 70661 . 71312) (\GENERATEFILEINFO 71314 . 
+71775) (\GETFILENAME 71777 . 72166) (\GENERIC.OUTFILEP 72168 . 72638) (\OPENFILE 72640 . 75218) (
+\DO.PARAMS.AT.OPEN 75220 . 79416) (\RENAMEFILE 79418 . 80374) (\REVALIDATEFILE 80376 . 82978) (
+\PAGED.REVALIDATEFILELST 82980 . 84538) (\PAGED.REVALIDATEFILES 84540 . 86259) (\PAGED.REVALIDATEFILE 
+86261 . 88544) (\BUFFERED.REVALIDATEFILE 88546 . 90832) (\BUFFERED.REVALIDATEFILELST 90834 . 92018) (
+\PRINT-REVALIDATION-RESULT 92020 . 92862) (\TRUNCATEFILE 92864 . 93255) (\FILE-CONFLICT 93257 . 94536)
+) (94574 99237 (\GENERATENOFILES 94584 . 96680) (\NULLFILEGENERATOR 96682 . 96926) (\NOFILESNEXTFILEFN
+ 96928 . 98919) (\NOFILESINFOFN 98921 . 99235)) (99356 101264 (\FILE.NOT.OPEN 99366 . 99879) (
+\FILE.WONT.OPEN 99881 . 100209) (\ILLEGAL.DEVICEOP 100211 . 100493) (\IS.NOT.RANDACCESSP 100495 . 
+100941) (\STREAM.NOT.OPEN 100943 . 101262)) (101399 103697 (\FDEVINSTANCE 101409 . 103695)) (104899 
+112273 (CNDIR 104909 . 106214) (DIRECTORYNAME 106216 . 110399) (DIRECTORYNAMEP 110401 . 111017) (
+HOSTNAMEP 111019 . 111826) (\ADD.CONNECTED.DIR 111828 . 112271)) (112318 140973 (\BACKFILEPTR 112328
+ . 112516) (\BACKPEEKBIN 112518 . 112879) (\BACKBIN 112881 . 113232) (BIN 113234 . 113451) (\BIN 
+113453 . 113730) (\BINS 113732 . 114018) (BOUT 114020 . 114382) (\BOUT 114384 . 114699) (\BOUTS 114701
+ . 115012) (COPYBYTES 115014 . 118346) (COPYCHARS 118348 . 122014) (COPYFILE 122016 . 123325) (
+\COPYOPENFILE 123327 . 126526) (\INFER.FILE.TYPE 126528 . 127482) (EOFP 127484 . 127781) (FORCEOUTPUT 
+127783 . 128030) (\FLUSH.OPEN.STREAMS 128032 . 128388) (CHARSET 128390 . 129749) (ACCESS-CHARSET 
+129751 . 130279) (GETEOFPTR 130281 . 130531) (GETFILEINFO 130533 . 133726) (\TYPE.FROM.FILETYPE 133728
+ . 134198) (\FILETYPE.FROM.TYPE 134200 . 134379) (GETFILEPTR 134381 . 134633) (SETFILEINFO 134635 . 
+138872) (SETFILEPTR 138874 . 140593) (BOUT16 140595 . 140780) (BIN16 140782 . 140971)) (141076 148147 
+(\GENERIC.BINS 141086 . 141366) (\GENERIC.BOUTS 141368 . 141633) (\GENERIC.RENAMEFILE 141635 . 143883)
+ (\GENERIC.OPENP 143885 . 145200) (\GENERIC.READP 145202 . 146354) (\GENERIC.CHARSET 146356 . 148145))
+ (148148 148487 (\MAP-OPEN-STREAMS 148158 . 148485)) (150342 152422 (\EOF.ACTION 150352 . 150603) (
+\EOSERROR 150605 . 150798) (\GETEOFPTR 150800 . 150982) (\INCFILEPTR 150984 . 151334) (\PEEKBIN 151336
+ . 151527) (\SETCLOSEDFILELENGTH 151529 . 151863) (\SETEOFPTR 151865 . 152053) (\SETFILEPTR 152055 . 
+152420)) (152423 152965 (\FIXPOUT 152433 . 152733) (\FIXPIN 152735 . 152963)) (152966 153532 (\BOUTEOL
+ 152976 . 153530)) (156428 166292 (\BUFFERED.BIN 156438 . 157290) (\BUFFERED.PEEKBIN 157292 . 158074) 
+(\BUFFERED.BOUT 158076 . 158936) (\BUFFERED.BINS 158938 . 162623) (\BUFFERED.BOUTS 162625 . 164426) (
+\BUFFERED.COPYBYTES 164428 . 166290)))))
 STOP

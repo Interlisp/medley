@@ -641,7 +641,7 @@ and load your system with:
 	  ((listp m)       (operate-on-system 'clos :compile-from m))
 	  ((symbolp m)     (operate-on-system 'clos :recompile-some `(,m))))))
 
-(defun load-clos (&optional m)
+(defun il:load-clos (&optional m)
   (let (#+:coral(ccl::*warn-if-redefine-kernel* nil)
 	#+Lucid (lcl:*redefinition-action* nil)
 	#+excl  (excl::*redefinition-warnings* nil)

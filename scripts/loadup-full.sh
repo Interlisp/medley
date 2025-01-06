@@ -4,11 +4,7 @@ main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-init.sh"              \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-mid-from-init.sh"  \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-lisp-from-mid.sh"  \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-full-from-lisp.sh" \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/copy-full.sh"             ;
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-all.sh" --full --noaux
 
 	# shellcheck disable=SC2181
 	if [ $? -eq 0 ];

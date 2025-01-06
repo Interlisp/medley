@@ -6,42 +6,168 @@ main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	# look thru args looking to see if -apps, --apps, or -a was specified in args
-	apps=""
-	j=1
-	jmax=$#
-	while [ "$j" -le "$jmax" ]
-	do
-	  if [ "$(eval "printf %s \${${j}}")" = "-a" ] ||    \
-	     [ "$(eval "printf %s \${${j}}")" = "-apps" ] || \
-	     [ "$(eval "printf %s \${${j}}")" = "--apps" ]
-	  then
-	    apps="-apps"
-	    break
-	  fi
+	# process args
+        noaux=""
+        start=0
+        start_s=init
+        start_sysout=""
+        end=4
+        end_s=full
+        while [ "$#" -ne 0 ];
+      	do
+          case "$1" in
+            -n | -noaux | --noaux)
+              noaux=true
+              ;;
+            -g | -lfg | --lfg)
+              end=6
+              end_s=lfg
+              ;;
+            -a | -apps | --apps)
+              end=5
+              end_s=apps
+              ;;
+            -f | -full | --full | -4)
+              end=4
+              end_s=full
+              ;;
+            -l | -lisp | --lisp | -3)
+              end=3
+              end_s=lisp
+             ;;
+            -m | -mid | --mid | -2)
+              end=2
+              end_s=mid
+              ;;
+            -i | -init | --init | -1)
+              end=1
+              end_s=init
+              ;;
+            -s | -start | --start)
+              case "$2" in
+               i | init | 1)
+                 start=1
+                 start_s=init
+                 start_sysout=init.dlinit
+                 ;;
+               m | mid | 2)
+                 start=2
+                 start_s=mid
+                 start_sysout=init-mid.sysout
+                 ;;
+               l | lisp | 3)
+                 start=3
+                 start_s=lisp
+                 start_sysout=lisp.sysout
+                 ;;
+               f | full | 4)
+                 start=4
+                 start_s=full
+                 start_sysout=full.sysout
+                 ;;
+               *)
+                 echo "Error: unknown parameter to --start (-s) flag: $2"
+                 echo "Exiting"
+                 exit 1
+                 ;;
+               esac
+               shift
+               ;;
+            *)
+              echo "Error: unknown flag: $1"
+              echo "Exiting"
+              exit 1
+              ;;
+          esac
+          shift
 	done
 
-	#  Do loadup components
-	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-init.sh"                   \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-mid-from-init.sh"       \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-lisp-from-mid.sh"       \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-full-from-lisp.sh"      \
-	&& {                                                           \
-	     if [ -n "${apps}" ];                                      \
-	     then                                                      \
-	       /bin/sh "${LOADUP_SCRIPTDIR}/loadup-apps-from-full.sh"; \
-	     fi;                                                       \
-	    }                                                          \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-aux.sh"                 \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/copy-all.sh" "${apps}"
+        # check arguments
+        if [ $end -le $start ]
+        then
+          echo "Error: The final stage ($end_s) comes before or is the same as the start stage ($start_s)"
+          echo "Exiting"
+          exit 1
+        fi
 
-	if [ $? -eq 0 ]
-	then
-	  echo "+++++ loadup-all.sh: SUCCESS +++++"
-	else
-	  echo "----- loadup-all.sh: FAILURE -----"
+	# find and place starting sysout
+        if [ $start -gt 0 ]
+        then
+          if [ ! -f "${LOADUP_WORKDIR}"/"${start_sysout}" ]
+          then
+            if [ -f "${LOADUP_OUTDIR}"/"${start_sysout}" ]
+            then
+              cp -p "${LOADUP_OUTDIR}"/"${start_sysout}" "${LOADUP_WORKDIR}"/"${start_sysout}"
+            else
+              echo "Error: Cannot find starting sysout ($start_sysout) in either ${LOADUP_WORKDIR} or ${LOADUP_WORKDIR}"
+              echo "Exiting"
+              exit 1
+            fi
+          fi
+        fi
+
+        #  Do individual loadups as requested
+        if [ $start -lt 1 ] && [ $end -ge 1 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-init.sh"
+          exit_if_failure $?
+        fi
+
+	if [ $start -lt 2 ] && [ $end -ge 2 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-mid-from-init.sh"
+          exit_if_failure $?
+        fi
+
+	if [ $start -lt 3 ] && [ $end -ge 3 ]
+        then
+	  /bin/sh "${LOADUP_SCRIPTDIR}/loadup-lisp-from-mid.sh"
+          exit_if_failure $?
 	fi
 
+        aux_not_run=true
+	if [ $start -lt 4 ] && [ $end -ge 4 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-full-from-lisp.sh"
+          exit_if_failure $?
+          if [ -z "$noaux" ]
+          then
+            /bin/sh "${LOADUP_SCRIPTDIR}/loadup-aux.sh"
+            exit_if_failure $?
+            aux_not_run=""
+          fi
+        fi
+
+	if [ $end -eq 5 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-apps-from-full.sh"
+          exit_if_failure $?
+        fi
+
+	if [ $end -eq 6 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-lfg-from-full.sh"
+          exit_if_failure $?
+        fi
+
+        # Nothing to copy to loadups until we've produced lisp.sysout
+        if [ $end -ge 3 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/copy-all.sh" $start $end "$aux_not_run"
+          exit_if_failure $?
+        fi
+
+        echo "+++++ loadup-all.sh: SUCCESS +++++"
+        exit 0
+
+}
+
+exit_if_failure() {
+  if [ "$1" -ne 0 ]
+  then
+    echo "----- loadup-all.sh: FAILURE -----"
+    exit 1
+  fi
 }
 
 # shellcheck disable=SC2164,SC2034

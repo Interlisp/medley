@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2086
 
 main() {
 	# shellcheck source=./loadup-setup.sh
@@ -6,41 +7,54 @@ main() {
 
 	echo ">>>>> START ${script_name}"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"       \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+        start=$1
+        end=$2
+        noaux="$3"
 
-	if [ "${1}" = "-apps" ]; then
-	    /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"   \
-	        | sed -e "s#${MEDLEYDIR}/##g"
-	fi
-
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/init.dribble "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.dribble "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.dribble "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/whereis.dribble "${LOADUP_OUTDIR}"   \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-
-	if [ "${1}" = "-apps" ]; then
-	    /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/apps.dribble "${LOADUP_OUTDIR}"  \
-	        | sed -e "s#${MEDLEYDIR}/##g"
-	fi
+        if [ $start -le 3 ] && [ $end -ge 3 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
 
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS library                        \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM library                   \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+        if [ $start -le 4 ] && [ $end -ge 4 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
 
+        if [ $end -eq 5 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ $end -eq 6 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lfg.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ -z "$noaux" ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
+              | sed -e "s#${MEDLEYDIR}/##g"
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+	if [ -f "${LOADUP_WORKDIR}"/RDSYS ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}/library"         \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+	if [ -f "${LOADUP_WORKDIR}"/RDSYS ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}/library"    \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
 
 	echo "<<<<< END ${script_name}"
 	echo ""

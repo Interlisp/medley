@@ -11,21 +11,20 @@ main() {
 	cat >"${cmfile}" <<-"EOF"
 	"
 	(PROG
-	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
+	  ((WORKDIR (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LOADUP_WORKDIR) '/)))
 	  (IL:MEDLEY-INIT-VARS)
-	  (IL:LOAD(QUOTE MEDLEY-UTILS))
-          (DRIBBLE (QUOTE {DSK}<TMP>FOOBAR))
-	  (IL:MAKE-EXPORTS-ALL (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.all))))
+	  (IL:LOAD 'MEDLEY-UTILS)
+          (DRIBBLE (IL:CONCAT WORKDIR (IL:L-CASE 'exports-all.dribble)))
+	  (IL:MAKE-EXPORTS-ALL (IL:CONCAT WORKDIR (IL:L-CASE 'exports.all)))
 	  (DRIBBLE)
-	  (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
 	  (IL:MAKE-WHEREIS-HASH
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.dribble)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash-tmp)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash)))
-        NIL NIL
+	    (IL:CONCAT WORKDIR (IL:L-CASE 'whereis.dribble))
+	    (IL:CONCAT WORKDIR (IL:L-CASE 'whereis.hash-tmp))
+	    (IL:CONCAT WORKDIR (IL:L-CASE 'whereis.hash))
 	  )
-	  (IL:LOGOUT T)
 	)
+        (IL:LOGOUT T)
+
 	"
 	EOF
 

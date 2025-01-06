@@ -6,70 +6,64 @@ main() {
 
 	loadup_start
 
-	export ROOMSDIR="${MEDLEYDIR}/rooms"
-	export CLOSDIR="${MEDLEYDIR}/clos"
+        if [ -z "${LFGDIR}" ]
+        then
+          export LFGDIR="${MEDLEYDIR}/lfg"
+          if [ ! -e "${lfg}" ]
+          then
+            LFGDIR=$(cd "${MEDLEYDIR}/../" && pwd)/lfg
+            if [ ! -e "${LFGDIR}" ]
+            then
+              LFGDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/lfg
+              if [ ! -e "${LFGDIR}" ]
+              then
+                LFGDIR=""
+              fi
+            fi
+          fi
+        fi
 
-	export NOTECARDSDIR="${MEDLEYDIR}/notecards"
-	if [ ! -e "${NOTECARDSDIR}" ]
+	if [ -z "${LFGDIR}" ]
 	then
-	    NOTECARDSDIR=$(cd "${MEDLEYDIR}/../" && pwd)/notecards
-	    if [ ! -e "${NOTECARDSDIR}" ]
-	    then
-	        NOTECARDSDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/notecards
-	        if [ ! -e "${NOTECARDSDIR}" ]
-	        then
-	            NOTECARDSDIR=""
-	        fi
-	    fi
-	fi
-
-	if [ -z "${NOTECARDSDIR}" ]
-	then
-	    echo "Error: Cannot find the Notecards directory"
-	    echo "It should be located at ${MEDLEYDIR}/../notecards or"
-	    echo "${MEDLEYDIR}/../../notecards.  But its not."
+	    echo "Error: Cannot find the LFG directory"
+	    echo "It should be located at ${MEDLEYDIR}/lfg, ${MEDLEYDIR}/../lfg, or"
+	    echo "${MEDLEYDIR}/../../lfg.  But its not."
 	    echo "Exiting"
 	    exit 1
 	fi
 
-        git_commit_ID "${NOTECARDSDIR}"
-        NOTECARDS_COMMIT_ID="${COMMIT_ID}"
-        export NOTECARDS_COMMIT_ID
+        git_commit_ID "${LFGDIR}"
+        LFG_COMMIT_ID="${COMMIT_ID}"
+        export LFG_COMMIT_ID
 
 	cat >"${cmfile}" <<-"EOF"
 	"
 
 	(PROGN
 	   (IL:MEDLEY-INIT-VARS 'IL:GREET)
-	   (IL:DRIBBLE (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LOADUP_WORKDIR) (IL:L-CASE '/apps.dribble)))
-	   (IL:LOAD (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'ROOMSDIR) '/ROOMS) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'NOTECARDSDIR) '/system/NOTECARDS.LCOM) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'CLOSDIR) '/DEFSYS.DFASL) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'MEDLEYDIR) 'lispusers/BUTTONS.LCOM) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LOADUP_SOURCEDIR) '/LOADUP-APPS.LCOM) 'IL:SYSLOAD)
-	)
-	(PROGN
-	   (IL:|Apps.LOADUP|)
-	   (CLOS::LOAD-CLOS)
-        )
-        (PROGN
-           (IL:PUTASSOC 'IL:NOTECARDS
+	   (IL:DRIBBLE (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LOADUP_WORKDIR) (IL:L-CASE '/lfg.dribble)))
+	   (IL:LOAD (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LFGDIR) '/LFG-LOADUP.LCOM) 'IL:SYSLOAD)
+           (IL:LOADUP-LFG (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LFGDIR)))
+           (IL:PUTASSOC 'IL:LFG
                         (LIST (IL:UNIX-GETENV 'LOADUP_COMMIT_ID))
                         (CADR (ASSOC 'IL:MEDLEY IL:SYSOUTCOMMITS)))
-           (IL:PUTASSOC 'IL:NOTECARDS (LIST (IL:UNIX-GETENV 'NOTECARDS_COMMIT_ID)) IL:SYSOUTCOMMITS)
+           (IL:PUTASSOC 'IL:LFG (LIST (IL:UNIX-GETENV 'LFG_COMMIT_ID)) IL:SYSOUTCOMMITS)
+           (IL:PRINT IL:SYSOUTCOMMITS)
 	   (IL:DRIBBLE)
 	   (IL:ENDLOADUP)
 	   (IL:MAKESYS
-	       (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LOADUP_WORKDIR) (IL:L-CASE '/apps.sysout))
-	       :APPS)
+	       (IL:CONCAT '{DSK} (IL:UNIX-GETENV 'LOADUP_WORKDIR) (IL:L-CASE '/lfg.sysout))
+	       :LFG
+           )
 	)
+	(IL:LOGOUT T)
 
 	"
 	EOF
 
 	run_medley "${LOADUP_WORKDIR}/full.sysout"
 
-	loadup_finish "apps.sysout" "apps.*"
+	loadup_finish "lfg.sysout" "lfg.*"
 }
 
 

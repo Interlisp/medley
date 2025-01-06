@@ -45,6 +45,11 @@ main() {
               ;;
             -s | -start | --start)
               case "$2" in
+               s | scratch | 0)
+                 start=0
+                 start_s=scratch
+                 start_sysout=starter.sysout
+                 ;;
                i | init | 1)
                  start=1
                  start_s=init

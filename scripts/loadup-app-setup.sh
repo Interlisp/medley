@@ -11,7 +11,7 @@ fi
 
 if [ ! -d "${APP_DIR}" ]
 then
-  echo "Error: Cannot find the LFG directory: ${APP_DIR}"
+  echo "Error: Cannot find the ${APP_NAME} directory: ${APP_DIR}"
   exit 1
 fi
 
@@ -24,7 +24,7 @@ if [ ! -d "${APP_LOADUPSDIR}" ]
 then
   if [ -e "${APP_LOADUPSDIR}" ]
   then
-    echo "Error: the lfg loadups dir (${APP_LOADUPSDIR}) exists, but it is not a directory."
+    echo "Error: the ${APP_NAME} loadups dir (${APP_LOADUPSDIR}) exists, but it is not a directory."
     echo "Exiting."
     exit 1
   else
@@ -41,7 +41,7 @@ if [ ! -d "${APP_WORKDIR}" ]
 then
   if [ -e "${APP_WORKDIR}" ]
   then
-    echo "Error: the lfg loadups work dir (${APP_WORKDIR}) exists, but it is not a directory."
+    echo "Error: the ${APP_NAME} loadups work dir (${APP_WORKDIR}) exists, but it is not a directory."
     echo "Exiting."
     exit 1
   else
@@ -90,11 +90,8 @@ loadup_finish () {
 # Can't use exit code for now since on MacOS exit codes appear to be inverted
 # Will restore once MacOS exit code are figured out
 #  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ]
-  if [ ! -f "${APP_WORKDIR}/$1" ]
+  if [ "${APP_WORKDIR}/$1" -nt "${APP_WORKDIR}"/loadup.timestamp ]
   then
-    echo "----- FAILURE -----"
-    exit_code=1
-  else
     echo
     echo "..... files copied into loadups ....."
     for f in "$@"
@@ -110,6 +107,9 @@ loadup_finish () {
     echo
     echo "+++++ SUCCESS +++++"
     exit_code=0
+  else
+    echo "----- FAILURE -----"
+    exit_code=1
   fi
   echo "<<<<< END ${script_name}"
   echo ""

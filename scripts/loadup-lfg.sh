@@ -2,9 +2,9 @@
 
 main() {
 
-        APP_DIR="${LFG_DIR}"
-        APP_LOADUPSDIR="${LFG_LOADUPSDIR}"
-        APP_WORKDIR="${LFG_WORKDIR}"
+        export APP_DIR="${LFG_DIR}"
+        export APP_LOADUPSDIR="${LFG_LOADUPSDIR}"
+        export APP_WORKDIR="${LFG_WORKDIR}"
 
         get_medleydir "$@"
 

@@ -1,10 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "19-Jan-2025 18:37:44" {WMEDLEY}<library>UNICODE.;101 96170  
+(FILECREATED "19-Jan-2025 22:02:25" {WMEDLEY}<library>UNICODE.;109 96963  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS UNICODECOMS)
+      :CHANGES-TO (MACROS UNICODE.TRANSLATE)
+                  (FNS UNICODE.UNMAPPED XTOUCODE UTOXCODE? XTOUCODE?)
+                  (VARS UNICODECOMS)
 
       :PREVIOUS-DATE "19-Jan-2025 15:59:00" {WMEDLEY}<library>UNICODE.;100)
 
@@ -647,7 +649,8 @@
 (DEFINEQ
 
 (UNICODE.UNMAPPED
-  [LAMBDA (CODE TABLE DONTFAKE)                              (* ; "Edited 18-Jan-2025 12:02 by rmk")
+  [LAMBDA (CODE TABLE DONTFAKE)                              (* ; "Edited 19-Jan-2025 22:02 by rmk")
+                                                             (* ; "Edited 18-Jan-2025 12:02 by rmk")
                                                              (* ; "Edited  2-Feb-2024 23:52 by rmk")
                                                              (* ; "Edited 31-Jan-2024 10:07 by rmk")
                                                             (* ; "Edited 11-Aug-2020 20:23 by rmk:")
@@ -661,14 +664,15 @@
     (* ;; "")
 
     (PROG ((INVERSE (EQ TABLE *UNICODETOXCCS*))
-           RANGE)
+           RANGE HASH)
 
      (* ;; "If we already looked up CODE's character set in a file, then we have already filled in its information in the translation table.  If it didn't have a code for a particular character, then we fake it here.  Faked codes are negative, so we can detect them easily, and interpret them with IABS.")
 
           (CL:WHEN (AND (UNICODE-EXTEND-TRANSLATION? CODE TABLE)
-                        (SETQ RANGE (UNICODE.TRANSLATE CODE TABLE T)))
+                        (SETQ HASH (CL:SVREF TABLE (LRSH CODE TRANSLATION-SHIFT)))
+                        (SETQ RANGE (GETHASH CODE HASH)))
 
-              (* ;; "We might have gotten the segment, but the segment didn't have CODE")
+              (* ;; "We might have gotten the segment that didn't have an entry for CODE.")
 
               (RETURN RANGE))
 
@@ -690,7 +694,10 @@
                 else (SETQ RANGE *NEXT-PRIVATE-UNICODE*)
                      (add *NEXT-PRIVATE-UNICODE* 1))
               [MERGE-UNICODE-TRANSLATION-TABLES INVERSE (CONS (LIST CODE (IMINUS RANGE]
-              (RETURN RANGE))])
+
+              (* ;; "CONS because of LIST convention so we can eventually distinguish combiners.")
+
+              (RETURN (CONS RANGE)))])
 
 (UNICODE-EXTEND-TRANSLATION?
   [LAMBDA (CODE TABLE)                                       (* ; "Edited 18-Jan-2025 12:40 by rmk")
@@ -926,18 +933,27 @@
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (DECLARE%: EVAL@COMPILE 
 
-(PUTPROPS UNICODE.TRANSLATE MACRO [OPENLAMBDA (CODE TRANSLATION-TABLE DONTFAKE)
+(PUTPROPS UNICODE.TRANSLATE MACRO [OPENLAMBDA (CODE TRANSLATION-TABLE DONTFAKE RETURNALL)
 
-                                    (* ;; 
-             "Negative codes are faked up. CAR because there can be alternatives, pick the first one")
+                                 (* ;; "Negative codes are faked up. If RETURNALL and the RANGE is a list of alternatives, the list is returned, othewise just the first one. ")
 
                                     (LET* [(HASH (CL:SVREF TRANSLATION-TABLE (LRSH CODE 
                                                                                    TRANSLATION-SHIFT)
                                                         ))
-                                           (RANGE (OR (AND HASH (CAR (GETHASH CODE HASH)))
+                                           (RANGE (OR (AND HASH (GETHASH CODE HASH))
                                                       (UNICODE.UNMAPPED CODE TRANSLATION-TABLE 
                                                              DONTFAKE]
-                                          (CL:WHEN RANGE (IABS RANGE])
+                                          (if RANGE)
+                                          (CL:WHEN RANGE
+                                              (CL:IF RETURNALL
+                                                  (if (CDR RANGE)
+                                                      then RANGE
+                                                    elseif (IGEQ (CAR RANGE)
+                                                                 0)
+                                                      then (CAR RANGE)
+                                                    elseif (NOT DONTFAKE)
+                                                      then (IMINUS (CAR RANGE)))
+                                                  (IABS (CAR RANGE))))])
 
 (PUTPROPS \UTF8.GETBASEBYTE MACRO ((BASE OFFSET ERROR?)      (* ; 
                         "Fetches the OFFSET'th byte from BASE, checking for UTF-8 validity if ERROR?")
@@ -952,7 +968,7 @@
 (DEFINEQ
 
 (XTOUCODE
-  [LAMBDA (XCCSCODE)                                    (* ; "Edited  9-Aug-2020 09:04 by rmk:")
+  [LAMBDA (XCCSCODE)                                        (* ; "Edited  9-Aug-2020 09:04 by rmk:")
     (UNICODE.TRANSLATE XCCSCODE *XCCSTOUNICODE*])
 
 (UTOXCODE
@@ -961,43 +977,29 @@
     (UNICODE.TRANSLATE UNNICODE *UNICODETOXCCS*])
 
 (XTOUCODE?
-  [LAMBDA (XCCSCODE)                                         (* ; "Edited 18-Jan-2025 11:44 by rmk")
+  [LAMBDA (XCCSCODE)                                         (* ; "Edited 19-Jan-2025 21:13 by rmk")
+                                                             (* ; "Edited 18-Jan-2025 11:44 by rmk")
                                                              (* ; "Edited 15-Jan-2025 19:51 by rmk")
                                                              (* ; "Edited 14-Jan-2025 13:14 by rmk")
                                                             (* ; "Edited  9-Aug-2020 09:04 by rmk:")
 
-    (* ;; "Returns the Unix range-code corresponding to XCCSCODE if there is a true mappping, otherwise NIL.  ")
+    (* ;; "Returns the Unix range-code(s) corresponding to XCCSCODE if there are true mapppings, otherwise NIL.  Alternative codes are returned in a list, the code itself is returned for a singleton.")
 
-    (* ;; " NOTE:  This returns ALL of the alternative Unicodes for XCCSCODE")
-
-    (LET ((UCODE (GETHASH XCCSCODE *XCCSTOUNICODE*)))
-         (CL:WHEN UCODE
-             (if (CDR UCODE)
-                 then                                        (* ; "Return alternatives as a list")
-                      UCODE
-               elseif (IGEQ (CAR UCODE)
-                            0)
-                 then (CAR UCODE)))])
+    (UNICODE.TRANSLATE XCCSCODE *XCCSTOUNICODE* T T])
 
 (UTOXCODE?
-  [LAMBDA (UNICODE)                                          (* ; "Edited 18-Jan-2025 11:46 by rmk")
+  [LAMBDA (UNICODE)                                          (* ; "Edited 19-Jan-2025 21:14 by rmk")
+                                                             (* ; "Edited 18-Jan-2025 11:46 by rmk")
                                                              (* ; "Edited 15-Jan-2025 19:51 by rmk")
                                                              (* ; "Edited 14-Jan-2025 13:14 by rmk")
                                                             (* ; "Edited  9-Aug-2020 09:04 by rmk:")
 
+    (* ;; "Returns the XCCS range-code(s) corresponding to UNICODE if there are true mapppings, otherwise NIL.  ")
+
     (* ;; 
- "Returns the XCCS range-code corresponding to UNICODE if there is a true mappping, otherwise NIL.  ")
+    " NOTE:  Alternative codes are returned in a list, the code itself is returned for a singleton.")
 
-    (* ;; " NOTE:  This returns ALL of the alternative XCCSCODEs for UNICODE")
-
-    (LET ((XCODE (GETHASH UNICODE *UNICODETOXCCS*)))
-         (CL:WHEN XCODE
-             (if (CDR XCODE)
-                 then                                        (* ; "Return alternatives as a list")
-                      XCODE
-               elseif (IGEQ (CAR XCODE)
-                            0)
-                 then (CAR XCODE)))])
+    (UNICODE.TRANSLATE UNICODE *UNICODETOXCCS* T T])
 )
 
 
@@ -1793,22 +1795,22 @@
 
 (PUTPROPS UNICODE FILETYPE :TCOMPL)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4605 19157 (UTF8.OUTCHARFN 4615 . 7413) (UTF8.SLUG.OUTCHARFN 7415 . 7819) (
-UTF8.INCCODEFN 7821 . 13433) (UTF8.PEEKCCODEFN 13435 . 18175) (\UTF8.BACKCCODEFN 18177 . 19155)) (
-19158 23412 (UTF16BE.OUTCHARFN 19168 . 20078) (UTF16BE.INCCODEFN 20080 . 21096) (UTF16BE.PEEKCCODEFN 
-21098 . 22329) (\UTF16BE.BACKCCODEFN 22331 . 23410)) (23413 27700 (UTF16LE.OUTCHARFN 23423 . 24430) (
-UTF16LE.INCCODEFN 24432 . 25448) (UTF16LE.PEEKCCODEFN 25450 . 26617) (\UTF16LE.BACKCCODEFN 26619 . 
-27698)) (27701 30748 (READBOM 27711 . 29780) (WRITEBOM 29782 . 30746)) (30778 34343 (
-MAKE-UNICODE-FORMATS 30788 . 34341)) (34440 44286 (UNICODE.UNMAPPED 34450 . 37383) (
-UNICODE-EXTEND-TRANSLATION? 37385 . 39909) (UTF8.BINCODE 39911 . 42490) (\UTF8.FETCHCODE 42492 . 44284
-)) (44287 49808 (UTF8.VALIDATE 44297 . 46894) (UTF8-SIZE-FROM-BYTE1 46896 . 47328) (NUTF8-BYTE1-BYTES 
-47330 . 48067) (NUTF8-CODE-BYTES 48069 . 49126) (NUTF8-STRING-BYTES 49128 . 49806)) (51323 53826 (
-XTOUCODE 51333 . 51501) (UTOXCODE 51503 . 51784) (XTOUCODE? 51786 . 52802) (UTOXCODE? 52804 . 53824)) 
-(55063 61931 (READ-UNICODE-MAPPING-FILENAMES 55073 . 58468) (READ-UNICODE-MAPPING 58470 . 61929)) (
-61998 67897 (MAKE-UNICODE-TRANSLATION-TABLES 62008 . 64515) (MERGE-UNICODE-TRANSLATION-TABLES 64517 . 
-67895)) (67898 71954 (ALL-UNICODE-MAPPINGS 67908 . 71952)) (73369 85800 (WRITE-UNICODE-MAPPING 73379
- . 77129) (WRITE-UNICODE-INCLUDED 77131 . 81853) (WRITE-UNICODE-MAPPING-HEADER 81855 . 83103) (
-WRITE-UNICODE-MAPPING-FILENAME 83105 . 84635) (HEXSTRING 84637 . 85798)) (85801 86477 (
-XCCS-UTF8-AFTER-OPEN 85811 . 86475)) (89002 94504 (UTF8HEXSTRING 89012 . 91217) (XTOUSTRING 91219 . 
-94139) (XCCSSTRING 94141 . 94502)) (94505 96015 (SHOWCHARS 94515 . 96013)))))
+  (FILEMAP (NIL (4720 19272 (UTF8.OUTCHARFN 4730 . 7528) (UTF8.SLUG.OUTCHARFN 7530 . 7934) (
+UTF8.INCCODEFN 7936 . 13548) (UTF8.PEEKCCODEFN 13550 . 18290) (\UTF8.BACKCCODEFN 18292 . 19270)) (
+19273 23527 (UTF16BE.OUTCHARFN 19283 . 20193) (UTF16BE.INCCODEFN 20195 . 21211) (UTF16BE.PEEKCCODEFN 
+21213 . 22444) (\UTF16BE.BACKCCODEFN 22446 . 23525)) (23528 27815 (UTF16LE.OUTCHARFN 23538 . 24545) (
+UTF16LE.INCCODEFN 24547 . 25563) (UTF16LE.PEEKCCODEFN 25565 . 26732) (\UTF16LE.BACKCCODEFN 26734 . 
+27813)) (27816 30863 (READBOM 27826 . 29895) (WRITEBOM 29897 . 30861)) (30893 34458 (
+MAKE-UNICODE-FORMATS 30903 . 34456)) (34555 44699 (UNICODE.UNMAPPED 34565 . 37796) (
+UNICODE-EXTEND-TRANSLATION? 37798 . 40322) (UTF8.BINCODE 40324 . 42903) (\UTF8.FETCHCODE 42905 . 44697
+)) (44700 50221 (UTF8.VALIDATE 44710 . 47307) (UTF8-SIZE-FROM-BYTE1 47309 . 47741) (NUTF8-BYTE1-BYTES 
+47743 . 48480) (NUTF8-CODE-BYTES 48482 . 49539) (NUTF8-STRING-BYTES 49541 . 50219)) (52472 54619 (
+XTOUCODE 52482 . 52654) (UTOXCODE 52656 . 52937) (XTOUCODE? 52939 . 53760) (UTOXCODE? 53762 . 54617)) 
+(55856 62724 (READ-UNICODE-MAPPING-FILENAMES 55866 . 59261) (READ-UNICODE-MAPPING 59263 . 62722)) (
+62791 68690 (MAKE-UNICODE-TRANSLATION-TABLES 62801 . 65308) (MERGE-UNICODE-TRANSLATION-TABLES 65310 . 
+68688)) (68691 72747 (ALL-UNICODE-MAPPINGS 68701 . 72745)) (74162 86593 (WRITE-UNICODE-MAPPING 74172
+ . 77922) (WRITE-UNICODE-INCLUDED 77924 . 82646) (WRITE-UNICODE-MAPPING-HEADER 82648 . 83896) (
+WRITE-UNICODE-MAPPING-FILENAME 83898 . 85428) (HEXSTRING 85430 . 86591)) (86594 87270 (
+XCCS-UTF8-AFTER-OPEN 86604 . 87268)) (89795 95297 (UTF8HEXSTRING 89805 . 92010) (XTOUSTRING 92012 . 
+94932) (XCCSSTRING 94934 . 95295)) (95298 96808 (SHOWCHARS 95308 . 96806)))))
 STOP

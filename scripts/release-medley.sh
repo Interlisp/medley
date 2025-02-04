@@ -6,48 +6,39 @@ if [ ! -x run-medley ] ; then
     exit 1
 fi
 
-tag=$1
-
-if [ -z "$tag" ] ; then
-    tag=medley-`date +%y%m%d`
+if [ -z "$(which gh)" ]; then
+    echo "Error: this script requires gh (github cli) to be installed. Exiting."
+    exit 1
 fi
 
-cd ..
+gh auth status 2>&1 | grep -i -q "Logged in to github.com"
+if [ $? -ne 0 ]; then
+    echo 'Error: this script requires you to be logged into github.  Use "gh auth login" to do so. Exiting.'
+    exit 1
+fi
 
-echo making $tag-loadups.tgz
+if [ "$1" = "-d" ]; then
+    draft="-d"
+    shift
+else
+    draft=""
+fi
 
-tar cfz medley/tmp/$tag-loadups.tgz                       \
-    medley/loadups/lisp.sysout                            \
-    medley/loadups/full.sysout                            \
-    medley/loadups/fuller.database                        \
-    medley/loadups/*.dribble                              \
-    medley/loadups/whereis.hash                           \
-    medley/loadups//exports.all
-	
-echo making $tag-runtime.tgz
+if [ -z "$1" ] ; then
+    tag=medley-$(date +%y%m%d)-$(date +%s)
+else
+    tag="$1"
+fi
+short_tag="${tag#medley-}"
 
-tar cfz medley/tmp/$tag-runtime.tgz                       \
-    --exclude "*~" --exclude "*#*"                        \
-    medley/docs/dinfo                                     \
-    medley/doctools                                       \
-    medley/greetfiles                                     \
-    medley/rooms                                          \
-    medley/run-medley                                     \
-    medley/scripts                                        \
-    medley/fonts/displayfonts  medley/fonts/altofonts     \
-    medley/fonts/adobe                                    \
-    medley/fonts/postscriptfonts                          \
-    medley/library                                        \
-    medley/lispusers                                      \
-    medley/sources                                        \
-    medley/internal
-
-cd medley
+scripts/release-make-tars.sh "${tag}"
 
 echo making release
-sed s/'$tag'/$tag/g < release-notes.md > tmp/release-notes.md
-gh release create $tag -F tmp/release-notes.md -p -t $tag
+sed s/'$tag'/$tag/g < release-notes.md > releases/${short_tag}/release-notes.md
+gh release create $tag -F releases/${short_tag}/release-notes.md -p -t $tag ${draft}
 
 echo uploading
-gh release upload $tag tmp/$tag-loadups.tgz tmp/$tag-runtime.tgz --clobber
+gh release upload $tag releases/${short_tag}/$tag-loadups.tgz releases/${short_tag}/$tag-runtime.tgz --clobber
+
+echo "Done with release ${tag}"
 

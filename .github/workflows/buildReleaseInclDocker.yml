@@ -3,6 +3,7 @@
 #
 # Interlisp webflow to build a Medley release and push it to github.
 # And to build a multiplatform Docker image for the release and push it to Docker Hub.
+# And to kickoff a build and deploy workflow for Medley-online within the online repo.
 #
 # This workflow just calls two reuseable workflows to the two task:
 # buildLoadup.yml and buildDocker.yml
@@ -14,12 +15,12 @@
 # ******************************************************************************
 
 
-name: "Build/Push Release & Docker"
+name: "Build/Push Release, Docker, OIO"
 
 # Run this workflow on ...
 on:
   schedule:
-    - cron: '0 9 * * 1'
+    - cron: '17 9 * * 3'
 
   workflow_dispatch:
     inputs:
@@ -68,14 +69,14 @@ jobs:
   # the result of a workflow_dispatch or a workflow_call
 
   inputs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       draft: ${{ steps.one.outputs.draft }}
       force: ${{ steps.one.outputs.force }}
     steps:
       - id: one
         run: >
-          if [ '${{ toJSON(inputs) }}' != 'null'  ];
+          if [ '${{ toJSON(inputs) }}' != '{}'  ];
           then
             echo "draft=${{ inputs.draft }}" >> $GITHUB_OUTPUT;
             echo "force=${{ inputs.force }}" >> $GITHUB_OUTPUT;
@@ -83,6 +84,7 @@ jobs:
             echo "draft=false" >> $GITHUB_OUTPUT;
             echo "force=false" >> $GITHUB_OUTPUT;
           fi
+
 
 ######################################################################################
 
@@ -94,8 +96,7 @@ jobs:
     with:
         draft: ${{ needs.inputs.outputs.draft }}
         force: ${{ needs.inputs.outputs.force }}
-    secrets:
-        OIO_SSH_KEY: ${{ secrets.OIO_SSH_KEY }}
+    secrets: inherit
 
 
 ######################################################################################
@@ -107,9 +108,30 @@ jobs:
     with:
         draft: ${{ needs.inputs.outputs.draft }}
         force: ${{ needs.inputs.outputs.force }}
-    secrets:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    secrets: inherit
 
 ######################################################################################
 
+  # Run HCFILES and push to files.interlisp.org
+  do_HCFILES:
+    needs: [inputs, do_release]
+    uses: ./.github/workflows/doHCFILES.yml
+    with:
+        draft: ${{ needs.inputs.outputs.draft }}
+    secrets: inherit
+
+######################################################################################
+
+  # Kickoff workflow in online repo to build and deploy Medley docker image to oio
+  do_oio:
+    runs-on: ubuntu-24.04
+    needs: [inputs, do_docker]
+    steps:
+      - name: trigger-oio-buildAndDeploy
+        run: |
+          if [ ! "${{ needs.inputs.outputs.draft }}" = "true" ]
+          then
+            gh workflow run buildAndDeployMedleyDocker.yml --repo Interlisp/online --ref master
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.ONLINE_TOKEN }}

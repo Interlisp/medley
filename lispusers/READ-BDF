@@ -1,21 +1,19 @@
 (DEFINE-FILE-INFO PACKAGE (DEFPACKAGE "BDF" (USE "XCL" "LISP") (EXPORT "READ-BDF" 
-"WRITE-BDF-TO-DISPLAYFONT-FILES") (IMPORT \FONTFACE \FONTFILENAME \FSETOFFSET \FSETWIDTH \FONTSYMBOL 
-\GETSTREAM \INSTALLCHARSETINFO \PUTBASE BITBLT BITMAPCREATE BITMAPHEIGHT BITMAPWIDTH BLACKSHADE 
-BLTSHADE BOLD CONDENSED DISPLAY FONTDESCRIPTOR FONTP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC 
-UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
+"WRITE-BDF-TO-DISPLAYFONT-FILES") (IMPORT \AVGCHARWIDTH \FGETWIDTH \FONTFACE \FONTFILENAME 
+\FSETOFFSET \FSETWIDTH \FONTSYMBOL \GETSTREAM \INSTALLCHARSETINFO \PUTBASE BITBLT BITMAPCREATE 
+BITMAPHEIGHT BITMAPWIDTH BLACKSHADE BLTSHADE BOLD CONDENSED CHARSETINFO DISPLAY FONTDESCRIPTOR FONTP 
+FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) 
+READTABLE "XCL" BASE 10)
 
-(IL:FILECREATED " 2-Feb-2025 21:19:45" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;17| 39134  
+(IL:FILECREATED " 3-Feb-2025 19:21:15" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;28| 36150  
 
       :EDIT-BY "mth"
 
-      :CHANGES-TO (IL:FUNCTIONS WRITE-BDF-TO-DISPLAYFONT-FILES GET-GLYPH-LIMITS BDF-TO-CHARSETINFO 
-                         GLYPHS-BY-CHARSET READ-GLYPH BDF-TO-FONTDESCRIPTOR PACKFILENAME.STRING 
-                         GET-CSET-BITMAP-LIMITS MAKE-CHARSET-BITMAP)
+      :CHANGES-TO (IL:FUNCTIONS FIXUP-CHARSETINFO BDF-TO-FONTDESCRIPTOR BDF-TO-CHARSETINFO 
+                         WRITE-BDF-TO-DISPLAYFONT-FILES)
                   (FILE-ENVIRONMENTS "READ-BDF")
-                  (IL:VARS IL:READ-BDFCOMS)
-                  (IL:VARIABLES MAXTHINCHAR NOMAPPINGCHARSET MAXCHARSET)
 
-      :PREVIOUS-DATE "23-Sep-2024 12:38:25" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;1|
+      :PREVIOUS-DATE " 3-Feb-2025 14:29:22" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;22|
 )
 
 
@@ -24,7 +22,8 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
 (IL:RPAQQ IL:READ-BDFCOMS
           ((IL:STRUCTURES BDF-FONT GL-LIMITS GLYPH)
            (IL:VARIABLES MAXCHARSET MAXTHINCHAR NOMAPPINGCHARSET)
-           (IL:FUNCTIONS PACKFILENAME.STRING READ-BDF READ-DELIMITED-LIST-FROM-STRING READ-GLYPH)
+           (IL:FUNCTIONS FIXUP-CHARSETINFO PACKFILENAME.STRING READ-BDF 
+                  READ-DELIMITED-LIST-FROM-STRING READ-GLYPH)
            (IL:FUNCTIONS BDF-TO-CHARSETINFO BDF-TO-FONTDESCRIPTOR GET-GLYPH-LIMITS GLYPHS-BY-CHARSET
                   SPLIT-FONT-NAME WRITE-BDF-TO-DISPLAYFONT-FILES)
            (IL:DECLARE\: IL:EVAL@COMPILE IL:DONTCOPY (IL:FILES (IL:LOADCOMP)
@@ -57,6 +56,37 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
 (DEFCONSTANT MAXTHINCHAR 255)
 
 (DEFCONSTANT NOMAPPINGCHARSET (1+ MAXCHARSET))
+
+(DEFUN FIXUP-CHARSETINFO (CSINFO ASCENT DESCENT SLUGWIDTH)
+                                                      (IL:* IL:\; "Edited  3-Feb-2025 19:19 by mth")
+   (LET* ((CSASCENT (IL:|fetch| (CHARSETINFO IL:CHARSETASCENT) IL:|of| CSINFO))
+          (CSDESCENT (IL:|fetch| (CHARSETINFO IL:CHARSETDESCENT) IL:|of| CSINFO))
+          (WIDTHS (IL:|fetch| (CHARSETINFO IL:WIDTHS) IL:|of| CSINFO))
+          (BMAP (IL:|fetch| (CHARSETINFO IL:CHARSETBITMAP) IL:|of| CSINFO))
+          (AMARGIN (- ASCENT CSASCENT))
+          (DMARGIN (- DESCENT CSDESCENT))
+          NEWBMAP)
+         (SETQ NEWBMAP (BITMAPCREATE (+ (BITMAPWIDTH BMAP)
+                                        SLUGWIDTH)
+                              (+ ASCENT DESCENT)
+                              1))
+         (BITBLT BMAP 0 0 NEWBMAP 0 DMARGIN (BITMAPWIDTH BMAP)
+                (BITMAPHEIGHT BMAP)
+                'INPUT
+                'IL:REPLACE)
+         (BLTSHADE BLACKSHADE NEWBMAP (1+ (BITMAPWIDTH BMAP))
+                0
+                (1- SLUGWIDTH)
+                (+ ASCENT DESCENT)
+                'IL:REPLACE)
+         (IL:|replace| (CHARSETINFO IL:CHARSETBITMAP) IL:|of| CSINFO IL:|with| NEWBMAP)
+         (IL:|replace| (CHARSETINFO IL:CHARSETASCENT) IL:|of| CSINFO IL:|with| ASCENT)
+         (IL:|replace| (CHARSETINFO IL:CHARSETDESCENT) IL:|of| CSINFO IL:|with| DESCENT)
+         (LOOP :FOR I :FROM 0 :TO (+ MAXTHINCHAR 2)
+               :WHEN
+               (ZEROP (\\FGETWIDTH WIDTHS I))
+               :DO
+               (\\FSETWIDTH WIDTHS I SLUGWIDTH))))
 
 (DEFMACRO PACKFILENAME.STRING (&WHOLE WHOLE)          (IL:* IL:\; "Edited  1-Feb-2025 23:17 by mth")
    `(IL:PACKFILENAME.STRING ,@(LOOP :FOR X :IN (CDR WHOLE)
@@ -260,7 +290,7 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
         GLYPH))
 
 (DEFUN BDF-TO-CHARSETINFO (FONT CSET &OPTIONAL MAP-UNKNOWN-TO-PRIVATE)
-                                                      (IL:* IL:\; "Edited  2-Feb-2025 21:07 by mth")
+                                                      (IL:* IL:\; "Edited  3-Feb-2025 16:02 by mth")
                                                       (IL:* IL:\; "Edited 30-Jan-2025 16:40 by mth")
    (LET (GBCS CSGLYPHS CSLIMITS)
         (UNLESS (AND (INTEGERP CSET)
@@ -294,7 +324,7 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
                   (LASTCHAR MOST-NEGATIVE-FIXNUM)
                   (CSINFO (IL:|create| CHARSETINFO))
                   (DLEFT 0)
-                  AVGCHARWIDTH GLYPHS-LIMITS BMAP SLUGOFFSET OFFSETS HEIGHT WIDTHS)
+                  GLYPHS-LIMITS BMAP OFFSETS HEIGHT WIDTHS)
                  (SETQ GLYPHS-LIMITS (LOOP :FOR XGL :IN CSGLYPHS :COLLECT
                                            (LET* ((XCODE (CAR XGL))
                                                   (GL (CDR XGL))
@@ -315,23 +345,21 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
                                                  (SETQ ASCENT (MAX ASCENT ASC))
                                                  (SETQ DESCENT (MAX DESCENT DSC))
                                                  GLIMITS)))
-                 (SETQ SLUGOFFSET TOTAL-WIDTH)
-                 (SETQ AVGCHARWIDTH (ROUND (/ TOTAL-WIDTH (LENGTH GLYPHS-LIMITS))))
-                 (INCF TOTAL-WIDTH AVGCHARWIDTH)
                  (IL:|replace| (CHARSETINFO IL:CHARSETASCENT) IL:|of| CSINFO IL:|with| ASCENT)
                  (IL:|replace| (CHARSETINFO IL:CHARSETDESCENT) IL:|of| CSINFO IL:|with| DESCENT)
                  (SETQ OFFSETS (IL:|fetch| (CHARSETINFO IL:OFFSETS) IL:|of| CSINFO))
 
-                 (IL:* IL:|;;| "Initialize the offsets to the slug offset")
+                 (IL:* IL:|;;| 
+               "Initialize the offsets to the TOTAL-WIDTH (without the SLUG. It will be added later)")
 
                  (IL:|for| I IL:|from| 0 IL:|to| (+ MAXTHINCHAR 2) IL:|do| (\\FSETOFFSET OFFSETS I 
-                                                                                  SLUGOFFSET))
+                                                                                  TOTAL-WIDTH))
                  (SETQ WIDTHS (IL:|fetch| (CHARSETINFO IL:WIDTHS) IL:|of| CSINFO))
 
-                 (IL:* IL:|;;| "Initialize the widths to AVGCHARWIDTH, the width of the slug")
+                 (IL:* IL:|;;| 
+                 "Initialize the widths to 0, the width of the slug will be set in FIXUP-CHARSETINFO")
 
-                 (IL:|for| I IL:|from| 0 IL:|to| (+ MAXTHINCHAR 2) IL:|do| (\\FSETWIDTH WIDTHS I 
-                                                                                  AVGCHARWIDTH))
+                 (IL:|for| I IL:|from| 0 IL:|to| (+ MAXTHINCHAR 2) IL:|do| (\\FSETWIDTH WIDTHS I 0))
                  (IL:|replace| (CHARSETINFO IL:IMAGEWIDTHS) IL:|of| CSINFO IL:|with| WIDTHS)
 
                  (IL:* IL:|;;| "JDS 12/4/92:  Apparently, these fields can be signed values, if all chars, e.g., ride above the base line. ")
@@ -340,10 +368,6 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
 
                  (SETQ HEIGHT (+ ASCENT DESCENT))
                  (SETQ BMAP (BITMAPCREATE TOTAL-WIDTH HEIGHT 1))
-                 (BLTSHADE BLACKSHADE BMAP (1+ SLUGOFFSET)
-                        0
-                        (1- AVGCHARWIDTH)
-                        HEIGHT)
                  (LOOP :FOR GLIM :IN GLYPHS-LIMITS :WITH GL :WITH GLBM :WITH GLW :WITH XCODE :DO
                        (SETQ GL (GLIM-GLYPH GLIM))
                        (SETQ GLBM (GLYPH-BITMAP GL))
@@ -363,7 +387,7 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
 
 (DEFUN BDF-TO-FONTDESCRIPTOR (BDFONT FAMILY SIZE FACE ROTATION DEVICE &OPTIONAL 
                                     MAP-UNKNOWN-TO-PRIVATE)
-                                                      (IL:* IL:\; "Edited  2-Feb-2025 20:46 by mth")
+                                                      (IL:* IL:\; "Edited  3-Feb-2025 19:10 by mth")
                                                       (IL:* IL:\; "Edited 30-Jan-2025 21:27 by mth")
    (WHEN (AND (BDF-FONT-P BDFONT)
               FAMILY)                                        (IL:* IL:\; "FAMILY Cannot be NIL")
@@ -381,11 +405,11 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
                                     'DISPLAY)
                                 MAP-UNKNOWN-TO-PRIVATE)))
              (WHEN (FONTP FAMILY)
-                 (RETURN (BDF-TO-FONTDESCRIPTOR BDFONT (IL:FONTPROP FAMILY 'IL:FAMILY)
-                                (OR SIZE (IL:FONTPROP FAMILY 'IL:SIZE))
-                                (OR FACE (IL:FONTPROP FAMILY 'IL:FACE))
-                                (OR ROTATION (IL:FONTPROP FAMILY 'IL:ROTATION))
-                                (OR DEVICE (IL:FONTPROP FAMILY 'IL:DEVICE))
+                 (RETURN (BDF-TO-FONTDESCRIPTOR BDFONT (FONTPROP FAMILY 'IL:FAMILY)
+                                (OR SIZE (FONTPROP FAMILY 'IL:SIZE))
+                                (OR FACE (FONTPROP FAMILY 'IL:FACE))
+                                (OR ROTATION (FONTPROP FAMILY 'IL:ROTATION))
+                                (OR DEVICE (FONTPROP FAMILY 'IL:DEVICE))
                                 MAP-UNKNOWN-TO-PRIVATE)))
              (SETQ FAMILY (\\FONTSYMBOL FAMILY))
              (UNLESS (AND (INTEGERP SIZE)
@@ -403,15 +427,8 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
                            'DISPLAY)
                           ((AND (SYMBOLP DEVICE)
                                 (NOT (EQ DEVICE T)))         (IL:* IL:\; 
-  "Maybe wrong case or package, but we bet it's OK and defer  expensive coercion until we've failed.")
+   "Maybe wrong case or package, but we bet it's OK and defer expensive coercion until we've failed.")
                            DEVICE)
-                          ((SETQ DEV (\\GETSTREAM DEVICE 'IL:OUTPUT T))
-                                                             (IL:* IL:\; 
-                                                             "T coerces here to primary output")
-                           (IL:|fetch| (IL:IMAGEOPS IL:IMFONTCREATE) IL:|of| (IL:|fetch| (STREAM
-                                                                                          IL:IMAGEOPS
-                                                                                          )
-                                                                                IL:|of| DEV)))
                           ((STRINGP DEVICE)
                            (INTERN (STRING-UPCASE DEVICE)
                                   "IL"))
@@ -434,8 +451,17 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
                                             MAXCHARSET)
                                       (SETQ CSINFO (BDF-TO-CHARSETINFO GBCS CSET))
                                       (\\INSTALLCHARSETINFO FONTDESC CSINFO CSET)
-                                      (LIST CSET))))
-             (RETURN (VALUES FONTDESC CHARSETS (ASSOC NOMAPPINGCHARSET GBCS :TEST #'=))))))
+                                      (LIST (CONS CSET CSINFO)))))
+             (SETQ CHARSETS (LOOP :FOR CSP :IN CHARSETS :WITH ASCENT = (FONTPROP FONTDESC
+                                                                              'IL:ASCENT)
+                                  :WITH DESCENT = (FONTPROP FONTDESC 'IL:DESCENT)
+                                  :WITH SLUGWIDTH = (1+ (\\AVGCHARWIDTH FONTDESC))
+                                  :COLLECT
+                                  (PROGN (FIXUP-CHARSETINFO (CDR CSP)
+                                                ASCENT DESCENT SLUGWIDTH)
+                                         (CAR CSP))))
+             (ASSOC NOMAPPINGCHARSET GBCS :TEST #'EQ)
+             (RETURN (VALUES FONTDESC CHARSETS)))))
 
 (DEFUN GET-GLYPH-LIMITS (GLYPH)                       (IL:* IL:\; "Edited  2-Feb-2025 21:07 by mth")
                                                       (IL:* IL:\; "Edited 29-Jan-2025 16:28 by mth")
@@ -521,81 +547,9 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
 
 (DEFUN WRITE-BDF-TO-DISPLAYFONT-FILES (BDFONT DEST-DIR &OPTIONAL MAP-UNKNOWN-TO-PRIVATE FAMILY SIZE 
                                              FACE ROTATION DEVICE)
-                                                      (IL:* IL:\; "Edited  2-Feb-2025 21:19 by mth")
+                                                      (IL:* IL:\; "Edited  3-Feb-2025 15:50 by mth")
    (UNLESS (TYPEP BDFONT 'BDF-FONT)
           (ERROR "Not a BDF-FONT: ~S~%" BDFONT))
-   (WHEN NIL
-
-       (IL:* IL:|;;| " older form:")
-
-       (LET (FONT-NAME WEIGHT SLANT EXPANSION PIXEL-SIZE POINT-SIZE)
-            (SETQ FONT-NAME (SPLIT-FONT-NAME (BF-NAME BDFONT)))
-                                                             (IL:* IL:\; "Parse as XLFD format")
-            (POP FONT-NAME)                                  (IL:* IL:\; "Don't need FOUNDRY")
-            (UNLESS FAMILY
-                (SETQ FAMILY (REMOVE #\Space (POP FONT-NAME)
-                                    :TEST
-                                    #'CHAR=)))
-            (SETQ WEIGHT (POP FONT-NAME))
-            (SETQ SLANT (POP FONT-NAME))
-            (SETQ EXPANSION (POP FONT-NAME))
-            (UNLESS FACE
-                (SETQ WEIGHT (OR (CDR (ASSOC (CHAR-UPCASE (ELT WEIGHT 0))
-                                             '((#\R . MEDIUM)
-                                               (#\M . MEDIUM)
-                                               (#\N . MEDIUM)
-                                               (#\B . BOLD)
-                                               (#\D . BOLD)
-                                               (#\L . LIGHT))))
-                                 'MEDIUM))                   (IL:* IL:\; "DemiBold => BOLD")
-                (SETQ SLANT (OR (CDR (ASSOC (STRING-UPCASE SLANT)
-                                            '(("R" . REGULAR)
-                                              ("I" . ITALIC)
-                                              ("O" . ITALIC))))
-                                'REGULAR))                   (IL:* IL:\; "Oblique => ITALIC")
-                                                             (IL:* IL:\; "Ignore others")
-                (SETQ EXPANSION (OR (CDR (ASSOC (CHAR-UPCASE (ELT EXPANSION 0))
-                                                '((#\R . REGULAR)
-                                                  (#\N . REGULAR)
-                                                  (#\B . BOLD)
-                                                  (#\S . CONDENSED)
-                                                  (#\C . CONDENSED))))
-                                    'REGULAR))               (IL:* IL:\; 
-                                                 "S is for \"SemiCondensed\", Assuming \"Condensed\"")
-
-                (IL:* IL:|;;| 
-                "Now check for WEIGHT and EXPANSION both BOLD. If so, change Expansion to REGULAR")
-
-                (WHEN (AND (EQ WEIGHT EXPANSION)
-                           (EQ EXPANSION 'BOLD))
-                    (SETQ EXPANSION 'REGULAR))
-                (SETQ FACE (LIST WEIGHT SLANT EXPANSION)))
-            (POP FONT-NAME)                                  (IL:* IL:\; "Don't need ADD_STYLE_NAME")
-            (SETQ PIXEL-SIZE (POP FONT-NAME))
-            (WHEN (ZEROP (LENGTH PIXEL-SIZE))
-                  (SETQ PIXEL-SIZE NIL))
-            (SETQ POINT-SIZE (POP FONT-NAME))
-            (SETQ POINT-SIZE (COND
-                                ((ZEROP (LENGTH POINT-SIZE))
-                                 NIL)
-                                ((SETQ POINT-SIZE (PARSE-INTEGER POINT-SIZE :JUNK-ALLOWED T))
-                                 (CEILING POINT-SIZE 10))
-                                (T NIL)))
-
-            (IL:* IL:|;;| "Don't need the rest of FONT-NAME ")
-
-            (UNLESS SIZE
-                (SETQ SIZE (OR (AND PIXEL-SIZE (PARSE-INTEGER PIXEL-SIZE :JUNK-ALLOWED T))
-                               POINT-SIZE
-                               (FIRST (BF-SIZE BDFONT)))))
-            (MULTIPLE-VALUE-BIND (FONTDESC CSETS UNMAPPEDGLYPHS)
-                   (BDF-TO-FONTDESCRIPTOR BDFONT FAMILY SIZE FACE ROTATION DEVICE 
-                          MAP-UNKNOWN-TO-PRIVATE)
-                   (LOOP :FOR CS :IN CSETS :DO (WRITESTRIKEFONTFILE FONTDESC CS
-                                                      (PACKFILENAME.STRING :BODY DEST-DIR :NAME
-                                                             (\\FONTFILENAME FAMILY SIZE FACE 
-                                                                    "DISPLAYFONT" CS))))
-                   (VALUES FONTDESC CSETS UNMAPPEDGLYPHS))))
    (DESTRUCTURING-BIND (FOUNDRY FN-FAMILY WEIGHT SLANT EXPANSION ADD_STYLE_NAME
                               PIXEL-SIZE POINT-SIZE)
           (SPLIT-FONT-NAME (BF-NAME BDFONT))                 (IL:* IL:\; "Parse as XLFD format")
@@ -663,23 +617,25 @@ UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) READTABLE "XCL" BASE 10)
 (DEFINE-FILE-ENVIRONMENT "READ-BDF" :PACKAGE (DEFPACKAGE "BDF" (:USE "XCL" "LISP")
                                                     (:EXPORT "READ-BDF" 
                                                            "WRITE-BDF-TO-DISPLAYFONT-FILES")
-                                                    (:IMPORT \\FONTFACE \\FONTFILENAME \\FSETOFFSET 
-                                                           \\FSETWIDTH \\FONTSYMBOL \\GETSTREAM 
+                                                    (:IMPORT \\AVGCHARWIDTH \\FGETWIDTH \\FONTFACE 
+                                                           \\FONTFILENAME \\FSETOFFSET \\FSETWIDTH 
+                                                           \\FONTSYMBOL \\GETSTREAM 
                                                            \\INSTALLCHARSETINFO \\PUTBASE BITBLT 
                                                            BITMAPCREATE BITMAPHEIGHT BITMAPWIDTH 
-                                                           BLACKSHADE BLTSHADE BOLD CONDENSED DISPLAY
-                                                           FONTDESCRIPTOR FONTP INPUT ITALIC LIGHT 
-                                                           LRSH MEDIUM REGULAR TCONC UTOXCODE 
-                                                           UTOXCODE? WRITESTRIKEFONTFILE))
+                                                           BLACKSHADE BLTSHADE BOLD CONDENSED 
+                                                           CHARSETINFO DISPLAY FONTDESCRIPTOR FONTP 
+                                                           FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM 
+                                                           REGULAR TCONC UTOXCODE UTOXCODE? 
+                                                           WRITESTRIKEFONTFILE))
    :READTABLE "XCL"
    :COMPILER :COMPILE-FILE)
 
 (IL:PUTPROPS IL:READ-BDF IL:DATABASE IL:NO)
-(IL:PUTPROPS IL:READ-BDF IL:COPYRIGHT (IL:NONE))
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (2544 3969 (PACKFILENAME.STRING 2544 . 3969)) (3971 9155 (READ-BDF 3971 . 9155)) (
-9157 9480 (READ-DELIMITED-LIST-FROM-STRING 9157 . 9480)) (9482 15064 (READ-GLYPH 9482 . 15064)) (15066
- 21132 (BDF-TO-CHARSETINFO 15066 . 21132)) (21134 25644 (BDF-TO-FONTDESCRIPTOR 21134 . 25644)) (25646 
-26243 (GET-GLYPH-LIMITS 25646 . 26243)) (26245 29272 (GLYPHS-BY-CHARSET 26245 . 29272)) (29274 29637 (
-SPLIT-FONT-NAME 29274 . 29637)) (29639 37829 (WRITE-BDF-TO-DISPLAYFONT-FILES 29639 . 37829)))))
+  (IL:FILEMAP (NIL (2395 4016 (FIXUP-CHARSETINFO 2395 . 4016)) (4018 5443 (PACKFILENAME.STRING 4018 . 
+5443)) (5445 10629 (READ-BDF 5445 . 10629)) (10631 10954 (READ-DELIMITED-LIST-FROM-STRING 10631 . 
+10954)) (10956 16538 (READ-GLYPH 10956 . 16538)) (16540 22257 (BDF-TO-CHARSETINFO 16540 . 22257)) (
+22259 26719 (BDF-TO-FONTDESCRIPTOR 22259 . 26719)) (26721 27318 (GET-GLYPH-LIMITS 26721 . 27318)) (
+27320 30347 (GLYPHS-BY-CHARSET 27320 . 30347)) (30349 30712 (SPLIT-FONT-NAME 30349 . 30712)) (30714 
+34725 (WRITE-BDF-TO-DISPLAYFONT-FILES 30714 . 34725)))))
 IL:STOP

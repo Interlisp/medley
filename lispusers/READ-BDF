@@ -5,13 +5,15 @@ BITMAPHEIGHT BITMAPWIDTH BLACKSHADE BLTSHADE BOLD CONDENSED CHARSETINFO DISPLAY 
 FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) 
 READTABLE "XCL" BASE 10)
 
-(IL:FILECREATED " 4-Feb-2025 22:28:30" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;32| 39958  
+(IL:FILECREATED " 5-Feb-2025 16:11:53" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;35| 42056  
 
       :EDIT-BY "mth"
 
-      :CHANGES-TO (IL:FUNCTIONS BDF-TO-FONTDESCRIPTOR)
+      :CHANGES-TO (IL:FUNCTIONS BDF-TO-FONTDESCRIPTOR WRITE-BDF-TO-DISPLAYFONT-FILES 
+                         GET-FAMILY-FACE-SIZE-FROM-NAME GLYPHS-BY-CHARSET)
+                  (IL:VARS IL:READ-BDFCOMS)
 
-      :PREVIOUS-DATE " 3-Feb-2025 23:18:20" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;30|
+      :PREVIOUS-DATE " 4-Feb-2025 22:28:30" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;32|
 )
 
 
@@ -20,8 +22,8 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 (IL:RPAQQ IL:READ-BDFCOMS
           ((IL:STRUCTURES BDF-FONT GL-LIMITS GLYPH)
            (IL:VARIABLES MAXCHARSET MAXTHINCHAR NOMAPPINGCHARSET)
-           (IL:FUNCTIONS FIXUP-CHARSETINFO PACKFILENAME.STRING READ-BDF 
-                  READ-DELIMITED-LIST-FROM-STRING READ-GLYPH)
+           (IL:FUNCTIONS FIXUP-CHARSETINFO GET-FAMILY-FACE-SIZE-FROM-NAME PACKFILENAME.STRING 
+                  READ-BDF READ-DELIMITED-LIST-FROM-STRING READ-GLYPH)
            (IL:FUNCTIONS BDF-TO-CHARSETINFO BDF-TO-FONTDESCRIPTOR GET-GLYPH-LIMITS GLYPHS-BY-CHARSET
                   SPLIT-FONT-NAME WRITE-BDF-TO-DISPLAYFONT-FILES)
            (IL:DECLARE\: IL:EVAL@COMPILE IL:DONTCOPY (IL:FILES (IL:LOADCOMP)
@@ -85,6 +87,57 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                (ZEROP (\\FGETWIDTH WIDTHS I))
                :DO
                (\\FSETWIDTH WIDTHS I SLUGWIDTH))))
+
+(DEFUN GET-FAMILY-FACE-SIZE-FROM-NAME (BDFONT)        (IL:* IL:\; "Edited  5-Feb-2025 12:56 by mth")
+   (UNLESS (TYPEP BDFONT 'BDF-FONT)
+          (ERROR "Not a BDF-FONT: ~S~%" BDFONT))
+   (DESTRUCTURING-BIND (FOUNDRY FAMILY WEIGHT SLANT EXPANSION ADD_STYLE_NAME
+                              PIXEL-SIZE POINT-SIZE)
+          (SPLIT-FONT-NAME (BF-NAME BDFONT))                 (IL:* IL:\; "Parse as XLFD format")
+          (DECLARE (IGNORE FOUNDRY ADD_STYLE_NAME))          (IL:* IL:\; 
+                                                             "Don't need FOUNDRY or ADD_STYLE_NAME")
+          (SETQ FAMILY (REMOVE #\Space FAMILY :TEST #'CHAR=))
+          (SETQ WEIGHT (OR (CDR (ASSOC (CHAR-UPCASE (ELT WEIGHT 0))
+                                       '((#\R . MEDIUM)
+                                         (#\M . MEDIUM)
+                                         (#\N . MEDIUM)
+                                         (#\B . BOLD)
+                                         (#\D . BOLD)
+                                         (#\L . LIGHT))))
+                           'MEDIUM))                         (IL:* IL:\; "DemiBold => BOLD")
+          (SETQ SLANT (OR (CDR (ASSOC (STRING-UPCASE SLANT)
+                                      '(("R" . REGULAR)
+                                        ("I" . ITALIC)
+                                        ("O" . ITALIC))))
+                          'REGULAR))                         (IL:* IL:\; "Oblique => ITALIC")
+                                                             (IL:* IL:\; "Ignore others")
+          (SETQ EXPANSION (OR (CDR (ASSOC (CHAR-UPCASE (ELT EXPANSION 0))
+                                          '((#\R . REGULAR)
+                                            (#\N . REGULAR)
+                                            (#\B . BOLD)
+                                            (#\S . CONDENSED)
+                                            (#\C . CONDENSED))))
+                              'REGULAR))                     (IL:* IL:\; 
+                                                 "S is for \"SemiCondensed\", Assuming \"Condensed\"")
+
+          (IL:* IL:|;;| 
+          "Now check for WEIGHT and EXPANSION both BOLD. If so, change Expansion to REGULAR")
+
+          (WHEN (AND (EQ WEIGHT EXPANSION)
+                     (EQ EXPANSION 'BOLD))
+              (SETQ EXPANSION 'REGULAR))
+          (WHEN (ZEROP (LENGTH PIXEL-SIZE))
+                (SETQ PIXEL-SIZE NIL))
+          (SETQ POINT-SIZE (COND
+                              ((ZEROP (LENGTH POINT-SIZE))
+                               NIL)
+                              ((SETQ POINT-SIZE (PARSE-INTEGER POINT-SIZE :JUNK-ALLOWED T))
+                               (CEILING POINT-SIZE 10))
+                              (T NIL)))
+          (LIST FAMILY (LIST WEIGHT SLANT EXPANSION)
+                (OR (AND PIXEL-SIZE (PARSE-INTEGER PIXEL-SIZE :JUNK-ALLOWED T))
+                    POINT-SIZE
+                    (FIRST (BF-SIZE BDFONT))))))
 
 (DEFMACRO PACKFILENAME.STRING (&WHOLE WHOLE)          (IL:* IL:\; "Edited  1-Feb-2025 23:17 by mth")
    `(IL:PACKFILENAME.STRING ,@(LOOP :FOR X :IN (CDR WHOLE)
@@ -384,8 +437,8 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                  CSINFO))))
 
 (DEFUN BDF-TO-FONTDESCRIPTOR (BDFONT FAMILY SIZE FACE ROTATION DEVICE &OPTIONAL 
-                                    MAP-UNKNOWN-TO-PRIVATE)
-                                                      (IL:* IL:\; "Edited  4-Feb-2025 22:27 by mth")
+                                    MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
+                                                      (IL:* IL:\; "Edited  5-Feb-2025 14:53 by mth")
                                                       (IL:* IL:\; "Edited 30-Jan-2025 21:27 by mth")
    (WHEN (AND (BDF-FONT-P BDFONT)
               FAMILY)                                        (IL:* IL:\; "FAMILY Cannot be NIL")
@@ -432,7 +485,7 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                   "IL"))
                           (T (IL:\\ILLEGAL.ARG DEVICE))))
              (SETQ FACE (\\FONTFACE FACE NIL DEV))
-             (SETQ GBCSL (GLYPHS-BY-CHARSET BDFONT MAP-UNKNOWN-TO-PRIVATE))
+             (SETQ GBCSL (GLYPHS-BY-CHARSET BDFONT MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING))
              (FLET ((GBCS-TO-FONTDESC (GBCS FAMILY)
                            (LET (FONTDESC CHARSETS)
                                 (WHEN GBCS
@@ -487,7 +540,8 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                        (FIRST (GLYPH-DWIDTH GLYPH)))))
          (MAKE-GL-LIMITS :WIDTH GWIDTH :ASCENT ASCENT :DESCENT DESCENT)))
 
-(DEFUN GLYPHS-BY-CHARSET (FONT &OPTIONAL MAP-UNKNOWN-TO-PRIVATE)
+(DEFUN GLYPHS-BY-CHARSET (FONT &OPTIONAL MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
+                                                      (IL:* IL:\; "Edited  5-Feb-2025 12:53 by mth")
                                                       (IL:* IL:\; "Edited  3-Feb-2025 23:00 by mth")
                                                       (IL:* IL:\; "Edited  2-Feb-2025 20:29 by mth")
                                                       (IL:* IL:\; "Edited 28-Jan-2025 23:09 by mth")
@@ -496,11 +550,12 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                                       (IL:* IL:\; "Edited  9-Jan-2025 11:23 by mth")
    (LET* ((NCSETS (+ MAXCHARSET 2))
           (CSETS (MAKE-ARRAY NCSETS :INITIAL-CONTENTS (LOOP :REPEAT NCSETS :COLLECT (CONS NIL))))
-          (UTOXFN (IF MAP-UNKNOWN-TO-PRIVATE
-                      #'UTOXCODE
-                      #'UTOXCODE?))
+          (UTOXFN (COND
+                     (RAW-UNICODE-MAPPING #'IDENTITY)
+                     (MAP-UNKNOWN-TO-PRIVATE #'UTOXCODE)
+                     (T #'UTOXCODE?)))
           NOMAPPINGCSETS ENC XCODE CS XCS)
-         (UNLESS MAP-UNKNOWN-TO-PRIVATE
+         (UNLESS (OR MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
              (SETQ NOMAPPINGCSETS (MAKE-ARRAY NCSETS :INITIAL-CONTENTS (LOOP :REPEAT NCSETS :COLLECT
                                                                              (CONS NIL)))))
          (FLET ((PUT-GLYPH-IN-CHARSET-ARRAY (CODE GLYPH CSARRAY)
@@ -512,37 +567,57 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                      (SETQ XCS NIL)
                      (SETQ ENC (GLYPH-ENCODING GL))
                      (SETQ XCODE (FUNCALL UTOXFN ENC))
-                     (COND
-                        ((NULL XCODE)
-
-                         (IL:* IL:|;;| "These assoc with the Unicode encoding")
-
+                     (IF RAW-UNICODE-MAPPING
                          (COND
                             ((> ENC 65535)
-
-                             (IL:* IL:|;;| 
-                             "Unicode encoding is > xFFFF, put it in the NOMAPPINGCHARSET")
-
+                             (WARN "~&Unicode encoding is beyond 16 bits: ~5X" ENC)
                              (TCONC (AREF CSETS NOMAPPINGCHARSET)
                                     (CONS ENC GL)))
-                            (T (PUT-GLYPH-IN-CHARSET-ARRAY ENC GL NOMAPPINGCSETS))))
-                        ((AND (INTEGERP XCODE)
-                              (<= 0 XCODE 65535))
+                            ((AND NIL (= 255 (LOGAND ENC 255)))
 
-                         (IL:* IL:|;;| "These assoc with the 8 bit character code within the charset")
+                             (IL:* IL:|;;| 
+                             "Temporarily? disable this warning in RAW-UNICODE-MAPPING mode")
 
-                         (PUT-GLYPH-IN-CHARSET-ARRAY XCODE GL CSETS))
-                        ((LISTP XCODE)
+                             (WARN 
+                       "~&Unicode encoding char byte (~2X,FF)=(~O,377) may not =FF in FONTDESCRIPTOR"
+                                   (LRSH ENC 8)
+                                   (LRSH ENC 8))
+                             (TCONC (AREF CSETS NOMAPPINGCHARSET)
+                                    (CONS ENC GL)))
+                            (T (PUT-GLYPH-IN-CHARSET-ARRAY ENC GL CSETS)))
+                         (COND
+                            ((NULL XCODE)
 
-                         (IL:* IL:|;;| 
-                         "These assoc with the 8 bit character code within the charset (like above)")
+                             (IL:* IL:|;;| "These assoc with the Unicode encoding")
 
-                         (LOOP :FOR XC :IN XCODE :UNLESS (MEMBER (SETQ CS (LRSH XC 8))
-                                                                XCS)
-                               :DO
-                               (PUSH CS XCS)
-                               (PUT-GLYPH-IN-CHARSET-ARRAY XC GL CSETS)))
-                        (T (ERROR "Invalid XCODE: ~A~%")))))
+                             (COND
+                                ((OR (> ENC 65535)
+                                     (= 255 (LOGAND ENC 255)))
+
+                                 (IL:* IL:|;;| 
+            "Unicode encoding is > xFFFF, or encoding low byte is FF, put it in the NOMAPPINGCHARSET")
+
+                                 (TCONC (AREF CSETS NOMAPPINGCHARSET)
+                                        (CONS ENC GL)))
+                                (T (PUT-GLYPH-IN-CHARSET-ARRAY ENC GL NOMAPPINGCSETS))))
+                            ((AND (INTEGERP XCODE)
+                                  (<= 0 XCODE 65535))
+
+                             (IL:* IL:|;;| 
+                             "These assoc with the 8 bit character code within the charset")
+
+                             (PUT-GLYPH-IN-CHARSET-ARRAY XCODE GL CSETS))
+                            ((LISTP XCODE)
+
+                             (IL:* IL:|;;| 
+                          "These assoc with the 8 bit character code within the charset (like above)")
+
+                             (LOOP :FOR XC :IN XCODE :UNLESS (MEMBER (SETQ CS (LRSH XC 8))
+                                                                    XCS)
+                                   :DO
+                                   (PUSH CS XCS)
+                                   (PUT-GLYPH-IN-CHARSET-ARRAY XC GL CSETS)))
+                            (T (ERROR "Invalid XCODE: ~A~%"))))))
 
          (IL:* IL:|;;| "Extract the lists from the TCONC pointers")
 
@@ -583,64 +658,22 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
          (SUBSEQ NAME I J)
          :WHILE J))
 
-(DEFUN WRITE-BDF-TO-DISPLAYFONT-FILES (BDFONT DEST-DIR &OPTIONAL MAP-UNKNOWN-TO-PRIVATE FAMILY SIZE 
-                                             FACE ROTATION DEVICE)
+(DEFUN WRITE-BDF-TO-DISPLAYFONT-FILES (BDFONT DEST-DIR &OPTIONAL MAP-UNKNOWN-TO-PRIVATE 
+                                             RAW-UNICODE-MAPPING FAMILY SIZE FACE ROTATION DEVICE)
+                                                      (IL:* IL:\; "Edited  5-Feb-2025 15:05 by mth")
                                                       (IL:* IL:\; "Edited  3-Feb-2025 23:18 by mth")
    (UNLESS (TYPEP BDFONT 'BDF-FONT)
           (ERROR "Not a BDF-FONT: ~S~%" BDFONT))
-   (DESTRUCTURING-BIND (FOUNDRY FN-FAMILY WEIGHT SLANT EXPANSION ADD_STYLE_NAME
-                              PIXEL-SIZE POINT-SIZE)
-          (SPLIT-FONT-NAME (BF-NAME BDFONT))                 (IL:* IL:\; "Parse as XLFD format")
-          (DECLARE (IGNORE FOUNDRY ADD_STYLE_NAME))          (IL:* IL:\; 
-                                                             "Don't need FOUNDRY or ADD_STYLE_NAME")
-          (UNLESS FAMILY
-              (SETQ FAMILY (REMOVE #\Space FN-FAMILY :TEST #'CHAR=)))
-          (UNLESS FACE
-              (SETQ WEIGHT (OR (CDR (ASSOC (CHAR-UPCASE (ELT WEIGHT 0))
-                                           '((#\R . MEDIUM)
-                                             (#\M . MEDIUM)
-                                             (#\N . MEDIUM)
-                                             (#\B . BOLD)
-                                             (#\D . BOLD)
-                                             (#\L . LIGHT))))
-                               'MEDIUM))                     (IL:* IL:\; "DemiBold => BOLD")
-              (SETQ SLANT (OR (CDR (ASSOC (STRING-UPCASE SLANT)
-                                          '(("R" . REGULAR)
-                                            ("I" . ITALIC)
-                                            ("O" . ITALIC))))
-                              'REGULAR))                     (IL:* IL:\; "Oblique => ITALIC")
-                                                             (IL:* IL:\; "Ignore others")
-              (SETQ EXPANSION (OR (CDR (ASSOC (CHAR-UPCASE (ELT EXPANSION 0))
-                                              '((#\R . REGULAR)
-                                                (#\N . REGULAR)
-                                                (#\B . BOLD)
-                                                (#\S . CONDENSED)
-                                                (#\C . CONDENSED))))
-                                  'REGULAR))                 (IL:* IL:\; 
-                                                 "S is for \"SemiCondensed\", Assuming \"Condensed\"")
-
-              (IL:* IL:|;;| 
-              "Now check for WEIGHT and EXPANSION both BOLD. If so, change Expansion to REGULAR")
-
-              (WHEN (AND (EQ WEIGHT EXPANSION)
-                         (EQ EXPANSION 'BOLD))
-                  (SETQ EXPANSION 'REGULAR))
-              (SETQ FACE (LIST WEIGHT SLANT EXPANSION)))
-          (WHEN (ZEROP (LENGTH PIXEL-SIZE))
-                (SETQ PIXEL-SIZE NIL))
-          (SETQ POINT-SIZE (COND
-                              ((ZEROP (LENGTH POINT-SIZE))
-                               NIL)
-                              ((SETQ POINT-SIZE (PARSE-INTEGER POINT-SIZE :JUNK-ALLOWED T))
-                               (CEILING POINT-SIZE 10))
-                              (T NIL)))
-          (UNLESS SIZE
-              (SETQ SIZE (OR (AND PIXEL-SIZE (PARSE-INTEGER PIXEL-SIZE :JUNK-ALLOWED T))
-                             POINT-SIZE
-                             (FIRST (BF-SIZE BDFONT)))))
+   (DESTRUCTURING-BIND (FN-FAMILY FN-FACE FN-SIZE)
+          (GET-FAMILY-FACE-SIZE-FROM-NAME BDFONT)
+          (SETQ FAMILY (OR FAMILY FN-FAMILY))
+          (WHEN RAW-UNICODE-MAPPING
+              (SETQ FAMILY (\\FONTSYMBOL (CONCATENATE 'STRING "RAW-" (STRING FAMILY)))))
+          (SETQ FACE (OR FACE FN-FACE))
+          (SETQ SIZE (OR SIZE FN-SIZE))
           (MULTIPLE-VALUE-BIND (FONTDESC CSETS UNMAPPED-FONTDESC UNICODE-CSETS UNMAPPEDGLYPHS)
                  (BDF-TO-FONTDESCRIPTOR BDFONT FAMILY SIZE FACE ROTATION DEVICE 
-                        MAP-UNKNOWN-TO-PRIVATE)
+                        MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
                  (LOOP :FOR CS :IN CSETS :DO (WRITESTRIKEFONTFILE FONTDESC CS
                                                     (PACKFILENAME.STRING :BODY DEST-DIR :NAME
                                                            (\\FONTFILENAME FAMILY SIZE FACE 
@@ -678,10 +711,11 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 (IL:PUTPROPS IL:READ-BDF IL:DATABASE IL:NO)
 (IL:PUTPROPS IL:READ-BDF IL:COPYRIGHT (IL:NONE))
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (2252 3873 (FIXUP-CHARSETINFO 2252 . 3873)) (3875 5300 (PACKFILENAME.STRING 3875 . 
-5300)) (5302 10486 (READ-BDF 5302 . 10486)) (10488 10811 (READ-DELIMITED-LIST-FROM-STRING 10488 . 
-10811)) (10813 16395 (READ-GLYPH 10813 . 16395)) (16397 22114 (BDF-TO-CHARSETINFO 16397 . 22114)) (
-22116 28166 (BDF-TO-FONTDESCRIPTOR 22116 . 28166)) (28168 28765 (GET-GLYPH-LIMITS 28168 . 28765)) (
-28767 33408 (GLYPHS-BY-CHARSET 28767 . 33408)) (33410 33773 (SPLIT-FONT-NAME 33410 . 33773)) (33775 
-38484 (WRITE-BDF-TO-DISPLAYFONT-FILES 33775 . 38484)))))
+  (IL:FILEMAP (NIL (2433 4054 (FIXUP-CHARSETINFO 2433 . 4054)) (4056 7088 (
+GET-FAMILY-FACE-SIZE-FROM-NAME 4056 . 7088)) (7090 8515 (PACKFILENAME.STRING 7090 . 8515)) (8517 13701
+ (READ-BDF 8517 . 13701)) (13703 14026 (READ-DELIMITED-LIST-FROM-STRING 13703 . 14026)) (14028 19610 (
+READ-GLYPH 14028 . 19610)) (19612 25329 (BDF-TO-CHARSETINFO 19612 . 25329)) (25331 31421 (
+BDF-TO-FONTDESCRIPTOR 25331 . 31421)) (31423 32020 (GET-GLYPH-LIMITS 31423 . 32020)) (32022 38036 (
+GLYPHS-BY-CHARSET 32022 . 38036)) (38038 38401 (SPLIT-FONT-NAME 38038 . 38401)) (38403 40582 (
+WRITE-BDF-TO-DISPLAYFONT-FILES 38403 . 40582)))))
 IL:STOP

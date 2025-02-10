@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 2-Feb-2025 11:37:42" {WMEDLEY}<library>tedit>TEDIT.;742 154343 
+(FILECREATED " 6-Feb-2025 16:18:10" {WMEDLEY}<library>tedit>TEDIT.;743 154384 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS TEDIT.INSERT.OBJECT)
-                  (VARS TEDITCOMS)
+      :CHANGES-TO (FNS \TEDIT.MOVE \TEDIT.DELETE)
 
-      :PREVIOUS-DATE "31-Jan-2025 09:36:11" {WMEDLEY}<library>tedit>TEDIT.;741)
+      :PREVIOUS-DATE " 2-Feb-2025 11:37:42" {WMEDLEY}<library>tedit>TEDIT.;742)
 
 
 (PRETTYCOMPRINT TEDITCOMS)
@@ -1496,7 +1495,8 @@
                    (CL:WHEN TYPEIN (\TEDIT.SCROLL.CARET TSTREAM)))])])
 
 (\TEDIT.MOVE
-  [LAMBDA (FROMSEL TOSEL FROMTSTREAM TOTSTREAM)              (* ; "Edited  8-Dec-2024 21:37 by rmk")
+  [LAMBDA (FROMSEL TOSEL FROMTSTREAM TOTSTREAM)              (* ; "Edited  6-Feb-2025 16:17 by rmk")
+                                                             (* ; "Edited  8-Dec-2024 21:37 by rmk")
                                                              (* ; "Edited 26-Nov-2024 22:34 by rmk")
                                                              (* ; "Edited 22-Nov-2024 15:42 by rmk")
                                                              (* ; "Edited 22-Sep-2024 18:43 by rmk")
@@ -1529,7 +1529,7 @@
                 (TOCH# (FGETSEL TOSEL CH#))
                 (TODCH (FGETSEL TOSEL DCH))
                 (TOPOINT (FGETSEL TOSEL POINT))
-                TODELEVENT FROMPIECES)
+                TODELEVENT FROMPIECES BPD)
                (CL:WHEN (\TEDIT.MOVE.MSG FROMOBJ TOOBJ NIL)
                       (RETURN NIL))
 
@@ -1539,68 +1539,78 @@
 
          (* ;; "If FROM is in a different document, the Venue sysout leaves that documents SEL as it was before (i.e. not at the position of the deletion).  Maybe it should be moved (and scrolled) to a point selection at the deletion site?")
 
-         (* ;; "Install FROM pieces  at TO, first clearing out the blue pending delete.  The move-event may be a composite of both.  If we are doing a move in the same textobject, the TO selection (= SEL for  a CTRL-SHIFT SELOPERATION) must be updated to reflect a preceding FROM-deletion.")
+         (* ;; "")
+
+         (* ;; "We'd like to check all the image objects for allowance before we make any changes, but we don't know whether the imageobject WHENxxx functions have side effects even if they decline.  So we check only once, when we do the BPD operation or grab the from pieces.  Since we are testing for MOVE, presumably the insert and delete are both OK.")
+
+         (* ;; " ")
+
+         (* ;; " Get rid of the BPD")
+
+               (CL:WHEN (AND (FGETTOBJ TOOBJ BLUEPENDINGDELETE)
+                             (IGREATERP TODCH 0))
+                   (FSETTOBJ TOOBJ BLUEPENDINGDELETE NIL)
+                   (CL:UNLESS (\TEDIT.DELETE TOOBJ TOSEL)
+                          (RETURN NIL))
+                   (SETQ BPD T)
+                   (CL:WHEN (EQ TOOBJ FROMOBJ)               (* ; "Same text, pre-adjust  the source")
+                       (\TEDIT.SEL.DELETEDCHARS FROMSEL TOCH# TODCH)))
 
          (* ;; "")
+
+         (* ;; "BPD is gone, TOSEL and FROMSEL have been adjusted")
 
          (* ;; "Grab (a copy of) the source pieces, if image objects allow copying.  FROMPIECES is essentially a clipboard for extract/insert--the FROMOBJ has not yet been changed.")
 
                (SETQ FROMPIECES (\TEDIT.SELPIECES.COPY (\TEDIT.SELPIECES FROMSEL NIL FROMOBJ)
-                                       'COPY TOOBJ FROMOBJ))
-               (CL:UNLESS FROMPIECES (RETURN))
-               (\TEDIT.SHOWSEL FROMSEL NIL FROMOBJ)          (* ; "Turn off any current highlighting")
+                                       'MOVE TOOBJ FROMOBJ))
+               (CL:UNLESS FROMPIECES
+
+                   (* ;; "If bailing, should we undo the BPDEVENT (if history is ON)?")
+
+                   (RETURN))
+               (\TEDIT.SHOWSEL FROMSEL NIL FROMOBJ)
                (\TEDIT.SHOWSEL TOSEL NIL TOOBJ)
 
-         (* ;; "")
-
-         (* ;; "Delete the FROM unless an object doesn't allow deletion.")
+         (* ;; "No need to recheck allowance")
 
                (if (EQ TOOBJ FROMOBJ)
                    then 
-                        (* ;; "In this case, TOSEL is SEL and FROMSEL is somewhere else in TOOBJ.")
+                        (* ;; 
+      "Can't call \TEDIT.DELETE because we don't want to implicitly update the TOSEL for the insert.")
 
-                        (CL:UNLESS (\TEDIT.DELETE.SELPIECES FROMOBJ FROMSEL)
-                               (RETURN))
-                        (SETQ TODELEVENT (\TEDIT.POPEVENT TOOBJ)) 
-                                                             (* ; 
-                                             "Pop so the insert below doesn't bump the history count")
-                        (\TEDIT.UPDATE.LINES FROMOBJ 'DELETION FROMSEL)
-                        (\TEDIT.SEL.DELETEDCHARS TOSEL FROMSEL) 
+                        (\TEDIT.DELETE.SELPIECES FROMOBJ FROMSEL NIL T)
+                        (\TEDIT.SEL.DELETEDCHARS TOSEL FROMSEL)
+                        (\TEDIT.UPDATE.LINES FROMOBJ 'DELETION FROMSEL) 
 
-                        (* ;; "TOSEL has been adjusted to after-deletion chnos, but lines have not yet been updated/displayed and TOSEL has not been fixed.")
+                        (* ;; "Pop to accumulate into a single event (BPD, DELETE, INSERT).")
 
-                 elseif (\TEDIT.DELETE FROMOBJ FROMSEL)
-                   then 
-                        (* ;; "The FROM deletion has been accomplished, and FROM's history is good.  If the destination is foreign, that's not our problem.")
+                 else (\TEDIT.DELETE FROMOBJ FROMSEL NIL NIL T))
 
-                        (CL:WHEN (GETTEXTPROP TOOBJ 'COPYBYBKSYSBUF)
-                            (\TEDIT.FOREIGN.COPY (WFROMDS TOTSTREAM)
-                                   FROMSEL T)
-                            (RETURN))
-                 else (RETURN))
+         (* ;; "Deletion accomplished possibly in separate FROMOBJ with its own history.")
 
          (* ;; "")
 
-               (if (FGETTOBJ TOOBJ BLUEPENDINGDELETE)
-                   then (FSETTOBJ TOOBJ BLUEPENDINGDELETE NIL)
-                        (\TEDIT.REPLACE.SELPIECES FROMPIECES TOOBJ TOSEL)
-                 else (\TEDIT.INSERT.SELPIECES FROMPIECES TOOBJ TOSEL))
-
-         (* ;; 
-         "TO's history has either a single replace or insert, depending on its BLUEPENDINGDELETE")
-
+               (CL:WHEN (GETTEXTPROP TOOBJ 'COPYBYBKSYSBUF)
+                   (\TEDIT.FOREIGN.COPY (WFROMDS TOTSTREAM)
+                          FROMSEL T)
+                   (CL:WHEN BPD                              (* ; "If no BPD, TO history is good")
+                       (\TEDIT.HISTORYADD.COMPOSITE TOOBJ TOOBJ (LIST (\TEDIT.POPEVENT TOOBJ)
+                                                                      (\TEDIT.POPEVENT TOOBJ))))
+                   (RETURN))
+               (\TEDIT.INSERT.SELPIECES FROMPIECES TOOBJ TOSEL)
                (\TEDIT.SET.SEL.LOOKS TOSEL 'NORMAL)
                (\TEDIT.FIXSEL TOSEL TOOBJ)
                (\TEDIT.SHOWSEL TOSEL T TOOBJ)
 
          (* ;; "")
 
-         (* ;; "TO's last history event is either a single replace or insert, depending on its BLUEPENDINGDELETE. If there is also a preceding TODELEVENT, we combine both events into a single Move.  There is no history connection between the deletion and insertion events if they happen in separate documents, they have to be undone separately.  Otherwise, we would have to make sure that both documents at both reverted to just after this move before we could undo either of them. ")
+         (* ;; "TO history in order has INS, DEL if TO=FROM, and possibly BPD. (DEL) (BPD), put them all in a composite event.  ")
 
-               (CL:WHEN TODELEVENT                           (* ; "We popped it above")
-                   (\TEDIT.HISTORYADD TOOBJ (\TEDIT.HISTORY.EVENT TOOBJ :Move TOCH# TODCH TOPOINT NIL
-                                                   (LIST (\TEDIT.POPEVENT TOOBJ)
-                                                         TODELEVENT))))])])
+               (\TEDIT.HISTORYADD.COMPOSITE TOOBJ (LIST (\TEDIT.POPEVENT TOOBJ)
+                                                        (CL:IF (EQ TOOBJ FROMOBJ)
+                                                               (\TEDIT.POPEVENT TOOBJ))
+                                                        (CL:IF BPD (\TEDIT.POPEVENT TOOBJ])])
 
 (\TEDIT.COPY
   [LAMBDA (FROMSEL TOSEL FROMTSTREAM TOTSTREAM)              (* ; "Edited 23-Nov-2024 22:45 by rmk")
@@ -1969,7 +1979,8 @@
                       OBJ])
 
 (\TEDIT.DELETE
-  [LAMBDA (TEXTOBJ TARGETSEL/CHAR LEN POINT)                 (* ; "Edited  8-Dec-2024 21:39 by rmk")
+  [LAMBDA (TEXTOBJ TARGETSEL/CHAR LEN POINT DONTCHECK)       (* ; "Edited  6-Feb-2025 00:14 by rmk")
+                                                             (* ; "Edited  8-Dec-2024 21:39 by rmk")
                                                              (* ; "Edited 28-Nov-2024 10:13 by rmk")
                                                              (* ; "Edited 27-Nov-2024 09:18 by rmk")
                                                              (* ; "Edited 13-Sep-2024 22:30 by rmk")
@@ -2015,7 +2026,7 @@
          [SETQ CLOOKS (\TEDIT.GET.INSERT.CHARLOOKS TEXTOBJ (CL:IF (EQ POINT 'LEFT)
                                                                (SUB1 FIRSTCHAR)
                                                                (IPLUS FIRSTCHAR LEN))]
-         (CL:WHEN (\TEDIT.DELETE.SELPIECES TEXTOBJ FIRSTCHAR LEN)
+         (CL:WHEN (\TEDIT.DELETE.SELPIECES TEXTOBJ FIRSTCHAR LEN DONTCHECK)
                                                              (* ; 
                                                   "Delete the selected characters (if objects allow)")
 
@@ -2475,7 +2486,7 @@
 (* ; "TEDIT Support information")
 
 
-(RPAQQ TEDITSYSTEMDATE " 2-Feb-2025 11:37:42")
+(RPAQQ TEDITSYSTEMDATE " 6-Feb-2025 16:18:10")
 
 
 
@@ -2485,27 +2496,27 @@
 (ADDTOVAR PRINTFILETYPES (TEDIT (TEST \TEDIT.GET.TRAILER)
                                 (EXTENSION (TEDIT))))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4627 6569 (MAKE-TEDIT-EXPORTS.ALL 4637 . 5183) (UPDATE-TEDIT 5185 . 5798) (EDIT-TEDIT 
-5800 . 6567)) (8242 36697 (TEDIT 8252 . 10830) (TEXTSTREAM 10832 . 12752) (TEXTSTREAMP 12754 . 13138) 
-(TEDITMENUP 13140 . 13906) (COERCETEXTSTREAM 13908 . 18119) (TEDIT.CONCAT 18121 . 21300) (TEDITSTRING 
-21302 . 22155) (TEDIT-SEE 22157 . 22716) (TEDIT.COPY 22718 . 24863) (TEDIT.DELETE 24865 . 26117) (
-TEDIT.INSERT 26119 . 29077) (TEDIT.TERPRI 29079 . 30193) (TEDIT.KILL 30195 . 31111) (TEDIT.QUIT 31113
- . 32888) (TEDIT.MOVE 32890 . 33778) (TEDIT.STRINGWIDTH 33780 . 34451) (TEDIT.CHARWIDTH 34453 . 36695)
-) (36698 38639 (TEXTOBJ 36708 . 37173) (COERCETEXTOBJ 37175 . 38637)) (40039 41095 (TDRIBBLE 40049 . 
-41093)) (41136 56240 (TEDIT.INSERT.OBJECT 41146 . 45880) (TEDIT.EDIT.OBJECT 45882 . 48223) (
-TEDIT.FIND.OBJECT 48225 . 49733) (TEDIT.FIND.OBJECT.BACKWARD 49735 . 51662) (TEDIT.OBJECT.CHANGED 
-51664 . 54531) (TEDIT.MAP.OBJECTS 54533 . 55768) (\TEDIT.FIRST.OBJPIECE 55770 . 56003) (
-\TEDIT.NEXT.OBJPIECE 56005 . 56238)) (56263 63773 (\TEDIT.CONCAT.PAGEFRAMES 56273 . 61407) (
-\TEDIT.GET.PAGE.HEADINGS 61409 . 62438) (\TEDIT.CONCAT.INSTALL.HEADINGS 62440 . 63771)) (63774 67203 (
-\TEDIT.MOVE.MSG 63784 . 65865) (\TEDIT.READONLY 65867 . 67201)) (67204 81825 (TEDIT.NCHARS 67214 . 
-67587) (TEDIT.RPLCHARCODE 67589 . 75389) (TEDIT.NTHCHARCODE 75391 . 77748) (TEDIT.NTHCHAR 77750 . 
-78008) (\TEDIT.PIECE.NTHCHARCODE 78010 . 81823)) (81871 136253 (\TEDIT1 81881 . 83958) (\TEDIT.INSERT 
-83960 . 89937) (\TEDIT.MOVE 89939 . 97338) (\TEDIT.COPY 97340 . 101318) (\TEDIT.REPLACE.SELPIECES 
-101320 . 105300) (\TEDIT.INSERT.SELPIECES 105302 . 108187) (\TEDIT.RESTARTFN 108189 . 110694) (
-\TEDIT.CHARDELETE 110696 . 113523) (\TEDIT.COPYPIECE 113525 . 118373) (\TEDIT.APPLY.OBJFN 118375 . 
-121572) (\TEDIT.DELETE 121574 . 126383) (\TEDIT.DIFFUSE.PARALOOKS 126385 . 128656) (\TEDIT.WORDDELETE 
-128658 . 130214) (\TEDIT.WORDDELETE.FORWARD 130216 . 131888) (\TEDIT.FINISHEDIT? 131890 . 136251)) (
-136254 136913 (\TEDIT.THELP 136264 . 136911)) (136947 144727 (\TEDIT.PARAPIECES 136957 . 138931) (
-\TEDIT.PARA.FIRST 138933 . 141800) (\TEDIT.PARA.LAST 141802 . 144725)) (144728 153693 (
-\TEDIT.WORD.FIRST 144738 . 149394) (\TEDIT.WORD.LAST 149396 . 153691)))))
+  (FILEMAP (NIL (4598 6540 (MAKE-TEDIT-EXPORTS.ALL 4608 . 5154) (UPDATE-TEDIT 5156 . 5769) (EDIT-TEDIT 
+5771 . 6538)) (8213 36668 (TEDIT 8223 . 10801) (TEXTSTREAM 10803 . 12723) (TEXTSTREAMP 12725 . 13109) 
+(TEDITMENUP 13111 . 13877) (COERCETEXTSTREAM 13879 . 18090) (TEDIT.CONCAT 18092 . 21271) (TEDITSTRING 
+21273 . 22126) (TEDIT-SEE 22128 . 22687) (TEDIT.COPY 22689 . 24834) (TEDIT.DELETE 24836 . 26088) (
+TEDIT.INSERT 26090 . 29048) (TEDIT.TERPRI 29050 . 30164) (TEDIT.KILL 30166 . 31082) (TEDIT.QUIT 31084
+ . 32859) (TEDIT.MOVE 32861 . 33749) (TEDIT.STRINGWIDTH 33751 . 34422) (TEDIT.CHARWIDTH 34424 . 36666)
+) (36669 38610 (TEXTOBJ 36679 . 37144) (COERCETEXTOBJ 37146 . 38608)) (40010 41066 (TDRIBBLE 40020 . 
+41064)) (41107 56211 (TEDIT.INSERT.OBJECT 41117 . 45851) (TEDIT.EDIT.OBJECT 45853 . 48194) (
+TEDIT.FIND.OBJECT 48196 . 49704) (TEDIT.FIND.OBJECT.BACKWARD 49706 . 51633) (TEDIT.OBJECT.CHANGED 
+51635 . 54502) (TEDIT.MAP.OBJECTS 54504 . 55739) (\TEDIT.FIRST.OBJPIECE 55741 . 55974) (
+\TEDIT.NEXT.OBJPIECE 55976 . 56209)) (56234 63744 (\TEDIT.CONCAT.PAGEFRAMES 56244 . 61378) (
+\TEDIT.GET.PAGE.HEADINGS 61380 . 62409) (\TEDIT.CONCAT.INSTALL.HEADINGS 62411 . 63742)) (63745 67174 (
+\TEDIT.MOVE.MSG 63755 . 65836) (\TEDIT.READONLY 65838 . 67172)) (67175 81796 (TEDIT.NCHARS 67185 . 
+67558) (TEDIT.RPLCHARCODE 67560 . 75360) (TEDIT.NTHCHARCODE 75362 . 77719) (TEDIT.NTHCHAR 77721 . 
+77979) (\TEDIT.PIECE.NTHCHARCODE 77981 . 81794)) (81842 136294 (\TEDIT1 81852 . 83929) (\TEDIT.INSERT 
+83931 . 89908) (\TEDIT.MOVE 89910 . 97260) (\TEDIT.COPY 97262 . 101240) (\TEDIT.REPLACE.SELPIECES 
+101242 . 105222) (\TEDIT.INSERT.SELPIECES 105224 . 108109) (\TEDIT.RESTARTFN 108111 . 110616) (
+\TEDIT.CHARDELETE 110618 . 113445) (\TEDIT.COPYPIECE 113447 . 118295) (\TEDIT.APPLY.OBJFN 118297 . 
+121494) (\TEDIT.DELETE 121496 . 126424) (\TEDIT.DIFFUSE.PARALOOKS 126426 . 128697) (\TEDIT.WORDDELETE 
+128699 . 130255) (\TEDIT.WORDDELETE.FORWARD 130257 . 131929) (\TEDIT.FINISHEDIT? 131931 . 136292)) (
+136295 136954 (\TEDIT.THELP 136305 . 136952)) (136988 144768 (\TEDIT.PARAPIECES 136998 . 138972) (
+\TEDIT.PARA.FIRST 138974 . 141841) (\TEDIT.PARA.LAST 141843 . 144766)) (144769 153734 (
+\TEDIT.WORD.FIRST 144779 . 149435) (\TEDIT.WORD.LAST 149437 . 153732)))))
 STOP

@@ -72,6 +72,7 @@ touch "${LOADUP_WORKDIR}"/loadup.timestamp
 
 script_name=$(basename "$0" ".sh")
 cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
+initfile="${LOADUP_WORKDIR}/${script_name}.init"
 
 # look thru args looking to see if oldschool was specified in args
 j=1
@@ -153,13 +154,14 @@ loadup_finish () {
 run_medley () {
   if [ ! "${LOADUP_OLDSCHOOL}" = true ]
   then
-    /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"  \
+    /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"         \
              --config -                                          \
              --id loadup_+                                       \
              --geometry "${geometry}"                            \
              --noscroll                                          \
              --logindir "${LOADUP_LOGINDIR}"                     \
-             --greet "${cmfile}"                                 \
+             --rem.cm "${cmfile}"                                \
+             --greet "${initfile}"                               \
              --sysout "$1"                                       \
              "$2" "$3" "$4" "$5" "$6" "$7"                       ;
     exit_code=$?

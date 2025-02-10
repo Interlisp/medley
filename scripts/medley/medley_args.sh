@@ -46,7 +46,8 @@ nh_mac_arg=""
 nh_debug_arg=""
 pixelscale_arg=""
 borderwidth_arg=""
-
+remcm_arg="${LDEREMCM}"
+repeat_cm=""
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -64,6 +65,28 @@ do
       -c | --config)
         # already handled so just skip both flag and value
         shift;
+        ;;
+      -cm | --rem.cm | --remcm)
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
+        then
+          remcm_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_file_readable "$1" "$2"
+          remcm_arg="$2"
+        fi
+        shift
+        ;;
+      -cc | --repeat.cm | --repeat)
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
+        then
+          repeat_cm=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          # check_file_readable "$1" "$2"
+          repeat_cm="$2"
+        fi
+        shift
         ;;
       -d | --display)
         if [ "$2" = "-" ]

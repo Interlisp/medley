@@ -32,10 +32,11 @@ main() {
 	    exit 1
 	fi
 
-    git_commit_ID "${NOTECARDSDIR}"
-    NOTECARDS_COMMIT_ID="${COMMIT_ID}"
-    export NOTECARDS_COMMIT_ID
+        git_commit_ID "${NOTECARDSDIR}"
+        NOTECARDS_COMMIT_ID="${COMMIT_ID}"
+        export NOTECARDS_COMMIT_ID
 
+        initfile="-"
 	cat >"${cmfile}" <<-"EOF"
 	"
 

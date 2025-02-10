@@ -115,6 +115,13 @@ flags:
 
     -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
+    -cm FILE | --rem.cm FILE   : use FILE as the REM.CM when starting up Medley.  FILE must be absolute pathname.
+
+    -cm - | --rem.cm -         : do not use an REM.CM.  Negate any prior setting, e.g., from config file.
+
+    -cc FILE | --repeat FILE   : as long as FILE exists and is greater than 0 length, repeat Medley run
+                                 using FILE as REM.CM
+
 sysout:
     The pathname of the file to use as a sysout for Medley to start from.
     If sysout is not provided and none of the flags [-a, -f & -l] is used, then Medley will start from

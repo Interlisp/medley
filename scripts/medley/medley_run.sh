@@ -130,6 +130,10 @@ else
 fi
 export LDEINIT
 
+# figure out rem.cm and repeat.cm situation
+export LDEREMCM="${remcm_arg}"
+export LDEREPEATCM="${repeat_cm}"
+
 # figure out noscroll situation
 noscroll_arg=""
 if [ "${noscroll}" = true ]
@@ -326,15 +330,33 @@ then
 fi
 
 
-# Run maiko either directly or with vnc
-if [ "${use_vnc}" = true ]
-then
-  # do the vnc thing - if called for
-  # shellcheck source=./medley_vnc.sh
-  . "${SCRIPTDIR}/medley_vnc.sh"
-else
-  # If not using vnc, just exec maiko directly
-  # handing over the pass-on args which are all thats left in the main args array
-  start_maiko "$@"
-fi
+# Repeatedly run medley as long as there is a repeat_cm file called for and it exists and is not zero length
+# In most cases, there will be no repeat_cm and hence medley will only run once
+
+loop_ctr=0
+while [ ${loop_ctr} -eq 0 ] || { [ -n "${repeat_cm}" ] && [ -f "${repeat_cm}" ] && [ -s "${repeat_cm}" ] ; }
+do
+  if [ ${loop_ctr} -eq 1 ]
+  then
+    LDEREMCM="${repeat_cm}"
+  fi
+  loop_ctr=1
+
+  # Run maiko either directly or with vnc
+  if [ "${use_vnc}" = true ]
+  then
+    # do the vnc thing - if called for
+    # shellcheck source=./medley_vnc.sh
+    . "${SCRIPTDIR}/medley_vnc.sh"
+  else
+    # If not using vnc, just exec maiko directly
+    # handing over the pass-on args which are all thats left in the main args array
+    start_maiko "$@"
+  fi
+  if [ -n "${exit_code}" ] && [ ${exit_code} -ne 0 ]
+  then
+    exit ${exit_code}
+  fi
+
+done
 exit ${exit_code}

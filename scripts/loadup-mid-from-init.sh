@@ -6,6 +6,7 @@ main() {
 
 	loadup_start
 
+        initfile="-"
 	cat >"${cmfile}" <<-"EOF"
 	"
 	(MOVD? (QUOTE NILL) (QUOTE PROMPTPRINT))

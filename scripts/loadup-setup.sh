@@ -4,12 +4,6 @@
 MEDLEYDIR=$(cd "${LOADUP_SCRIPTDIR}/.."; pwd)
 export MEDLEYDIR
 
-if [ -z "${LOADUP_WORKDIR}" ]
-then
-  LOADUP_WORKDIR=/tmp/loadups-$$
-  export LOADUP_WORKDIR
-fi
-
 if [ -z "${LOADUP_SOURCEDIR}" ]
 then
   LOADUP_SOURCEDIR="${MEDLEYDIR}/internal/loadups"
@@ -20,12 +14,6 @@ if [ -z "${LOADUP_OUTDIR}" ]
 then
   LOADUP_OUTDIR="${MEDLEYDIR}/loadups"
   export LOADUP_OUTDIR
-fi
-
-if [ -z "${LOADUP_LOGINDIR}" ]
-then
-  LOADUP_LOGINDIR="${LOADUP_WORKDIR}/logindir"
-  export LOADUP_LOGINDIR
 fi
 
 if [ ! -d "${LOADUP_OUTDIR}" ];
@@ -39,6 +27,12 @@ then
   fi
 fi
 
+if [ -z "${LOADUP_WORKDIR}" ]
+then
+  LOADUP_WORKDIR="${LOADUP_OUTDIR}/build"
+  export LOADUP_WORKDIR
+fi
+
 if [ ! -d "${LOADUP_WORKDIR}" ];
 then
   if [ ! -e "${LOADUP_WORKDIR}" ];
@@ -46,6 +40,23 @@ then
     mkdir -p "${LOADUP_WORKDIR}"
   else
     echo "Error: ${LOADUP_WORKDIR} exists but is not a directory. Exiting."
+    exit 1
+  fi
+fi
+
+if [ -z "${LOADUP_LOGINDIR}" ]
+then
+  LOADUP_LOGINDIR="${LOADUP_WORKDIR}/logindir"
+  export LOADUP_LOGINDIR
+fi
+
+if [ ! -d "${LOADUP_LOGINDIR}" ];
+then
+  if [ ! -e "${LOADUP_LOGINDIR}" ];
+  then
+    mkdir -p "${LOADUP_LOGINDIR}"
+  else
+    echo "Error: ${LOADUP_LOGINDIR} exists but is not a directory. Exiting."
     exit 1
   fi
 fi
@@ -93,19 +104,6 @@ done
 
 loadup_start () {
   echo ">>>>> START ${script_name}"
-  if [ -d "${MEDLEYDIR}/tmp" ];
-    then
-      TMP_PRE_EXISTS="true"
-      if [ -d "${MEDLEYDIR}/tmp/logindir" ];
-      then
-        LOGINDIR_PRE_EXISTS="true"
-      else
-        LOGINDIR_PRE_EXISTS="false"
-      fi
-    else
-      LOGINDIR_PRE_EXISTS="false"
-      TMP_PRE_EXISTS="false"
-  fi
 }
 
 loadup_finish () {

@@ -4,16 +4,15 @@ main () {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-db-from-full.sh"  \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/copy-db.sh"
+        process_maikodir "$@"
 
-        # shellcheck disable=SC2181
-	if [ $? -eq 0 ];
-	then
-	  echo "+++++ loadup-db.sh: SUCCESS +++++"
-	else
-	  echo "----- loadup-db.sh: FAILURE -----"
-	fi
+        # do the loadup
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-db-from-full.sh"
+        exit_if_failure $?
+	/bin/sh "${LOADUP_SCRIPTDIR}/copy-db.sh"
+        exit_if_failure $?
+
+        echo "+++++ loadup-db.sh: SUCCESS +++++"
 }
 
 # shellcheck disable=SC2164,SC2034

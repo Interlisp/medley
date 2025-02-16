@@ -1,14 +1,8 @@
 #!to_be_sourced_only
 # shellcheck shell=sh
 
-MEDLEYDIR=$(cd "${LOADUP_SCRIPTDIR}/.."; pwd)
+MEDLEYDIR=$(cd "${LOADUP_SCRIPTDIR}/.." || exit; pwd)
 export MEDLEYDIR
-
-if [ -z "${LOADUP_WORKDIR}" ]
-then
-  LOADUP_WORKDIR=/tmp/loadups-$$
-  export LOADUP_WORKDIR
-fi
 
 if [ -z "${LOADUP_SOURCEDIR}" ]
 then
@@ -22,12 +16,6 @@ then
   export LOADUP_OUTDIR
 fi
 
-if [ -z "${LOADUP_LOGINDIR}" ]
-then
-  LOADUP_LOGINDIR="${LOADUP_WORKDIR}/logindir"
-  export LOADUP_LOGINDIR
-fi
-
 if [ ! -d "${LOADUP_OUTDIR}" ];
 then
   if [ ! -e "${LOADUP_OUTDIR}" ];
@@ -37,6 +25,12 @@ then
     echo "Error: ${LOADUP_OUTDIR} exists but is not a directory. Exiting."
     exit 1
   fi
+fi
+
+if [ -z "${LOADUP_WORKDIR}" ]
+then
+  LOADUP_WORKDIR="${LOADUP_OUTDIR}/build"
+  export LOADUP_WORKDIR
 fi
 
 if [ ! -d "${LOADUP_WORKDIR}" ];
@@ -50,11 +44,31 @@ then
   fi
 fi
 
-HAS_GIT= [ -f $(which git) ] && [ -x $(which git) ]
-export HAS_GIT
+if [ -z "${LOADUP_LOGINDIR}" ]
+then
+  LOADUP_LOGINDIR="${LOADUP_WORKDIR}/logindir"
+  export LOADUP_LOGINDIR
+fi
+
+if [ ! -d "${LOADUP_LOGINDIR}" ];
+then
+  if [ ! -e "${LOADUP_LOGINDIR}" ];
+  then
+    mkdir -p "${LOADUP_LOGINDIR}"
+  else
+    echo "Error: ${LOADUP_LOGINDIR} exists but is not a directory. Exiting."
+    exit 1
+  fi
+fi
+
+if [ -f "$(command -v  git)" ] && [ -x "$(command -v git)" ]
+then
+   HAS_GIT=true
+   export HAS_GIT
+fi
 
 git_commit_ID () {
-  if ${HAS_GIT};
+  if "${HAS_GIT}"
   then
     # This does NOT indicate if there are any modified files!
     COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
@@ -65,7 +79,7 @@ git_commit_ID "${LOADUP_SOURCEDIR}"
 LOADUP_COMMIT_ID="${COMMIT_ID}"
 export LOADUP_COMMIT_ID
 
-scr="-sc 1024x768 -g 1042x790"
+# obsolete? scr="-sc 1024x768 -g 1042x790"
 geometry=1024x768
 
 touch "${LOADUP_WORKDIR}"/loadup.timestamp
@@ -74,50 +88,23 @@ script_name=$(basename "$0" ".sh")
 cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
 initfile="${LOADUP_WORKDIR}/${script_name}.init"
 
-# look thru args looking to see if oldschool was specified in args
-j=1
-jmax=$#
-while [ "$j" -le "$jmax" ]
-do
-  if [ "$(eval "printf %s \${${j}}")" = "-os" ] || [ "$(eval "printf %s \${${j}}")" = "--oldschool" ]
-  then
-    LOADUP_OLDSCHOOL=true
-    export LOADUP_OLDSCHOOL
-    break
-  else
-    j=$(( j + 1 ))
-  fi
-done
-
 
 ######################################################################
 
 loadup_start () {
+  touch "${LOADUP_WORKDIR}"/timestamp
+  sleep 1
   echo ">>>>> START ${script_name}"
-  if [ -d "${MEDLEYDIR}/tmp" ];
-    then
-      TMP_PRE_EXISTS="true"
-      if [ -d "${MEDLEYDIR}/tmp/logindir" ];
-      then
-        LOGINDIR_PRE_EXISTS="true"
-      else
-        LOGINDIR_PRE_EXISTS="false"
-      fi
-    else
-      LOGINDIR_PRE_EXISTS="false"
-      TMP_PRE_EXISTS="false"
-  fi
 }
 
 loadup_finish () {
-  rm -f "${cmfile}"
-# 2024-05-05 FGH
-# Can't use exit code for now since on MacOS exit codes appear to be inverted
-# Will restore once MacOS exit code are figured out
-#  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ]
-  if [ ! -f "${LOADUP_WORKDIR}/$1" ]
+
+  if [ ! "${cmfile}" = "-" ]; then rm -f "${cmfile}"; fi
+  if [ ! "${initfile}" = "-" ]; then rm -f "${initfile}"; fi
+
+  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ]
   then
-    echo "----- FAILURE -----"
+    output_error_msg "----- FAILURE ${script_name}-----"
     exit_code=1
   else
     echo "+++++ SUCCESS +++++"
@@ -133,18 +120,12 @@ loadup_finish () {
       for ff in $(ls -1 "${LOADUP_WORKDIR}"/$f);
       do
         # shellcheck disable=SC2010
-        ls -l "${ff}" 2>/dev/null | grep -v "^.*~[0-9]\+~$"
+        if [ "$( find "${ff}" -newer "${LOADUP_WORKDIR}"/timestamp )" ]
+        then
+          ls -l "${ff}" 2>/dev/null | grep -v "^.*~[0-9]\+~$"
+        fi
       done
     done
-  fi
-  if [ "${TMP_PRE_EXISTS}" = "false" ];
-  then
-    rm -rf "${MEDLEYDIR}/tmp"
-  else
-    if [ "${LOGINDIR_PRE_EXISTS}" = "false" ];
-    then
-      rm -rf "${MEDLEYDIR}/tmp/logindir"
-    fi
   fi
   echo "<<<<< END ${script_name}"
   echo ""
@@ -152,8 +133,6 @@ loadup_finish () {
 }
 
 run_medley () {
-  if [ ! "${LOADUP_OLDSCHOOL}" = true ]
-  then
     /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"         \
              --config -                                          \
              --id loadup_+                                       \
@@ -165,13 +144,69 @@ run_medley () {
              --sysout "$1"                                       \
              "$2" "$3" "$4" "$5" "$6" "$7"                       ;
     exit_code=$?
-  else
-    # shellcheck disable=SC2086
-    "${MEDLEYDIR}/run-medley" ${scr} $2 $3 $4 $5 $6 $7 -loadup "${cmfile}" "$1"
-    exit_code=$?
-  fi
-
 }
+
+is_tput="$(command -v tput)"
+if [ -z "${is_tput}" ]
+then
+  is_tput="$(command -v true)"
+fi
+
+
+EOL="
+"
+output_error_msg() {
+  local_oem_file="${TMPDIR:-/tmp}"/oem_$$
+  echo "$1" >"${local_oem_file}"
+  while read -r line
+  do
+      echo "$(${is_tput} setab 1)$(${is_tput} setaf 7)${line}$(${is_tput} sgr0)"
+  done <"${local_oem_file}"
+  rm -f "${local_oem_file}"
+}
+
+exit_if_failure() {
+  if [ "$1" -ne 0 ]
+  then
+    if [ ! "$2" = "true" ]
+    then
+      output_error_msg  "----- ${script_name}: FAILURE -----${EOL}"
+    fi
+    exit 1
+  fi
+}
+
+process_maikodir() {
+        # process --maikodir argument.  Only use when --maikodir is only possible argument
+        while [ "$#" -ne 0 ];
+      	do
+          case "$1" in
+            -d | -maikodir | --maikodir)
+              if [ -n "$2" ]
+              then
+                maikodir=$(cd "$2" 2>/dev/null && pwd)
+                if [ -z "${maikodir}" ] || [ ! -d "${maikodir}" ]
+                then
+                  output_error_msg "Error: In --maikodir (-d) command line argument, "$2" is not an existing directory.${EOL}Exiting"
+                  exit 1
+                fi
+              else
+                output_error_msg "Error: Missing value for the --maikodir (-d) command line argument.${EOL}Exiting"
+                exit 1
+              fi
+              export MAIKODIR="${maikodir}"
+              shift
+              ;;
+            *)
+              output_error_msg "Error: unknown flag: $1${EOL}Exiting"
+              exit 1
+              ;;
+          esac
+          shift
+	done
+}
+
+
 
 ######################################################################
 

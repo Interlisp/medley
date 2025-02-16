@@ -4,18 +4,17 @@ main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-init.sh"              \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-mid-from-init.sh"  \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-lisp-from-mid.sh"  \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/loadup-full-from-lisp.sh" \
-	&& /bin/sh "${LOADUP_SCRIPTDIR}/copy-full.sh"             ;
+        process_maikodir "$@"
+
+        # do the loadup
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-all.sh" --full --noaux --noendmsg
 
 	# shellcheck disable=SC2181
 	if [ $? -eq 0 ];
 	then
-	  echo "+++++ loadup-full.sh: SUCCESS +++++"
+	  echo "+++++ ${script_name}: SUCCESS +++++"
 	else
-	  echo "----- loadup-full.sh: FAILURE -----"
+	  output_error_msg "----- ${script_name}: FAILURE -----${EOL}"
 	fi
 }
 

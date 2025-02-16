@@ -13,7 +13,7 @@
 #
 ###############################################################################
 
-is_tput="$(which tput)"
+is_tput="$(command -v tput)"
 
 output_error_msg() {
   local_oem_file="${TMPDIR:-/tmp}"/oem_$$
@@ -24,7 +24,7 @@ output_error_msg() {
     then
       echo "$(${is_tput} setab 1)$(${is_tput} setaf 7)${line}$(${is_tput} sgr0)"
     else
-      echo "$1"
+      echo "${line}"
     fi
   done <"${local_oem_file}"
   rm -f "${local_oem_file}"

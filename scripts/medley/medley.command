@@ -159,7 +159,7 @@ SCRIPTDIR="$(get_script_dir "$0")"
 #
 ###############################################################################
 
-is_tput="$(which tput)"
+is_tput="$(command -v tput)"
 
 output_error_msg() {
   local_oem_file="${TMPDIR:-/tmp}"/oem_$$
@@ -170,7 +170,7 @@ output_error_msg() {
     then
       echo "$(${is_tput} setab 1)$(${is_tput} setaf 7)${line}$(${is_tput} sgr0)"
     else
-      echo "$1"
+      echo "${line}"
     fi
   done <"${local_oem_file}"
   rm -f "${local_oem_file}"
@@ -620,8 +620,8 @@ sysout_stage=""
 title=""
 use_vnc=false
 windows=false
-maikodir_arg=""
-maikodir_stage=""
+maikodir_arg="${MAIKODIR}"
+maikodir_stage="MAIKODIR env variable"
 maikoprog_arg=""
 greet_arg=""
 noscroll=false
@@ -931,10 +931,16 @@ do
         ;;
       --maikodir)
         # for use in loadups
-        check_for_dash_or_end "$1" "$2"
-        check_dir_exists "$1" "2"
-        maikodir_arg="$2"
-        maikodir_stage="${args_stage}"
+        if [ "$2" = "-" ] || [ "$2" == "--" ]
+        then
+          maikodir_arg=""
+          maikodir_stage=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_dir_exists "$1" "2"
+          maikodir_arg="$2"
+          maikodir_stage="${args_stage}"
+        fi
         shift;
         ;;
       -prog | --maikoprog)
@@ -1365,7 +1371,8 @@ then
     then
       err_msg="ERROR: Cannot find the Maiko directory at either
 \"${MEDLEYDIR}/maiko\" or \"${MEDLEYDIR}/../maiko\".
-You can use the --maikodir argument to specify the Maiko directory.
+You can use the --maikodir argument or the MAIKODIR env variable
+to specify the Maiko directory.
 Exiting."
       output_error_msg "${err_msg}"
       exit 53
@@ -1380,8 +1387,8 @@ Exiting."
 elif ! check_if_maiko_dir "${maikodir_arg}" || ! check_for_maiko_exe "${maikodir_arg}"
 then
   err_msg="In ${maikodir_stage}:
-ERROR: The value of the --maikodir argument is not in fact a directory containing
-the Maiko emulator (${maiko_exe_subdir}/${maikoprog_arg}).
+ERROR: The value provided by \$MAIKODIR or by the  --maikodir argument ("${maikodir_arg}") is not
+in fact a directory containing the Maiko emulator (${maiko_exe_subdir}/${maikoprog_arg}).
 Exiting."
   output_error_msg "${err_msg}"
   exit 53
@@ -1412,6 +1419,7 @@ start_maiko() {
   echo "MEDLEYDIR: \"${MEDLEYDIR}\""
   echo "LOGINDIR: \"${LOGINDIR}\""
   echo "GREET FILE: \"${LDEINIT}\""
+  echo "REM.CM FILE: \"${LDEREMCM}\""
   echo "VMEM FILE: \"${LDEDESTSYSOUT}\""
   #
   # Temp workaround for issues in Maiko sysout arg

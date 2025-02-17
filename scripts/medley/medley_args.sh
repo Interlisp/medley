@@ -347,6 +347,11 @@ do
       --)
         pass_args=true
         ;;
+      -rtd | --runtime_debug)
+        LDERUNTIMEDEBUG="$2"
+        export LDERUNTIMEDEBUG
+        shift
+        ;;
       -*)
         usage "ERROR: Unknown flag: $1"
         ;;

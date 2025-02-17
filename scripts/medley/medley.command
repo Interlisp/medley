@@ -582,6 +582,8 @@ flags:
 
     -r - | --greet -           : do not use a greetfile
 
+    -rtd N | --runtime_debug N : Enable maiko runtime debug output at level N (integer)
+
     -x DIR | --logindir DIR    : use DIR as LOGINDIR in Medley
 
     -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
@@ -929,6 +931,11 @@ do
         ;;
       --)
         pass_args=true
+        ;;
+      -rtd | --runtime_debug)
+        LDERUNTIMEDEBUG="$2"
+        export LDERUNTIMEDEBUG
+        shift
         ;;
       -*)
         usage "ERROR: Unknown flag: $1"

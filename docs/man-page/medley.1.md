@@ -1,4 +1,4 @@
-% MEDLEY(1) | Start Medley Interlisp
+﻿% MEDLEY(1) | Start Medley Interlisp
 
 ---
 adjusting: l
@@ -210,6 +210,16 @@ in which case it is $MEDLEYDIR/greetfiles/APPS-INIT.
     On Windows/Cygwin installations, *FILE* is
 specified in the Medley file system, not the host Windows file system.
 
+-cm \[*FILE* | -], \-\-rem.cm \[*FILE* | -]
+: Use *FILE* as the REM&#46;CM file that Medley reads and executes at startup - after any greet files.  Usually used only for loadups and other maintenance operations .
+
+    If the given value is "-",  Medley will start up without using REM&#46;CM file.
+
+    There is no default Medley REM&#46;CM file.
+    
+    On Windows/Cygwin installations, *FILE* is
+specified in the Medley file system, not the host Windows file system.
+
 -x \[*DIR* | - | --], \-\-logindir \[*DIR* | - | --]
 : Use *DIR* as LOGINDIR in Medley.  *DIR* must be writeable by the current user.
 
@@ -241,6 +251,12 @@ for the parameter will be reset to the default value - which in the case of *Hos
 
 --maikodir *DIR*
 : Use *DIR* as the directory containing the Maiko emulator.  For testing purposes only.
+
+-cc \[*FILE* | -], \-\-repeat \[*FILE* | -]
+: Run Medley once.  And then as long as *FILE* exists and is greater then zero length, repeatedly run Medley using *FILE* as the REM&#46;CM file that Medley reads and executes at startup.  Each run of Medley can change the contents of *FILE* to effect the subsequent run of Medley.  To end the cycle, Medley needs to delete *FILE*.  WIthin Medley, *FILE* can be found as the value of the environment variable LDEREPEATCM.
+    
+    On Windows/Cygwin installations, *FILE* is
+specified in the Medley file system, not the host Windows file system.
 
 
 Other Options

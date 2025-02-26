@@ -6,7 +6,8 @@ main() {
 
 	loadup_start
 
-	cat >"${cmfile}" <<-"EOF"
+        cmfile="-"
+	cat >"${initfile}" <<-"EOF"
 	(* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
 
 	(SETQ MEDLEYDIR NIL)
@@ -40,7 +41,7 @@ main() {
 	(LOGOUT T)
 	STOP
 	EOF
-    
+
 	run_medley "${LOADUP_SOURCEDIR}/starter.sysout"
 
 	loadup_finish "init.dlinit" "init.*" "RDSYS*" "I-NEW*"

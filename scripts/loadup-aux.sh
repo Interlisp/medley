@@ -8,6 +8,7 @@ main() {
 
 	loadup_start
 
+        initfile="-"
 	cat >"${cmfile}" <<-"EOF"
 	"
 	(PROG

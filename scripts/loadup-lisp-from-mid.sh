@@ -5,7 +5,8 @@ main() {
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
 	loadup_start
-    
+
+        initfile="-"
 	cat >"${cmfile}" <<-"EOF"
 	"
 

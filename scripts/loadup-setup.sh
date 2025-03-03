@@ -50,14 +50,27 @@ then
   fi
 fi
 
-HAS_GIT= [ -f $(which git) ] && [ -x $(which git) ]
+HAS_GIT= [ -f $(command -v git) ] && [ -x $(command -v git) ]
 export HAS_GIT
 
-git_commit_ID () {
-  if ${HAS_GIT};
+is_git_dir () {
+  if ${HAS_GIT}
   then
-    # This does NOT indicate if there are any modified files!
-    COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+    return $(cd "$1"; git status >/dev/null 2>/dev/null; echo $?)
+  else
+    return 1
+  fi
+}
+
+
+git_commit_ID () {
+  if ${HAS_GIT}
+  then
+    if is_git_dir "$1"
+    then
+      # This does NOT indicate if there are any modified files!
+      COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+    fi
   fi
 }
 

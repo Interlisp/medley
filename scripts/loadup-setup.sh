@@ -50,14 +50,27 @@ then
   fi
 fi
 
-HAS_GIT= [ -f $(which git) ] && [ -x $(which git) ]
+HAS_GIT= [ -f $(command -v git) ] && [ -x $(command -v git) ]
 export HAS_GIT
 
-git_commit_ID () {
-  if ${HAS_GIT};
+is_git_dir () {
+  if ${HAS_GIT}
   then
-    # This does NOT indicate if there are any modified files!
-    COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+    return $(cd "$1"; git status >/dev/null 2>/dev/null; echo $?)
+  else
+    return 1
+  fi
+}
+
+
+git_commit_ID () {
+  if ${HAS_GIT}
+  then
+    if is_git_dir "$1"
+    then
+      # This does NOT indicate if there are any modified files!
+      COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+    fi
   fi
 }
 
@@ -72,6 +85,7 @@ touch "${LOADUP_WORKDIR}"/loadup.timestamp
 
 script_name=$(basename "$0" ".sh")
 cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
+initfile="${LOADUP_WORKDIR}/${script_name}.init"
 
 # look thru args looking to see if oldschool was specified in args
 j=1
@@ -153,13 +167,14 @@ loadup_finish () {
 run_medley () {
   if [ ! "${LOADUP_OLDSCHOOL}" = true ]
   then
-    /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"  \
+    /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"         \
              --config -                                          \
              --id loadup_+                                       \
              --geometry "${geometry}"                            \
              --noscroll                                          \
              --logindir "${LOADUP_LOGINDIR}"                     \
-             --greet "${cmfile}"                                 \
+             --rem.cm "${cmfile}"                                \
+             --greet "${initfile}"                               \
              --sysout "$1"                                       \
              "$2" "$3" "$4" "$5" "$6" "$7"                       ;
     exit_code=$?

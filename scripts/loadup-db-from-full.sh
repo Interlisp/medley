@@ -13,6 +13,7 @@ main() {
 	  exit 1
 	fi
 
+        initfile="-"
 	cat >"${cmfile}" <<-"EOF"
 	"
 

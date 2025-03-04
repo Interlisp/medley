@@ -586,6 +586,13 @@ flags:
 
     -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
+    -cm FILE | --rem.cm FILE   : use FILE as the REM.CM when starting up Medley.  FILE must be absolute pathname.
+
+    -cm - | --rem.cm -         : do not use an REM.CM.  Negate any prior setting, e.g., from config file.
+
+    -cc FILE | --repeat FILE   : as long as FILE exists and is greater than 0 length, repeat Medley run
+                                 using FILE as REM.CM
+
 sysout:
     The pathname of the file to use as a sysout for Medley to start from.
     If sysout is not provided and none of the flags [-a, -f & -l] is used, then Medley will start from
@@ -629,7 +636,8 @@ nh_mac_arg=""
 nh_debug_arg=""
 pixelscale_arg=""
 borderwidth_arg=""
-
+remcm_arg="${LDEREMCM}"
+repeat_cm=""
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -647,6 +655,28 @@ do
       -c | --config)
         # already handled so just skip both flag and value
         shift;
+        ;;
+      -cm | --rem.cm | --remcm)
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
+        then
+          remcm_arg=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_file_readable "$1" "$2"
+          remcm_arg="$2"
+        fi
+        shift
+        ;;
+      -cc | --repeat.cm | --repeat)
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
+        then
+          repeat_cm=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          # check_file_readable "$1" "$2"
+          repeat_cm="$2"
+        fi
+        shift
         ;;
       -d | --display)
         if [ "$2" = "-" ]
@@ -1219,6 +1249,10 @@ else
 fi
 export LDEINIT
 
+# figure out rem.cm and repeat.cm situation
+export LDEREMCM="${remcm_arg}"
+export LDEREPEATCM="${repeat_cm}"
+
 # figure out noscroll situation
 noscroll_arg=""
 if [ "${noscroll}" = true ]
@@ -1415,12 +1449,24 @@ then
 fi
 
 
-# Run maiko either directly or with vnc
-if [ "${use_vnc}" = true ]
-then
-  # do the vnc thing - if called for
-  # shellcheck source=./medley_vnc.sh
-#   . "${SCRIPTDIR}/medley_vnc.sh"
+# Repeatedly run medley as long as there is a repeat_cm file called for and it exists and is not zero length
+# In most cases, there will be no repeat_cm and hence medley will only run once
+
+loop_ctr=0
+while [ ${loop_ctr} -eq 0 ] || { [ -n "${repeat_cm}" ] && [ -f "${repeat_cm}" ] && [ -s "${repeat_cm}" ] ; }
+do
+  if [ ${loop_ctr} -eq 1 ]
+  then
+    LDEREMCM="${repeat_cm}"
+  fi
+  loop_ctr=1
+
+  # Run maiko either directly or with vnc
+  if [ "${use_vnc}" = true ]
+  then
+    # do the vnc thing - if called for
+    # shellcheck source=./medley_vnc.sh
+#     . "${SCRIPTDIR}/medley_vnc.sh"
 # shellcheck shell=sh
 # shellcheck disable=SC2154,SC2162
 ###############################################################################
@@ -1658,9 +1704,15 @@ then
   true
 
 #######################################
-else
-  # If not using vnc, just exec maiko directly
-  # handing over the pass-on args which are all thats left in the main args array
-  start_maiko "$@"
-fi
+  else
+    # If not using vnc, just exec maiko directly
+    # handing over the pass-on args which are all thats left in the main args array
+    start_maiko "$@"
+  fi
+  if [ -n "${exit_code}" ] && [ ${exit_code} -ne 0 ]
+  then
+    exit ${exit_code}
+  fi
+
+done
 exit ${exit_code}

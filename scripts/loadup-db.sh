@@ -1,1 +1,1 @@
-loadup-scripts/loadup-db.sh
+loadups/loadup-db.sh

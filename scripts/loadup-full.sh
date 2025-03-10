@@ -1,1 +1,1 @@
-loadup-scripts/loadup-full.sh
+loadups/loadup-full.sh

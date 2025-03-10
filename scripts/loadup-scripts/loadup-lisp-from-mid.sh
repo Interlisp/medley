@@ -6,63 +6,38 @@ main() {
 
 	loadup_start
 
-	export ROOMSDIR="${MEDLEYDIR}/rooms"
-	export CLOSDIR="${MEDLEYDIR}/clos"
-
-	export NOTECARDSDIR="${MEDLEYDIR}/notecards"
-	if [ ! -e "${NOTECARDSDIR}" ]
-	then
-	    NOTECARDSDIR=$(cd "${MEDLEYDIR}/../" && pwd)/notecards
-	    if [ ! -e "${NOTECARDSDIR}" ]
-	    then
-	        NOTECARDSDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/notecards
-	        if [ ! -e "${NOTECARDSDIR}" ]
-	        then
-	            NOTECARDSDIR=""
-	        fi
-	    fi
-	fi
-
-	if [ -z "${NOTECARDSDIR}" ]
-	then
-	    echo "Error: Cannot find the Notecards directory"
-	    echo "It should be located at ${MEDLEYDIR}/../notecards or"
-	    echo "${MEDLEYDIR}/../../notecards.  But its not."
-	    echo "Exiting"
-	    exit 1
-	fi
-
-	git_commit_ID "${NOTECARDSDIR}"
-	NOTECARDS_COMMIT_ID="${COMMIT_ID}"
-	export NOTECARDS_COMMIT_ID
-
         initfile="-"
-	cat >"${cmfile}" <<-"EOF"
+	cat >"${cmfile}" <<-EOF
 	"
 
 	(PROGN
-	  (SETQ IL:HELPTIME 0)
-	  (IL:MEDLEY-INIT-VARS 'IL:GREET)
-	  (IL:DRIBBLE (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /apps.dribble))))
-	  (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR))(QUOTE /LOADUP-APPS.LCOM)))
-	  (IL:LOADUP-APPS)
-	  (IL:ENDLOADUP)
-	  (IL:DRIBBLE)
-	  (IL:MAKESYS
-	    (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR)) (IL:L-CASE (QUOTE /apps.sysout)))
-	    :APPS
-	  )
-	  (IL:LOGOUT T 0)
-	)
-	(IL:LOGOUT T 1)
+          (SETQ LOADUP-SUCCESS NIL)
+	  (LOAD (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE MEDLEYDIR)) (QUOTE /sources/MEDLEYDIR.LCOM)))
+	  (MEDLEY-INIT-VARS)
+	  (LOAD (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) (QUOTE /LOADUP-LISP.LCOM)))
+	  (LOADUP-LISP (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /lisp.dribble)))
+          (SETQ LOADUP-SUCCESS T)
+          (HARDRESET)
+        )
+        (COND
+          (IL:LOADUP-SUCCESS
+	    (IL:ENDLOADUP)
+            (SETQ IL:HELPFLAG T)
+            (SETQ IL:LOADUP-SUCCESS (QUOTE NOBIND))
+	    (IL:MAKESYS
+               (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (IL:L-CASE (QUOTE /lisp.sysout)))
+               :LISP)
+	    (IL:LOGOUT T 0)
+          )
+        )
+        (IL:LOGOUT T 1)
 
 	"
 	EOF
 
-	run_medley "${LOADUP_WORKDIR}/full.sysout"
+	run_medley "${LOADUP_WORKDIR}/init-mid.sysout"
 
-	loadup_finish "apps.sysout" "apps.*"
-
+	loadup_finish "lisp.sysout" "lisp.*"
 }
 
 

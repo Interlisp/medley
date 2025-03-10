@@ -4,42 +4,19 @@ main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	loadup_start
+        process_maikodir "$@"
 
-        initfile="-"
-	cat >"${cmfile}" <<-"EOF"
-	"
+        # do the loadup
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-all.sh" --full --noaux --noendmsg
 
-	(PROGN
-          (SETQ LOADUP-SUCCESS NIL)
-	  (LOAD (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE MEDLEYDIR)) (QUOTE /sources/MEDLEYDIR.LCOM)))
-	  (MEDLEY-INIT-VARS)
-	  (LOAD (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) (QUOTE /LOADUP-LISP.LCOM)))
-	  (LOADUP-LISP (CONCAT (QUOTE {DSK}) (UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /lisp.dribble)))
-	  (PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)
-          (SETQ LOADUP-SUCCESS T)
-	  (HARDRESET)
-        )
-        (COND
-          (IL:LOADUP-SUCCESS
-            (IL:ENDLOADUP)
-            (IL:MAKESYS
-              (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR)) (IL:L-CASE (QUOTE /lisp.sysout)))
-              :LISP
-            )
-	    (IL:LOGOUT T 0)
-          )
-	)
-        (IL:LOGOUT T 1)
-
-	"
-	EOF
-
-	run_medley "${LOADUP_WORKDIR}/init-mid.sysout"
-
-	loadup_finish "lisp.sysout" "lisp.*"
+	# shellcheck disable=SC2181
+	if [ $? -eq 0 ];
+	then
+	  echo "+++++ ${script_name}: SUCCESS +++++"
+	else
+	  output_error_msg "----- ${script_name}: FAILURE -----${EOL}"
+	fi
 }
-
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${LOADUP_SCRIPTDIR}" ]

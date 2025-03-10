@@ -1,8 +1,10 @@
 #!to_be_sourced_only
 # shellcheck shell=sh
 
-MEDLEYDIR=$(cd "${LOADUP_SCRIPTDIR}/.." || exit; pwd)
+MEDLEYDIR=$(cd "${LOADUP_SCRIPTDIR}/../.." || exit; pwd)
 export MEDLEYDIR
+
+export LOADUP_CPV="${MEDLEYDIR}/scripts/cpv"
 
 if [ -z "${LOADUP_SOURCEDIR}" ]
 then
@@ -89,6 +91,17 @@ cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
 initfile="${LOADUP_WORKDIR}/${script_name}.init"
 
 
+# Select whether we use NLSETQ or ERSETQ to wrap the loadup
+# cm files depending on whether we want to allow breaks or not.
+if [ -n "${LOADUP_NOBREAK}" ]
+then
+  HELPFLAG=NIL
+  NL_ER_SETQ=IL:NLSETQ
+else
+  HELPFLAG="(QUOTE IL:BREAK!)"
+  NL_ER_SETQ=IL:ERSETQ
+fi
+
 ######################################################################
 
 loadup_start () {
@@ -102,7 +115,8 @@ loadup_finish () {
   if [ ! "${cmfile}" = "-" ]; then rm -f "${cmfile}"; fi
   if [ ! "${initfile}" = "-" ]; then rm -f "${initfile}"; fi
 
-  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ]
+  if [ "${exit_code}" -ne 0 ] || [ ! -f "${LOADUP_WORKDIR}/$1" ] \
+     || [ ! "$( find "${LOADUP_WORKDIR}/$1" -newer "${LOADUP_WORKDIR}"/timestamp )" ]
   then
     output_error_msg "----- FAILURE ${script_name}-----"
     exit_code=1

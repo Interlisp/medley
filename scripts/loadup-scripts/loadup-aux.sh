@@ -5,14 +5,37 @@ main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	echo ">>>>> START ${script_name}"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/fuller.dribble "${LOADUP_OUTDIR}"
+	loadup_start
 
-	echo "<<<<< END ${script_name}"
-	echo ""
-	exit 0
+        initfile="-"
+	cat >"${cmfile}" <<-"EOF"
+	"
+
+	(SETQ IL:HELPFLAG ${HELPFLAG})
+	(PROG
+	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
+	  (IL:MEDLEY-INIT-VARS)
+	  (IL:LOAD (QUOTE MEDLEY-UTILS))
+          (IL:DRIBBLE (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.dribble))))
+	  (IL:MAKE-EXPORTS-ALL (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.all))))
+	  (IL:DRIBBLE)
+	  (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
+	  (IL:MAKE-WHEREIS-HASH
+	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.dribble)))
+	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash-tmp)))
+	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash)))
+	  )
+	  (IL:LOGOUT T 0)
+	)
+        (IL:LOGOUT T 1)
+
+	"
+	EOF
+
+	run_medley "${LOADUP_WORKDIR}/full.sysout"
+
+	loadup_finish "whereis.hash" "whereis.hash" "exports.all"
 }
 
 

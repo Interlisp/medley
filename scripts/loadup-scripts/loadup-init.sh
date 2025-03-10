@@ -1,66 +1,51 @@
 #!/bin/sh
-# shellcheck disable=SC2086
 
 main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	echo ">>>>> START ${script_name}"
+	loadup_start
 
-        start=$1
-        end=$2
-        noaux="$3"
+        cmfile="-"
+	cat >"${initfile}" <<-"EOF"
+	(* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
 
-        if [ $start -le 3 ] && [ $end -ge 3 ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
+	(SETQ MEDLEYDIR NIL)
+	(LOAD (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
+	(MEDLEY-INIT-VARS)
+	(PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)
+	(CNDIR (UNIX-GETENV "LOADUP_WORKDIR"))
+	(DRIBBLE "init.dribble")
 
+	(UNADVISE)
+	(ADVISE 'PAGEFULLFN '(RETURN))
+	(ADVISE '(ERROR IN \DO-DEFINE-FILE-INFO) '(RETURN))
+	(MOVD? 'NILL 'SETTEMPLATE)
+	(DEFINEQ (RRE (LAMBDA (X Y) Y)))
+	(MOVD? 'RRE 'READ-READER-ENVIRONMENT)
 
-        if [ $start -le 4 ] && [ $end -ge 4 ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
+	(LOAD (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_SOURCEDIR") "/" "MAKEINIT.LCOM"))
+	(PROG
+	  ((WORKDIR (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_WORKDIR") "/"))
+	   (LOADUP-SOURCE-DIR (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_SOURCEDIR") "/"))
+	  )
+	  (SETQ DIRECTORIES (CONS LOADUP-SOURCE-DIR DIRECTORIES))
+          (PRINT (DATE))
+	  (PRINT (SETQ SYSOUTCOMMITS (LIST (LIST (QUOTE MEDLEY) (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))))))
+	  (RESETLST (RESETSAVE OK.TO.MODIFY.FNS T)
+	    (MAKEINITGREET (CONCAT WORKDIR "init.sysout") (CONCAT WORKDIR "init.dlinit"))
+	  )
+	)
 
-        if [ $end -eq 5 ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
+	(DRIBBLE)
+	(LOGOUT T)
+	STOP
+	EOF
 
-        if [ $end -eq 6 ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lfg.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
+	run_medley "${LOADUP_SOURCEDIR}/starter.sysout"
 
-        if [ -z "$noaux" ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
-              | sed -e "s#${MEDLEYDIR}/##g"
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-	if [ -f "${LOADUP_WORKDIR}"/RDSYS ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}/library"         \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-	if [ -f "${LOADUP_WORKDIR}"/RDSYS ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}/library"    \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-	echo "<<<<< END ${script_name}"
-	echo ""
-	exit 0
+	loadup_finish "init.dlinit" "init.*" "RDSYS*" "I-NEW*"
 }
-
 
 
 # shellcheck disable=SC2164,SC2034

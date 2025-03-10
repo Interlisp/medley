@@ -1,41 +1,32 @@
 #!/bin/sh
 
 main() {
-
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
+	echo ">>>>> START ${script_name}"
 
-	loadup_start
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"  \
+	    | sed -e "s#${MEDLEYDIR}/##g"
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"  \
+	    | sed -e "s#${MEDLEYDIR}/##g"
 
-        initfile="-"
-	cat >"${cmfile}" <<-"EOF"
-	"
-	(PROG
-	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
-	  (IL:MEDLEY-INIT-VARS)
-	  (IL:LOAD (QUOTE MEDLEY-UTILS))
-          (DRIBBLE (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.dribble))))
-	  (IL:MAKE-EXPORTS-ALL (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.all))))
-	  (DRIBBLE)
-	  (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
-	  (IL:MAKE-WHEREIS-HASH
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.dribble)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash-tmp)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash)))
-	  )
-	  (IL:LOGOUT T 0)
-	)
-        (IL:LOGOUT T 1)
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/init.dribble "${LOADUP_OUTDIR}" \
+	    | sed -e "s#${MEDLEYDIR}/##g"
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/lisp.dribble "${LOADUP_OUTDIR}" \
+	    | sed -e "s#${MEDLEYDIR}/##g"
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/full.dribble "${LOADUP_OUTDIR}" \
+	    | sed -e "s#${MEDLEYDIR}/##g"
 
-	"
-	EOF
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS library                   \
+	    | sed -e "s#${MEDLEYDIR}/##g"
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS.LCOM library              \
+	    | sed -e "s#${MEDLEYDIR}/##g"
 
-	run_medley "${LOADUP_WORKDIR}/full.sysout"
-
-	loadup_finish "whereis.hash" "whereis.hash" "exports.all"
+	echo "<<<<< END ${script_name}"
+	echo ""
+	exit 0
 }
-
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${LOADUP_SCRIPTDIR}" ]

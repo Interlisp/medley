@@ -1,0 +1,276 @@
+#!/bin/sh
+# shellcheck disable=SC2181
+
+main() {
+
+	# shellcheck source=./loadup-setup.sh
+	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
+
+	# process args
+        noaux=""
+        start=0
+        start_s=init
+        start_sysout=""
+        end=4
+        end_s=full
+        while [ "$#" -ne 0 ];
+      	do
+          case "$1" in
+            -n | -noaux | --noaux)
+              noaux=true
+              ;;
+            -a | -apps | --apps | -5)
+              end=5
+              end_s=apps
+              ;;
+            -f | -full | --full | -4)
+              end=4
+              end_s=full
+              ;;
+            -l | -lisp | --lisp | -3)
+              end=3
+              end_s=lisp
+             ;;
+            -m | -mid | --mid | -2)
+              end=2
+              end_s=mid
+              ;;
+            -i | -init | --init | -1)
+              end=1
+              end_s=init
+              ;;
+            -s | -start | --start)
+              case "$2" in
+               s | scratch | 0)
+                 start=0
+                 start_s=scratch
+                 start_sysout=starter.sysout
+                 ;;
+               i | init | 1)
+                 start=1
+                 start_s=init
+                 start_sysout=init.dlinit
+                 ;;
+               m | mid | 2)
+                 start=2
+                 start_s=mid
+                 start_sysout=init-mid.sysout
+                 ;;
+               l | lisp | 3)
+                 start=3
+                 start_s=lisp
+                 start_sysout=lisp.sysout
+                 ;;
+               f | full | 4)
+                 start=4
+                 start_s=full
+                 start_sysout=full.sysout
+                 ;;
+               *)
+                 output_error_msg "Error: unknown parameter to --start (-s) flag: $2${EOL}Exiting"
+                 exit 1
+                 ;;
+               esac
+               shift
+               ;;
+            -d | -maikodir | --maikodir)
+              if [ -n "$2" ]
+              then
+                maikodir=$(cd "$2" 2>/dev/null && pwd)
+                if [ -z "${maikodir}" ] || [ ! -d "${maikodir}" ]
+                then
+                  output_error_msg "Error: In --maikodir (-d) command line argument, "$2" is not an existing directory.${EOL}Exiting"
+                  exit 1
+                fi
+              else
+                output_error_msg "Error: Missing value for the --maikodir (-d) command line argument.${EOL}Exiting"
+                exit 1
+              fi
+              export MAIKODIR="${maikodir}"
+              shift
+              ;;
+            --noendmsg)
+              noendmsg=true
+              ;;
+            *)
+              output_error_msg "Error: unknown flag: $1${EOL}Exiting"
+              exit 1
+              ;;
+          esac
+          shift
+	done
+
+        # check arguments
+        if [ $end -le $start ]
+        then
+          output_error_msg "Error: The final stage ($end_s) comes before or is the same as the start stage ($start_s)${EOL}Exiting"
+          exit 1
+        fi
+
+	# find and place starting sysout
+        if [ $start -gt 0 ]
+        then
+          if [ ! -f "${LOADUP_WORKDIR}"/"${start_sysout}" ]
+          then
+            if [ -f "${LOADUP_OUTDIR}"/"${start_sysout}" ]
+            then
+              cp -p "${LOADUP_OUTDIR}"/"${start_sysout}" "${LOADUP_WORKDIR}"/"${start_sysout}"
+            else
+              echo "Error: Cannot find starting sysout (${start_sysout}) in either ${LOADUP_OUTDIR} or ${LOADUP_WORKDIR}"
+              echo "Exiting"
+              exit 1
+            fi
+          fi
+        fi
+
+        #  Do individual loadups as requested
+        if [ $start -lt 1 ] && [ $end -ge 1 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-init.sh"
+          exit_if_failure $? "${noendmsg}"
+        fi
+
+	if [ $start -lt 2 ] && [ $end -ge 2 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-mid-from-init.sh"
+          exit_if_failure $? "${noendmsg}"
+        fi
+
+	if [ $start -lt 3 ] && [ $end -ge 3 ]
+        then
+	  /bin/sh "${LOADUP_SCRIPTDIR}/loadup-lisp-from-mid.sh"
+          exit_if_failure $? "${noendmsg}"
+	fi
+
+        aux_not_run=true
+	if [ $start -lt 4 ] && [ $end -ge 4 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-full-from-lisp.sh"
+          exit_if_failure $? "${noendmsg}"
+          if [ -z "$noaux" ]
+          then
+            /bin/sh "${LOADUP_SCRIPTDIR}/loadup-aux.sh"
+            exit_if_failure $? "${noendmsg}"
+            aux_not_run=""
+          fi
+        fi
+
+	if [ $end -eq 5 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-apps-from-full.sh"
+          exit_if_failure $? "${noendmsg}"
+        fi
+
+        # Nothing to copy to loadups until we've produced lisp.sysout
+        if [ $end -ge 3 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/copy-all.sh" $start $end "$aux_not_run"
+          exit_if_failure $? "${noendmsg}"
+        fi
+
+        echo "+++++ loadup-all.sh: SUCCESS +++++"
+        exit 0
+
+}
+
+
+# shellcheck disable=SC2164,SC2034
+if [ -z "${LOADUP_SCRIPTDIR}" ]
+then
+	#
+	#
+	# Some functions to determine what directory this script is being executed from
+	#
+	#
+	get_abs_filename() {
+	  # $1 : relative filename
+	  echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+	}
+
+	# This function taken from
+	# https://stackoverflow.com/questions/29832037/how-to-get-script-directory-in-posix-sh
+	rreadlink() (
+
+	  # Execute this function in a *subshell* to localize variables and the effect of `cd`.
+
+	  target=$1
+	  fname=
+	  targetDir=
+	  CDPATH=
+
+	  # Try to make the execution environment as predictable as possible:
+	  # All commands below are invoked via `command`, so we must make sure that `command`
+	  # itself is not redefined as an alias or shell function.
+	  # (Note that command is too inconsistent across shells, so we don't use it.)
+	  # `command` is a *builtin* in bash, dash, ksh, zsh, and some platforms do not even have
+	  # an external utility version of it (e.g, Ubuntu).
+	  # `command` bypasses aliases and shell functions and also finds builtins 
+	  # in bash, dash, and ksh. In zsh, option POSIX_BUILTINS must be turned on for that
+	  # to happen.
+	  { \unalias command; \unset -f command; } >/dev/null 2>&1
+	  [ -n "$ZSH_VERSION" ] && options[POSIX_BUILTINS]=on # make zsh find *builtins* with `command` too.
+
+	  while :; do # Resolve potential symlinks until the ultimate target is found.
+	      [ -L "$target" ] || [ -e "$target" ] || { command printf '%s\n' "ERROR: '$target' does not exist." >&2; return 1; }
+	      command cd "$(command dirname -- "$target")" # Change to target dir; necessary for correct resolution of target path.
+	      fname=$(command basename -- "$target") # Extract filename.
+	      [ "$fname" = '/' ] && fname='' # !! curiously, `basename /` returns '/'
+	      if [ -L "$fname" ]; then
+	        # Extract [next] target path, which may be defined
+	        # *relative* to the symlink's own directory.
+	        # Note: We parse `ls -l` output to find the symlink target
+	        #       which is the only POSIX-compliant, albeit somewhat fragile, way.
+	        target=$(command ls -l "$fname")
+	        target=${target#* -> }
+	        continue # Resolve [next] symlink target.
+	      fi
+	      break # Ultimate target reached.
+	  done
+	  targetDir=$(command pwd -P) # Get canonical dir. path
+	  # Output the ultimate target's canonical path.
+	  # Note that we manually resolve paths ending in /. and /.. to make sure we have a normalized path.
+	  if [ "$fname" = '.' ]; then
+	    command printf '%s\n' "${targetDir%/}"
+	  elif  [ "$fname" = '..' ]; then
+	    # Caveat: something like /var/.. will resolve to /private (assuming /var@ -> /private/var), i.e. the '..' is applied
+	    # AFTER canonicalization.
+	    command printf '%s\n' "$(command dirname -- "${targetDir}")"
+	  else
+	    command printf '%s\n' "${targetDir%/}/$fname"
+	  fi
+	)
+
+	get_script_dir() {
+
+	    # call this with $0 (from main script) as its (only) parameter
+	    # if you need to preserve cwd, run this is a subshell since
+	    # it can change cwd
+
+	    # set -x
+
+	    local_SCRIPT_PATH="$( get_abs_filename "$1" )";
+
+	    while [ -h "$local_SCRIPT_PATH" ];
+	    do
+	        cd "$( dirname -- "$local_SCRIPT_PATH"; )";
+	        local_SCRIPT_PATH="$( rreadlink "$local_SCRIPT_PATH" )";
+	    done
+
+	    cd "$( dirname -- "$local_SCRIPT_PATH"; )" > '/dev/null';
+	    local_SCRIPT_PATH="$( pwd; )";
+
+	    # set +x
+
+	    echo "${local_SCRIPT_PATH}"
+	}
+
+	# end of script directory functions
+	###############################################################################
+
+        # figure out the script dir
+        LOADUP_SCRIPTDIR="$(get_script_dir "$0")"
+	export LOADUP_SCRIPTDIR
+
+fi
+
+main "$@"

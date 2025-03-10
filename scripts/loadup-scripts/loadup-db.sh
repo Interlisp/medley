@@ -1,45 +1,19 @@
 #!/bin/sh
 
-main() {
+main () {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	loadup_start
+        process_maikodir "$@"
 
-	SYSOUT="${MEDLEYDIR}/loadups/full.sysout"
-	if [ ! -f "${SYSOUT}" ];
-	then
-	  echo "Error: cannot find ${SYSOUT}.  Exiting."
-	  exit 1
-	fi
+        # do the loadup
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-db-from-full.sh"
+        exit_if_failure $?
+	/bin/sh "${LOADUP_SCRIPTDIR}/copy-db.sh"
+        exit_if_failure $?
 
-        initfile="-"
-	cat >"${cmfile}" <<-"EOF"
-	"
-
-	(PROG
-	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
-	  (SETQ IL:SYSOUTCOMMITS (LIST (LIST (QUOTE IL:MEDLEY) (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID)))))
-	  (IL:MEDLEY-INIT-VARS)
-	  (IL:FILESLOAD MEDLEY-UTILS)
-	  (SETQ IL:DIRECTORIES (CONS (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) IL:DIRECTORIES))
-	  (IL:MAKE-FULLER-DB
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.dribble)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.database)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.sysout)))
-	  )
-	  (IL:LOGOUT T)
-	)
-
-	"
-	EOF
-
-	run_medley "${SYSOUT}"
-
-	loadup_finish "fuller.database" "fuller*"
+        echo "+++++ loadup-db.sh: SUCCESS +++++"
 }
-
-
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${LOADUP_SCRIPTDIR}" ]
@@ -141,3 +115,8 @@ then
 fi
 
 main "$@"
+
+
+
+
+

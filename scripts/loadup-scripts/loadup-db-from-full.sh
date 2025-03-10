@@ -6,46 +6,41 @@ main() {
 
 	loadup_start
 
-        cmfile="-"
-	cat >"${initfile}" <<-"EOF"
-	(* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
+	SYSOUT="${MEDLEYDIR}/loadups/full.sysout"
+	if [ ! -f "${SYSOUT}" ];
+	then
+	  echo "Error: cannot find ${SYSOUT}.  Exiting."
+	  exit 1
+	fi
 
-	(SETQ MEDLEYDIR NIL)
-	(LOAD (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
-	(MEDLEY-INIT-VARS)
-	(PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)
-	(CNDIR (UNIX-GETENV "LOADUP_WORKDIR"))
-	(DRIBBLE "init.dribble")
+        initfile="-"
+	cat >"${cmfile}" <<-"EOF"
+	"
 
-	(UNADVISE)
-	(ADVISE 'PAGEFULLFN '(RETURN))
-	(ADVISE '(ERROR IN \DO-DEFINE-FILE-INFO) '(RETURN))
-	(MOVD? 'NILL 'SETTEMPLATE)
-	(DEFINEQ (RRE (LAMBDA (X Y) Y)))
-	(MOVD? 'RRE 'READ-READER-ENVIRONMENT)
-
-	(LOAD (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_SOURCEDIR") "/" "MAKEINIT.LCOM"))
+	(SETQ IL:HELPFLAG ${HELPFLAG})
 	(PROG
-	  ((WORKDIR (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_WORKDIR") "/"))
-	   (LOADUP-SOURCE-DIR (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_SOURCEDIR") "/"))
+	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
+	  (SETQ IL:SYSOUTCOMMITS (LIST (LIST (QUOTE IL:MEDLEY) (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID)))))
+	  (IL:MEDLEY-INIT-VARS)
+	  (IL:FILESLOAD MEDLEY-UTILS)
+	  (SETQ IL:DIRECTORIES (CONS (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) IL:DIRECTORIES))
+	  (IL:MAKE-FULLER-DB
+	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.dribble)))
+	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.database)))
+	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.sysout)))
 	  )
-	  (SETQ DIRECTORIES (CONS LOADUP-SOURCE-DIR DIRECTORIES))
-      (PRINT (DATE))
-	  (PRINT (SETQ SYSOUTCOMMITS (LIST (LIST (QUOTE MEDLEY) (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))))))
-	  (RESETLST (RESETSAVE OK.TO.MODIFY.FNS T)
-	    (MAKEINITGREET (CONCAT WORKDIR "init.sysout") (CONCAT WORKDIR "init.dlinit"))
-	  )
+	  (IL:LOGOUT T 0)
 	)
+        (IL:LOGOUT T 1)
 
-	(DRIBBLE)
-	(LOGOUT T)
-	STOP
+	"
 	EOF
 
-	run_medley "${LOADUP_SOURCEDIR}/starter.sysout"
+	run_medley "${SYSOUT}"
 
-	loadup_finish "init.dlinit" "init.*" "RDSYS*" "I-NEW*"
+	loadup_finish "fuller.database" "fuller*"
 }
+
 
 
 # shellcheck disable=SC2164,SC2034

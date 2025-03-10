@@ -4,29 +4,44 @@ main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	echo ">>>>> START ${script_name}"
+	loadup_start
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"  \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"  \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+        initfile="-"
+	cat >"${cmfile}" <<-EOF
+	"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/init.dribble "${LOADUP_OUTDIR}" \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.dribble "${LOADUP_OUTDIR}" \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.dribble "${LOADUP_OUTDIR}" \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+        (SETQ IL:LOADUP-SUCCESS
+          (${NL_ER_SETQ}
+            (PROGN
+	      (SETQ IL:HELPFLAG ${HELPFLAG})
+              (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR))(QUOTE /LOADUP-FULL.LCOM)))
+              (IL:LOADUP-FULL (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.dribble))))
+              (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
+            )
+          )
+        )
+	(COND
+          (IL:LOADUP-SUCCESS
+	    (IL:ENDLOADUP)
+	    (SETQ IL:HELPFLAG T)
+            (SETQ IL:LOADUP-SUCCESS (QUOTE NOBIND))
+	    (IL:MAKESYS
+              (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.sysout)))
+              :FULL
+            )
+            (IL:LOGOUT T 0)
+          )
+	)
+        (IL:LOGOUT T 1)
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS library                   \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM library              \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+	"
+	EOF
 
-	echo "<<<<< END ${script_name}"
-	echo ""
-	exit 0
+	run_medley "${LOADUP_WORKDIR}/lisp.sysout"
+
+	loadup_finish "full.sysout" "full.*"
 }
+
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${LOADUP_SCRIPTDIR}" ]

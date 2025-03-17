@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "17-Mar-2025 09:46:16" {WMEDLEY}<library>tedit>TEDIT-FNKEYS.;207 86739  
+(FILECREATED "17-Mar-2025 15:40:10" {WMEDLEY}<library>TEDIT>TEDIT-FNKEYS.;210 88849  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS TEDIT-FNKEYSCOMS)
-                  (FNS TEDIT.GET.KEYACTION TEDIT.GET.KEYBINDING TEDIT.CLEAR.KEYBINDINGS 
-                       TEDIT.INSTALL.KEYBINDINGS)
+      :CHANGES-TO (VARS TEDIT.KEYBINDINGS TEDIT-FNKEYSCOMS)
+                  (FNS TEDIT.GET.ACTIONBINDINGS TEDIT.GET.KEYACTION TEDIT.GET.KEYBINDING 
+                       TEDIT.CLEAR.KEYBINDINGS TEDIT.INSTALL.KEYBINDINGS)
 
       :PREVIOUS-DATE "16-Mar-2025 21:44:56" {WMEDLEY}<library>tedit>TEDIT-FNKEYS.;204)
 
@@ -14,7 +14,11 @@
 (PRETTYCOMPRINT TEDIT-FNKEYSCOMS)
 
 (RPAQQ TEDIT-FNKEYSCOMS
-       ((COMS 
+       ((COMS                                                (* ; 
+                                                             "Public functions (binding data  below)")
+              (FNS TEDIT.INSTALL.KEYBINDINGS TEDIT.CLEAR.KEYBINDINGS TEDIT.GET.KEYACTION 
+                   TEDIT.GET.ACTIONBINDINGS))
+        (COMS 
               (* ;; "Functions that implement the key actions:")
 
               (FNS \TEDIT.KEY.CHARLOOKS \TEDIT.KEY.QUAD \TEDIT.DEFAULTSSEL \TEDIT.SETDEFAULT.FROM.SEL
@@ -46,7 +50,6 @@
                                                              (* ; "Keybindings")
         (DECLARE%: EVAL@COMPILE DONTCOPY (EXPORT (CONSTANTS \TEDIT.TTCCODES)
                                                 (MACROS \TEDIT.TTC)))
-        (FNS TEDIT.INSTALL.KEYBINDINGS TEDIT.CLEAR.KEYBINDINGS TEDIT.GET.KEYACTION)
         (VARS TEDIT.KEYACTIONS TEDIT.KEYBINDINGS TEDIT.DORADO.KEYBINDINGS)
                                                              (* ; "Installation")
         [DECLARE%: DONTEVAL@LOAD DOCOPY (VARS (TEDIT.READTABLE (\TEDIT.READTABLE))
@@ -57,6 +60,165 @@
         (VARS TEDIT.BUTTONS.SPEC)
         (FNS TEDIT.BUTTONS.BUILD TEDIT.BUTTONBITMAP.FILL)
         (VARS TEDIT.BUTTONBITMAP)))
+
+
+
+(* ; "Public functions (binding data  below)")
+
+(DEFINEQ
+
+(TEDIT.INSTALL.KEYBINDINGS
+  [LAMBDA (KEYBINDINGS RDTBL KEYACTIONS)                     (* ; "Edited 17-Mar-2025 09:34 by rmk")
+                                                             (* ; "Edited 15-Mar-2025 15:20 by rmk")
+                                                             (* ; "Edited 13-Mar-2025 23:25 by rmk")
+                                                             (* ; "Edited 11-Mar-2025 22:03 by rmk")
+
+    (* ;; "Installs KEYBINDINGS in the Tedit RDTBL.  A binding is an action-name followed by a list of  character-name strings or Tedit built-in action items (like NEXT, UNDO).  The implementation of the action is taken from entries in the TEDIT.KEYACTIONS list.")
+
+    (* ;; "This will overwrite previous assignments in RDTBL, possibly add new ones.   ")
+
+    (CL:UNLESS KEYBINDINGS (SETQ KEYBINDINGS TEDIT.KEYBINDINGS))
+    (SETQ RDTBL (if (NULL RDTBL)
+                    then TEDIT.READTABLE
+                  elseif (TEXTSTREAM RDTBL T)
+                    then (OR (GETTOBJ (TEXTOBJ RDTBL)
+                                    TXTRTBL)
+                             TEDIT.READTABLE)
+                  elseif (type? READTABLEP RDTBL)
+                    then RDTBL
+                  else (\ILLEGAL.ARG RDTBL)))
+    (CL:UNLESS KEYACTIONS (SETQ KEYACTIONS TEDIT.KEYACTIONS))
+    [for KB A ACTION in KEYBINDINGS when (LISTP KB) unless (EQ '* (CAR KB))
+       when (AND [SETQ ACTION (find PAIR in TEDIT.KEYACTIONS suchthat 
+
+                                                                   (* ;; 
+                                                                  "An ASSOC that allows synonym keys")
+
+                                                                   (EQMEMB (CAR KB)
+                                                                          (CAR PAIR]
+                 (SETQ A (CADR ACTION))) do (for CHAR in (CDR KB)
+                                               do (CL:UNLESS (CHARCODEP CHAR)
+                                                      (SETQ CHAR (CHARCODE.DECODE CHAR)))
+                                                  (CL:WHEN (EQ (CAR ACTION)
+                                                               'CHARDELETE.FORWARD))
+                                                  (TEDIT.SETFUNCTION CHAR A RDTBL) 
+                                                             (* ; "Set the method")
+                                                  (CL:WHEN NIL
+                                                      (ASSOC (CAR ACTION)
+                                                             \TEDIT.TTCCODES)
+                                                             (* ; 
+                                                   "A tag like NEXT, UNDO. Setup the termtable FWIW ")
+                                                      (TEDIT.SETSYNTAX CHAR (CAR ACTION)
+                                                             RDTBL))]
+    RDTBL])
+
+(TEDIT.CLEAR.KEYBINDINGS
+  [LAMBDA (RDTBL KEYBINDINGS)                                (* ; "Edited 17-Mar-2025 09:35 by rmk")
+                                                             (* ; "Edited 15-Mar-2025 12:02 by rmk")
+
+    (* ;; "Removes the Tedit function bindings to the keys in KEYBINDINGS, or all current bindings if KEYBINDINGS is T")
+
+    (SETQ RDTBL (if (NULL RDTBL)
+                    then TEDIT.READTABLE
+                  elseif (TEXTSTREAM RDTBL T)
+                    then (OR (GETTOBJ (TEXTOBJ RDTBL)
+                                    TXTRTBL)
+                             TEDIT.READTABLE)
+                  elseif (type? READTABLEP RDTBL)
+                    then RDTBL
+                  else (\ILLEGAL.ARG RDTBL)))
+    (CL:WHEN (fetch READMACRODEFS of RDTBL)
+        [if (EQ KEYBINDINGS T)
+            then [MAPHASH (fetch READMACRODEFS of RDTBL)
+                        (FUNCTION (LAMBDA (VAL CHARCODE)
+                                    (CL:WHEN (EQ (\TEDIT.TTC FUNCTIONCALL)
+                                                 (\SYNCODE (fetch READSA of RDTBL)
+                                                        CHARCODE))
+                                        (TEDIT.SETFUNCTION CHARCODE NIL RDTBL)
+                                        (CL:WHEN (ASSOC CHARCODE \TEDIT.TTCCODES)
+                                                             (* ; 
+                                                   "A tag like NEXT, UNDO. Setup the termtable FWIW ")
+                                            (TEDIT.SETSYNTAX CHARCODE CHARCODE RDTBL)))]
+                 KEYBINDINGS
+          else (for KB in KEYBINDINGS when (LISTP KB) unless (EQ '* (CAR KB))
+                  do (for CHARCODE in (CDR KB) do (CL:UNLESS (CHARCODEP CHARCODE)
+                                                      (SETQ CHARCODE (CHARCODE.DECODE CHARCODE)))
+                                                  (TEDIT.SETFUNCTION CHARCODE NIL RDTBL)
+                                                  (CL:WHEN (ASSOC (CAR KB)
+                                                                  \TEDIT.TTCCODES)
+                                                             (* ; 
+                                                   "A tag like NEXT, UNDO. Setup the termtable FWIW ")
+                                                      (TEDIT.SETSYNTAX CHARCODE (CAR KB)
+                                                             RDTBL))])])
+
+(TEDIT.GET.KEYACTION
+  [LAMBDA (CHARCODE BINDINGS)                                (* ; "Edited 17-Mar-2025 09:43 by rmk")
+
+    (* ;; "Returns the keyaction that CHARCODE binds to in BINDINGS.  If BINDINGS is a readtable, looks at all currently installed bindings in that readtable.  If NIL, uses TEDIT.READTABLE.")
+
+    (CL:UNLESS (CHARCODEP CHARCODE)
+        (SETQ CHARCODE (CHARCODE.DECODE CHARCODE)))
+    (if (LISTP BINDINGS)
+        then [for KB in BINDINGS when (LISTP KB) unless (EQ '* (CAR KB))
+                when [thereis K in (CDR KB) suchthat (EQ CHARCODE (CL:IF (CHARCODEP K)
+                                                                      K
+                                                                      (CHARCODE.DECODE K))]
+                collect (CAR KB) finally 
+
+                                       (* ;; "Maybe cause an error if a character is assigned twice?")
+
+                                       (RETURN (CL:IF (CDR $$VAL)
+                                                   $$VAL
+                                                   (CAR $$VAL))]
+      else (LET [(RDTBL (if (NULL BINDINGS)
+                            then TEDIT.READTABLE
+                          elseif (TEXTSTREAM BINDINGS T)
+                            then (OR (GETTOBJ (TEXTOBJ BINDINGS)
+                                            TXTRTBL)
+                                     TEDIT.READTABLE)
+                          elseif (type? READTABLEP BINDINGS)
+                          else (\ILLEGAL.ARG BINDINGS]
+                [MAPHASH (fetch READMACRODEFS of RDTBL)
+                       (FUNCTION (LAMBDA (VAL CCODE)
+                                   (CL:WHEN (AND (EQ CCODE CHARCODE)
+                                                 (EQ (\TEDIT.TTC FUNCTIONCALL)
+                                                     (\SYNCODE (fetch READSA of RDTBL)
+                                                            CHARCODE)))
+                                       (for KA in TEDIT.KEYACTIONS when (EQUAL (CADR KA)
+                                                                               (CADR VAL))
+                                          do (RETFROM (FUNCTION TEDIT.GET.KEYACTION)
+                                                    (CAR KA))))]
+                NIL])
+
+(TEDIT.GET.ACTIONBINDINGS
+  [LAMBDA (ACTION BINDINGS)                                  (* ; "Edited 17-Mar-2025 15:21 by rmk")
+
+    (* ;; "Returns the bindings for ACTION in BINDINGS, a binding list or a read-table specification. If BINDINGS is a readtable, looks at all currently installed bindings in that readtable.  If NIL, uses TEDIT.READTABLE.")
+
+    (if (LISTP BINDINGS)
+        then (for KB in BINDINGS when (EQ ACTION (CAR KB)) join 
+                                                                (* ;; 
+                                                  "Allow for duplicate bindings for the same action?")
+
+                                                                (APPEND (CDR KB)))
+      else (LET ((RDTBL (if (NULL BINDINGS)
+                            then TEDIT.READTABLE
+                          elseif (TEXTSTREAM BINDINGS T)
+                            then (OR (GETTOBJ (TEXTOBJ BINDINGS)
+                                            TXTRTBL)
+                                     TEDIT.READTABLE)
+                          elseif (type? READTABLEP BINDINGS)
+                          else (\ILLEGAL.ARG BINDINGS)))
+                 (IMPL (CADR (ASSOC ACTION TEDIT.KEYACTIONS)))
+                 KEYS)
+                (CL:WHEN IMPL
+                    [MAPHASH (fetch READMACRODEFS of RDTBL)
+                           (FUNCTION (LAMBDA (VAL CCODE)
+                                       (CL:WHEN (EQUAL IMPL (CADR VAL))
+                                                             (* ; "charcode, not charname")
+                                           (push KEYS CCODE))]
+                    KEYS)])
+)
 
 
 
@@ -1133,131 +1295,6 @@
 (* "END EXPORTED DEFINITIONS")
 
 )
-(DEFINEQ
-
-(TEDIT.INSTALL.KEYBINDINGS
-  [LAMBDA (KEYBINDINGS RDTBL KEYACTIONS)                     (* ; "Edited 17-Mar-2025 09:34 by rmk")
-                                                             (* ; "Edited 15-Mar-2025 15:20 by rmk")
-                                                             (* ; "Edited 13-Mar-2025 23:25 by rmk")
-                                                             (* ; "Edited 11-Mar-2025 22:03 by rmk")
-
-    (* ;; "Installs KEYBINDINGS in the Tedit RDTBL.  A binding is an action-name followed by a list of  character-name strings or Tedit built-in action items (like NEXT, UNDO).  The implementation of the action is taken from entries in the TEDIT.KEYACTIONS list.")
-
-    (* ;; "This will overwrite previous assignments in RDTBL, possibly add new ones.   ")
-
-    (CL:UNLESS KEYBINDINGS (SETQ KEYBINDINGS TEDIT.KEYBINDINGS))
-    (SETQ RDTBL (if (NULL RDTBL)
-                    then TEDIT.READTABLE
-                  elseif (TEXTSTREAM RDTBL T)
-                    then (OR (GETTOBJ (TEXTOBJ RDTBL)
-                                    TXTRTBL)
-                             TEDIT.READTABLE)
-                  elseif (type? READTABLEP RDTBL)
-                    then RDTBL
-                  else (\ILLEGAL.ARG RDTBL)))
-    (CL:UNLESS KEYACTIONS (SETQ KEYACTIONS TEDIT.KEYACTIONS))
-    [for KB A ACTION in KEYBINDINGS when (LISTP KB) unless (EQ '* (CAR KB))
-       when (AND [SETQ ACTION (find PAIR in TEDIT.KEYACTIONS suchthat 
-
-                                                                   (* ;; 
-                                                                  "An ASSOC that allows synonym keys")
-
-                                                                   (EQMEMB (CAR KB)
-                                                                          (CAR PAIR]
-                 (SETQ A (CADR ACTION))) do (for CHAR in (CDR KB)
-                                               do (CL:UNLESS (CHARCODEP CHAR)
-                                                      (SETQ CHAR (CHARCODE.DECODE CHAR)))
-                                                  (CL:WHEN (EQ (CAR ACTION)
-                                                               'CHARDELETE.FORWARD))
-                                                  (TEDIT.SETFUNCTION CHAR A RDTBL) 
-                                                             (* ; "Set the method")
-                                                  (CL:WHEN NIL
-                                                      (ASSOC (CAR ACTION)
-                                                             \TEDIT.TTCCODES)
-                                                             (* ; 
-                                                   "A tag like NEXT, UNDO. Setup the termtable FWIW ")
-                                                      (TEDIT.SETSYNTAX CHAR (CAR ACTION)
-                                                             RDTBL))]
-    RDTBL])
-
-(TEDIT.CLEAR.KEYBINDINGS
-  [LAMBDA (RDTBL KEYBINDINGS)                                (* ; "Edited 17-Mar-2025 09:35 by rmk")
-                                                             (* ; "Edited 15-Mar-2025 12:02 by rmk")
-
-    (* ;; "Removes the Tedit function bindings to the keys in KEYBINDINGS, or all current bindings if KEYBINDINGS is T")
-
-    (SETQ RDTBL (if (NULL RDTBL)
-                    then TEDIT.READTABLE
-                  elseif (TEXTSTREAM RDTBL T)
-                    then (OR (GETTOBJ (TEXTOBJ RDTBL)
-                                    TXTRTBL)
-                             TEDIT.READTABLE)
-                  elseif (type? READTABLEP RDTBL)
-                    then RDTBL
-                  else (\ILLEGAL.ARG RDTBL)))
-    (CL:WHEN (fetch READMACRODEFS of RDTBL)
-        [if (EQ KEYBINDINGS T)
-            then [MAPHASH (fetch READMACRODEFS of RDTBL)
-                        (FUNCTION (LAMBDA (VAL CHARCODE)
-                                    (CL:WHEN (EQ (\TEDIT.TTC FUNCTIONCALL)
-                                                 (\SYNCODE (fetch READSA of RDTBL)
-                                                        CHARCODE))
-                                        (TEDIT.SETFUNCTION CHARCODE NIL RDTBL)
-                                        (CL:WHEN (ASSOC CHARCODE \TEDIT.TTCCODES)
-                                                             (* ; 
-                                                   "A tag like NEXT, UNDO. Setup the termtable FWIW ")
-                                            (TEDIT.SETSYNTAX CHARCODE CHARCODE RDTBL)))]
-                 KEYBINDINGS
-          else (for KB in KEYBINDINGS when (LISTP KB) unless (EQ '* (CAR KB))
-                  do (for CHARCODE in (CDR KB) do (CL:UNLESS (CHARCODEP CHARCODE)
-                                                      (SETQ CHARCODE (CHARCODE.DECODE CHARCODE)))
-                                                  (TEDIT.SETFUNCTION CHARCODE NIL RDTBL)
-                                                  (CL:WHEN (ASSOC (CAR KB)
-                                                                  \TEDIT.TTCCODES)
-                                                             (* ; 
-                                                   "A tag like NEXT, UNDO. Setup the termtable FWIW ")
-                                                      (TEDIT.SETSYNTAX CHARCODE (CAR KB)
-                                                             RDTBL))])])
-
-(TEDIT.GET.KEYACTION
-  [LAMBDA (CHARCODE BINDINGS)                                (* ; "Edited 17-Mar-2025 09:43 by rmk")
-
-    (* ;; "Returns the keyaction that CHARCODE binds to in BINDINGS.  If BINDINGS is a readtable, looks at all currently installed bindings in that readtable.  If NIL, uses TEDIT.READTABLE.")
-
-    (CL:UNLESS (CHARCODEP CHARCODE)
-        (SETQ CHARCODE (CHARCODE.DECODE CHARCODE)))
-    (if (LISTP BINDINGS)
-        then [for KB in BINDINGS when (LISTP KB) unless (EQ '* (CAR KB))
-                when [thereis K in (CDR KB) suchthat (EQ CHARCODE (CL:IF (CHARCODEP K)
-                                                                      K
-                                                                      (CHARCODE.DECODE K))]
-                collect (CAR KB) finally 
-
-                                       (* ;; "Maybe cause an error if a character is assigned twice?")
-
-                                       (RETURN (CL:IF (CDR $$VAL)
-                                                   $$VAL
-                                                   (CAR $$VAL))]
-      else (LET [(RDTBL (if (NULL BINDINGS)
-                            then TEDIT.READTABLE
-                          elseif (TEXTSTREAM BINDINGS T)
-                            then (OR (GETTOBJ (TEXTOBJ BINDINGS)
-                                            TXTRTBL)
-                                     TEDIT.READTABLE)
-                          elseif (type? READTABLEP BINDINGS)
-                          else (\ILLEGAL.ARG BINDINGS]
-                [MAPHASH (fetch READMACRODEFS of RDTBL)
-                       (FUNCTION (LAMBDA (VAL CCODE)
-                                   (CL:WHEN (AND (EQ CCODE CHARCODE)
-                                                 (EQ (\TEDIT.TTC FUNCTIONCALL)
-                                                     (\SYNCODE (fetch READSA of RDTBL)
-                                                            CHARCODE)))
-                                       (for KA in TEDIT.KEYACTIONS when (EQUAL (CADR KA)
-                                                                               (CADR VAL))
-                                          do (RETFROM (FUNCTION TEDIT.GET.KEYACTION)
-                                                    (CAR KA))))]
-                NIL])
-)
 
 (RPAQQ TEDIT.KEYACTIONS
        (
@@ -1395,7 +1432,7 @@
 
 (RPAQQ TEDIT.KEYBINDINGS
        (
-        (* ;; "Establishes key bindings for particular Tedit key actions. Function,xxx roughly correspond to Koto release notes, but mostly correspond to the current keyboard keyactions for e.g. BOLD, ITALIC, etc. perhaps in \DLIONKEYACTIONS")
+        (* ;; "Establishes key bindings for particular Tedit key actions. Function,xxx roughly correspond to Koto release notes, but this preserves the immediately preceding assignments if those drifted away from the Koto notes. There is no obvious way of typing Function.  Maybe Meta,^xxx instead, as in DORADO.KEYBINDINGS.  (But CTRL collapses upper and lower case).")
 
         
         (* ;; "")
@@ -1485,8 +1522,7 @@
                                                              (* ; "keyactions for DEL key ??")
         (WORDDELELETE)
         (WORDDELETE.FORWARD)
-                                                             (* ; 
-                                                             "^W isn't available--chardelete forward")
+                                                             (* ; "^W is used for chardelete forward")
         (LINEDELETE.FORWARD)
         (LINEDELETE.BACKWARD)
         
@@ -1672,26 +1708,26 @@
 (RPAQQ TEDIT.BUTTONBITMAP #*(78 48)OOOOOOOOOOOOOOOOOOOLON@@@@@@@@@@@@@@@AOLO@@@@@@@@@@@@@@@@@CLO@@@@@@@@@@@@@@@@@CLMH@@@@@@@@@@@@@@@@DLNLGOOOOOOOOOOOOOOHHLMFL@@@@@@@@@@@@@@M@LJK@@@@@@@@@@@@@@@B@DMF@@@@@@@@@@@@@@@A@DJN@@@@@@@@@@@@@@@AHDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMD@@@@@@@@@@@@@@@@HDJL@@@@@@@@@@@@@@@@HDMF@@@@@@@@@@@@@@@AHDJJ@@@@@@@@@@@@@@@A@DMG@@@@@@@@@@@@@@@B@DNEL@@@@@@@@@@@@@@O@LLIGOOOOOOOOOOOOOOMHLOBBJJJJJJJJJJJJJJJLLNDEEEEEEEEEEEEEEEEGLOHJJJJJJJJJJJJJJJJKLOLEEEEEEEEEEEEEEEEOLOOOOOOOOOOOOOOOOOOOL
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (3522 11312 (\TEDIT.KEY.CHARLOOKS 3532 . 4474) (\TEDIT.KEY.QUAD 4476 . 6569) (
-\TEDIT.DEFAULTSSEL 6571 . 7182) (\TEDIT.SETDEFAULT.FROM.SEL 7184 . 7861) (\TEDIT.KEY.SIZE 7863 . 8313)
- (\TEDIT.SUBSCRIPTSEL 8315 . 8518) (\TEDIT.SUPERSCRIPTSEL 8520 . 8724) (\TEDIT.KEY.TRANSFORM 8726 . 
-10301) (\TEDIT.KEY.OPENLINE 10303 . 10757) (\TEDIT.KEY.FAMILYN 10759 . 11310)) (11313 11602 (
-CAP-CASECODE 11323 . 11600)) (11636 14262 (\TEDIT.SHOWCARETLOOKS 11646 . 13355) (\TEDIT.DESCRIBEFONT 
-13357 . 14260)) (14293 28350 (\TEDIT.ONECHAR.BACKWARD 14303 . 15432) (\TEDIT.ONECHAR.FORWARD 15434 . 
-16652) (\TEDIT.ONELINE.UP 16654 . 19615) (\TEDIT.ONELINE.DOWN 19617 . 21274) (\TEDIT.ONELINE.MOVE 
-21276 . 23490) (\TEDIT.ONEWORD.BACKWARD 23492 . 24529) (\TEDIT.ONEWORD.FORWARD 24531 . 25567) (
-\TEDIT.LINE.BEGIN 25569 . 26499) (\TEDIT.LINE.END 26501 . 27589) (\TEDIT.DOCUMENT.BEGIN 27591 . 27950)
- (\TEDIT.DOCUMENT.END 27952 . 28348)) (28351 30195 (\TEDIT.LINEDELETE.FORWARD 28361 . 29261) (
-\TEDIT.LINEDELETE.BACKWARD 29263 . 30193)) (30196 32450 (\TEDIT.NEST 30206 . 32448)) (32504 40409 (
-\TEDIT.KEY.FIND 32514 . 37549) (\TEDIT.KEY.FIND.SEARCHSTRING 37551 . 38691) (\TEDIT.GET.TARGET.STRING 
-38693 . 40407)) (40440 43072 (\TEDIT.KEY.SUBSTITUTE 40450 . 40671) (\TEDIT.MANPAGE 40673 . 41920) (
-\TEDIT.CALL.ED 41922 . 42752) (\TEDIT.SELECT.ALL 42754 . 43070)) (43099 48679 (\TEDIT.CLIPBOARD 43109
- . 44864) (\TEDIT.COPYTOCLIPBOARD 44866 . 45646) (\TEDIT.EXTRACTTOCLIPBOARD 45648 . 45843) (
-\TEDIT.WRITE.SEL 45845 . 48677)) (49031 60636 (\TEDIT.READTABLE 49041 . 49867) (
-\TEDIT.WORDBOUND.READTABLE 49869 . 52498) (TEDIT.GETSYNTAX 52500 . 54019) (TEDIT.SETSYNTAX 54021 . 
-55226) (TEDIT.GETFUNCTION 55228 . 56400) (TEDIT.SETFUNCTION 56402 . 58388) (TEDIT.WORDGET 58390 . 
-58651) (TEDIT.WORDSET 58653 . 59284) (TEDIT.ATOMBOUND.READTABLE 59286 . 60634)) (61323 69434 (
-TEDIT.INSTALL.KEYBINDINGS 61333 . 64406) (TEDIT.CLEAR.KEYBINDINGS 64408 . 67005) (TEDIT.GET.KEYACTION 
-67007 . 69432)) (79273 85713 (TEDIT.BUTTONS.BUILD 79283 . 83981) (TEDIT.BUTTONBITMAP.FILL 83983 . 
-85711)))))
+  (FILEMAP (NIL (3791 13628 (TEDIT.INSTALL.KEYBINDINGS 3801 . 6874) (TEDIT.CLEAR.KEYBINDINGS 6876 . 9473
+) (TEDIT.GET.KEYACTION 9475 . 11900) (TEDIT.GET.ACTIONBINDINGS 11902 . 13626)) (13688 21478 (
+\TEDIT.KEY.CHARLOOKS 13698 . 14640) (\TEDIT.KEY.QUAD 14642 . 16735) (\TEDIT.DEFAULTSSEL 16737 . 17348)
+ (\TEDIT.SETDEFAULT.FROM.SEL 17350 . 18027) (\TEDIT.KEY.SIZE 18029 . 18479) (\TEDIT.SUBSCRIPTSEL 18481
+ . 18684) (\TEDIT.SUPERSCRIPTSEL 18686 . 18890) (\TEDIT.KEY.TRANSFORM 18892 . 20467) (
+\TEDIT.KEY.OPENLINE 20469 . 20923) (\TEDIT.KEY.FAMILYN 20925 . 21476)) (21479 21768 (CAP-CASECODE 
+21489 . 21766)) (21802 24428 (\TEDIT.SHOWCARETLOOKS 21812 . 23521) (\TEDIT.DESCRIBEFONT 23523 . 24426)
+) (24459 38516 (\TEDIT.ONECHAR.BACKWARD 24469 . 25598) (\TEDIT.ONECHAR.FORWARD 25600 . 26818) (
+\TEDIT.ONELINE.UP 26820 . 29781) (\TEDIT.ONELINE.DOWN 29783 . 31440) (\TEDIT.ONELINE.MOVE 31442 . 
+33656) (\TEDIT.ONEWORD.BACKWARD 33658 . 34695) (\TEDIT.ONEWORD.FORWARD 34697 . 35733) (
+\TEDIT.LINE.BEGIN 35735 . 36665) (\TEDIT.LINE.END 36667 . 37755) (\TEDIT.DOCUMENT.BEGIN 37757 . 38116)
+ (\TEDIT.DOCUMENT.END 38118 . 38514)) (38517 40361 (\TEDIT.LINEDELETE.FORWARD 38527 . 39427) (
+\TEDIT.LINEDELETE.BACKWARD 39429 . 40359)) (40362 42616 (\TEDIT.NEST 40372 . 42614)) (42670 50575 (
+\TEDIT.KEY.FIND 42680 . 47715) (\TEDIT.KEY.FIND.SEARCHSTRING 47717 . 48857) (\TEDIT.GET.TARGET.STRING 
+48859 . 50573)) (50606 53238 (\TEDIT.KEY.SUBSTITUTE 50616 . 50837) (\TEDIT.MANPAGE 50839 . 52086) (
+\TEDIT.CALL.ED 52088 . 52918) (\TEDIT.SELECT.ALL 52920 . 53236)) (53265 58845 (\TEDIT.CLIPBOARD 53275
+ . 55030) (\TEDIT.COPYTOCLIPBOARD 55032 . 55812) (\TEDIT.EXTRACTTOCLIPBOARD 55814 . 56009) (
+\TEDIT.WRITE.SEL 56011 . 58843)) (59197 70802 (\TEDIT.READTABLE 59207 . 60033) (
+\TEDIT.WORDBOUND.READTABLE 60035 . 62664) (TEDIT.GETSYNTAX 62666 . 64185) (TEDIT.SETSYNTAX 64187 . 
+65392) (TEDIT.GETFUNCTION 65394 . 66566) (TEDIT.SETFUNCTION 66568 . 68554) (TEDIT.WORDGET 68556 . 
+68817) (TEDIT.WORDSET 68819 . 69450) (TEDIT.ATOMBOUND.READTABLE 69452 . 70800)) (81383 87823 (
+TEDIT.BUTTONS.BUILD 81393 . 86091) (TEDIT.BUTTONBITMAP.FILL 86093 . 87821)))))
 STOP

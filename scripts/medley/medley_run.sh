@@ -293,6 +293,7 @@ start_maiko() {
   echo "MEDLEYDIR: \"${MEDLEYDIR}\""
   echo "LOGINDIR: \"${LOGINDIR}\""
   echo "GREET FILE: \"${LDEINIT}\""
+  echo "REM.CM FILE: \"${LDEREMCM}\""
   echo "VMEM FILE: \"${LDEDESTSYSOUT}\""
   #
   # Temp workaround for issues in Maiko sysout arg

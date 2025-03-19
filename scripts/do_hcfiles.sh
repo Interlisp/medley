@@ -44,7 +44,8 @@ main() {
              --geometry 1024x768                                 \
              --noscroll                                          \
              --logindir "${logindir}"                            \
-             --greet "${cmfile}"                                 \
+             --greet -                                           \
+             --rem.cm "${cmfile}"                                \
              --apps
 
         # save dribble file to loadups; extract and save fails

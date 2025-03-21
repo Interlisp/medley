@@ -9,7 +9,10 @@ main() {
 
 	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"
 	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/fuller.dribble "${LOADUP_OUTDIR}"
-
+        if [ ! -z "$SAVE_FULLER" ]
+	then
+	    /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/fuller.sysout "${LOADUP_OUTDIR}"
+	fi 
 	echo "<<<<< END ${script_name}"
 	echo ""
 	exit 0

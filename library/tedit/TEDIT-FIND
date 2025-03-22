@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 6-Mar-2025 20:18:04" {WMEDLEY}<library>TEDIT>TEDIT-FIND.;138 38227  
+(FILECREATED "19-Mar-2025 11:25:45" {WMEDLEY}<library>tedit>TEDIT-FIND.;153 43667  
 
       :EDIT-BY rmk
 
       :CHANGES-TO (FNS TEDIT.SUBSTITUTE)
 
-      :PREVIOUS-DATE "17-Feb-2025 12:25:36" {WMEDLEY}<library>TEDIT>TEDIT-FIND.;136)
+      :PREVIOUS-DATE "15-Mar-2025 00:35:11" {WMEDLEY}<library>tedit>TEDIT-FIND.;151)
 
 
 (PRETTYCOMPRINT TEDIT-FINDCOMS)
@@ -14,12 +14,15 @@
 (RPAQQ TEDIT-FINDCOMS (
                        (* ;; "User entries")
 
-                       (FNS TEDIT.FIND TEDIT.FIND.BACKWARD TEDIT.SUBSTITUTE TEDIT.NEXT)
+                       (FNS TEDIT.FIND TEDIT.FIND.SETSEL TEDIT.FIND.BACKWARD TEDIT.SUBSTITUTE 
+                            TEDIT.NEXT)
+                       (FNS TEDIT.FIND.OBJECT TEDIT.FIND.OBJECT.BACKWARD)
                        
                        (* ;; "Implementation")
 
-                       (FNS \TEDIT.WCFIND \TEDIT.BASICFIND \TEDIT.WCFIND.BACKWARD 
-                            \TEDIT.BASICFIND.BACKWARD \TEDIT.PARSE.SEARCHSTRING)))
+                       (FNS \TEDIT.FIND \TEDIT.FIND.BACKWARD \TEDIT.WCFIND \TEDIT.BASICFIND 
+                            \TEDIT.WCFIND.BACKWARD \TEDIT.BASICFIND.BACKWARD 
+                            \TEDIT.PARSE.SEARCHSTRING)))
 
 
 
@@ -28,81 +31,50 @@
 (DEFINEQ
 
 (TEDIT.FIND
-  [LAMBDA (TSTREAM TARGET START END WILDCARDS?)              (* ; "Edited 10-May-2024 21:55 by rmk")
-                                                             (* ; "Edited 24-Apr-2024 23:47 by rmk")
-                                                             (* ; "Edited 19-Jun-2023 22:27 by rmk")
-                                                            (* ; "Edited  6-May-2018 17:34 by rmk:")
-                                                             (* ; "Edited 30-May-91 20:56 by jds")
+  [LAMBDA (TSTREAM TARGET START END WILDCARDS? AGAIN)        (* ; "Edited 14-Mar-2025 23:39 by rmk")
+                                                             (* ; "Edited 11-Mar-2025 12:33 by rmk")
 
-    (* ;; "If WILDCARDS?  is NIL then TEDIT.FIND returns just the start of a basic string-match.")
+    (* ;; "This is the documented user interface that does the silly thing with the return value--caller must know whether WILCARD? was true or not.")
 
-    (* ;; "Otherwise it returns a list of (MATCHSTART MATCHEND) which is the start and end char positions of the match,")
+    (LET ((RESULT (\TEDIT.FIND TSTREAM TARGET WILDCARDS? AGAIN START END)))
+         (CL:WHEN RESULT
+             (CL:IF WILDCARDS?
+                 RESULT
+                 (CAR RESULT)))])
 
-    (* ;; "RMK:  FIND isn't undoable, FIND-AGAIN is armed on meta-g.  No point in hiding a previous actual edit and then having to undo a find in order to undo the intended previous event. Or maybe undoing FIND would put you back where you started?")
+(TEDIT.FIND.SETSEL
+  [LAMBDA (TSTREAM TARGET START END WILDCARDS?)              (* ; "Edited 11-Mar-2025 15:29 by rmk")
 
-    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
-    (CL:WHEN TARGET
+    (* ;; "Sets the selection to the result of a successful FIND.")
 
-        (* ;; "* and # are implicitly quoted if not WILDCARDS?  This could be handled simply by calling CONS  instead of  \TEDIT.PARSE.SEARCHSTRING")
-
-        [if (IMAGEOBJP TARGET)
-            then (TEDIT.FIND.OBJECT TSTREAM TARGET START END)
-          elseif [NEQ 0 (NCHARS (SETQ TARGET (MKSTRING TARGET]
-            then (CL:UNLESS END
-                     (SETQ END (FGETTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
-                                      TEXTLEN)))
-                 (CL:UNLESS START
-                     (SETQ START (TEDIT.GETPOINT TSTREAM)))
-                 (CL:WHEN (ILEQ START END)
-                     (CL:IF WILDCARDS?
-                         (\TEDIT.WCFIND TSTREAM (\TEDIT.PARSE.SEARCHSTRING TARGET)
-                                START END)
-                         (CAR (\TEDIT.BASICFIND TSTREAM TARGET START END))))])])
+    (LET ((RESULT (\TEDIT.FIND TSTREAM TARGET WILDCARDS? NIL START END)))
+         (CL:WHEN RESULT
+             (TEDIT.SETSEL TSTREAM (CAR RESULT)
+                    (CADR RESULT)
+                    'RIGHT)
+             (TEDIT.NORMALIZECARET TSTREAM))])
 
 (TEDIT.FIND.BACKWARD
-  [LAMBDA (TSTREAM TARGET START END WILDCARDS? AGAIN)        (* ; "Edited 19-May-2024 12:07 by rmk")
-                                                             (* ; "Edited 10-May-2024 22:00 by rmk")
-                                                             (* ; "Edited 24-Apr-2024 23:43 by rmk")
-                                                             (* ; "Edited 12-Jul-2023 08:24 by rmk")
-                                                             (* ; "Edited 20-Jun-2023 12:12 by rmk")
-                                                             (* ; "Edited 18-Jun-2023 23:43 by rmk")
+  [LAMBDA (TSTREAM TARGET START END WILDCARDS? AGAIN)        (* ; "Edited 11-Mar-2025 15:06 by rmk")
                                                              (* ; "Edited 30-May-91 19:17 by jds")
 
-    (* ;; "The search is confined to the characters between START and END.  It runs backwards from END looking for the nearest match, and returns the character positions of that match.")
+    (* ;; "This is a new function that preserves the silly interface of  TEDIT.FIND--caller must know whether WILCARD? was true or not.")
 
-    (* ;; "If WILDCARDS?, the value is the pair (MATCHSTART  MATCHEND) for that match, since the caller doesn't know the length.  But if not WILDCARDS?, just the match-start, since the caller knows the match is (NCHARS TARGETSTRING) long.  This is quirky, but that's the way it is documented.")
-
-    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
-    (CL:WHEN TARGET
-        [if (IMAGEOBJP TARGET)
-            then (TEDIT.FIND.OBJECT.BACKWARD TSTREAM TARGET START END AGAIN)
-          elseif [NEQ 0 (NCHARS (SETQ TARGET (MKSTRING TARGET]
-            then (SETQ START (IMAX 1 (OR START 1)))
-                 (SETQ END (IMIN (OR END (SUB1 (TEDIT.GETPOINT TSTREAM)))
-                                 (FGETTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
-                                        TEXTLEN)))
-                 (CL:WHEN AGAIN
-
-                     (* ;; 
-                     "Assume that we aren't interested in another match at the current position.")
-
-                     (ADD END -1))
-                 (CL:WHEN (ILEQ START END)
-                     (CL:IF WILDCARDS?
-                         (\TEDIT.WCFIND.BACKWARD TSTREAM (\TEDIT.PARSE.SEARCHSTRING TARGET T)
-                                START END)
-                         (CAR (\TEDIT.BASICFIND.BACKWARD TSTREAM TARGET START END))))])])
+    (LET ((RESULT (\TEDIT.FIND.BACKWARD TARGET WILDCARDS? AGAIN START END)))
+         (CL:WHEN RESULT
+             (CL:IF WILDCARDS?
+                 RESULT
+                 (CAR RESULT)))])
 
 (TEDIT.SUBSTITUTE
-  [LAMBDA (TSTREAM PATTERN REPLACEMENT CONFIRM?)             (* ; "Edited  6-Mar-2025 20:17 by rmk")
+  [LAMBDA (TSTREAM PATTERN REPLACEMENT CONFIRM? NEWCHARLOOKS)(* ; "Edited 19-Mar-2025 11:20 by rmk")
+                                                             (* ; "Edited 15-Mar-2025 00:23 by rmk")
+                                                             (* ; "Edited  6-Mar-2025 20:17 by rmk")
                                                              (* ; "Edited  8-Dec-2024 15:47 by rmk")
                                                              (* ; "Edited 26-Nov-2024 23:49 by rmk")
                                                              (* ; "Edited 15-Aug-2024 09:20 by rmk")
                                                              (* ; "Edited 14-Jul-2024 00:24 by rmk")
-                                                             (* ; "Edited  7-Jul-2024 11:46 by rmk")
-                                                             (* ; "Edited 29-Jun-2024 10:49 by rmk")
                                                              (* ; "Edited 18-May-2024 23:03 by rmk")
-                                                             (* ; "Edited  9-Mar-2024 11:36 by rmk")
                                                              (* ; "Edited 12-May-2024 21:11 by rmk")
                                                              (* ; "Edited 15-Mar-2024 14:09 by rmk")
                                                              (* ; "Edited  6-Jan-2024 11:09 by rmk")
@@ -119,8 +91,8 @@
             (PROG ((TEXTOBJ (TEXTOBJ TSTREAM))
                    (NREPLACEMENTS 0)
                    (YESLIST '("Y" "y" "yes" "YES" "T" "Yes"))
-                   SEARCHSTRING ABORTFLG ENDCHAR# STARTCHAR# RANGE CONFIRMFLG SEL EOLSEEN REPLACE-LEN
-                   ACTIONSTRING)
+                   SEARCHSTRING ABORTFLG ENDCHAR# STARTCHAR# CONFIRMFLG SEL REPLACE-LEN ACTIONSTRING
+                   CHARLOOKS)
 
              (* ;; "Don't call \TEDIT.GET.TARGET.STRING because it might pick the search-domain (current selection) as the search string.  If the search pattern is empty, bail out.")
 
@@ -165,7 +137,6 @@
                                                     "ing...")
                          T)
                   (SETQ SEL (FGETTOBJ TEXTOBJ SEL))
-                  (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)
                   (\TEDIT.RESET.EXTEND.PENDING.DELETE TEXTOBJ)
                                                              (* ; "Turn off any blue pending delete")
 
@@ -183,16 +154,15 @@
                       then 
                            (* ;; "In this case the selection moves along, ending up at the last hit.")
 
-                           (bind (LASTSEL _ (\TEDIT.COPYSEL SEL))
-                              while (SETQ RANGE (TEDIT.FIND TEXTOBJ SEARCHSTRING STARTCHAR# ENDCHAR#
-                                                       T))
+                           (bind HIT (LASTSEL _ (\TEDIT.COPYSEL SEL))
+                              while (SETQ HIT (\TEDIT.FIND TEXTOBJ SEARCHSTRING T NIL STARTCHAR# 
+                                                     ENDCHAR#))
                               do                             (* ; 
                                                  "Show each substitution site and ask for permission")
-                                 (\TEDIT.UPDATE.SEL SEL (CAR RANGE)
-                                        NIL
+                                 (\TEDIT.UPDATE.SEL SEL (CAR HIT)
+                                        (CADR HIT)
                                         'RIGHT
-                                        'PENDINGDEL
-                                        (ADD1 (CADR RANGE)))
+                                        'PENDINGDEL)
                                  (\TEDIT.FIXSEL SEL TEXTOBJ)
                                  (\TEDIT.SHOWSEL SEL T TEXTOBJ)
                                  (TEDIT.NORMALIZECARET TEXTOBJ SEL)
@@ -201,6 +171,9 @@
                                                          1))
                                      (Q (GO $$OUT))
                                      (Y                      (* ; "Do this one")
+                                        (CL:UNLESS NEWCHARLOOKS
+                                            (SETQ CHARLOOKS (PCHARLOOKS (\TEDIT.CHTOPC (CAR HIT)
+                                                                               TEXTOBJ))))
                                         (\TEDIT.REPLACE.SELPIECES (\TEDIT.SELPIECES.COPY REPLACEMENT
                                                                          'COPY TEXTOBJ)
                                                TEXTOBJ SEL)
@@ -209,32 +182,31 @@
                                         (add NREPLACEMENTS 1)
                                         (SETQ STARTCHAR# (GETSEL SEL CHLIM))
                                                              (* ; "Next start, compensate for end")
-                                        [add ENDCHAR# (IDIFFERENCE REPLACE-LEN
-                                                             (ADD1 (IDIFFERENCE (CADR RANGE)
-                                                                          (CAR RANGE])
+                                        (add ENDCHAR# (IDIFFERENCE REPLACE-LEN (CADR HIT))))
                                      (PROGN 
                                             (* ;; 
     "Turn off rejected selection, search for next starting one charcter later. ENDCHAR# is still OK.")
 
                                             (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)
-                                            (SETQ STARTCHAR# (ADD1 (CAR RANGE]
+                                            (SETQ STARTCHAR# (ADD1 (CAR HIT]
                               finally (\TEDIT.COPYSEL LASTSEL SEL))
                     else 
                          (* ;; "No confirmation required.  Do the substitutions without showing intermediate work, collect all of the replacement events")
 
-                         (bind FIRSTHIT HITLAST HITLEN HITDIFF (TOTALDIFF _ 0)
-                               EVENTS while (SETQ RANGE (TEDIT.FIND TEXTOBJ SEARCHSTRING STARTCHAR# 
-                                                               ENDCHAR# T))
+                         (bind FIRSTHIT HIT HITLAST HITDIFF CHARLOOKS (TOTALDIFF _ 0)
+                               EVENTS while (SETQ HIT (\TEDIT.FIND TEXTOBJ SEARCHSTRING T NIL 
+                                                             STARTCHAR# ENDCHAR#))
                             do (CL:UNLESS FIRSTHIT           (* ; "For final line updating.")
-                                   (SETQ FIRSTHIT (CAR RANGE)))
-                               [SETQ HITLEN (ADD1 (IDIFFERENCE (CADR RANGE)
-                                                         (CAR RANGE]
-                               (\TEDIT.UPDATE.SEL SEL (CAR RANGE)
-                                      HITLEN
+                                   (SETQ FIRSTHIT (CAR HIT)))
+                               (CL:UNLESS NEWCHARLOOKS
+                                   (SETQ CHARLOOKS (PCHARLOOKS (\TEDIT.CHTOPC (CAR HIT)
+                                                                      TEXTOBJ))))
+                               (\TEDIT.UPDATE.SEL SEL (CAR HIT)
+                                      (CADR HIT)
                                       'RIGHT)
                                (\TEDIT.FIXSEL SEL TEXTOBJ)
                                (\TEDIT.REPLACE.SELPIECES (\TEDIT.SELPIECES.COPY REPLACEMENT
-                                                                'COPY TEXTOBJ)
+                                                                'COPY TEXTOBJ NIL CHARLOOKS)
                                       TEXTOBJ SEL)
                                (push EVENTS (\TEDIT.POPEVENT TEXTOBJ)) 
                                                              (* ; 
@@ -242,26 +214,17 @@
                                (add NREPLACEMENTS 1)
                                (SETQ STARTCHAR# (GETSEL SEL CHLIM))
                                (SETQ HITLAST STARTCHAR#)
-                               (SETQ HITDIFF (IDIFFERENCE REPLACE-LEN HITLEN))
+                               (SETQ HITDIFF (IDIFFERENCE REPLACE-LEN (CADR HIT)))
                                (add ENDCHAR# HITDIFF)
                                (add TOTALDIFF HITDIFF)
                             finally (CL:UNLESS (EQ NREPLACEMENTS 0)
 
-                                 (* ;; "At least one replacement, update the lines that have changed.  We have to calculate how many of the original characters have %"changed%" by adding the TOTALDIFF to the final position of the last character of the last hit.  Might be better if UPDATELINES took a lastchangechar.")
+                                 (* ;; "At least one replacement, update the lines that have changed.  We have to calculate how many of the original characters have %"changed%" by adding the TOTALDIFF to the final position of the last character of the last hit.  ")
 
-                                        (if (IGREATERP TOTALDIFF 0)
-                                            then (\TEDIT.UPDATE.LINES TEXTOBJ 'INSERTION FIRSTHIT
-                                                        (IDIFFERENCE (IPLUS (FGETSEL SEL CHLIM)
-                                                                            TOTALDIFF)
-                                                               FIRSTHIT))
-                                          elseif (ILESSP TOTALDIFF 0)
-                                            then (\TEDIT.UPDATE.LINES TEXTOBJ 'DELETION FIRSTHIT
-                                                        (IDIFFERENCE (IDIFFERENCE (FGETSEL SEL CHLIM)
-                                                                            TOTALDIFF)
-                                                               FIRSTHIT))
-                                          else (\TEDIT.UPDATE.LINES TEXTOBJ 'CHANGED FIRSTHIT
-                                                      (IDIFFERENCE (FGETSEL SEL CHLIM)
-                                                             FIRSTHIT)))
+                                        (\TEDIT.UPDATE.LINES TEXTOBJ 'INSERTION FIRSTHIT
+                                               (IDIFFERENCE (IPLUS (FGETSEL SEL CHLIM)
+                                                                   TOTALDIFF)
+                                                      FIRSTHIT))
 
                                  (* ;; "Not clear what the final selection should be, if there are multiple changes.  The original selection? A selection that goes from the beginning of the first subsitution to the end of the last (as here)?  Or just the selection of the last substitution?")
 
@@ -288,7 +251,10 @@
                   (RETURN NREPLACEMENTS))))])
 
 (TEDIT.NEXT
-  [LAMBDA (TSTREAM)                                          (* ; "Edited 15-Feb-2025 18:08 by rmk")
+  [LAMBDA (TSTREAM)                                          (* ; "Edited 14-Mar-2025 23:14 by rmk")
+                                                             (* ; "Edited 11-Mar-2025 15:35 by rmk")
+                                                             (* ; "Edited  9-Mar-2025 11:31 by rmk")
+                                                             (* ; "Edited 15-Feb-2025 18:08 by rmk")
                                                              (* ; "Edited 21-Oct-2024 00:40 by rmk")
                                                              (* ; "Edited  7-Jul-2024 11:47 by rmk")
                                                              (* ; "Edited 18-May-2024 16:23 by rmk")
@@ -298,59 +264,109 @@
                                                              (* ; "Edited 14-Dec-2023 21:20 by rmk")
                                                              (* ; "Edited 20-Jun-2023 00:05 by rmk")
                                                              (* ; "Edited  3-May-2023 23:47 by rmk")
-                                                             (* ; "Edited 18-Apr-2023 23:46 by rmk")
+                                                            (* ; "Edited 18-Apr-2023 23:46 by rmk ")
                                                              (* ; "Edited 30-May-91 20:57 by jds")
-    (LET ((TEXTOBJ (TEXTOBJ TSTREAM))
-          TARGET SEL OPTION FIELDSEL)
-         (SETQ SEL (TEXTSEL TEXTOBJ))
-         (SETQ TARGET (TEDIT.FIND TEXTOBJ ">>*<<" NIL NIL T))(* ; 
-                                                             "find the first >>delimited<< field")
-         (SETQ FIELDSEL (TEDIT.FIND TEXTOBJ "{*}" NIL NIL T))(* ; 
-                                "find the first menu-type insertion field, usually delimited with {}")
-         [SETQ OPTION (COND
-                         [(AND TARGET FIELDSEL)              (* ; "take the first one")
-                          (COND
-                             ((IGREATERP (CAR TARGET)
-                                     (GETSEL FIELDSEL CH#))  (* ; "use the {} selection")
-                              'FIELD)
-                             (T 'TARGET]
-                         (TARGET 'TARGET)
-                         (FIELDSEL 'FIELD)
-                         (T 'NEITHER]
-         (SELECTQ OPTION
-             (TARGET                                         (* ; "Found another fill-in")
-                     (replace (TEXTOBJ BLUEPENDINGDELETE) of TEXTOBJ with T)
-                                                             (* ; 
-                                         "Original comment: %"never pending a deletion%", but it is!")
-                     (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)        (* ; 
-                                                             "Set up SELECTION to be the found text")
-                     (\TEDIT.UPDATE.SEL SEL (CAR TARGET)
-                            (IDIFFERENCE (ADD1 (CADR TARGET))
-                                   (CAR TARGET))
-                            'RIGHT
-                            'PENDINGDEL)
-                     (\TEDIT.FIXSEL SEL TEXTOBJ)             (* ; "Always selected normally")
-                     (\TEDIT.SHOWSEL SEL T TEXTOBJ)
-                     (TEDIT.NORMALIZECARET TEXTOBJ)          (* ; "And get it into the window")
-                     )
-             (FIELD                                          (* ; 
-   "Update the selection for this textobj from the scratch sel returned from MBUTTON.FIND.NEXT.FIELD")
-                    (FSETTOBJ TEXTOBJ BLUEPENDINGDELETE T)
-                    (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)         (* ; 
-                                                             "Set SELECTION to be the found text")
-                    (\TEDIT.UPDATE.SEL SEL (GETSEL FIELDSEL CH#)
-                           (GETSEL FIELDSEL DCH)
-                           'LEFT
-                           'PENDINGDEL)                      (* ; "And get it into the window")
-                    (\TEDIT.FIXSEL SEL TEXTOBJ)
-                    (\TEDIT.SHOWSEL SEL T TEXTOBJ)
-                    (TEDIT.NORMALIZECARET TEXTOBJ))
-             (NEITHER (TEDIT.PROMPTPRINT TEXTOBJ "No more blanks to fill in." T)
-                      (SETQ SEL NIL))
-             (\TEDIT.THELP "No legal value found in SELECTQ in TEDIT.NEXT"))
-         (CL:WHEN SEL                                        (* ; 
-                    "There really IS a selection made here, so set up the charlooks for it properly.")
-             (FSETTOBJ TEXTOBJ CARETLOOKS (\TEDIT.GET.INSERT.CHARLOOKS TEXTOBJ SEL)))])
+
+    (* ;; "Finds/selects the next   >>*<<  or   {*}   or   menu field after the current selection")
+
+    (LET* ((TEXTOBJ (TEXTOBJ TSTREAM))
+           (SEL (TEXTSEL TEXTOBJ))
+           CH CHNO DCH)
+
+          (* ;; "One pass, search in parallel")
+
+          (if [for old CHNO HIT from (FGETSEL SEL CHLIM) while (SETQ CH (TEDIT.NTHCHARCODE TEXTOBJ 
+                                                                               CHNO))
+                 do (SELCHARQ CH
+                         (> (CL:WHEN (SETQ HIT (\TEDIT.FIND TEXTOBJ ">>*<<" T NIL CHNO))
+                                (SETQ CHNO (CAR HIT))
+                                (SETQ DCH (CADR HIT))
+                                (RETURN T)))
+                         ({ (CL:WHEN (SETQ HIT (\TEDIT.FIND TEXTOBJ "{*}" T NIL CHNO))
+                                (SETQ CHNO (CAR HIT))        (* ; "Shouldn't include the { and }")
+                                (SETQ DCH (IDIFFERENCE (CADR HIT)
+                                                 2))
+                                (CL:UNLESS (EQ 0 DCH)        (* ; 
+                                                             "Right of {, if empty. to put it inside")
+                                    (add CHNO 1))
+                                (RETURN T)))
+                         (CL:WHEN (AND (IMAGEOBJP CH)
+                                       (IMAGEOBJPROP CH 'FIELDPREFIX))
+                                                             (* ; "Menu fields")
+                             (add CHNO 1)
+                             (RETURN (for ENDCHNO FCH from CHNO while (SETQ FCH (TEDIT.NTHCHARCODE
+                                                                                 TEXTOBJ ENDCHNO))
+                                        when (AND (IMAGEOBJP FCH)
+                                                  (IMAGEOBJPROP FCH 'FIELDSUFFIX))
+                                        do (SETQ DCH (IDIFFERENCE ENDCHNO CHNO))
+                                           (CL:WHEN (EQ 0 DCH)
+                                                             (* ; "RIGHT of prefix, if empty")
+                                               (add CHNO -1))
+                                           (RETURN T))))]
+              then 
+                   (* ;; "CHNO is the beginning of the located blank, DCH is its length")
+
+                   (\TEDIT.SHOWSEL SEL NIL TEXTOBJ)
+                   (\TEDIT.UPDATE.SEL SEL CHNO DCH 'RIGHT 'PENDINGDEL)
+                   (FSETTOBJ TEXTOBJ BLUEPENDINGDELETE T)
+                   (\TEDIT.FIXSEL SEL TEXTOBJ)
+                   (\TEDIT.SHOWSEL SEL T TEXTOBJ)
+                   (FSETTOBJ TEXTOBJ CARETLOOKS (\TEDIT.GET.INSERT.CHARLOOKS TEXTOBJ SEL))
+                   (TEDIT.NORMALIZECARET TEXTOBJ)
+            else (TEDIT.PROMPTPRINT TEXTOBJ "No more blanks to fill in" T])
+)
+(DEFINEQ
+
+(TEDIT.FIND.OBJECT
+  [LAMBDA (TSTREAM OBJ START END)                            (* ; "Edited 20-Oct-2024 12:07 by rmk")
+                                                             (* ; "Edited 10-May-2024 21:58 by rmk")
+                                                             (* ; "Edited 16-Mar-2024 10:03 by rmk")
+                                                             (* ; "Edited  6-Nov-2022 11:12 by rmk")
+                                                             (* ; "Edited  3-May-93 12:52 by jds")
+
+    (* ;; "Return the character number of OBJ in TSTREAM, if it occurs between START and END.  We know that an object occupies its own singleton piece, so we don't need to worry about starting or ending in the middle of a piece.  We also don't need to test PTYPE, just look at PCONTENTS.")
+
+    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (CL:WHEN (IMAGEOBJP OBJ)
+        [LET ((TEXTOBJ (GETTSTR TSTREAM TEXTOBJ)))
+             (CL:UNLESS END
+                 (SETQ END (FGETTOBJ TEXTOBJ TEXTLEN)))
+             (CL:UNLESS START
+                 (SETQ START (TEDIT.GETPOINT TSTREAM)))
+             (CL:WHEN (AND (ILEQ START END)
+                           (SETQ START (\TEDIT.CHTOPC START TEXTOBJ)))
+                 (SETQ END (\TEDIT.CHTOPC END TEXTOBJ))
+                 (for PC inpieces START when (EQ OBJ (PCONTENTS PC))
+                    do (RETURN (\TEDIT.PCTOCH PC TEXTOBJ)) repeatuntil (EQ PC END)))])])
+
+(TEDIT.FIND.OBJECT.BACKWARD
+  [LAMBDA (TSTREAM OBJ START END AGAIN)                      (* ; "Edited 10-May-2024 22:06 by rmk")
+                                                             (* ; "Edited 16-Mar-2024 10:03 by rmk")
+                                                             (* ; "Edited  6-Nov-2022 11:12 by rmk")
+                                                             (* ; "Edited  3-May-93 12:52 by jds")
+
+    (* ;; "Return the character number of OBJ in TSTREAM, if it occurs between START and  END and is the occurrence closest to END.  START defaults to 1, END defaults to current caret position (or one before, if AGAIN).")
+
+    (* ;; "If we were sure that a given object can appear only once in a document, we could just run the TEDIT.FIND.OBJECT with different defaults for START and END, but...")
+
+    (* ;; "We know that an object occupies its own singleton piece, so we don't need to worry about starting or ending in the middle of a piece.  We also don't need to test PTYPE, just look at PCONTENTS.")
+
+    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (CL:WHEN (IMAGEOBJP OBJ)
+        [LET [(TEXTOBJ (TEXTOBJ! (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM]
+             (SETQ START (IMAX 1 (OR START 1)))
+             (SETQ END (IMIN (OR END (SUB1 (TEDIT.GETPOINT TSTREAM)))
+                             (FGETTOBJ TEXTOBJ TEXTLEN)))
+             (CL:WHEN AGAIN
+
+                 (* ;; "Assume that we aren't interested in another match at the current position.")
+
+                 (ADD END -1))
+             (CL:WHEN (ILEQ START END)
+                 (SETQ START (\TEDIT.CHTOPC START TEXTOBJ))
+                 (SETQ END (\TEDIT.CHTOPC END TEXTOBJ))
+                 (for PC backpieces END when (EQ OBJ (PCONTENTS PC))
+                    do (RETURN (\TEDIT.PCTOCH PC TEXTOBJ)) repeatuntil (EQ PC START)))])])
 )
 
 
@@ -358,6 +374,95 @@
 (* ;; "Implementation")
 
 (DEFINEQ
+
+(\TEDIT.FIND
+  [LAMBDA (TSTREAM TARGET WILDCARDS? AGAIN START END)        (* ; "Edited 14-Mar-2025 18:42 by rmk")
+                                                             (* ; "Edited 11-Mar-2025 15:04 by rmk")
+                                                             (* ; "Edited 10-May-2024 21:55 by rmk")
+                                                             (* ; "Edited 24-Apr-2024 23:47 by rmk")
+                                                             (* ; "Edited 19-Jun-2023 22:27 by rmk")
+                                                            (* ; "Edited  6-May-2018 17:34 by rmk:")
+                                                             (* ; "Edited 30-May-91 20:56 by jds")
+
+    (* ;; "This returns the hit's (CH# DCL)  or NIL.")
+
+    (* ;; "If WILDCARDS?  is NIL then TEDIT.FIND returns just the start of a basic string-match.")
+
+    (* ;; "Otherwise it returns a list of (MATCHSTART MATCHEND) which is the start and end char positions of the match,")
+
+    (* ;; "RMK:  FIND isn't undoable, FIND-AGAIN is armed on meta-g.  No point in hiding a previous actual edit and then having to undo a find in order to undo the intended previous event. Or maybe undoing FIND would put you back where you started?")
+
+    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (CL:WHEN TARGET
+
+        (* ;; "* and # are implicitly quoted if not WILDCARDS?  This could be handled simply by calling CONS  instead of  \TEDIT.PARSE.SEARCHSTRING")
+
+        (CL:UNLESS END
+            (SETQ END (TEXTLEN (GETTSTR TSTREAM TEXTOBJ))))
+        (CL:UNLESS START
+            (SETQ START (TEDIT.GETPOINT TSTREAM)))
+        (CL:WHEN AGAIN                                       (* ; 
+                                                             "We aren't interested in the same hit")
+            (add START 1))
+        (CL:WHEN (ILEQ START END)
+            [LET (RESULT)
+                 (if (IMAGEOBJP TARGET)
+                     then (CL:WHEN (SETQ RESULT (TEDIT.FIND.OBJECT TSTREAM TARGET START END))
+                                 (LIST RESULT 1))
+                   elseif [NEQ 0 (NCHARS (SETQ TARGET (MKSTRING TARGET]
+                     then (CL:WHEN (SETQ RESULT (CL:IF WILDCARDS?
+                                                    (\TEDIT.WCFIND TSTREAM (\TEDIT.PARSE.SEARCHSTRING
+                                                                            TARGET NIL)
+                                                           START END)
+                                                    (\TEDIT.BASICFIND TSTREAM TARGET START END)))
+
+                              (* ;; "Switch from CHLAST to DCH")
+
+                              [LIST (CAR RESULT)
+                                    (ADD1 (IDIFFERENCE (CADR RESULT)
+                                                 (CAR RESULT])]))])
+
+(\TEDIT.FIND.BACKWARD
+  [LAMBDA (TSTREAM TARGET WILDCARDS? AGAIN START END)        (* ; "Edited 11-Mar-2025 15:07 by rmk")
+
+    (* ;; "This returns the hit's (CH# DCL)  or NIL.")
+
+    (* ;; "The search is confined to the characters between START and END.  It runs backwards from END looking for the nearest match, and returns the character positions of that match.")
+
+    (* ;; "If WILDCARDS?, the value is the pair (MATCHSTART  MATCHEND) for that match, since the caller doesn't know the length.  But if not WILDCARDS?, just the match-start, since the caller knows the match is (NCHARS TARGETSTRING) long.  This is quirky, but that's the way it is documented.")
+
+    (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (CL:WHEN TARGET
+        [LET (RESULT)
+             (if (IMAGEOBJP TARGET)
+                 then (CL:WHEN (SETQ RESULT (TEDIT.FIND.OBJECT.BACKWARD TSTREAM TARGET START END 
+                                                   AGAIN))
+                             (LIST RESULT 1))
+               elseif [NEQ 0 (NCHARS (SETQ TARGET (MKSTRING TARGET]
+                 then (SETQ START (IMAX 1 (OR START 1)))
+                      (SETQ END (IMIN (OR END (SUB1 (TEDIT.GETPOINT TSTREAM)))
+                                      (FGETTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM)
+                                             TEXTLEN)))
+                      (CL:WHEN AGAIN
+
+                          (* ;; 
+                         "Assume that we aren't interested in another match at the current position.")
+
+                          (ADD END -1))
+                      (CL:WHEN (ILEQ START END)
+                          (CL:WHEN (SETQ RESULT (CL:IF WILDCARDS?
+                                                    (\TEDIT.WCFIND.BACKWARD TSTREAM (
+                                                                            \TEDIT.PARSE.SEARCHSTRING
+                                                                                     TARGET T)
+                                                           START END)
+                                                    (\TEDIT.BASICFIND.BACKWARD TSTREAM TARGET START 
+                                                           END)))
+
+                              (* ;; "Switch from CHLAST to DCH")
+
+                              [LIST (CAR RESULT)
+                                    (ADD1 (IDIFFERENCE (CADR RESULT)
+                                                 (CAR RESULT]))])])
 
 (\TEDIT.WCFIND
   [LAMBDA (TSTREAM TARGETLIST START END)                     (* ; "Edited 26-Jun-2024 08:04 by rmk")
@@ -582,8 +687,10 @@
                                                     (DREVERSE $$VAL))])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (784 23475 (TEDIT.FIND 794 . 2793) (TEDIT.FIND.BACKWARD 2795 . 5117) (TEDIT.SUBSTITUTE 
-5119 . 18822) (TEDIT.NEXT 18824 . 23473)) (23508 38204 (\TEDIT.WCFIND 23518 . 27037) (\TEDIT.BASICFIND
- 27039 . 29398) (\TEDIT.WCFIND.BACKWARD 29400 . 32864) (\TEDIT.BASICFIND.BACKWARD 32866 . 35123) (
-\TEDIT.PARSE.SEARCHSTRING 35125 . 38202)))))
+  (FILEMAP (NIL (967 20027 (TEDIT.FIND 977 . 1561) (TEDIT.FIND.SETSEL 1563 . 2028) (TEDIT.FIND.BACKWARD 
+2030 . 2609) (TEDIT.SUBSTITUTE 2611 . 15430) (TEDIT.NEXT 15432 . 20025)) (20028 23457 (
+TEDIT.FIND.OBJECT 20038 . 21538) (TEDIT.FIND.OBJECT.BACKWARD 21540 . 23455)) (23490 43644 (\TEDIT.FIND
+ 23500 . 26436) (\TEDIT.FIND.BACKWARD 26438 . 28956) (\TEDIT.WCFIND 28958 . 32477) (\TEDIT.BASICFIND 
+32479 . 34838) (\TEDIT.WCFIND.BACKWARD 34840 . 38304) (\TEDIT.BASICFIND.BACKWARD 38306 . 40563) (
+\TEDIT.PARSE.SEARCHSTRING 40565 . 43642)))))
 STOP

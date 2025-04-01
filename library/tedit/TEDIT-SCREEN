@@ -1,12 +1,14 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 6-Mar-2025 11:42:48" {WMEDLEY}<library>TEDIT>TEDIT-SCREEN.;867 189057 
+(FILECREATED "30-Mar-2025 10:02:52" {WMEDLEY}<library>TEDIT>TEDIT-SCREEN.;871 189269 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.FORMATLINE)
+      :CHANGES-TO (FNS \TEDIT.VALID.LINES \TEDIT.PANE.CREATELINES \TEDIT.SUFFIXLINE.CREATE 
+                       \TEDIT.LASTVALIDLINE \TEDIT.LINES.ABOVE \TEDIT.UPDATE.LINES \TEDIT.FORMATLINE)
+                  (RECORDS LINEDESCRIPTOR)
 
-      :PREVIOUS-DATE "25-Feb-2025 10:40:05" {WMEDLEY}<library>TEDIT>TEDIT-SCREEN.;866)
+      :PREVIOUS-DATE " 6-Mar-2025 11:42:48" {WMEDLEY}<library>TEDIT>TEDIT-SCREEN.;867)
 
 
 (PRETTYCOMPRINT TEDIT-SCREENCOMS)
@@ -134,8 +136,8 @@
            LMARK                                             (* ; "One of SOLID, GREY, NIL.  Tells what kind of special-line marker should be put in the left margin for this paragraph.  (For hardcopy, can also be an indicator for special processing?)")
            LTEXTSTREAM                                       (* ; "A cached textstream that this line took its text from.  Filled in by \TEDIT.FORMATLINE only in hardcopy, used temporarily and the cleared by \TEDIT.FORMATBOX to avoid the circularity.")
            NIL                                               (* ; "Was CACHE: A cached THISLINE, for keeping hardcopy info around while we crunch with the line descriptors to make things fit.  Now:  THISLINE comes from TEXTOBJ")
-           NIL                                               (* ; 
-                      "Was LDOBJ: The object which lies behind this line of text, for updating, etc.")
+           LFIRSTSEPR                                        (* ; 
+          "Character position of the first separator on the line, for detecting the last valid line.")
            LPARALOOKS                                        (* ; 
                                          "The paragraph looks for this line's paragraph (eventually)")
            (NIL FLAG)                                        (* ; 
@@ -687,6 +689,7 @@
 
 (\TEDIT.FORMATLINE
   [LAMBDA (TSTREAM CH#1 LINE REGION IMAGESTREAM FORMATTINGSTATE)
+                                                             (* ; "Edited 29-Mar-2025 11:39 by rmk")
                                                              (* ; "Edited  6-Mar-2025 11:42 by rmk")
                                                              (* ; "Edited 25-Feb-2025 10:39 by rmk")
                                                              (* ; "Edited 19-Feb-2025 13:36 by rmk")
@@ -762,7 +765,7 @@
            (BOXSTREAM IMAGESTREAM)
            THISLINE LINETYPE WIDTH WMARGIN SCALE PARALOOKS RIGHTMARGIN HASKERN PC CHARSLOT PREVSP 
            1STLN CHNOB FORCED-END CHNO LX1 TX TXB FONT CHARSLOTB TABPENDING PREVHYPH PREVDHYPH 
-           START-OF-PIECE UNBREAKABLE OLDPIECE OLDPCCHARSLEFT OLDCARETLOOKS)
+           START-OF-PIECE UNBREAKABLE OLDPIECE OLDPCCHARSLEFT OLDCARETLOOKS FIRSTSEPR)
           (DECLARE (SPECVARS TEXTOBJ LINETYPE CHARSLOT CHNO OFFSET ASCENTC DESCENTC FONT 
                           START-OF-PIECE HASKERN UNBREAKABLE))
           (CL:UNLESS LINE
@@ -970,7 +973,8 @@
                                  (* ;; "Not including this space in the justifying chain, so it won't expand.  If that looks odd, let it fall through to the PUSHCHAR below.")
 
                                      (PUSHCHAR CHARSLOT CH DX)
-                              else (SPACEBREAK)
+                              else (CL:UNLESS FIRSTSEPR (SETQ FIRSTSEPR CHNO))
+                                   (SPACEBREAK)
                                    (add TX DX)
                                    (SAVEBREAK) 
 
@@ -985,6 +989,8 @@
 
                           (* ;; "Remove all prior candidate break points and expandable spaces")
 
+                          (CL:UNLESS (OR FIRSTSEPR UNBREAKABLE)
+                                 (SETQ FIRSTSEPR CHNO))
                           (FORGETPREVIOUSBREAK)
                           (SETQ PREVSP (\TEDIT.FORMATLINE.PURGE.SPACES PREVSP))
 
@@ -1180,6 +1186,7 @@
      (* ;; 
      "All the line information is now in our variables.  Migrate to the LINE and THISLINE fields. ")
 
+          (FSETLD LINE LFIRSTSEPR (OR FIRSTSEPR (ADD1 CHNO)))(* ; "For detecting last valid line")
           (FSETLD LINE LCHAR1 CH#1)
           (FSETLD LINE LCHARLAST CHNO)
           (FSETLD LINE LX1 LX1)                              (* ; 
@@ -1856,7 +1863,8 @@
              T)])
 
 (\TEDIT.LINES.ABOVE
-  [LAMBDA (TSTREAM CHN BOTTOMY)                              (* ; "Edited 24-Nov-2024 11:47 by rmk")
+  [LAMBDA (TSTREAM CHN BOTTOMY)                              (* ; "Edited 30-Mar-2025 09:09 by rmk")
+                                                             (* ; "Edited 24-Nov-2024 11:47 by rmk")
                                                              (* ; "Edited 20-Nov-2024 12:37 by rmk")
                                                              (* ; "Edited 17-Nov-2024 16:02 by rmk")
                                                              (* ; "Edited  2-Nov-2024 23:21 by rmk")
@@ -1874,27 +1882,32 @@
 
     (* ;; "We assume this is not called on an empty text (TEXTLEN = 0), since we wouldn't know what to return. Caller should check that.")
 
+    (* ;; "If CHN is a line, this creates all lines preceding it in its paragraph.")
+
+    (CL:WHEN (type? LINEDESCRIPTOR CHN)
+        (SETQ BOTTOMY (FGETLD CHN YTOP))
+        (SETQ CHN (SUB1 (FGETLD CHN LCHAR1))))
     (bind LTOP LBOT LINE HEIGHT CHNO (TEXTOBJ _ (GETTSTR TSTREAM TEXTOBJ))
        first (CL:WHEN (IGREATERP CHN (TEXTLEN TEXTOBJ))
                  (SETQ CHN (TEXTLEN TEXTOBJ)))
              (SETQ CHNO (\TEDIT.PREVIOUS.LINEBREAK TSTREAM CHN)) 
-                                                             (* ; "The end-of-line character")
-             (SETQ LTOP (\TEDIT.FORMATLINE TSTREAM CHNO))    (* ; "A line containiing only the EOL")
+                                                             (* ; "The character after the EOL")
+             (SETQ LTOP (\TEDIT.FORMATLINE TSTREAM CHNO))    (* ; "The line after the EOL")
              (SETQ LBOT LTOP)
-             (SETQ CHNO (FGETLD LTOP LCHARLIM)) until (IGREATERP CHNO CHN)
-       do (SETQ LINE (\TEDIT.FORMATLINE TSTREAM CHNO))
-          (LINKLD LBOT LINE)
-          (SETQ LBOT LINE)
-          (SETQ CHNO (FGETLD LINE LCHARLIM)) finally 
+             (SETQ CHNO (FGETLD LTOP LCHARLIM))              (* ; "First char of second line")
+       until (IGREATERP CHNO CHN) do (SETQ LINE (\TEDIT.FORMATLINE TSTREAM CHNO))
+                                     (LINKLD LBOT LINE)
+                                     (SETQ LBOT LINE)
+                                     (SETQ CHNO (FGETLD LINE LCHARLIM))
+       finally 
 
-                                                   (* ;; 
+             (* ;; 
            "We now have the line chain, but they aren't positioned.  Set the YBOT of LBOT to BOTTOMY")
 
-                                                   (CL:WHEN BOTTOMY
-                                                       (for L (YB _ BOTTOMY) backlines LBOT
-                                                          do (SETYBOT L YB)
-                                                             (add YB (FGETLD L LHEIGHT))))
-                                                   (RETURN (CONS LTOP LBOT])
+             (CL:WHEN BOTTOMY
+                 (for L (YB _ BOTTOMY) backlines LBOT do (SETYBOT L YB)
+                                                         (add YB (FGETLD L LHEIGHT))))
+             (RETURN (CONS LTOP LBOT])
 )
 
 (RPAQ? TEDIT.LINELEADING.BELOW NIL)
@@ -2346,7 +2359,8 @@
                            1)])
 
 (\TEDIT.UPDATE.LINES
-  [LAMBDA (TEXTOBJ REASON FIRSTCHANGEDCHNO NCHARSCHANGED)    (* ; "Edited  1-Feb-2025 10:34 by rmk")
+  [LAMBDA (TEXTOBJ REASON FIRSTCHANGEDCHNO NCHARSCHANGED)    (* ; "Edited 30-Mar-2025 10:02 by rmk")
+                                                             (* ; "Edited  1-Feb-2025 10:34 by rmk")
                                                              (* ; "Edited 21-Jan-2025 13:25 by rmk")
                                                              (* ; "Edited  7-Jan-2025 11:55 by rmk")
                                                              (* ; "Edited  7-Dec-2024 21:52 by rmk")
@@ -2381,7 +2395,7 @@
                (CL:UNLESS NCHARSCHANGED
                    (SETQ NCHARSCHANGED (FGETTOBJ TEXTOBJ TEXTLEN)))]
         (\TEDIT.SHOWSEL NIL NIL TEXTOBJ)
-        (for PANE VALIDS LASTVALID NEXTVALID LASTGAPLINE UPPERBITMAPLINES BITMAPLINES inpanes TEXTOBJ
+        (for PANE VALIDS LASTVALID NEXTVALID LASTGAPLINE BITMAPLINES inpanes TEXTOBJ
            when (SETQ VALIDS (\TEDIT.VALID.LINES PANE FIRSTCHANGEDCHNO NCHARSCHANGED REASON
                                     (FGETTOBJ TEXTOBJ STREAMHINT)))
            do 
@@ -2405,14 +2419,11 @@
 
               (* ;; "If LASTVALID is not visible (above the pane), make sure that its NEXT is linked to the PANE's prefix")
 
-              (CL:WHEN (IGEQ (FGETLD LASTVALID YBOT)
-                             (PANETOP PANE))
-                  (LINKLD (PANEPREFIX PANE)
-                         (FGETLD LASTVALID NEXTLINE)))
-              (\TEDIT.SHIFTLINES LASTVALID PANE TEXTOBJ BITMAPLINES UPPERBITMAPLINES)))])
+              (\TEDIT.SHIFTLINES LASTVALID PANE TEXTOBJ BITMAPLINES)))])
 
 (\TEDIT.PANE.CREATELINES
-  [LAMBDA (TEXTOBJ PANE LCHARLAST YBOT)                      (* ; "Edited  8-Feb-2025 23:52 by rmk")
+  [LAMBDA (TEXTOBJ PANE LCHARLAST YBOT)                      (* ; "Edited 28-Mar-2025 20:55 by rmk")
+                                                             (* ; "Edited  8-Feb-2025 23:52 by rmk")
                                                              (* ; "Edited 29-Nov-2024 09:14 by rmk")
                                                              (* ; "Edited 20-Nov-2024 14:26 by rmk")
                                                              (* ; "Edited 17-Nov-2024 19:53 by rmk")
@@ -2455,7 +2466,8 @@
                  LTRUEDESCENT _ 0
                  LPARALOOKS _ TEDIT.DEFAULT.FMTSPEC
                  1STLN _ NIL
-                 LSTLN _ NIL))
+                 LSTLN _ NIL
+                 LFIRSTSEPR _ MAX.FIXP))
          (SETYBOT PREFIX (OR YBOT (PANEHEIGHT PANE)))
          (FSETPANEPROP (PANEPROPS PANE)
                 PREFIXLINE PREFIX)
@@ -2463,7 +2475,8 @@
          PREFIX])
 
 (\TEDIT.SUFFIXLINE.CREATE
-  [LAMBDA (PANE TEXTOBJ PREVLINE)                            (* ; "Edited 29-Nov-2024 10:54 by rmk")
+  [LAMBDA (PANE TEXTOBJ PREVLINE)                            (* ; "Edited 28-Mar-2025 20:56 by rmk")
+                                                             (* ; "Edited 29-Nov-2024 10:54 by rmk")
                                                              (* ; "Edited 22-Nov-2024 10:22 by rmk")
                                                              (* ; "Edited 20-Nov-2024 14:25 by rmk")
 
@@ -2480,7 +2493,7 @@
          (CL:WHEN (FGETLD PREVLINE FORCED-END)
              (SETQ EMPTYLINE (create LINEDESCRIPTOR using SUFFIX LDUMMY _ NIL LCHARLIM _
                                                           (FGETLD SUFFIX LCHAR1)
-                                                          FORCED-END _ NIL))
+                                                          FORCED-END _ NIL LFIRSTSEPR _ MAX.FIXP))
              (LINKLD PREVLINE EMPTYLINE)
              (LINKLD EMPTYLINE SUFFIX))
          SUFFIX])
@@ -2568,6 +2581,8 @@
 
 (\TEDIT.VALID.LINES
   [LAMBDA (PANE FIRSTCHANGEDCHNO NCHARSCHANGED REASON TSTREAM)
+                                                             (* ; "Edited 30-Mar-2025 09:12 by rmk")
+                                                             (* ; "Edited 27-Mar-2025 12:40 by rmk")
                                                              (* ; "Edited 21-Jan-2025 15:22 by rmk")
                                                              (* ; "Edited  6-Jan-2025 15:19 by rmk")
                                                              (* ; "Edited 22-Nov-2024 16:54 by rmk")
@@ -2615,9 +2630,10 @@
 
     (* ;; "Note that this is mostly an optimization to avoid unnecessary reformatting and redisplaying of still-valid lines in favor of bitbltting a block of their currently visible images.  Smashing all lines to NIL and refilling each pane would also give the correct behavior, but slower.  Intermediate would be smashing all lines below the last valid.")
 
+    (* ;; "LASTCHANGEDCHNO is in the before-change sequence.  I.e., if FIRST is 5 and  6 were being deleted, then it is 10.  But it doesn't correspond to the surviving line positions after they have been adjusted.  It would have to be adjusted too.")
+
     (PROG ((TEXTOBJ (fetch (TEXTSTREAM TEXTOBJ) of TSTREAM))
            (LASTCHANGEDCHNO (SUB1 (IPLUS FIRSTCHANGEDCHNO NCHARSCHANGED)))
-           (PREFIXLINE (PANEPREFIX PANE))
            (SUFFIXLINE (PANESUFFIX PANE))
            (DELTA (SELECTQ REASON
                       (INSERTION NCHARSCHANGED)
@@ -2625,15 +2641,10 @@
                       ((CHANGED LOOKS) 
                            NIL)
                       (\TEDIT.THELP "BAD REASONS FOR VALID LINES")))
-           FIRSTVISIBLECHNO LASTVISIBLECHNO FIRSTCHANGEDLINE LASTCHANGEDLINE LASTVALIDLINE 
-           NEXTVALIDLINE)
+           FIRSTCHANGEDLINE LASTCHANGEDLINE LASTVALIDLINE NEXTVALIDLINE LINESABOVE)
           (CL:WHEN (EQ 0 (TEXTLEN TEXTOBJ))                  (* ; "Empty document")
-              (RETURN (CONS PREFIXLINE)))
-          (CL:UNLESS SUFFIXLINE
-              (\TEDIT.THELP "NO SUFFIXLINE")
-              (RETURN NIL))
-          (SETQ LASTVISIBLECHNO (SUB1 (FGETLD SUFFIXLINE LCHAR1)))
-          (CL:WHEN (IGREATERP FIRSTCHANGEDCHNO LASTVISIBLECHNO)
+              (RETURN (CONS (PANEPREFIX PANE))))
+          (CL:WHEN (IGEQ FIRSTCHANGEDCHNO (FGETLD SUFFIXLINE LCHAR1))
                                                              (* ; 
                                                              "Change after previously visible lines")
               (CL:UNLESS (ILEQ LASTCHANGEDCHNO (TEXTLEN TEXTOBJ))
@@ -2645,17 +2656,13 @@
 
               (\TEDIT.INSERTLINE (\TEDIT.FORMATLINE TEXTOBJ FIRSTCHANGEDCHNO)
                      SUFFIXLINE))
-          (SETQ FIRSTVISIBLECHNO (FGETLD PREFIXLINE LCHARLIM))
-          (SETQ FIRSTCHANGEDLINE (find L inlines (FGETLD PREFIXLINE NEXTLINE)
-                                    suchthat (FWITHINLINEP FIRSTCHANGEDCHNO L)))
-          (CL:UNLESS FIRSTCHANGEDLINE                        (* ; "Changes are not visible")
+          (SETQ FIRSTCHANGEDLINE (find L inlines (PANEPREFIX PANE) suchthat (FWITHINLINEP 
+                                                                                   FIRSTCHANGEDCHNO L
+                                                                                   )))
+          (CL:UNLESS FIRSTCHANGEDLINE                        (* ; "Change is below PANE")
               (RETURN NIL))
 
-     (* ;; "Change is visible in PANE, look for the last valid line (in PANE).")
-
-          (SETQ LASTVALIDLINE (\TEDIT.LASTVALIDLINE FIRSTCHANGEDLINE FIRSTVISIBLECHNO PANE TSTREAM))
-
-     (* ;; "Now for the after-change lines")
+     (* ;; "Change starts above or inside PANE, Where does it end?")
 
           (SETQ LASTCHANGEDLINE (find L inlines FIRSTCHANGEDLINE suchthat (FWITHINLINEP 
                                                                                  LASTCHANGEDCHNO L)))
@@ -2665,6 +2672,10 @@
      "Last changed line is visible, its changes may cause character to shift to or from lower lines.")
 
               (SETQ NEXTVALIDLINE (\TEDIT.NEXTVALIDLINE LASTCHANGEDLINE TSTREAM)))
+
+     (* ;; "")
+
+          (SETQ LASTVALIDLINE (\TEDIT.LASTVALIDLINE FIRSTCHANGEDLINE FIRSTCHANGEDCHNO PANE TSTREAM))
           (CL:WHEN NEXTVALIDLINE
               (FSETLD NEXTVALIDLINE PREVLINE NIL)
               (CL:WHEN DELTA
@@ -2683,7 +2694,8 @@
               (RETURN (CONS LASTVALIDLINE NEXTVALIDLINE)))])
 
 (\TEDIT.LASTVALIDLINE
-  [LAMBDA (FIRSTCHANGEDLINE FIRSTCHANGEDCHNO PANE TSTREAM)   (* ; "Edited 18-Feb-2025 12:45 by rmk")
+  [LAMBDA (FIRSTCHANGEDLINE FIRSTCHANGEDCHNO PANE TSTREAM)   (* ; "Edited 30-Mar-2025 10:00 by rmk")
+                                                             (* ; "Edited 18-Feb-2025 12:45 by rmk")
                                                              (* ; "Edited 29-Nov-2024 09:14 by rmk")
                                                              (* ; "Edited 20-Nov-2024 12:37 by rmk")
                                                              (* ; "Edited 18-Nov-2024 23:16 by rmk")
@@ -2701,43 +2713,29 @@
 
     (* ;; "A line L is impervious to a change in L+1 if it has a forced end, or if L has at least one separator (space, tab) prior to its change point.  The change point is FIRSTCHANGEDCHNO for the first line.  If we have to go to earlier lines, then any separator anywhere on the line (at or before LCHARLAST) will stop the back-propagation.")
 
-    (LET* ((PREFIXLINE (PANEPREFIX PANE))
-           (FIRSTPANECHAR (AND (FGETLD PREFIXLINE NEXTLINE)
-                               (FGETLD (FGETLD PREFIXLINE NEXTLINE)
-                                      LCHAR1)))
-           PREV)
-          (if (bind (L _ FIRSTCHANGEDLINE)
-                    (LIMCHAR _ (SUB1 FIRSTCHANGEDCHNO)) while (SETQ PREV (FGETLD L PREVLINE))
-                 do 
-                    (* ;; "The previous line is valid if its ending was forced, or if L has at least one space/tab earlier then the limit.  Note that PREFIXLINE  is always forced-end, it stops the iteration..")
+    (if (ILESSP (FGETLD FIRSTCHANGEDLINE LFIRSTSEPR)
+               FIRSTCHANGEDCHNO)
+        then (FGETLD FIRSTCHANGEDLINE PREVLINE)
+      elseif (for L (TOPLINE _ (PANETOPLINE PANE)) backlines (FGETLD FIRSTCHANGEDLINE PREVLINE)
+                do 
+                   (* ;; "Line with a forced end is valid")
 
-                    (CL:WHEN (FGETLD PREV FORCED-END)
-                        (RETURN (if (NEQ PREFIXLINE PREV)
-                                    then PREV
-                                  elseif (EQ 1 FIRSTPANECHAR)
-                                    then                     (* ; "PANE is at the top")
-                                         PREFIXLINE)))
-                    (\TEDIT.TEXTSETFILEPTR TSTREAM (SUB1 (FGETLD L LCHAR1)))
-                    (CL:WHEN [find I from 1 to (IDIFFERENCE LIMCHAR (FGETLD L LCHAR1))
-                                suchthat (MEMB (BIN TSTREAM)
-                                               (CHARCODE (SPACE TAB]
-                           (RETURN PREV))
-                    (SETQ L PREV)
-                    (SETQ LIMCHAR (FGETLD L LCHARLIM)) repeatwhile L)
-            else 
-                 (* ;; "None of the existing lines above FIRSTCHANGEDLINE are valid.  We return a valid line that is positioned just above PANE such that everything past its LCHARLAST is valid.   That line has no current bitmap and will not be displayed, but it signals where the gap begins.")
+                   (CL:WHEN (FGETLD L FORCED-END)
+                          (RETURN L)) 
 
-                 (* ;; 
-                "Note that that line is not linked into the chain, PANEPREFIX doesn't know about it.")
+                   (* ;; "The prev of a line containing an internal sepr is valid")
 
-                 (* ;; "We could go forward from the CAR or backwards from the CADR to find the valid line just above the pane. Maybe fewer lines backwards, if we're working at the bottom of a paragraph?")
-
-                 (find L (PTOP _ (PANEHEIGHT PANE)) backlines (CDR (\TEDIT.LINES.ABOVE TSTREAM
-                                                                          (SUB1 FIRSTPANECHAR)
-                                                                          (FGETLD FIRSTCHANGEDLINE 
-                                                                                 YTOP)))
-                    suchthat (IGEQ (FGETLD L YBOT)
-                                   PTOP])
+                   (CL:WHEN (ILESSP (FGETLD L LFIRSTSEPR)
+                                   (FGETLD L LCHARLAST))
+                       (RETURN (FGETLD L PREVLINE))) finally (CL:WHEN (SETQ TOPLINE
+                                                                       (CDR (\TEDIT.LINES.ABOVE
+                                                                             TSTREAM TOPLINE)))
+                                                                 (FSETLD (PANEPREFIX PANE)
+                                                                        LCHARLIM
+                                                                        (FGETLD TOPLINE LCHAR1))
+                                                                 (LINKLD (PANEPREFIX PANE)
+                                                                        TOPLINE)
+                                                                 (RETURN (PANEPREFIX PANE)))])
 
 (\TEDIT.NEXTVALIDLINE
   [LAMBDA (LASTCHANGEDLINE TSTREAM)                          (* ; "Edited 21-Jan-2025 15:27 by rmk")
@@ -2887,21 +2885,21 @@
                  (\TEDIT.LINE.TALLP LINE PHEIGHT))))])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (27983 30199 (\TEDIT.LINEDESCRIPTOR.DEFPRINT 27993 . 30197)) (37604 120468 (
-\TEDIT.FORMATLINE 37614 . 73135) (\TEDIT.FORMATLINE.SETUP.PARA 73137 . 78303) (
-\TEDIT.FORMATLINE.HORIZONTAL 78305 . 82878) (\TEDIT.FORMATLINE.VERTICAL 82880 . 85331) (
-\TEDIT.FORMATLINE.JUSTIFY 85333 . 91354) (\TEDIT.FORMATLINE.TABS 91356 . 99384) (\TEDIT.SCALE.TABS 
-99386 . 100177) (\TEDIT.FORMATLINE.PURGE.SPACES 100179 . 101606) (\TEDIT.FORMATLINE.FLUSH.SOFTHYPHEN 
-101608 . 102509) (\TEDIT.FORMATLINE.EMPTY 102511 . 107538) (\TEDIT.FORMATLINE.UPDATELOOKS 107540 . 
-113662) (\TEDIT.FORMATLINE.LASTLEGAL 113664 . 117204) (\TEDIT.LINES.ABOVE 117206 . 120466)) (120585 
-122500 (\TLVALIDATE 120595 . 122498)) (122698 144236 (\TEDIT.DISPLAYLINE 122708 . 136348) (
-\TEDIT.DISPLAYLINE.TABS 136350 . 139154) (\TEDIT.LINECACHE 139156 . 139884) (\TEDIT.CREATE.LINECACHE 
-139886 . 140722) (\TEDIT.BLTCHAR 140724 . 143351) (\TEDIT.DIACRITIC.SHIFT 143353 . 144234)) (144851 
-189034 (\TEDIT.BACKFORMAT 144861 . 147415) (\TEDIT.PREVIOUS.LINEBREAK 147417 . 150140) (
-\TEDIT.UPDATE.LINES 150142 . 155012) (\TEDIT.PANE.CREATELINES 155014 . 158117) (
-\TEDIT.SUFFIXLINE.CREATE 158119 . 159494) (\TEDIT.LINES.BELOW 159496 . 163957) (\TEDIT.MEASURED.LINES 
-163959 . 165859) (\TEDIT.VALID.LINES 165861 . 174122) (\TEDIT.LASTVALIDLINE 174124 . 179049) (
-\TEDIT.NEXTVALIDLINE 179051 . 180481) (\TEDIT.CLEARPANE.BELOW.LINE 180483 . 182589) (\TEDIT.INSERTLINE
- 182591 . 183977) (\TEDIT.LINE.BOTTOM 183979 . 187209) (\TEDIT.SHOW.AT.BOTTOMP 187211 . 188321) (
-\TEDIT.SHOW.AT.TOPP 188323 . 189032)))))
+  (FILEMAP (NIL (28178 30394 (\TEDIT.LINEDESCRIPTOR.DEFPRINT 28188 . 30392)) (37799 121333 (
+\TEDIT.FORMATLINE 37809 . 73751) (\TEDIT.FORMATLINE.SETUP.PARA 73753 . 78919) (
+\TEDIT.FORMATLINE.HORIZONTAL 78921 . 83494) (\TEDIT.FORMATLINE.VERTICAL 83496 . 85947) (
+\TEDIT.FORMATLINE.JUSTIFY 85949 . 91970) (\TEDIT.FORMATLINE.TABS 91972 . 100000) (\TEDIT.SCALE.TABS 
+100002 . 100793) (\TEDIT.FORMATLINE.PURGE.SPACES 100795 . 102222) (\TEDIT.FORMATLINE.FLUSH.SOFTHYPHEN 
+102224 . 103125) (\TEDIT.FORMATLINE.EMPTY 103127 . 108154) (\TEDIT.FORMATLINE.UPDATELOOKS 108156 . 
+114278) (\TEDIT.FORMATLINE.LASTLEGAL 114280 . 117820) (\TEDIT.LINES.ABOVE 117822 . 121331)) (121450 
+123365 (\TLVALIDATE 121460 . 123363)) (123563 145101 (\TEDIT.DISPLAYLINE 123573 . 137213) (
+\TEDIT.DISPLAYLINE.TABS 137215 . 140019) (\TEDIT.LINECACHE 140021 . 140749) (\TEDIT.CREATE.LINECACHE 
+140751 . 141587) (\TEDIT.BLTCHAR 141589 . 144216) (\TEDIT.DIACRITIC.SHIFT 144218 . 145099)) (145716 
+189246 (\TEDIT.BACKFORMAT 145726 . 148280) (\TEDIT.PREVIOUS.LINEBREAK 148282 . 151005) (
+\TEDIT.UPDATE.LINES 151007 . 155755) (\TEDIT.PANE.CREATELINES 155757 . 159008) (
+\TEDIT.SUFFIXLINE.CREATE 159010 . 160516) (\TEDIT.LINES.BELOW 160518 . 164979) (\TEDIT.MEASURED.LINES 
+164981 . 166881) (\TEDIT.VALID.LINES 166883 . 175396) (\TEDIT.LASTVALIDLINE 175398 . 179261) (
+\TEDIT.NEXTVALIDLINE 179263 . 180693) (\TEDIT.CLEARPANE.BELOW.LINE 180695 . 182801) (\TEDIT.INSERTLINE
+ 182803 . 184189) (\TEDIT.LINE.BOTTOM 184191 . 187421) (\TEDIT.SHOW.AT.BOTTOMP 187423 . 188533) (
+\TEDIT.SHOW.AT.TOPP 188535 . 189244)))))
 STOP

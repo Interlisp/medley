@@ -56,7 +56,7 @@ export HAS_GIT
 is_git_dir () {
   if ${HAS_GIT}
   then
-    return $(cd "$1"; git status >/dev/null 2>/dev/null; echo $?)
+    return $(git -C "$1" rev-parse >/dev/null 2>/dev/null; echo $?)
   else
     return 1
   fi

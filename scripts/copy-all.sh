@@ -36,9 +36,9 @@ main() {
 	fi
 
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS library                        \
+	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}"/library         \
 	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM library                   \
+	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}"/library    \
 	    | sed -e "s#${MEDLEYDIR}/##g"
 
 

@@ -1,29 +1,29 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "31-Mar-2024 06:57:25" {DSK}<home>larry>il>medley>lispusers>WHEELSCROLL.;2 9911   
+(FILECREATED "29-Mar-2025 20:15:01" {WMEDLEY}<lispusers>WHEELSCROLL.;39 10966  
 
-      :EDIT-BY "lmm"
+      :EDIT-BY rmk
 
       :CHANGES-TO (VARS WHEELSCROLLCOMS)
-                  (FNS ENABLEWHEELSCROLL)
 
-      :PREVIOUS-DATE " 2-Oct-2023 10:15:55" {DSK}<home>larry>il>medley>lispusers>WHEELSCROLL.;1)
+      :PREVIOUS-DATE "16-Mar-2025 18:23:44" {WMEDLEY}<lispusers>WHEELSCROLL.;36)
 
 
 (PRETTYCOMPRINT WHEELSCROLLCOMS)
 
 (RPAQQ WHEELSCROLLCOMS
        [(FNS ENABLEWHEELSCROLL WHEELSCROLL WHEELSCROLL.DOIT INSTALL-WHEELSCROLL)
-        
-        (* ;; "These are the highest meta-ctrl characters, they will be unaffected by teh state of ctrl and meta mode keys")
-
-        (DECLARE%: EVAL@COMPILE DONTCOPY (CONSTANTS * WHEELSCROLLCHARS))
-        (GLOBALVARS WHEELSCROLLENABLED WHEELSCROLLDELTA WHEELSCROLLSETTLETIME \WHEELSCROLLINPROGRESS)
+        (GLOBALVARS WHEELSCROLLENABLED WHEELSCROLLDELTA HWHEELSCROLLDELTA WHEELSCROLLSETTLETIME 
+               \WHEELSCROLLINPROGRESS)
         
         (* ;; "To restore the keyactions for PAD..., if the keyaction table has been reinitialized")
 
         [ADDVARS (AFTERSYSOUTFORMS (AND WHEELSCROLLENABLED (ENABLEWHEELSCROLL T)))
                (AFTERMAKESYSFORMS (AND WHEELSCROLLENABLED (ENABLEWHEELSCROLL T]
+        
+        (* ;; "These are the highest meta-ctrl characters, they will be unaffected by the state of ctrl and meta mode keys. Should be moved to Function")
+
+        (ALISTS (CHARACTERNAMES WHEELSCROLL-UP WHEELSCROLL-DOWN WHEELSCROLL-LEFT WHEELSCROLL-RIGHT))
         (INITVARS (WHEELSCROLLENABLED NIL)
                (WHEELSCROLLDELTA 20)
                (HWHEELSCROLLDELTA NIL)
@@ -34,7 +34,8 @@
 (DEFINEQ
 
 (ENABLEWHEELSCROLL
-  [LAMBDA (ON EXCLUDEHORIZONTAL)                             (* ; "Edited 31-Mar-2024 06:30 by lmm")
+  [LAMBDA (ON EXCLUDEHORIZONTAL)                             (* ; "Edited 14-Mar-2025 18:27 by rmk")
+                                                             (* ; "Edited 31-Mar-2024 06:30 by lmm")
                                                              (* ; "Edited  2-Oct-2023 10:05 by rmk")
                                                            (* ; "Edited 23-Oct-2021 16:31 by larry")
                                                             (* ; "Edited 11-Jun-2021 12:50 by rmk:")
@@ -49,14 +50,14 @@
 
              (for KAT in (LIST \CURRENTKEYACTION \COMMANDKEYACTION \DEFAULTKEYACTION)
                 do (for K in [if EXCLUDEHORIZONTAL
-                                 then `((PAD1 ,\WSUP)
-                                        (PAD2 ,\WSDOWN)
+                                 then `((PAD1 ,(CHARCODE WHEELSCROLL-UP))
+                                        (PAD2 ,(CHARCODE WHEELSCROLL-DOWN))
                                         (PAD4 IGNORE)
                                         (PAD5 IGNORE))
-                               else `((PAD1 ,\WSUP)
-                                      (PAD2 ,\WSDOWN)
-                                      (PAD4 ,\WSLEFT)
-                                      (PAD5 ,\WSRIGHT]
+                               else `((PAD1 ,(CHARCODE WHEELSCROLL-UP))
+                                      (PAD2 ,(CHARCODE WHEELSCROLL-DOWN))
+                                      (PAD4 ,(CHARCODE WHEELSCROLL-LEFT))
+                                      (PAD5 ,(CHARCODE WHEELSCROLL-RIGHT]
                       do (KEYACTION (CAR K)
                                 (CONS (CL:IF (EQ (CADR K)
                                                  'IGNORE)
@@ -84,45 +85,56 @@
            (SETQ WHEELSCROLLENABLED NIL])
 
 (WHEELSCROLL
-  [LAMBDA (DIRECTION DELTA)                                  (* ; 
-                                                           "Edited 21-Feb-2021 09:38 by rmk:")
+  [LAMBDA (DIRECTION DELTA/POS)                              (* ; "Edited 16-Mar-2025 18:23 by rmk")
+                                                             (* ; "Edited 14-Mar-2025 17:11 by rmk")
+                                                             (* ; "Edited 13-Mar-2025 16:31 by rmk")
+                                                            (* ; "Edited 21-Feb-2021 09:38 by rmk:")
 
     (* ;; "The wheel may accidentally turn (giving the interrupt) when the users intention is simply to push the middle button.  And there may be another accidental turn (also giving an interrupt) when the user is releasing the middle button.  We don't yet have a good solution to this problem.  (This is not an issue with a trackpad)")
 
     (* ;; "")
 
-    (CL:WHEN (MOUSESTATE UP)                                 (* ; 
-                                                           "Ignore interrupt if a button is down")
-        [LET ((W (WHICHW)))
+    (CL:WHEN (AND WHEELSCROLLENABLED (MOUSESTATE UP))        (* ; 
+                                                             "Ignore interrupt if a button is down")
+        [LET ((W (WHICHW))
+              DELTA)
 
-         (* Unsuccessful a ttempt to suppress scroll if middlebutton comes down within 
-       the setetle time (NOT (UNTILMOUSESTATE (ONLY MIDDLE) WHEELSCROLLSETTLETIME)))
+             (* ;; "Unsuccessful a ttempt to suppress scroll if middlebutton comes down within the setetle time (NOT (UNTILMOUSESTATE (ONLY MIDDLE) WHEELSCROLLSETTLETIME))")
 
              (CL:WHEN W
 
                  (* ;; "We scroll only if the window has a scrollfn.  Our behavior is thus different from a direct call to SCROLLW, which defaults to SCROLLBYREPAINTFN in that case, but conforms to what happens with IN/SCROLL/BAR? and SCROLL.HANDLER in WINDOWSCROLL.  Menus and scrollbars typically do not have scrollfns, so this suppresses otherwise funky behavior. ")
 
+                 (SETQ DELTA (SELECTQ DELTA/POS
+                                 (T                          (* ; "UP/RIGHT")
+                                    (CL:IF (EQ DIRECTION 'VERTICAL)
+                                        WHEELSCROLLDELTA
+                                        (OR HWHEELSCROLLDELTA WHEELSCROLLDELTA)))
+                                 (NIL                        (* ; "DOWN/LEFT")
+                                      (IMINUS (CL:IF (EQ DIRECTION 'VERTICAL)
+                                                  WHEELSCROLLDELTA
+                                                  (OR HWHEELSCROLLDELTA WHEELSCROLLDELTA))))
+                                 DELTA/POS))
                  (if (WINDOWPROP W 'SCROLLFN)
                      then [PROCESS.EVAL (FIND.PROCESS 'MOUSE)
-                                     (CL:IF (EQ DIRECTION 'VERTICAL)
-                                         `(WHEELSCROLL.DOIT ,(KWOTE W)
-                                                 0
-                                                 ,DELTA)
-                                         `(WHEELSCROLL.DOIT ,(KWOTE W)
-                                                 ,DELTA 0))]
+                                 (CL:IF (EQ DIRECTION 'VERTICAL)
+                                     `(WHEELSCROLL.DOIT ,(KWOTE W)
+                                             0
+                                             ,DELTA)
+                                     `(WHEELSCROLL.DOIT ,(KWOTE W)
+                                             ,DELTA 0))]
                    elseif (EQ DIRECTION 'VERTICAL)
                      then 
+                          (* ;; "We are in a pop-up scrollbar.  This moves the cursor there, the user has to click to scroll the main window.")
 
-                           (* ;; "We are in a pop-up scrollbar.  This moves the cursor there, the user has to click to scroll the main window.")
-
-                           (CL:WHEN (WINDOWPROP W 'VERTICALSCROLLBARFOR)
-                               (\CURSORPOSITION LASTMOUSEX (IPLUS LASTMOUSEY DELTA))
-                               (GETMOUSESTATE))
+                          (CL:WHEN (WINDOWPROP W 'VERTICALSCROLLBARFOR)
+                              (\CURSORPOSITION LASTMOUSEX (IPLUS LASTMOUSEY DELTA))
+                              (GETMOUSESTATE))
                    elseif (EQ DIRECTION 'HORIZONTAL)
                      then (CL:WHEN (WINDOWPROP W 'HORIZONTALSCROLLBARFOR)
-                                  (\CURSORPOSITION (IPLUS DELTA LASTMOUSEX)
-                                         LASTMOUSEY)
-                                  (GETMOUSESTATE))))])])
+                              (\CURSORPOSITION (IPLUS DELTA LASTMOUSEX)
+                                     LASTMOUSEY)
+                              (GETMOUSESTATE))))])])
 
 (WHEELSCROLL.DOIT
   [LAMBDA (WINDOW DX DY)                                (* ; "Edited 20-Feb-2021 17:34 by rmk:")
@@ -137,56 +149,30 @@
         (RESETVAR \WHEELSCROLLINPROGRESS T (SCROLLW WINDOW DX DY)))])
 
 (INSTALL-WHEELSCROLL
-  [LAMBDA NIL                                               (* ; "Edited 29-Nov-2021 21:56 by rmk:")
+  [LAMBDA NIL                                                (* ; "Edited 14-Mar-2025 18:27 by rmk")
+                                                            (* ; "Edited 29-Nov-2021 21:56 by rmk:")
                                                             (* ; "Edited 28-May-2021 11:46 by rmk:")
                                                             (* ; "Edited 17-Feb-2021 11:53 by rmk:")
 
     (* ;; "We want the UP, DOWN...constants to be compiled awsy")
 
-    (SETQ WHEELSCROLLINTERRUPTS `((,\WSUP (WHEELSCROLL 'VERTICAL WHEELSCROLLDELTA)
-                                         T)
-                                  (,\WSDOWN (WHEELSCROLL 'VERTICAL (IMINUS WHEELSCROLLDELTA))
-                                         T)
-                                  (,\WSLEFT (WHEELSCROLL 'HORIZONTAL (IMINUS (OR HWHEELSCROLLDELTA 
-                                                                                 WHEELSCROLLDELTA))
-                                                   T))
-                                  (,\WSRIGHT (WHEELSCROLL 'HORIZONTAL (OR HWHEELSCROLLDELTA 
-                                                                          WHEELSCROLLDELTA)
-                                                    WHEELSCROLLDELTA T])
-)
-
-
-
-(* ;; 
-"These are the highest meta-ctrl characters, they will be unaffected by teh state of ctrl and meta mode keys"
-)
-
-(DECLARE%: EVAL@COMPILE DONTCOPY 
-
-(RPAQQ WHEELSCROLLCHARS ((\WSUP 156)
-                         (\WSDOWN 157)
-                         (\WSLEFT 158)
-                         (\WSRIGHT 159)))
-(DECLARE%: EVAL@COMPILE 
-
-(RPAQQ \WSUP 156)
-
-(RPAQQ \WSDOWN 157)
-
-(RPAQQ \WSLEFT 158)
-
-(RPAQQ \WSRIGHT 159)
-
-
-(CONSTANTS (\WSUP 156)
-       (\WSDOWN 157)
-       (\WSLEFT 158)
-       (\WSRIGHT 159))
-)
+    (SETQ WHEELSCROLLINTERRUPTS `((,(CHARCODE WHEELSCROLL-UP)
+                                   (WHEELSCROLL 'VERTICAL T)
+                                   T)
+                                  (,(CHARCODE WHEELSCROLL-DOWN)
+                                   (WHEELSCROLL 'VERTICAL)
+                                   T)
+                                  (,(CHARCODE WHEELSCROLL-LEFT)
+                                   (WHEELSCROLL 'HORIZONTAL)
+                                   T)
+                                  (,(CHARCODE WHEELSCROLL-RIGHT)
+                                   (WHEELSCROLL 'HORIZONTAL T)
+                                   T])
 )
 (DECLARE%: DOEVAL@COMPILE DONTCOPY
 
-(GLOBALVARS WHEELSCROLLENABLED WHEELSCROLLDELTA WHEELSCROLLSETTLETIME \WHEELSCROLLINPROGRESS)
+(GLOBALVARS WHEELSCROLLENABLED WHEELSCROLLDELTA HWHEELSCROLLDELTA WHEELSCROLLSETTLETIME 
+       \WHEELSCROLLINPROGRESS)
 )
 
 
@@ -197,6 +183,18 @@
 (ADDTOVAR AFTERSYSOUTFORMS (AND WHEELSCROLLENABLED (ENABLEWHEELSCROLL T)))
 
 (ADDTOVAR AFTERMAKESYSFORMS (AND WHEELSCROLLENABLED (ENABLEWHEELSCROLL T)))
+
+
+
+(* ;; 
+"These are the highest meta-ctrl characters, they will be unaffected by the state of ctrl and meta mode keys. Should be moved to Function"
+)
+
+
+(ADDTOVAR CHARACTERNAMES (WHEELSCROLL-UP "Function,234")
+                         (WHEELSCROLL-DOWN "Function,235")
+                         (WHEELSCROLL-LEFT "Function,236")
+                         (WHEELSCROLL-RIGHT "Function,237"))
 
 (RPAQ? WHEELSCROLLENABLED NIL)
 
@@ -214,6 +212,6 @@
 (ENABLEWHEELSCROLL T)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1452 8682 (ENABLEWHEELSCROLL 1462 . 4220) (WHEELSCROLL 4222 . 6823) (WHEELSCROLL.DOIT 
-6825 . 7461) (INSTALL-WHEELSCROLL 7463 . 8680)))))
+  (FILEMAP (NIL (1467 9855 (ENABLEWHEELSCROLL 1477 . 4463) (WHEELSCROLL 4465 . 8013) (WHEELSCROLL.DOIT 
+8015 . 8651) (INSTALL-WHEELSCROLL 8653 . 9853)))))
 STOP

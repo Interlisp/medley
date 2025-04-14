@@ -9,7 +9,7 @@ main() {
 	SYSOUT="${MEDLEYDIR}/loadups/full.sysout"
 	if [ ! -f "${SYSOUT}" ];
 	then
-	  echo "Error: cannot find ${SYSOUT}.  Exiting."
+	  output_error_msg "Error: cannot find ${SYSOUT}.${EOL}Exiting."
 	  exit 1
 	fi
 

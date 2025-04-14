@@ -7,19 +7,26 @@ main() {
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
 	# process args
-        noaux=""
+        nargs="$#"
         start=0
         start_s=init
         start_sysout=""
-        end=4
-        end_s=full
+        end=5
+        end_s=aux
+        db=""
+        maikodir_specified=""
         while [ "$#" -ne 0 ];
       	do
           case "$1" in
-            -n | -noaux | --noaux)
-              noaux=true
+            -d | -db | --db | -7)
+              end=7
+              end_s=db
               ;;
-            -a | -apps | --apps | -5)
+            -a | -apps | --apps | -6)
+              end=6
+              end_s=apps
+              ;;
+            -x | -aux | --aux | -5)
               end=5
               end_s=apps
               ;;
@@ -87,10 +94,14 @@ main() {
                 exit 1
               fi
               export MAIKODIR="${maikodir}"
+              maikodir_specified=true
               shift
               ;;
             --noendmsg)
               noendmsg=true
+              ;;
+            -db | --db)
+              db=true
               ;;
             *)
               output_error_msg "Error: unknown flag: $1${EOL}Exiting"
@@ -107,6 +118,26 @@ main() {
           exit 1
         fi
 
+        # check for db and if its specified and ok, then just do loadup-db.sh and exit
+        if [ -n "${db}" ]
+        then
+          if [ -n "${maikodir_specified}" ]
+          then
+            maxargs=3
+          else
+            maxargs=1
+          fi
+          if [ "${nargs}" -gt "${maxargs}" ]
+          then
+            output_warn_msg "Warning: The --db argument should be the only argument aside from the --maikodir argument.${EOL}But other arguments were given.  They will be ignored.${EOL}"
+          fi
+          /bin/sh "${LOADUP_SCRIPTDIR}"/loadup-db.sh
+          exit $?
+        fi
+
+        # check and set the run_lock - can't do it before now due to possible call to loadup-db.sh
+        check_run_lock
+
 	# find and place starting sysout
         if [ $start -gt 0 ]
         then
@@ -116,8 +147,7 @@ main() {
             then
               cp -p "${LOADUP_OUTDIR}"/"${start_sysout}" "${LOADUP_WORKDIR}"/"${start_sysout}"
             else
-              echo "Error: Cannot find starting sysout (${start_sysout}) in either ${LOADUP_OUTDIR} or ${LOADUP_WORKDIR}"
-              echo "Exiting"
+              output_error_msg "Error: Cannot find starting sysout (${start_sysout}) in either ${LOADUP_OUTDIR} or ${LOADUP_WORKDIR}${EOL}Exiting"
               exit 1
             fi
           fi
@@ -142,20 +172,19 @@ main() {
           exit_if_failure $? "${noendmsg}"
 	fi
 
-        aux_not_run=true
 	if [ $start -lt 4 ] && [ $end -ge 4 ]
         then
           /bin/sh "${LOADUP_SCRIPTDIR}/loadup-full-from-lisp.sh"
           exit_if_failure $? "${noendmsg}"
-          if [ -z "$noaux" ]
-          then
-            /bin/sh "${LOADUP_SCRIPTDIR}/loadup-aux.sh"
-            exit_if_failure $? "${noendmsg}"
-            aux_not_run=""
-          fi
         fi
 
-	if [ $end -eq 5 ]
+        if [ $end -ge 5 ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-aux.sh"
+          exit_if_failure $? "${noendmsg}"
+        fi
+
+	if [ $end -eq 6 ]
         then
           /bin/sh "${LOADUP_SCRIPTDIR}/loadup-apps-from-full.sh"
           exit_if_failure $? "${noendmsg}"
@@ -164,11 +193,12 @@ main() {
         # Nothing to copy to loadups until we've produced lisp.sysout
         if [ $end -ge 3 ]
         then
-          /bin/sh "${LOADUP_SCRIPTDIR}/copy-all.sh" $start $end "$aux_not_run"
+          /bin/sh "${LOADUP_SCRIPTDIR}/copy-all.sh" $start $end
           exit_if_failure $? "${noendmsg}"
         fi
 
         echo "+++++ loadup-all.sh: SUCCESS +++++"
+        remove_run_lock
         exit 0
 
 }

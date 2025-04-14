@@ -9,7 +9,6 @@ main() {
 
         start=$1
         end=$2
-        noaux="$3"
 
         if [ $start -le 3 ] && [ $end -ge 3 ]
         then
@@ -17,30 +16,23 @@ main() {
               | sed -e "s#${MEDLEYDIR}/##g"
         fi
 
-
         if [ $start -le 4 ] && [ $end -ge 4 ]
         then
           /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
               | sed -e "s#${MEDLEYDIR}/##g"
         fi
 
-        if [ $end -eq 5 ]
-        then
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-        if [ $end -eq 6 ]
-        then
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/lfg.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-        if [ -z "$noaux" ]
+        if [ $end -ge 5 ]
         then
           /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
               | sed -e "s#${MEDLEYDIR}/##g"
           /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ $end -ge 6 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"       \
               | sed -e "s#${MEDLEYDIR}/##g"
         fi
 

@@ -143,6 +143,7 @@ loadup_finish () {
   fi
   echo "<<<<< END ${script_name}"
   echo ""
+
   exit ${exit_code}
 }
 
@@ -179,6 +180,16 @@ output_error_msg() {
   rm -f "${local_oem_file}"
 }
 
+output_warn_msg() {
+  local_oem_file="${TMPDIR:-/tmp}"/oem_$$
+  echo "$1" >"${local_oem_file}"
+  while read -r line
+  do
+      echo "$(${is_tput} setab 3)$(${is_tput} setaf 4)${line}$(${is_tput} sgr0)"
+  done <"${local_oem_file}"
+  rm -f "${local_oem_file}"
+}
+
 exit_if_failure() {
   if [ "$1" -ne 0 ]
   then
@@ -186,6 +197,7 @@ exit_if_failure() {
     then
       output_error_msg  "----- ${script_name}: FAILURE -----${EOL}"
     fi
+    remove_run_lock
     exit 1
   fi
 }
@@ -220,6 +232,24 @@ process_maikodir() {
 	done
 }
 
+export LOADUP_LOCKFILE="${LOADUP_WORKDIR}"/lock
+
+check_run_lock() {
+  if [ -e "${LOADUP_LOCKFILE}" ]
+  then
+    output_error_msg "Error: Another loadup is already running with PID $(cat "${LOADUP_LOCKFILE}")${EOL}Exiting."
+    exit 1
+  fi
+  echo "$$" > "${LOADUP_LOCKFILE}"
+  LOADUP_LOCK="$$"
+}
+
+remove_run_lock() {
+  if [ -n "${LOADUP_LOCK}" ]
+  then
+    rm -f "${LOADUP_LOCKFILE}"
+  fi
+}
 
 
 ######################################################################

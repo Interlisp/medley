@@ -7,7 +7,7 @@ main() {
         process_maikodir "$@"
 
         # do the loadup
-	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-all.sh" --full --noaux --noendmsg
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-all.sh" --full --noendmsg
 
 	# shellcheck disable=SC2181
 	if [ $? -eq 0 ];

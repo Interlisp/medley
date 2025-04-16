@@ -12,7 +12,7 @@ fi
 
 if [ -z "${LOADUP_SOURCEDIR}" ]
 then
-  LOADUP_SOURCEDIR="${MEDLEYDIR}/internal/loadups"
+  LOADUP_SOURCEDIR="${MEDLEYDIR}/sources"
   export LOADUP_SOURCEDIR
 fi
 

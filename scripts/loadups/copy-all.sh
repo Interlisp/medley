@@ -42,7 +42,7 @@ main() {
               | sed -e "s#${MEDLEYDIR}/##g"
         fi
 
-	if [ -f "${LOADUP_WORKDIR}"/RDSYS ]
+	if [ -f "${LOADUP_WORKDIR}"/RDSYS.LCOM ]
         then
           /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}/library"    \
               | sed -e "s#${MEDLEYDIR}/##g"

@@ -72,8 +72,10 @@ fi
 git_commit_ID () {
   if "${HAS_GIT}"
   then
-    # This does NOT indicate if there are any modified files!
-    COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+    if is_git_dir "$1"
+      # This does NOT indicate if there are any modified files!
+      COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+    fi
   fi
 }
 

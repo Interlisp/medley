@@ -5,14 +5,15 @@ BITMAPHEIGHT BITMAPWIDTH BLACKSHADE BLTSHADE BOLD CONDENSED CHARSETINFO DISPLAY 
 FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) 
 READTABLE "XCL" BASE 10)
 
-(IL:FILECREATED " 5-Mar-2025 12:44:10" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;39| 42641  
+(IL:FILECREATED "17-Apr-2025 15:11:53" IL:{LU}READ-BDF.\;40 45780  
 
       :EDIT-BY "mth"
 
-      :CHANGES-TO (IL:FUNCTIONS BDF-TO-CHARSETINFO READ-GLYPH)
+      :CHANGES-TO (IL:FUNCTIONS GLYPHS-BY-CHARSET FIXUP-CHARSETINFO READ-BDF BDF-TO-FONTDESCRIPTOR 
+                         BDF-TO-CHARSETINFO GET-GLYPH-LIMITS)
+                  (IL:STRUCTURES BDF-FONT GL-LIMITS GLYPH)
 
-      :PREVIOUS-DATE "26-Feb-2025 15:23:23" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;37|
-)
+      :PREVIOUS-DATE " 5-Mar-2025 12:44:10" IL:{LU}READ-BDF.\;39)
 
 
 (IL:PRETTYCOMPRINT IL:READ-BDFCOMS)
@@ -31,14 +32,17 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                   IL:READ-BDF)))
 
 (DEFSTRUCT (BDF-FONT (:CONC-NAME "BF-"))
+   "Main structure to hold a parsed BDF font file"
    (NAME NIL :TYPE STRING)
    (SIZE NIL :TYPE LIST)
    (BOUNDINGBOX NIL :TYPE LIST)
    (METRICSSET 0 :TYPE (INTEGER 0 2))
    (PROPERTIES NIL :TYPE LIST)
-   SWIDTH DWIDTH SWIDTH1 DWIDTH1 VVECTOR (GLYPHS NIL :TYPE LIST))
+   SWIDTH DWIDTH SWIDTH1 DWIDTH1 VVECTOR (GLYPHS NIL :TYPE LIST)
+   (SLUG NIL :TYPE GLYPH))
 
 (DEFSTRUCT (GL-LIMITS (:CONC-NAME "GLIM-"))
+   "This holds calculated Glyph dimension information"
    (XCODE 0 :TYPE INTEGER)
    (GLYPH NIL :TYPE GLYPH)
    (WIDTH 0 :TYPE INTEGER)
@@ -46,6 +50,7 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
    (DESCENT 0 :TYPE INTEGER))
 
 (DEFSTRUCT GLYPH
+   "This is an individual BDF glyph"
    (NAME NIL :TYPE STRING)
    ENCODING SWIDTH DWIDTH SWIDTH1 DWIDTH1 VVECTOR BBW BBH BBXOFF0 BBYOFF0 BITMAP)
 
@@ -55,36 +60,61 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 
 (DEFCONSTANT NOMAPPINGCHARSET (1+ MAXCHARSET))
 
-(DEFUN FIXUP-CHARSETINFO (CSINFO ASCENT DESCENT SLUGWIDTH)
+(DEFUN FIXUP-CHARSETINFO (CSINFO ASCENT DESCENT SLUG.OR.WIDTH)
+                                                      (IL:* IL:\; "Edited 17-Apr-2025 15:05 by mth")
                                                       (IL:* IL:\; "Edited  3-Feb-2025 19:19 by mth")
-   (LET* ((CSASCENT (IL:|fetch| (CHARSETINFO IL:CHARSETASCENT) IL:|of| CSINFO))
-          (CSDESCENT (IL:|fetch| (CHARSETINFO IL:CHARSETDESCENT) IL:|of| CSINFO))
-          (WIDTHS (IL:|fetch| (CHARSETINFO IL:WIDTHS) IL:|of| CSINFO))
-          (BMAP (IL:|fetch| (CHARSETINFO IL:CHARSETBITMAP) IL:|of| CSINFO))
-          (AMARGIN (- ASCENT CSASCENT))
-          (DMARGIN (- DESCENT CSDESCENT))
-          NEWBMAP)
-         (SETQ NEWBMAP (BITMAPCREATE (+ (BITMAPWIDTH BMAP)
-                                        SLUGWIDTH)
-                              (+ ASCENT DESCENT)
-                              1))
-         (BITBLT BMAP 0 0 NEWBMAP 0 DMARGIN (BITMAPWIDTH BMAP)
-                (BITMAPHEIGHT BMAP)
-                'INPUT
-                'IL:REPLACE)
-         (BLTSHADE BLACKSHADE NEWBMAP (1+ (BITMAPWIDTH BMAP))
-                0
-                (1- SLUGWIDTH)
-                (+ ASCENT DESCENT)
-                'IL:REPLACE)
-         (IL:|replace| (CHARSETINFO IL:CHARSETBITMAP) IL:|of| CSINFO IL:|with| NEWBMAP)
-         (IL:|replace| (CHARSETINFO IL:CHARSETASCENT) IL:|of| CSINFO IL:|with| ASCENT)
-         (IL:|replace| (CHARSETINFO IL:CHARSETDESCENT) IL:|of| CSINFO IL:|with| DESCENT)
-         (LOOP :FOR I :FROM 0 :TO (+ MAXTHINCHAR 2)
-               :WHEN
-               (ZEROP (\\FGETWIDTH WIDTHS I))
-               :DO
-               (\\FSETWIDTH WIDTHS I SLUGWIDTH))))
+   (STEP (LET* ((CSASCENT (IL:|fetch| (CHARSETINFO IL:CHARSETASCENT) IL:|of| CSINFO))
+                (CSDESCENT (IL:|fetch| (CHARSETINFO IL:CHARSETDESCENT) IL:|of| CSINFO))
+                (WIDTHS (IL:|fetch| (CHARSETINFO IL:WIDTHS) IL:|of| CSINFO))
+                (BMAP (IL:|fetch| (CHARSETINFO IL:CHARSETBITMAP) IL:|of| CSINFO))
+                (AMARGIN (- ASCENT CSASCENT))
+                (DMARGIN (- DESCENT CSDESCENT))
+                SLUG SLUGWIDTH GLIMITS NEWBMAP)
+               (COND
+                  ((GL-LIMITS-P SLUG.OR.WIDTH)
+                   (SETQ GLIMITS SLUG.OR.WIDTH)
+                   (SETQ SLUG (GLIM-GLYPH GLIMITS))
+                   (SETQ SLUGWIDTH (1+ (GLIM-WIDTH GLIMITS)))
+                   (SETQ ASCENT (MAX ASCENT (GLIM-ASCENT GLIMITS)))
+                   (SETQ DESCENT (MAX DESCENT (GLIM-DESCENT GLIMITS))))
+                  ((GLYPH-P SLUG.OR.WIDTH)
+                   (SETQ SLUG SLUG.OR.WIDTH)
+                   (SETQ GLIMITS (GET-GLYPH-LIMITS SLUG))
+                   (SETQ SLUGWIDTH (1+ (GLIM-WIDTH GLIMITS)))
+                   (SETQ ASCENT (MAX ASCENT (GLIM-ASCENT GLIMITS)))
+                   (SETQ DESCENT (MAX DESCENT (GLIM-DESCENT GLIMITS))))
+                  ((NOT (INTEGERP SLUG.OR.WIDTH))
+                   (ERROR "Invalid SLUG.OR.WIDTH: ~S" SLUG.OR.WIDTH)))
+               (SETQ NEWBMAP (BITMAPCREATE (+ (BITMAPWIDTH BMAP)
+                                              SLUGWIDTH)
+                                    (+ ASCENT DESCENT)
+                                    1))
+               (BITBLT BMAP 0 0 NEWBMAP 0 DMARGIN (BITMAPWIDTH BMAP)
+                      (BITMAPHEIGHT BMAP)
+                      'INPUT
+                      'IL:REPLACE)
+               (IF SLUG
+                   (LET ((GLBM (GLYPH-BITMAP SLUG)))
+                        (BITBLT GLBM 0 0 NEWBMAP (+ (BITMAPWIDTH BMAP)
+                                                    (GLYPH-BBXOFF0 SLUG))
+                               (+ DESCENT (GLYPH-BBYOFF0 SLUG))
+                               (BITMAPWIDTH GLBM)
+                               (BITMAPHEIGHT GLBM)
+                               'INPUT
+                               'IL:REPLACE))
+                   (BLTSHADE BLACKSHADE NEWBMAP (1+ (BITMAPWIDTH BMAP))
+                          0
+                          (1- SLUGWIDTH)
+                          (+ ASCENT DESCENT)
+                          'IL:REPLACE))
+               (IL:|replace| (CHARSETINFO IL:CHARSETBITMAP) IL:|of| CSINFO IL:|with| NEWBMAP)
+               (IL:|replace| (CHARSETINFO IL:CHARSETASCENT) IL:|of| CSINFO IL:|with| ASCENT)
+               (IL:|replace| (CHARSETINFO IL:CHARSETDESCENT) IL:|of| CSINFO IL:|with| DESCENT)
+               (LOOP :FOR I :FROM 0 :TO (+ MAXTHINCHAR 2)
+                     :WHEN
+                     (ZEROP (\\FGETWIDTH WIDTHS I))
+                     :DO
+                     (\\FSETWIDTH WIDTHS I SLUGWIDTH)))))
 
 (DEFUN GET-FAMILY-FACE-SIZE-FROM-NAME (BDFONT)        (IL:* IL:\; "Edited  5-Feb-2025 12:56 by mth")
    (UNLESS (TYPEP BDFONT 'BDF-FONT)
@@ -157,13 +187,10 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                                               X))
                                                         Y))))
 
-(DEFUN READ-BDF (PATH)                                (IL:* IL:\; "Edited 26-Feb-2025 15:22 by mth")
-                                                      (IL:* IL:\; "Edited 23-Sep-2024 12:37 by mth")
-                                                      (IL:* IL:\; "Edited 22-Aug-2024 16:43 by mth")
-                                                      (IL:* IL:\; "Edited 17-Jul-2024 14:45 by mth")
+(DEFUN READ-BDF (PATH)                                (IL:* IL:\; "Edited 17-Apr-2025 15:10 by mth")
                                                       (IL:* IL:\; "Edited 12-Jul-2024 23:02 by mth")
    (LET
-    (PROPS PROPS-COMPLETE CHARS-COUNT FONT-COMPLETE FONT POS KEY V VV LINE ITEMS (NGLYPHS 0)
+    (PROPS PROPS-COMPLETE CHARS-COUNT FONT-COMPLETE FONT POS KEY V VV LINE ITEMS GL (NGLYPHS 0)
            (*PACKAGE* (FIND-PACKAGE "BDF")))
     (WITH-OPEN-FILE
      (FILE-STREAM PATH :ELEMENT-TYPE 'CHARACTER :DIRECTION :INPUT)
@@ -252,7 +279,21 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                 (ERROR "Invalid BDF file - CHARS count (~A) is invalid or missing." 
                                        NGLYPHS))
                          (SETF (BF-GLYPHS FONT)
-                               (LOOP :REPEAT NGLYPHS :COLLECT (READ-GLYPH FILE-STREAM FONT))))
+                               (LOOP :REPEAT NGLYPHS :COLLECT
+                                     (PROG1 (SETQ GL (READ-GLYPH FILE-STREAM FONT))
+
+                                         (IL:* IL:|;;| 
+           "Any GLYPH with ENCODING of -1 is taken as the SLUG glyph. If multiple, the last applies.")
+
+                                         (SETQ V (GLYPH-ENCODING GL))
+                                         (WHEN (AND (LISTP V)
+                                                    (EQ (FIRST V)
+                                                        -1))
+                                             (SETQ V (OR (SECOND V)
+                                                         -1)))
+                                         (WHEN (EQ V -1)
+                                             (SETF (BF-SLUG FONT)
+                                                   GL))))))
                       (ENDFONT (SETQ FONT-COMPLETE T))))))))
      FONT)))
 
@@ -355,6 +396,7 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
         GLYPH))
 
 (DEFUN BDF-TO-CHARSETINFO (FONT CSET &OPTIONAL MAP-UNKNOWN-TO-PRIVATE)
+                                                      (IL:* IL:\; "Edited 17-Apr-2025 13:33 by mth")
                                                       (IL:* IL:\; "Edited  5-Mar-2025 12:39 by mth")
                                                       (IL:* IL:\; "Edited  3-Feb-2025 16:02 by mth")
                                                       (IL:* IL:\; "Edited 30-Jan-2025 16:40 by mth")
@@ -367,14 +409,18 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 
             (SETQ CSET 0))
         (SETQ GBCS (COND
-                      ((TYPEP FONT 'BDF-FONT)
-                       (GLYPHS-BY-CHARSET FONT MAP-UNKNOWN-TO-PRIVATE))
                       ((LISTP FONT)
 
                        (IL:* IL:|;;| 
-                     "Assuming that FONT is already the A-LIST form of result from GLYPHS-BY-CHARSET")
+              "Assuming that FONT is already the LIST of ALIST form of result from GLYPHS-BY-CHARSET")
 
                        FONT)
+                      ((BDF-FONT-P FONT)
+
+                       (IL:* IL:|;;| 
+                       "If passed a BDF-FONT, look only at glyphs in the mapped charsets")
+
+                       (FIRST (GLYPHS-BY-CHARSET FONT MAP-UNKNOWN-TO-PRIVATE)))
                       (T (ERROR "Invalid FONT: ~S" FONT))))
         (WHEN (SETQ CSGLYPHS (SECOND (ASSOC CSET GBCS)))
             (LET ((TOTAL-WIDTH 0)
@@ -447,11 +493,12 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 
 (DEFUN BDF-TO-FONTDESCRIPTOR (BDFONT FAMILY SIZE FACE ROTATION DEVICE &OPTIONAL 
                                     MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
+                                                      (IL:* IL:\; "Edited 17-Apr-2025 15:05 by mth")
                                                       (IL:* IL:\; "Edited  5-Feb-2025 14:53 by mth")
                                                       (IL:* IL:\; "Edited 30-Jan-2025 21:27 by mth")
    (WHEN (AND (BDF-FONT-P BDFONT)
               FAMILY)                                        (IL:* IL:\; "FAMILY Cannot be NIL")
-       (PROG (FONTDESC DEV GBCSL CHARSETS)
+       (PROG (FONTDESC DEV GBCSL CHARSETS (SLUG-LIMITS (GET-GLYPH-LIMITS (BF-SLUG BDFONT))))
              (WHEN (LISTP FAMILY)
                  (RETURN (BDF-TO-FONTDESCRIPTOR BDFONT (FIRST FAMILY)
                                 (OR (SECOND FAMILY)
@@ -521,11 +568,12 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                                          (FONTPROP FONTDESC 'IL:ASCENT)
                                                          :WITH DESCENT = (FONTPROP FONTDESC
                                                                                 'IL:DESCENT)
-                                                         :WITH SLUGWIDTH = (1+ (\\AVGCHARWIDTH 
-                                                                                      FONTDESC))
+                                                         :WITH SLUG.OR.WIDTH =
+                                                         (OR SLUG-LIMITS (1+ (\\AVGCHARWIDTH FONTDESC
+                                                                                    )))
                                                          :COLLECT
                                                          (PROGN (FIXUP-CHARSETINFO (CDR CSP)
-                                                                       ASCENT DESCENT SLUGWIDTH)
+                                                                       ASCENT DESCENT SLUG.OR.WIDTH)
                                                                 (CAR CSP)))))
                                 (LIST FONTDESC CHARSETS))))
                    (RETURN (VALUES-LIST (NCONC (GBCS-TO-FONTDESC (FIRST GBCSL)
@@ -536,26 +584,23 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                                                            "-UNMAPPED")))
                                                (LIST (ASSOC NOMAPPINGCHARSET (FIRST GBCSL)
                                                             :TEST
-                                                            #'EQ)))))))))
+                                                            #'EQL)))))))))
 
-(DEFUN GET-GLYPH-LIMITS (GLYPH)                       (IL:* IL:\; "Edited  2-Feb-2025 21:07 by mth")
+(DEFUN GET-GLYPH-LIMITS (GLYPH)                       (IL:* IL:\; "Edited 17-Apr-2025 13:42 by mth")
+                                                      (IL:* IL:\; "Edited  2-Feb-2025 21:07 by mth")
                                                       (IL:* IL:\; "Edited 29-Jan-2025 16:28 by mth")
-   (LET* ((BBYOFF0 (GLYPH-BBYOFF0 GLYPH))
-          (ASCENT (+ (GLYPH-BBH GLYPH)
-                     BBYOFF0))
-          (DESCENT (ABS (MIN 0 BBYOFF0)))
-          (GWIDTH (MAX (+ (GLYPH-BBXOFF0 GLYPH)
-                          (GLYPH-BBW GLYPH))
-                       (FIRST (GLYPH-DWIDTH GLYPH)))))
-         (MAKE-GL-LIMITS :WIDTH GWIDTH :ASCENT ASCENT :DESCENT DESCENT)))
+   (WHEN GLYPH
+       (LET* ((BBYOFF0 (GLYPH-BBYOFF0 GLYPH))
+              (ASCENT (+ (GLYPH-BBH GLYPH)
+                         BBYOFF0))
+              (DESCENT (ABS (MIN 0 BBYOFF0)))
+              (GWIDTH (MAX (+ (GLYPH-BBXOFF0 GLYPH)
+                              (GLYPH-BBW GLYPH))
+                           (FIRST (GLYPH-DWIDTH GLYPH)))))
+             (MAKE-GL-LIMITS :GLYPH GLYPH :WIDTH GWIDTH :ASCENT ASCENT :DESCENT DESCENT))))
 
 (DEFUN GLYPHS-BY-CHARSET (FONT &OPTIONAL MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
-                                                      (IL:* IL:\; "Edited  5-Feb-2025 12:53 by mth")
-                                                      (IL:* IL:\; "Edited  3-Feb-2025 23:00 by mth")
-                                                      (IL:* IL:\; "Edited  2-Feb-2025 20:29 by mth")
-                                                      (IL:* IL:\; "Edited 28-Jan-2025 23:09 by mth")
-                                                      (IL:* IL:\; "Edited 27-Jan-2025 17:22 by mth")
-                                                      (IL:* IL:\; "Edited 23-Jan-2025 17:58 by mth")
+                                                      (IL:* IL:\; "Edited 17-Apr-2025 15:10 by mth")
                                                       (IL:* IL:\; "Edited  9-Jan-2025 11:23 by mth")
    (LET* ((NCSETS (+ MAXCHARSET 2))
           (CSETS (MAKE-ARRAY NCSETS :INITIAL-CONTENTS (LOOP :REPEAT NCSETS :COLLECT (CONS NIL))))
@@ -563,6 +608,7 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                      (RAW-UNICODE-MAPPING #'IDENTITY)
                      (MAP-UNKNOWN-TO-PRIVATE #'UTOXCODE)
                      (T #'UTOXCODE?)))
+          (SLUG (BF-SLUG FONT))
           NOMAPPINGCSETS ENC XCODE CS XCS)
          (UNLESS (OR MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
              (SETQ NOMAPPINGCSETS (MAKE-ARRAY NCSETS :INITIAL-CONTENTS (LOOP :REPEAT NCSETS :COLLECT
@@ -572,10 +618,26 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                               (CONS (LOGAND CODE 255)
                                     GLYPH))))
                (LOOP :FOR GL :IN (BF-GLYPHS FONT)
+                     :UNLESS
+                     (EQ GL SLUG)
                      :DO
                      (SETQ XCS NIL)
                      (SETQ ENC (GLYPH-ENCODING GL))
-                     (SETQ XCODE (FUNCALL UTOXFN ENC))
+                     (WHEN (LISTP ENC)
+
+                         (IL:* IL:|;;| 
+                         "Should happen only if -1 is first on ENCODING line in BDF file")
+
+                         (SETQ ENC (OR (SECOND ENC)
+                                       -1))
+
+                         (IL:* IL:|;;| 
+                    "The -1 case shouldn't happen. The (EQ GL SLUG) test above should have caught it")
+
+                         )
+                     (SETQ XCODE (AND (INTEGERP ENC)
+                                      (PLUSP ENC)
+                                      (FUNCALL UTOXFN ENC)))
                      (IF RAW-UNICODE-MAPPING
                          (COND
                             ((> ENC 65535)
@@ -654,7 +716,7 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                         (LET ((CS (AREF NOMAPPINGCSETS I)))
                                              (WHEN CS
                                                  (LIST (LIST I CS)))))))
-         (LIST CSETS NOMAPPINGCSETS)))
+         (LIST CSETS NOMAPPINGCSETS SLUG)))
 
 (DEFUN SPLIT-FONT-NAME (NAME)                         (IL:* IL:\; "Edited 31-Jan-2025 22:20 by mth")
    (LOOP :FOR I = (IF (CHAR= #\- (ELT NAME 0))
@@ -719,11 +781,11 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 
 (IL:PUTPROPS IL:READ-BDF IL:DATABASE IL:NO)
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (2291 3912 (FIXUP-CHARSETINFO 2291 . 3912)) (3914 6946 (
-GET-FAMILY-FACE-SIZE-FROM-NAME 3914 . 6946)) (6948 8373 (PACKFILENAME.STRING 6948 . 8373)) (8375 14009
- (READ-BDF 8375 . 14009)) (14011 14334 (READ-DELIMITED-LIST-FROM-STRING 14011 . 14334)) (14336 20558 (
-READ-GLYPH 14336 . 20558)) (20560 25963 (BDF-TO-CHARSETINFO 20560 . 25963)) (25965 32055 (
-BDF-TO-FONTDESCRIPTOR 25965 . 32055)) (32057 32654 (GET-GLYPH-LIMITS 32057 . 32654)) (32656 38670 (
-GLYPHS-BY-CHARSET 32656 . 38670)) (38672 39035 (SPLIT-FONT-NAME 38672 . 39035)) (39037 41216 (
-WRITE-BDF-TO-DISPLAYFONT-FILES 39037 . 41216)))))
+  (IL:FILEMAP (NIL (2537 5797 (FIXUP-CHARSETINFO 2537 . 5797)) (5799 8831 (
+GET-FAMILY-FACE-SIZE-FROM-NAME 5799 . 8831)) (8833 10258 (PACKFILENAME.STRING 8833 . 10258)) (10260 
+16363 (READ-BDF 10260 . 16363)) (16365 16688 (READ-DELIMITED-LIST-FROM-STRING 16365 . 16688)) (16690 
+22912 (READ-GLYPH 16690 . 22912)) (22914 28568 (BDF-TO-CHARSETINFO 22914 . 28568)) (28570 34904 (
+BDF-TO-FONTDESCRIPTOR 28570 . 34904)) (34906 35673 (GET-GLYPH-LIMITS 34906 . 35673)) (35675 41809 (
+GLYPHS-BY-CHARSET 35675 . 41809)) (41811 42174 (SPLIT-FONT-NAME 41811 . 42174)) (42176 44355 (
+WRITE-BDF-TO-DISPLAYFONT-FILES 42176 . 44355)))))
 IL:STOP

@@ -1,21 +1,11 @@
 #!/bin/sh
-
+#
+#   Redirect loadup-full.sh to omnibus loadup script
+#
 main() {
-	# shellcheck source=./loadup-setup.sh
-	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-        process_maikodir "$@"
+    "${LOADUP_SCRIPTDIR}"/loadup -target full
 
-        # do the loadup
-	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-all.sh" --full --noendmsg
-
-	# shellcheck disable=SC2181
-	if [ $? -eq 0 ];
-	then
-	  echo "+++++ ${script_name}: SUCCESS +++++"
-	else
-	  output_error_msg "----- ${script_name}: FAILURE -----${EOL}"
-	fi
 }
 
 # shellcheck disable=SC2164,SC2034

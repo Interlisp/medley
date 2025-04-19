@@ -13,13 +13,7 @@ NAME
 SYNOPSIS
 ========
 
-**\<MEDLEYDIR>/loadup** \[ flags ... ]
-
-
-**\<MEDLEYDIR>/scripts/loadup-all.sh** \[ flags ... ] 
-
-
-**\<MEDLEYDIR>/scripts/loadups/loadup-all.sh** \[ flags ... ] 
+**\<MEDLEYDIR>/scripts/loadup** \[ options ... ]
 
 
 DESCRIPTION
@@ -66,10 +60,10 @@ hence MEDLEYDIR is computed on each invocation of loadup.
 
 OPTIONS
 =======
--z, \-\-man, \-man
+**-z, \-\-man, \-man**
 : Print this manual page on the screen.
 
--t STAGE, \-\-target STAGE, -target STAGE
+**-t STAGE, \-\-target STAGE, -target STAGE**
 : Run the sequential loadup procedure until the STAGE is complete, starting from the files created by the previously run STAGE specified in the --start option.
 
 >STAGE can be one of the following:
@@ -84,7 +78,7 @@ OPTIONS
  
 >>a, apps, 5: Run the loadup sequence through Stage 5 (apps.sysout).  Apps.sysout is copied into the loadups directory.
 
--s STAGE \-\-start STAGE, -start STAGE
+**-s STAGE \-\-start STAGE, -start STAGE**
 :  Start the loadup process using the files previously created by STAGE.  These files are looked for first in the loadups directory or, if not found there, in the work directory.  It is an error if the files created by      						STAGE cannot be found.
 
 >STAGE can be one of the following:
@@ -99,35 +93,50 @@ OPTIONS
  
 >>f, full, 4 : Start the loadup process using the files created by Stage 4 (full.sysout).
 
--x, \-\-aux, -aux
+**-x, \-\-aux, -aux**
 : Run the Aux loadup stage, creating the *whereis.hash* and *exports.all* files.  If loadup completes successfully, these files are copied into loadups.   
 
--b, \-\-db, \-db
+**-b, \-\-db, \-db**
 : Run the DB loadup stage, creating the *fuller.database* file.  If this stage complete successfully, these files are copied into loadups.
 
--i, \-\-init, -init, -1
+**-i, \-\-init, -init, -1**
 : Synonym for "--target init"
 
--m, \-\-mid, -mid, -2
+**-m, \-\-mid, -mid, -2**
 : Synonym for "--target mid"
 
--l, \-\-lisp, -lisp, -3
+**-l, \-\-lisp, -lisp, -3**
 : Synonym for "--target lisp"
 
--f, \-\-full. -full, -4
+**-f, \-\-full. -full, -4**
 : Synonym for "--target full"
 
--a, \-\-apps, -apps, -5
+**-a, \-\-apps, -apps, -5**
 : Synonym for "--target apps"
 
--d DIR \-\-maikodir DIR, -maikodir DIR
+**-nc, \-\-nocopy, -nocopy**
+: Run the specified loadups, but do not copy results into loadups directory.
+
+**-tw, \-\-thinw, -thinw**
+: Before running loadups (if any), thin the working directory by deleting all versioned (*.~[0-9]*~) files.
+
+**-tl, \-\-thinl, -thinl**
+: Before running loadups (if any), thin the loadups directory by deleting all versioned (*.~[0-9]*~) files.
+
+**-d DIR \-\-maikodir DIR, -maikodir DIR**
 :  Use DIR as the directory from which to execute lde (Miko) when running Medley in the loadup process.  If this flag is not present, the value of the environment variable MAIKODIR will be used instead.  And if MAIKODIR does not exist, then the default Maiko directory search within Medley will be used.
 
 DEFAULTS
 ====
 The defaults for the Options context-dependent and somewhat complicated due to the goal of maintaining compatibility with legacy loadup scripts.  All of the following defaults rules hold independent of the --maikodir (-d) option.
 
-1.  If there are no options specified (except for --maikodir), then the options default to:<br>```--target full --start 0 --aux```
+1. If none of --target, --start, --aux, and --db are specified, then:
+
+>1A.  If neither --thinw nor --thinl are specified,  the options default to:
+
+>> **--target full --start 0 --aux**
+
+>1B.  If either --thinw or --thinl are specified, no loadups are run.
 
 2. If neither --start nor --target are specified but either -aux or -db or both are, then --start defaults to *full* and --target is irrelevant.
 
@@ -137,15 +146,17 @@ The defaults for the Options context-dependent and somewhat complicated due to t
 
 EXAMPLES
 ====
-```./loadup -full -s lisp``` or ```./loadup --target full --start lisp ```:  run loadup thru Stage 4 (full.sysout) starting from existing Stage 3 outputs (lisp.sysout).
+**./loadup -full -s lisp** : run loadup thru Stage 4 (full.sysout) starting from existing Stage 3 outputs (lisp.sysout).
 
-```loadup -5 --aux```: run loadup from the beginning thru Stage 5 (apps.sysout) then run the Aux "stage" to create *whereis.hash* and *exports.all*
+**./loadup \-\-target full \-\-start lisp** : run loadup thru Stage 4 (full.sysout) starting from existing Stage 3 outputs (lisp.sysout).
 
-```loadup -db```: just run the DB "stage" starting from an existing full.sysout; do not run any of the sequential stages.
+**loadup -5 --aux** : run loadup from the beginning thru Stage 5 (apps.sysout) then run the Aux "stage" to create *whereis.hash* and *exports.all*
 
-```loadup --maikodir ~/il/newmaiko```:   run loadup sequence from beginning to full plus the loadup Aux stage, while using *~/il/newmaiko* as the location for the lde executables when running Medley.
+**loadup -db** : just run the DB "stage" starting from an existing full.sysout; do not run any of the sequential stages.
 
-```loadup -full```: run loadup sequence from beginning thru full.  (Do not run the Aux stage unlike in the case of the legacy loadup-full.sh)
+**loadup --maikodir ~/il/newmaiko** :   run loadup sequence from beginning to full plus the loadup Aux stage, while using *~/il/newmaiko* as the location for the lde executables when running Medley.
+
+**loadup -full** : run loadup sequence from beginning thru full.  (Do not run the Aux stage unlike in the case of the legacy loadup-full.sh)
 
 BUGS
 ====

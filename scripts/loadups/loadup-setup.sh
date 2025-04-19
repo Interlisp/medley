@@ -63,16 +63,27 @@ then
   fi
 fi
 
-if [ -f "$(command -v  git)" ] && [ -x "$(command -v git)" ]
+if [ -f $(command -v git) ] && [ -x $(command -v git) ]
 then
-   HAS_GIT=true
-   export HAS_GIT
+  export HAS_GET=true
+else
+  export HAS_GET=false
 fi
 
+is_git_dir () {
+  if ${HAS_GIT}
+  then
+    return $(git -C "$1" rev-parse >/dev/null 2>/dev/null)
+  else
+    return 1
+  fi
+}
+
 git_commit_ID () {
-  if "${HAS_GIT}"
+  if ${HAS_GIT}
   then
     if is_git_dir "$1"
+      then
       # This does NOT indicate if there are any modified files!
       COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
     fi

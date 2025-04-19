@@ -8,43 +8,48 @@ main() {
 
 	# process args
         nargs="$#"
-        start=0
-        start_s=init
+        start=""
+        start_s=""
         start_sysout=""
-        end=5
-        end_s=aux
+        end=""
+        end_s=""
         db=""
+        aux=""
+        thin=false
+        thinw=false
+        thinl=false
         maikodir_specified=""
         while [ "$#" -ne 0 ];
       	do
           case "$1" in
-            -d | -db | --db | -7)
-              end=7
-              end_s=db
-              ;;
-            -a | -apps | --apps | -6)
-              end=6
-              end_s=apps
-              ;;
-            -x | -aux | --aux | -5)
-              end=5
-              end_s=apps
-              ;;
-            -f | -full | --full | -4)
-              end=4
-              end_s=full
-              ;;
-            -l | -lisp | --lisp | -3)
-              end=3
-              end_s=lisp
-             ;;
-            -m | -mid | --mid | -2)
-              end=2
-              end_s=mid
-              ;;
-            -i | -init | --init | -1)
-              end=1
-              end_s=init
+            -t | -target | --target)
+              case "$2" in
+                a | apps | 5)
+                  end=5
+                  end_s=apps
+                  ;;
+                f | full | 4)
+                  end=4
+                  end_s=full
+                  ;;
+                l | lisp | 3)
+                  end=3
+                  end_s=lisp
+                  ;;
+                m | mid | 2)
+                  end=2
+                  end_s=mid
+                  ;;
+                i | init |1)
+                  end=1
+                  end_s=init
+                  ;;
+                *)
+                  output_error_msg "Error: unknown parameter to --start (-s) flag: $2${EOL}Exiting"
+                  exit 1
+                  ;;
+              esac
+              shift
               ;;
             -s | -start | --start)
               case "$2" in
@@ -77,9 +82,35 @@ main() {
                  output_error_msg "Error: unknown parameter to --start (-s) flag: $2${EOL}Exiting"
                  exit 1
                  ;;
-               esac
-               shift
+              esac
+              shift
                ;;
+            -x | -aux | --aux)
+              aux=true
+              ;;
+            -b | -db | --db)
+              db=true
+              ;;
+            -a | -apps | --apps | -5)
+              end=5
+              end_s=apps
+              ;;
+            -f | -full | --full | -4)
+              end=4
+              end_s=full
+              ;;
+            -l | -lisp | --lisp | -3)
+              end=3
+              end_s=lisp
+             ;;
+            -m | -mid | --mid | -2)
+              end=2
+              end_s=mid
+              ;;
+            -i | -init | --init | -1)
+              end=1
+              end_s=init
+              ;;
             -d | -maikodir | --maikodir)
               if [ -n "$2" ]
               then
@@ -100,8 +131,14 @@ main() {
             --noendmsg)
               noendmsg=true
               ;;
-            -db | --db)
-              db=true
+            -z | -man | --man )
+              if [ "$(uname)" = "Darwin" ]
+              then
+                /usr/bin/man "${LOADUP_SOURCEDIR}/man-page/loadup.1.gz"
+              else
+                /usr/bin/man -l "${LOADUP_SOURCEDIR}/man-page/loadup.1.gz"
+              fi
+              exit 0
               ;;
             *)
               output_error_msg "Error: unknown flag: $1${EOL}Exiting"
@@ -111,31 +148,86 @@ main() {
           shift
 	done
 
+        #
+        #
         # check arguments
-        if [ $end -le $start ]
+        #
+        #
+
+        #
+        # check for no args or only maikodir arg and set defaults appropriately
+        #
+        if [ -z "${start}" ] && [ -z "${end}" ] && [ -z "${aux}" ] && [ -z "${db}" ]
+        then
+            end=4
+            end_s=full
+            start=0
+            start_s=scratch
+            start_sysout=starter.sysout
+            aux=true
+            db=false
+        fi
+
+        #
+        #  defaults for aux and db
+        #
+        if [ -z "${aux}" ]
+        then
+          aux=false
+        fi
+        if [ -z "${db}" ]
+        then
+          db=false
+        fi
+
+        #
+        # if no start and no end specified, then signal no stages
+        # otherwise if start or end is not specified, set defaults
+        #
+        if [ -z "${start}" ] && [ -z "${end}" ]
+        then
+          start=4
+          start_s=full
+          start_sysout=full.sysout
+          end=-1
+        else
+          if [ -z "${end}" ]
+          then
+            end=4
+            end_s=full
+          fi
+          if [ -z "${start}" ]
+          then
+            start=0
+            start_s=scratch
+            start_sysout=starter.sysout
+          fi
+        fi
+
+        #
+        # if aux and/or db is set and there is an end, the end must be full (4) or later
+        #
+        if ( [ "${aux}" = true ] || [ "${db}" = true ] ) && [ "${end}" -gt 0 ] && [ "${end}" -lt 4 ]
+        then
+          output_error_msg "Error: either -aux or -db was specified, but the ending sysout specified was \"before\" full (4)${EOL}}Exiting"
+          exit 1
+        fi
+
+        #
+        # End has to be greater than start unless $end is -1
+        #
+        if [ $end -ne -1 ] && [ $end -le $start ]
         then
           output_error_msg "Error: The final stage ($end_s) comes before or is the same as the start stage ($start_s)${EOL}Exiting"
           exit 1
         fi
 
-        # check for db and if its specified and ok, then just do loadup-db.sh and exit
-        if [ -n "${db}" ]
-        then
-          if [ -n "${maikodir_specified}" ]
-          then
-            maxargs=3
-          else
-            maxargs=1
-          fi
-          if [ "${nargs}" -gt "${maxargs}" ]
-          then
-            output_warn_msg "Warning: The --db argument should be the only argument aside from the --maikodir argument.${EOL}But other arguments were given.  They will be ignored.${EOL}"
-          fi
-          /bin/sh "${LOADUP_SCRIPTDIR}"/loadup-db.sh
-          exit $?
-        fi
+        #
+        # End of args checks
+        #
 
-        # check and set the run_lock - can't do it before now due to possible call to loadup-db.sh
+
+        # check and set the run_lock
         check_run_lock
 
 	# find and place starting sysout
@@ -153,7 +245,9 @@ main() {
           fi
         fi
 
+        #
         #  Do individual loadups as requested
+        #
         if [ $start -lt 1 ] && [ $end -ge 1 ]
         then
           /bin/sh "${LOADUP_SCRIPTDIR}/loadup-init.sh"
@@ -178,26 +272,69 @@ main() {
           exit_if_failure $? "${noendmsg}"
         fi
 
-        if [ $end -ge 5 ]
-        then
-          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-aux.sh"
-          exit_if_failure $? "${noendmsg}"
-        fi
-
-	if [ $end -eq 6 ]
+        if [ $start -lt 5 ] && [ $end -ge 5 ]
         then
           /bin/sh "${LOADUP_SCRIPTDIR}/loadup-apps-from-full.sh"
           exit_if_failure $? "${noendmsg}"
         fi
 
-        # Nothing to copy to loadups until we've produced lisp.sysout
-        if [ $end -ge 3 ]
+        if [ "${aux}" = true ]
         then
-          /bin/sh "${LOADUP_SCRIPTDIR}/copy-all.sh" $start $end
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-aux.sh"
           exit_if_failure $? "${noendmsg}"
         fi
 
-        echo "+++++ loadup-all.sh: SUCCESS +++++"
+        if [ "${db}" = true ]
+        then
+          /bin/sh "${LOADUP_SCRIPTDIR}/loadup-db-from-full.sh"
+          exit_if_failure $? "${noendmsg}"
+        fi
+
+        #
+        #   Done with loadups, successfully.  Now copy files into loadups dir from workdir
+        #
+
+        if [ $start -eq 0 ] && [ $end -ge 1 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}/library"         \
+              | sed -e "s#${MEDLEYDIR}/##g"
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}/library"    \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ $start -le 2 ] && [ $end -ge 3 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ $start -le 3 ] && [ $end -ge 4 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if  [ $start -le 4 ] && [ $end -ge 5 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ "${aux}" = true ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
+              | sed -e "s#${MEDLEYDIR}/##g"
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ "${db}" = true ]
+        then
+	  /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"    \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        echo "+++++ loadup: SUCCESS +++++"
         remove_run_lock
         exit 0
 

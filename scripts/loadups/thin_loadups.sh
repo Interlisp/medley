@@ -1,64 +1,22 @@
-#!/bin/sh
-# shellcheck disable=SC2086
+#
+#  Thin the Medley loadups and loadups/build directories by deleting all but the latest version.
+#
+#  2025-04-18 Frank Halasz
+#
 
 main() {
-	# shellcheck source=./loadup-setup.sh
-	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	echo ">>>>> START ${script_name}"
+    #shellcheck source=./loadup-setup.sh
+    . "${LOADUP_SCRIPTDIR}"/loadup-setup.sh
 
-
-        aux="$1"
-        db="$2"
-        no_stages="$3"
-        start="$4"
-        end="$5"
-
-        if [ $start -eq 0 ] && [ $end -ge 1 ]
-        then
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}/library"         \
-              | sed -e "s#${MEDLEYDIR}/##g"
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}/library"    \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-        if [ $start -le 2 ] && [ $end -ge 3 ]
-        then
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-        if [ $start -le 3 ] && [ $end -ge 4 ]
-        then
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-        if  [ $start -le 3 ] && [ $end -ge 5 ]
-        then
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-        if [ "${aux}" = true ]
-        then
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
-              | sed -e "s#${MEDLEYDIR}/##g"
-          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-        if [ "${db}" = true ]
-        then
-	  /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"    \
-              | sed -e "s#${MEDLEYDIR}/##g"
-	  /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/fuller.dribble "${LOADUP_OUTDIR}"     \
-              | sed -e "s#${MEDLEYDIR}/##g"
-        fi
-
-	echo "<<<<< END ${script_name}"
-	echo ""
-	exit 0
+    if [ "$1" = "w" ] || [ "$1" = "lw" ] || [ "$1" = "wl" ]
+    then
+      find "${LOADUP_WORKDIR}" -name "*.~[0-9]*~" -delete
+    fi
+    if [ "$1" = "l" ] || [ "$1" = "lw" ] || [ "$1" = "wl" ]
+    then
+      find "${LOADUP_OUTDIR}" -name "*.~[0-9]*~" -delete
+    fi
 
 }
 
@@ -164,3 +122,4 @@ then
 fi
 
 main "$@"
+

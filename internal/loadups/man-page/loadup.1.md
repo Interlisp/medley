@@ -76,7 +76,10 @@ OPTIONS
  
 >>f, full, 4: Run the loadup sequence through Stage 4 (full.sysout).  Full.sysout is copied into the loadups directory.
  
->>a, apps, 5: Run the loadup sequence through Stage 5 (apps.sysout).  Apps.sysout is copied into the loadups directory.
+>>a, apps, 5: Run the loadup sequence through Stage 5 (apps.sysout). Also run the Aux stage as if --aux option had been specified. Apps.sysout and the Aux files are copied into the loadups directory.
+
+>>a-, apps-, 5-: Run the loadup sequence through Stage 5 (apps.sysout).  The Aux stage is not run unless otherwise specified. Apps.sysout is copied into the loadups directory.  Also run the Aux stage as if --aux option had been specified.
+
 
 **-s STAGE \-\-start STAGE, -start STAGE**
 :  Start the loadup process using the files previously created by STAGE.  These files are looked for first in the loadups directory or, if not found there, in the work directory.  It is an error if the files created by      						STAGE cannot be found.
@@ -112,6 +115,9 @@ OPTIONS
 : Synonym for "--target full"
 
 **-a, \-\-apps, -apps, -5**
+: Synonym for "--target apps"
+
+**-a-, \-\-apps-, -apps-, -5-**
 : Synonym for "--target apps"
 
 **-nc, \-\-nocopy, -nocopy**
@@ -156,7 +162,11 @@ EXAMPLES
 
 **loadup --maikodir ~/il/newmaiko** :   run loadup sequence from beginning to full plus the loadup Aux stage, while using *~/il/newmaiko* as the location for the lde executables when running Medley.
 
-**loadup -full** : run loadup sequence from beginning thru full.  (Do not run the Aux stage unlike in the case of the legacy loadup-full.sh)
+**loadup -full** : run loadup sequence from beginning thru full
+
+**loadup -apps** : run loadup sequence from beginning thru app. Also run the Aux stage loadup. 
+
+**loadup -apps-** : run loadup sequence from beginning thru app. Do not run the Aux stage loadup.
 
 BUGS
 ====

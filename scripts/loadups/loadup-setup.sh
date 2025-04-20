@@ -63,29 +63,29 @@ then
   fi
 fi
 
-if [ -f $(command -v git) ] && [ -x $(command -v git) ]
+if [ -f "$(command -v git)" ] && [ -x "$(command -v git)" ]
 then
-  export HAS_GET=true
+  export HAS_GIT=true
 else
-  export HAS_GET=false
+  export HAS_GIT=false
 fi
 
 is_git_dir () {
-  if ${HAS_GIT}
+  if [ "${HAS_GIT}" = true ]
   then
-    return $(git -C "$1" rev-parse >/dev/null 2>/dev/null; echo $?)
+    return "$(git -C "$1" rev-parse >/dev/null 2>/dev/null; echo $?)"
   else
     return 1
   fi
 }
 
 git_commit_ID () {
-  if ${HAS_GIT}
+  if [ "${HAS_GIT}" = true ]
   then
     if is_git_dir "$1"
       then
       # This does NOT indicate if there are any modified files!
-      COMMIT_ID=$(git -C "$1" rev-parse --short HEAD)
+      COMMIT_ID="$(git -C "$1" rev-parse --short HEAD)"
     fi
   fi
 }
@@ -106,6 +106,7 @@ initfile="${LOADUP_WORKDIR}/${script_name}.init"
 
 # Select whether we use NLSETQ or ERSETQ to wrap the loadup
 # cm files depending on whether we want to allow breaks or not.
+# shellcheck disable=SC2034
 if [ -n "${LOADUP_NOBREAK}" ]
 then
   HELPFLAG=NIL
@@ -226,7 +227,7 @@ process_maikodir() {
                 maikodir=$(cd "$2" 2>/dev/null && pwd)
                 if [ -z "${maikodir}" ] || [ ! -d "${maikodir}" ]
                 then
-                  output_error_msg "Error: In --maikodir (-d) command line argument, "$2" is not an existing directory.${EOL}Exiting"
+                  output_error_msg "Error: In --maikodir (-d) command line argument, \"$2\" is not an existing directory.${EOL}Exiting"
                   exit 1
                 fi
               else

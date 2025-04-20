@@ -1,3 +1,4 @@
+#!/bin/sh
 #
 #  Thin the Medley loadups and loadups/build directories by deleting all but the latest version.
 #

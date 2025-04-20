@@ -156,17 +156,17 @@ EXAMPLES
 
 **./loadup \-\-target full \-\-start lisp** : run loadup thru Stage 4 (full.sysout) starting from existing Stage 3 outputs (lisp.sysout).
 
-**loadup -5 --aux** : run loadup from the beginning thru Stage 5 (apps.sysout) then run the Aux "stage" to create *whereis.hash* and *exports.all*
+**./loadup -5 --aux** : run loadup from the beginning thru Stage 5 (apps.sysout) then run the Aux "stage" to create *whereis.hash* and *exports.all*
 
-**loadup -db** : just run the DB "stage" starting from an existing full.sysout; do not run any of the sequential stages.
+**./loadup -db** : just run the DB "stage" starting from an existing full.sysout; do not run any of the sequential stages.
 
-**loadup --maikodir ~/il/newmaiko** :   run loadup sequence from beginning to full plus the loadup Aux stage, while using *~/il/newmaiko* as the location for the lde executables when running Medley.
+**./loadup --maikodir ~/il/newmaiko** :   run loadup sequence from beginning to full plus the loadup Aux stage, while using *~/il/newmaiko* as the location for the lde executables when running Medley.
 
-**loadup -full** : run loadup sequence from beginning thru full
+**./loadup -full** : run loadup sequence from beginning thru full
 
-**loadup -apps** : run loadup sequence from beginning thru app. Also run the Aux stage loadup. 
+**./loadup -apps** : run loadup sequence from beginning thru app. Also run the Aux stage loadup. 
 
-**loadup -apps-** : run loadup sequence from beginning thru app. Do not run the Aux stage loadup.
+**./loadup -apps-** : run loadup sequence from beginning thru app. Do not run the Aux stage loadup.
 
 BUGS
 ====

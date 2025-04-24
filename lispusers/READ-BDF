@@ -5,14 +5,14 @@ BITMAPHEIGHT BITMAPWIDTH BLACKSHADE BLTSHADE BOLD CONDENSED CHARSETINFO DISPLAY 
 FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITESTRIKEFONTFILE)) 
 READTABLE "XCL" BASE 10)
 
-(IL:FILECREATED "23-Apr-2025 17:55:25" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;54| 45384  
+(IL:FILECREATED "24-Apr-2025 00:45:54" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;56| 47327  
 
       :EDIT-BY "mth"
 
-      :CHANGES-TO (IL:FUNCTIONS BDF-TO-CHARSETINFO READ-GLYPH GET-FAMILY-FACE-SIZE-FROM-NAME 
-                         SPLIT-FONT-NAME READ-BDF)
+      :CHANGES-TO (IL:FUNCTIONS READ-BDF WRITE-BDF-TO-DISPLAYFONT-FILES BDF-TO-CHARSETINFO READ-GLYPH
+                         GET-FAMILY-FACE-SIZE-FROM-NAME SPLIT-FONT-NAME)
 
-      :PREVIOUS-DATE "21-Apr-2025 16:23:52" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;52|
+      :PREVIOUS-DATE "23-Apr-2025 17:55:25" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;54|
 )
 
 
@@ -487,7 +487,7 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                                               X))
                                                         Y))))
 
-(DEFUN READ-BDF (PATH)                                (IL:* IL:\; "Edited 23-Apr-2025 16:33 by mth")
+(DEFUN READ-BDF (PATH &OPTIONAL VERBOSE)              (IL:* IL:\; "Edited 24-Apr-2025 00:44 by mth")
                                                       (IL:* IL:\; "Edited 17-Apr-2025 15:10 by mth")
                                                       (IL:* IL:\; "Edited 12-Jul-2024 23:02 by mth")
    (LET
@@ -602,6 +602,14 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
                                              (SETF (BF-SLUG FONT)
                                                    GL))))))
                       (ENDFONT (SETQ FONT-COMPLETE T))))))))
+     (WHEN VERBOSE
+         (DESTRUCTURING-BIND (FAMILY (WEIGHT SLANT EXPANSION)
+                                    SIZE)
+                (GET-FAMILY-FACE-SIZE-FROM-NAME FONT)
+                (FORMAT *STANDARD-OUTPUT* 
+                       "Name: ~A~%Family: ~A~%Size: ~A~%Weight: ~A~%Slant: ~A~%Expansion: ~A~%"
+                       (BF-NAME FONT)
+                       FAMILY SIZE WEIGHT SLANT EXPANSION)))
      FONT)))
 
 (DEFUN READ-DELIMITED-LIST-FROM-STRING (INPUT-STRING &OPTIONAL (DELIMIT #\]))
@@ -731,12 +739,30 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 
          (LIST NIL NAME))))
 
-(DEFUN WRITE-BDF-TO-DISPLAYFONT-FILES (BDFONT DEST-DIR &OPTIONAL MAP-UNKNOWN-TO-PRIVATE 
-                                             RAW-UNICODE-MAPPING FAMILY SIZE FACE ROTATION DEVICE)
+(DEFUN WRITE-BDF-TO-DISPLAYFONT-FILES (BDFONT DEST-DIR &KEY FAMILY SIZE FACE ROTATION DEVICE
+                                             (CHAR-SETS T)
+                                             WRITE-UNMAPPED MAP-UNKNOWN-TO-PRIVATE 
+                                             RAW-UNICODE-MAPPING)
+                                                      (IL:* IL:\; "Edited 24-Apr-2025 00:09 by mth")
                                                       (IL:* IL:\; "Edited 21-Apr-2025 16:03 by mth")
                                                       (IL:* IL:\; "Edited  3-Feb-2025 23:18 by mth")
    (UNLESS (TYPEP BDFONT 'BDF-FONT)
           (ERROR "Not a BDF-FONT: ~S~%" BDFONT))
+   (COND
+      ((EQ CHAR-SETS T)                                      (IL:* IL:\; "This means ALL charsets")
+       )
+      ((NULL CHAR-SETS)
+       (SETQ CHAR-SETS '(0))                                 (IL:* IL:\; "Only charset 0")
+       )
+      ((AND (INTEGERP CHAR-SETS)
+            (<= 0 CHAR-SETS MAXCHARSET))                     (IL:* IL:\; "A single integer charset")
+       (SETQ CHAR-SETS (LIST CHAR-SETS)))
+      ((AND (LISTP CHAR-SETS)
+            (EVERY #'(LAMBDA (CS)
+                            (AND (INTEGERP CS)
+                                 (<= 0 CS MAXCHARSET)))
+                   CHAR-SETS)))
+      (T (ERROR "Invalid specification of :CHAR-SETS ~S~%" CHAR-SETS)))
    (DESTRUCTURING-BIND (FN-FAMILY FN-FACE FN-SIZE)
           (GET-FAMILY-FACE-SIZE-FROM-NAME BDFONT)
           (SETQ FAMILY (OR FAMILY FN-FAMILY))
@@ -747,17 +773,29 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
           (MULTIPLE-VALUE-BIND (FONTDESC CSETS UNMAPPED-FONTDESC UNICODE-CSETS UNMAPPEDGLYPHS)
                  (BDF-TO-FONTDESCRIPTOR BDFONT FAMILY SIZE FACE ROTATION DEVICE 
                         MAP-UNKNOWN-TO-PRIVATE RAW-UNICODE-MAPPING)
+                 (UNLESS (EQ CHAR-SETS T)
+                     (SETQ CSETS (INTERSECTION CHAR-SETS CSETS))
+                     (SETQ UNICODE-CSETS (INTERSECTION CHAR-SETS UNICODE-CSETS)))
                  (LOOP :FOR CS :IN CSETS :DO (WRITESTRIKEFONTFILE FONTDESC CS
                                                     (PACKFILENAME.STRING :BODY DEST-DIR :NAME
                                                            (\\FONTFILENAME FAMILY SIZE FACE 
                                                                   "DISPLAYFONT" CS))))
-                 (LOOP :FOR CS :IN UNICODE-CSETS :DO (WRITESTRIKEFONTFILE
-                                                      UNMAPPED-FONTDESC CS
-                                                      (PACKFILENAME.STRING :BODY DEST-DIR :NAME
-                                                             (\\FONTFILENAME (FONTPROP 
-                                                                                    UNMAPPED-FONTDESC
-                                                                                    'IL:FAMILY)
-                                                                    SIZE FACE "DISPLAYFONT" CS))))
+                 (IF WRITE-UNMAPPED
+                     (LOOP :FOR CS :IN UNICODE-CSETS :DO (WRITESTRIKEFONTFILE
+                                                          UNMAPPED-FONTDESC CS
+                                                          (PACKFILENAME.STRING
+                                                           :BODY DEST-DIR :NAME
+                                                           (\\FONTFILENAME (FONTPROP 
+                                                                                  UNMAPPED-FONTDESC
+                                                                                  'IL:FAMILY)
+                                                                  SIZE FACE "DISPLAYFONT" CS))))
+                     (SETQ UNICODE-CSETS NIL))
+
+                 (IL:* IL:|;;| "These correspond to the charsets ACTUALLY written.")
+
+                 (IL:* IL:|;;| 
+        "UNMAPPEDGLYPHS are never written. (Unicode encoding is > xFFFF, or encoding low byte is FF)")
+
                  (VALUES FONTDESC CSETS UNMAPPED-FONTDESC UNICODE-CSETS UNMAPPEDGLYPHS))))
 (IL:DECLARE\: IL:EVAL@COMPILE IL:DONTCOPY 
 
@@ -783,10 +821,10 @@ FONTPROP INPUT ITALIC LIGHT LRSH MEDIUM REGULAR TCONC UTOXCODE UTOXCODE? WRITEST
 
 (IL:PUTPROPS IL:READ-BDF IL:DATABASE IL:NO)
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (2397 10356 (BDF-TO-CHARSETINFO 2397 . 10356)) (10358 16228 (BDF-TO-FONTDESCRIPTOR 
-10358 . 16228)) (16230 19593 (GET-FAMILY-FACE-SIZE-FROM-NAME 16230 . 19593)) (19595 26406 (
-GLYPHS-BY-CHARSET 19595 . 26406)) (26408 27833 (PACKFILENAME.STRING 26408 . 27833)) (27835 34220 (
-READ-BDF 27835 . 34220)) (34222 34545 (READ-DELIMITED-LIST-FROM-STRING 34222 . 34545)) (34547 41035 (
-READ-GLYPH 34547 . 41035)) (41037 41778 (SPLIT-FONT-NAME 41037 . 41778)) (41780 43959 (
-WRITE-BDF-TO-DISPLAYFONT-FILES 41780 . 43959)))))
+  (IL:FILEMAP (NIL (2427 10386 (BDF-TO-CHARSETINFO 2427 . 10386)) (10388 16258 (BDF-TO-FONTDESCRIPTOR 
+10388 . 16258)) (16260 19623 (GET-FAMILY-FACE-SIZE-FROM-NAME 16260 . 19623)) (19625 26436 (
+GLYPHS-BY-CHARSET 19625 . 26436)) (26438 27863 (PACKFILENAME.STRING 26438 . 27863)) (27865 34669 (
+READ-BDF 27865 . 34669)) (34671 34994 (READ-DELIMITED-LIST-FROM-STRING 34671 . 34994)) (34996 41484 (
+READ-GLYPH 34996 . 41484)) (41486 42227 (SPLIT-FONT-NAME 41486 . 42227)) (42229 45902 (
+WRITE-BDF-TO-DISPLAYFONT-FILES 42229 . 45902)))))
 IL:STOP

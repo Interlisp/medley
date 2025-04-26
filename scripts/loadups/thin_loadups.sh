@@ -1,78 +1,26 @@
 #!/bin/sh
+#
+#  Thin the Medley loadups and loadups/build directories by deleting all but the latest version.
+#
+#  2025-04-18 Frank Halasz
+#
 
 main() {
-	# shellcheck source=./loadup-setup.sh
-	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	loadup_start
+    #shellcheck source=./loadup-setup.sh
+    . "${LOADUP_SCRIPTDIR}"/loadup-setup.sh
 
-	export ROOMSDIR="${MEDLEYDIR}/rooms"
-	export CLOSDIR="${MEDLEYDIR}/clos"
+    if [ "$1" = "w" ] || [ "$1" = "lw" ] || [ "$1" = "wl" ]
+    then
+      find "${LOADUP_WORKDIR}" -name "*.~[0-9]*~" -delete
+    fi
+    if [ "$1" = "l" ] || [ "$1" = "lw" ] || [ "$1" = "wl" ]
+    then
+      find "${LOADUP_OUTDIR}" -name "*.~[0-9]*~" -delete
+    fi
 
-	export NOTECARDSDIR="${MEDLEYDIR}/notecards"
-	if [ ! -e "${NOTECARDSDIR}" ]
-	then
-	    NOTECARDSDIR=$(cd "${MEDLEYDIR}/../" && pwd)/notecards
-	    if [ ! -e "${NOTECARDSDIR}" ]
-	    then
-	        NOTECARDSDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/notecards
-	        if [ ! -e "${NOTECARDSDIR}" ]
-	        then
-	            NOTECARDSDIR=""
-	        fi
-	    fi
-	fi
-
-	if [ -z "${NOTECARDSDIR}" ]
-	then
-	    echo "Error: Cannot find the Notecards directory"
-	    echo "It should be located at ${MEDLEYDIR}/../notecards or"
-	    echo "${MEDLEYDIR}/../../notecards.  But its not."
-	    echo "Exiting"
-	    exit 1
-	fi
-
-        git_commit_ID "${NOTECARDSDIR}"
-        NOTECARDS_COMMIT_ID="${COMMIT_ID}"
-        export NOTECARDS_COMMIT_ID
-
-        initfile="-"
-	cat >"${cmfile}" <<-"EOF"
-	"
-
-	(PROGN
-	   (IL:MEDLEY-INIT-VARS 'IL:GREET)
-	   (IL:DRIBBLE (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /apps.dribble))))
-	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE ROOMSDIR))(QUOTE /ROOMS)) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE NOTECARDSDIR))(QUOTE |/system/NOTECARDS.LCOM|)) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE CLOSDIR))(QUOTE /DEFSYS.DFASL)) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE MEDLEYDIR))(QUOTE |lispusers/BUTTONS.LCOM|)) 'IL:SYSLOAD)
-	   (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) (QUOTE /LOADUP-APPS.LCOM)) 'IL:SYSLOAD)
-       (IL:PRINT (IL:UNIX-GETENV (QUOTE NOTECARDS_COMMIT_ID)))
-       (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
-       (IL:PUTASSOC (QUOTE IL:NOTECARDS) (LIST (IL:UNIX-GETENV (QUOTE NOTECARDS_COMMIT_ID))) IL:SYSOUTCOMMITS)
-       (IL:PRINT IL:SYSOUTCOMMITS)
-	   (IL:HARDRESET)
-	)
-	SHH
-	(PROGN
-	   (IL:ENDLOADUP)
-	   (CLOS::LOAD-CLOS)
-	   (IL:|Apps.LOADUP|)
-	   (IL:DRIBBLE)
-	   (IL:MAKESYS
-	       (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /apps.sysout)))
-	       :APPS)
-	)
-	(IL:LOGOUT T)
-
-	"
-	EOF
-
-	run_medley "${LOADUP_WORKDIR}/full.sysout"
-
-	loadup_finish "apps.sysout" "apps.*"
 }
+
 
 
 # shellcheck disable=SC2164,SC2034
@@ -175,3 +123,4 @@ then
 fi
 
 main "$@"
+

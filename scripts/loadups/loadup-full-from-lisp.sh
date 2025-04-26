@@ -6,45 +6,40 @@ main() {
 
 	loadup_start
 
-        cmfile="-"
-	cat >"${initfile}" <<-"EOF"
-	(* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
+        initfile="-"
+	cat >"${cmfile}" <<-EOF
+	"
 
-	(SETQ MEDLEYDIR NIL)
-	(LOAD (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
-	(MEDLEY-INIT-VARS)
-	(PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)
-	(CNDIR (UNIX-GETENV "LOADUP_WORKDIR"))
-	(DRIBBLE "init.dribble")
-
-	(UNADVISE)
-	(ADVISE 'PAGEFULLFN '(RETURN))
-	(ADVISE '(ERROR IN \DO-DEFINE-FILE-INFO) '(RETURN))
-	(MOVD? 'NILL 'SETTEMPLATE)
-	(DEFINEQ (RRE (LAMBDA (X Y) Y)))
-	(MOVD? 'RRE 'READ-READER-ENVIRONMENT)
-
-	(LOAD (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_SOURCEDIR") "/" "MAKEINIT.LCOM"))
-	(PROG
-	  ((WORKDIR (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_WORKDIR") "/"))
-	   (LOADUP-SOURCE-DIR (CONCAT "{DSK}" (UNIX-GETENV "LOADUP_SOURCEDIR") "/"))
-	  )
-	  (SETQ DIRECTORIES (CONS LOADUP-SOURCE-DIR DIRECTORIES))
-      (PRINT (DATE))
-	  (PRINT (SETQ SYSOUTCOMMITS (LIST (LIST (QUOTE MEDLEY) (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))))))
-	  (RESETLST (RESETSAVE OK.TO.MODIFY.FNS T)
-	    (MAKEINITGREET (CONCAT WORKDIR "init.sysout") (CONCAT WORKDIR "init.dlinit"))
-	  )
+        (SETQ IL:LOADUP-SUCCESS
+          (${NL_ER_SETQ}
+            (PROGN
+	      (SETQ IL:HELPFLAG ${HELPFLAG})
+              (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR))(QUOTE /LOADUP-FULL.LCOM)))
+              (IL:LOADUP-FULL (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.dribble))))
+              (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
+            )
+          )
+        )
+	(COND
+          (IL:LOADUP-SUCCESS
+	    (IL:ENDLOADUP)
+	    (SETQ IL:HELPFLAG T)
+            (SETQ IL:LOADUP-SUCCESS (QUOTE NOBIND))
+	    (IL:MAKESYS
+              (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.sysout)))
+              :FULL
+            )
+            (IL:LOGOUT T 0)
+          )
 	)
+        (IL:LOGOUT T 1)
 
-	(DRIBBLE)
-	(LOGOUT T)
-	STOP
+	"
 	EOF
 
-	run_medley "${LOADUP_SOURCEDIR}/starter.sysout"
+	run_medley "${LOADUP_WORKDIR}/lisp.sysout"
 
-	loadup_finish "init.dlinit" "init.*" "RDSYS*" "I-NEW*"
+	loadup_finish "full.sysout" "full.*"
 }
 
 

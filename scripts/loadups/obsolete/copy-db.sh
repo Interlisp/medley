@@ -1,34 +1,18 @@
 #!/bin/sh
 
 main() {
+
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	loadup_start
+	echo ">>>>> START ${script_name}"
 
-        initfile="-"
-	cat >"${cmfile}" <<-"EOF"
-	"
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"
+	/bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/fuller.dribble "${LOADUP_OUTDIR}"
 
-	(PROGN
-	  (IL:LOAD (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR))(QUOTE /LOADUP-FULL.LCOM)))
-	  (IL:LOADUP-FULL (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.dribble))))
-	  (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
-	  (IL:HARDRESET)
-	)
-	SHH
-	(PROGN
-	  (IL:ENDLOADUP)
-	  (IL:MAKESYS (IL:CONCAT (QUOTE {DSK})(IL:UNIX-GETENV(QUOTE LOADUP_WORKDIR))(IL:L-CASE (QUOTE /full.sysout))) :FULL))
-	  (IL:LOGOUT T)
-	)
-
-	"
-	EOF
-
-	run_medley "${LOADUP_WORKDIR}/lisp.sysout"
-
-	loadup_finish "full.sysout" "full.*"
+	echo "<<<<< END ${script_name}"
+	echo ""
+	exit 0
 }
 
 

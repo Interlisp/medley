@@ -1,40 +1,12 @@
 #!/bin/sh
-
+#
+#   Redirect loadup-db.sh to omnibus loadup script
+#
 main() {
 
-	# shellcheck source=./loadup-setup.sh
-	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
+    "${LOADUP_SCRIPTDIR}"/loadup -db
 
-
-	loadup_start
-
-        initfile="-"
-	cat >"${cmfile}" <<-"EOF"
-	"
-	(PROG
-	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
-	  (IL:MEDLEY-INIT-VARS)
-	  (IL:LOAD(QUOTE MEDLEY-UTILS))
-          (DRIBBLE (QUOTE {DSK}<TMP>FOOBAR))
-	  (IL:MAKE-EXPORTS-ALL (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE exports.all))))
-	  (DRIBBLE)
-	  (IL:PUTASSOC (QUOTE IL:MEDLEY) (LIST (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) IL:SYSOUTCOMMITS)
-	  (IL:MAKE-WHEREIS-HASH
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.dribble)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash-tmp)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE whereis.hash)))
-        NIL NIL
-	  )
-	  (IL:LOGOUT T)
-	)
-	"
-	EOF
-
-	run_medley "${LOADUP_WORKDIR}/full.sysout"
-
-	loadup_finish "whereis.hash" "whereis.hash" "exports.all"
 }
-
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${LOADUP_SCRIPTDIR}" ]

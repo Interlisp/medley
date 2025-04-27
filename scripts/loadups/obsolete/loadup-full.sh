@@ -4,50 +4,19 @@ main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	echo ">>>>> START ${script_name}"
+        process_maikodir "$@"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"       \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+        # do the loadup
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-all.sh" --full --noendmsg
 
-	if [ "${1}" = "-apps" ]; then
-	    /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"   \
-	        | sed -e "s#${MEDLEYDIR}/##g"
+	# shellcheck disable=SC2181
+	if [ $? -eq 0 ];
+	then
+	  echo "+++++ ${script_name}: SUCCESS +++++"
+	else
+	  output_error_msg "----- ${script_name}: FAILURE -----${EOL}"
 	fi
-
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/init.dribble "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.dribble "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.dribble "${LOADUP_OUTDIR}"      \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/whereis.dribble "${LOADUP_OUTDIR}"   \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-
-	if [ "${1}" = "-apps" ]; then
-	    /bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/apps.dribble "${LOADUP_OUTDIR}"  \
-	        | sed -e "s#${MEDLEYDIR}/##g"
-	fi
-
-
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}"/library         \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}"/library    \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-
-
-	echo "<<<<< END ${script_name}"
-	echo ""
-	exit 0
 }
-
-
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${LOADUP_SCRIPTDIR}" ]

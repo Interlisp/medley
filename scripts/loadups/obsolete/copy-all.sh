@@ -1,42 +1,65 @@
 #!/bin/sh
+# shellcheck disable=SC2086
 
 main() {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	loadup_start
+	echo ">>>>> START ${script_name}"
 
-	SYSOUT="${MEDLEYDIR}/loadups/full.sysout"
-	if [ ! -f "${SYSOUT}" ];
-	then
-	  echo "Error: cannot find ${SYSOUT}.  Exiting."
-	  exit 1
-	fi
 
-        initfile="-"
-	cat >"${cmfile}" <<-"EOF"
-	"
+        aux="$1"
+        db="$2"
+        no_stages="$3"
+        start="$4"
+        end="$5"
 
-	(PROG
-	  ((WORKDIR (IL:CONCAT (QUOTE {DSK}) (IL:UNIX-GETENV (QUOTE LOADUP_WORKDIR)) (QUOTE /))))
-	  (SETQ IL:SYSOUTCOMMITS (LIST (LIST (QUOTE IL:MEDLEY) (IL:UNIX-GETENV (QUOTE LOADUP_COMMIT_ID)))))
-	  (IL:MEDLEY-INIT-VARS)
-	  (IL:FILESLOAD MEDLEY-UTILS)
-	  (SETQ IL:DIRECTORIES (CONS (IL:UNIX-GETENV (QUOTE LOADUP_SOURCEDIR)) IL:DIRECTORIES))
-	  (IL:MAKE-FULLER-DB
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.dribble)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.database)))
-	    (IL:CONCAT WORKDIR (IL:L-CASE (QUOTE fuller.sysout)))
-	  )
-	  (IL:LOGOUT T)
-	)
+        if [ $start -eq 0 ] && [ $end -ge 1 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}/library"         \
+              | sed -e "s#${MEDLEYDIR}/##g"
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}/library"    \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
 
-	"
-	EOF
+        if [ $start -le 2 ] && [ $end -ge 3 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
 
-	run_medley "${SYSOUT}"
+        if [ $start -le 3 ] && [ $end -ge 4 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
 
-	loadup_finish "fuller.database" "fuller*"
+        if  [ $start -le 3 ] && [ $end -ge 5 ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/apps.sysout "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ "${aux}" = true ]
+        then
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/whereis.hash "${LOADUP_OUTDIR}"      \
+              | sed -e "s#${MEDLEYDIR}/##g"
+          /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/exports.all "${LOADUP_OUTDIR}"       \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+        if [ "${db}" = true ]
+        then
+	  /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"    \
+              | sed -e "s#${MEDLEYDIR}/##g"
+	  /bin/sh "${LOADUP_CPV}" "${LOADUP_WORKDIR}"/fuller.dribble "${LOADUP_OUTDIR}"     \
+              | sed -e "s#${MEDLEYDIR}/##g"
+        fi
+
+	echo "<<<<< END ${script_name}"
+	echo ""
+	exit 0
+
 }
 
 

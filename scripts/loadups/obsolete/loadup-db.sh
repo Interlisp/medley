@@ -1,31 +1,22 @@
 #!/bin/sh
 
-main() {
+main () {
 	# shellcheck source=./loadup-setup.sh
 	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
 
-	echo ">>>>> START ${script_name}"
+        check_run_lock
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.sysout "${LOADUP_OUTDIR}"  \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.sysout "${LOADUP_OUTDIR}"  \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+        process_maikodir "$@"
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/init.dribble "${LOADUP_OUTDIR}" \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/lisp.dribble "${LOADUP_OUTDIR}" \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/full.dribble "${LOADUP_OUTDIR}" \
-	    | sed -e "s#${MEDLEYDIR}/##g"
+        # do the loadup
+	/bin/sh "${LOADUP_SCRIPTDIR}/loadup-db-from-full.sh"
+        exit_if_failure $?
+	/bin/sh "${LOADUP_SCRIPTDIR}/copy-db.sh"
+        exit_if_failure $?
 
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS "${MEDLEYDIR}"/library                   \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/RDSYS.LCOM "${MEDLEYDIR}"/library              \
-	    | sed -e "s#${MEDLEYDIR}/##g"
-
-	echo "<<<<< END ${script_name}"
-	echo ""
-	exit 0
+        echo "+++++ loadup-db.sh: SUCCESS +++++"
+        remove_run_lock
+        exit 0
 }
 
 # shellcheck disable=SC2164,SC2034
@@ -128,3 +119,8 @@ then
 fi
 
 main "$@"
+
+
+
+
+

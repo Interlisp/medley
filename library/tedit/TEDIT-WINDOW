@@ -1,10 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "27-Apr-2025 23:53:42" {WMEDLEY}<library>tedit>TEDIT-WINDOW.;835 226906 
+(FILECREATED "28-Apr-2025 15:40:33" {WMEDLEY}<library>TEDIT>TEDIT-WINDOW.;836 226673 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.CURSORMOVEDFN TEDIT.DEACTIVATE.WINDOW \TEDIT.BUTTONEVENTFN.DOOPERATION)
+      :CHANGES-TO (FNS TEDIT.DEACTIVATE.WINDOW \TEDIT.CLOSEPANES \TEDIT.CLOSESPLITS 
+                       \TEDIT.CURSORMOVEDFN \TEDIT.BUTTONEVENTFN.DOOPERATION)
+                  (VARS TEDIT-WINDOWCOMS)
 
       :PREVIOUS-DATE "27-Apr-2025 13:08:05" {WMEDLEY}<library>tedit>TEDIT-WINDOW.;833)
 
@@ -60,7 +62,7 @@
               (FNS \TEDIT.FILENAME \TEDIT.DEFAULT.TITLE \TEDIT.WINDOW.TITLE \TEDIT.LIKELY.FILENAME 
                    \TEDIT.UPDATE.TITLE))
         (COMS                                                (* ; "Screen updating utilities")
-              (FNS TEDIT.DEACTIVATE.WINDOW \TEDIT.RESHAPEFN \TEDIT.REPAINTFN \TEDIT.CLOSEPANES)
+              (FNS TEDIT.DEACTIVATE.WINDOW \TEDIT.RESHAPEFN \TEDIT.REPAINTFN \TEDIT.CLOSESPLITS)
               (FNS \TEDIT.SCROLLFN \TEDIT.SCROLLCH.TOP \TEDIT.SCROLLCH.BOTTOM \TEDIT.SCROLLUP 
                    \TEDIT.TOPLINE.YTOP \TEDIT.SCROLLDOWN \TEDIT.SCROLL.CARET \TEDIT.VISIBLECARETP 
                    \TEDIT.VISIBLECHARP \TEDIT.BITMAPLINES \TEDIT.SETPANE.TOPLINE \TEDIT.SHIFTLINES)
@@ -2300,7 +2302,7 @@
 (DEFINEQ
 
 (TEDIT.DEACTIVATE.WINDOW
-  [LAMBDA (PANE)                                             (* ; "Edited 27-Apr-2025 23:35 by rmk")
+  [LAMBDA (PANE)                                             (* ; "Edited 28-Apr-2025 15:38 by rmk")
                                                              (* ; "Edited 20-Apr-2025 15:10 by rmk")
                                                              (* ; "Edited 14-Mar-2025 16:22 by rmk")
                                                              (* ; "Edited 18-Feb-2025 23:56 by rmk")
@@ -2331,43 +2333,51 @@
      (* ;; "Return DON'T to signal (to CLOSEW) that the window shouldn't be closed.  if previously quit, the window is closed already, and would be reopened to reclose it.")
 
            (CL:UNLESS (FGETTOBJ TEXTOBJ EDITFINISHEDFLG)
-               (CL:WHEN (\TEDIT.FINISHEDIT? TSTREAM T)
+               (CL:WHEN (EQ 'DON'T (\TEDIT.FINISHEDIT? TSTREAM T))
                    (RETURN 'DON'T)))
            (CL:UNLESS (EQ PANE (FGETTOBJ TEXTOBJ PRIMARYPANE))
                                                              (* ; "Must be a lower split window")
                (\TEDIT.UNSPLITW PANE)
                (RETURN))
+
+     (* ;; "We're really closing: get rid of the splits, recover the region that they all occupy so we can recover the original/reshaped region of the primary pane=PANE.")
+
+           (WINDOWPROP (PANEWINDOW PANE)
+                  'SAVED-TYPED-REGION
+                  (\TEDIT.CLOSESPLITS TSTREAM))
+           (\TEDIT.CLOSESPLITS TSTREAM)
+
+     (* ;; "It's just the primary pane now.  Shut things down.")
+
            (CL:WHEN (AND (FGETTOBJ TEXTOBJ PROMPTWINDOW)
-                         (OPENWP (GETTOBJ TEXTOBJ PROMPTWINDOW)))
-               (CLEARW (GETTOBJ TEXTOBJ PROMPTWINDOW)))
+                         (OPENWP (FGETTOBJ TEXTOBJ PROMPTWINDOW)))
+               (CLEARW (FGETTOBJ TEXTOBJ PROMPTWINDOW)))
            (\TEDIT.SETCARET (TEXTSEL TEXTOBJ)
                   PANE TEXTOBJ 'OFF)                         (* ; 
         "Before the window is closed, make sure that the caret is down, or the window will reappear.")
            (CL:WHEN (AND (\TEDIT.WINDOW.TITLE TEXTOBJ)
-                         (OPENWP (GETTOBJ TEXTOBJ PROMPTWINDOW))
-                         (OPENWP PANE)
-                         (EQ PANE (FGETTOBJ TEXTOBJ PRIMARYPANE)))
+                         (OPENWP (FGETTOBJ TEXTOBJ PROMPTWINDOW))
+                         (OPENWP PANE))
 
                (* ;; 
    "Reset the window's title to a known 'inactive' value, in case somebody else also has the window.")
 
                (\TEDIT.WINDOW.TITLE TEXTOBJ NIL "Edit Window [Inactive]"))
-
-     (* ;; "Detach and close all panes")
-
-           (\TEDIT.CLOSEPANES TSTREAM)
            (CL:WHEN (type? STREAM (FGETTOBJ TEXTOBJ TXTFILE))(* ; 
                                                        "Close the file that this window was open on.")
                (CL:UNLESS (fetch (TEXTWINDOW CLOSINGFILE) of PANEWINDOW)
                    (replace (TEXTWINDOW CLOSINGFILE) of PANEWINDOW with T)
                    (CLOSEF? (FGETTOBJ TEXTOBJ TXTFILE))))
+
+     (* ;; "Clean up the window properties")
+
            (WINDOWPROP PANEWINDOW 'PROCESS.EXITFN NIL)
            (WINDOWPROP PANEWINDOW 'PROCESS.IDLEFN NIL)
            (WINDOWPROP PANEWINDOW 'BUTTONEVENTFN (FUNCTION TOTOPW))
                                                              (* ; "And the button functions")
            (WINDOWPROP PANEWINDOW 'RIGHTBUTTONFN (FUNCTION DOWINDOWCOM))
            (WINDOWDELPROP PANEWINDOW 'CLOSEFN (FUNCTION TEDIT.DEACTIVATE.WINDOW))
-                                                             (* ; "Remove to avoid a loop")
+                                                             (* ; "Remove to avoid a loop on reuse?")
            (WINDOWPROP PANEWINDOW 'SCROLLFN NIL)
            (WINDOWPROP PANEWINDOW 'AFTERMOVEFN NIL)
            (WINDOWDELPROP PANEWINDOW 'RESHAPEFN (FUNCTION \TEDIT.RESHAPEFN))
@@ -2386,8 +2396,7 @@
            (GIVE.TTY.PROCESS PANE)                           (* ; "Now kill this one")
            (DISMISS 300)
            (WINDOWPROP PANEWINDOW 'CURSOROUTFN NIL)
-           (WINDOWPROP PANEWINDOW 'CURSORMOVEDFN NIL)
-           (\TEDIT.UNLINKPANE PANE)                          (* ; "Disconnect")
+           (WINDOWPROP PANEWINDOW 'CURSORMOVEDFN NIL)        (* ; "Disconnect")
            (replace (TEXTWINDOW WTEXTSTREAM) of PANE with NIL])
 
 (\TEDIT.RESHAPEFN
@@ -2431,42 +2440,32 @@
 
     (\TEDIT.FILL.PANES WINDOW])
 
-(\TEDIT.CLOSEPANES
-  [LAMBDA (TSTREAM)                                          (* ; "Edited 20-Apr-2025 13:46 by rmk")
+(\TEDIT.CLOSESPLITS
+  [LAMBDA (TSTREAM)                                          (* ; "Edited 28-Apr-2025 15:32 by rmk")
 
-    (* ;; "This closes the panes associated with TSTREAM.  It also breaks the link from TSTREAM to its primary pane and additional split panes, but otherwise leaves the document alone.  Someone with a pointer to the closed window can see a window with its region but otherwise is clean.  ")
+    (* ;; "Detach and close all split panes, if any.  This differs from unsplitting in that it doesn't do any intermediatge redisplays.")
 
-    (* ;; "It would be nice to be able to just close the window and leave alone the pointers from the window to the stream and the stream to the windows.  But then neither would ever be collected.")
+    (* ;; "Returns the total region occupied by the primary pane (still open) and all of its the split windows.  We include the primary pane's region but don't otherwise touch the primary pane.")
 
-    (* ;; "So the window in its pre-split size is let loose, the stream remains until the user drops all pointers to it.  But holding on by the TEXTOBJ won't work--the user should never rely on that.")
+    (LET* ((TEXTOBJ (FTEXTOBJ TSTREAM))
+           (PRIMARYPANE (FGETTOBJ TEXTOBJ PRIMARYPANE)))
+          (PROG1 [for PANE PANEWINDOW SPLITREGIONS inpanes (NEXTPANE PRIMARYPANE)
+                    eachtime (SETQ PANEWINDOW (PANEWINDOW PANE))
+                    collect 
 
-    (* ;; "")
+                          (* ;; "Avoid closing loop through TEDIT.DEACTIVATE.WINDOW")
 
-    (* ;; "When panes-as-windows are replaced by the paneprops data that points to the window, we can break the link by smashing out the window, but keep all the other information--enough to recreate a new window-datum with the same look as the original.  In that case we would keep the split regions too and recreate them")
-
-    (LET ((TEXTOBJ (FTEXTOBJ TSTREAM))
-          REGIONS)
-         (SETQ REGIONS (for PANE PANEWINDOW inpanes TEXTOBJ eachtime (SETQ PANEWINDOW (PANEWINDOW
-                                                                                       PANE))
-                          collect 
-
-                                (* ;; 
-                                "Avoid closing loop through TEDIT.DEACTIVATE.WINDOW, and detach")
-
-                                (WINDOWDELPROP PANEWINDOW 'CLOSEFN (FUNCTION TEDIT.DEACTIVATE.WINDOW)
-                                       )
-                                (WINDOWREGION PANEWINDOW)))
-
-         (* ;; "Save the overall shape of the unsplit primary window as the SAVE-TYPED-REGION property, for subsequent reuse of that typed-region. ")
-
-         (WINDOWPROP (PANEWINDOW (FGETTOBJ TEXTOBJ PRIMARYPANE))
-                'SAVED-TYPED-REGION
-                (APPLY (FUNCTION UNIONREGIONS)
-                       REGIONS))
-         (for PANE inpanes TEXTOBJ do (CLOSEW (PANEWINDOW PANE))
-                                      (replace (TEXTWINDOW WTEXTSTREAM) of (PANEWINDOW PANE)
-                                         with NIL))
-         (FSETTOBJ TEXTOBJ PRIMARYPANE NIL])
+                          (WINDOWDELPROP PANEWINDOW 'CLOSEFN (FUNCTION TEDIT.DEACTIVATE.WINDOW))
+                          (WINDOWREGION PANEWINDOW) finally (RETURN (APPLY (FUNCTION UNIONREGIONS)
+                                                                           (CONS (WINDOWREGION 
+                                                                                        PRIMARYPANE)
+                                                                                 SPLITREGIONS]
+              (for PANE inpanes (NEXTPANE PRIMARYPANE) do (CLOSEW (PANEWINDOW PANE))
+                                                          (replace (TEXTWINDOW WTEXTSTREAM)
+                                                             of (PANEWINDOW PANE) with NIL))
+                                                             (* ; "Disconnect all the splits")
+              (SETPANEPROP (PANEPROPS PRIMARYPANE)
+                     NEXTPANE NIL))])
 )
 (DEFINEQ
 
@@ -3583,36 +3582,36 @@
 (RPAQ? TEDIT.TITLED.ICON.TEMPLATE (create TITLEDICON ICON _ TEDITICON MASK _ TEDITMASK TITLEREG _ 
                                          TEDIT.ICON.TITLE.REGION))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (17119 18015 (TEDIT.DEFER.UPDATES 17129 . 18013)) (18016 43437 (\TEDIT.WINDOW.CREATE 
-18026 . 25046) (\TEDIT.WINDOW.GETREGION 25048 . 28538) (\TEDIT.WINDOW.SETUP 28540 . 32762) (
-\TEDIT.MINIMAL.WINDOW.SETUP 32764 . 40175) (\TEDIT.CLEARPANE 40177 . 40894) (\TEDIT.FILL.PANES 40896
- . 43435)) (43438 67168 (\TEDIT.CURSORMOVEDFN 43448 . 49058) (\TEDIT.CURSOROUTFN 49060 . 49505) (
-\TEDIT.ACTIVE.WINDOWP 49507 . 50577) (\TEDIT.EXPANDFN 50579 . 51142) (\TEDIT.MAINW 51144 . 52424) (
-\TEDIT.MAINSTREAM 52426 . 52760) (\TEDIT.PRIMARYPANE 52762 . 53532) (\TEDIT.PANELIST 53534 . 54030) (
-\TEDIT.NEWREGIONFN 54032 . 56548) (\TEDIT.SET.WINDOW.EXTENT 56550 . 61804) (\TEDIT.SHRINK.ICONCREATE 
-61806 . 64539) (\TEDIT.SHRINKFN 64541 . 64950) (\TEDIT.PANEREGION 64952 . 67166)) (67200 99922 (
-\TEDIT.BUTTONEVENTFN 67210 . 80082) (\TEDIT.BUTTONEVENTFN.DOOPERATION 80084 . 87235) (
-\TEDIT.BUTTONEVENTFN.GETOPERATION 87237 . 89079) (\TEDIT.BUTTONEVENTFN.CURSEL.INIT 89081 . 92646) (
-\TEDIT.BUTTONEVENTFN.INACTIVE 92648 . 95072) (\TEDIT.BUTTONEVENTFN.INTITLE 95074 . 96909) (
-\TEDIT.COPYINSERTFN 96911 . 98043) (\TEDIT.FOREIGN.COPY 98045 . 99920)) (99923 117004 (
-\TEDIT.PANE.SPLIT 99933 . 103881) (\TEDIT.SPLITW 103883 . 111241) (\TEDIT.UNSPLITW 111243 . 115661) (
-\TEDIT.LINKPANES 115663 . 116426) (\TEDIT.UNLINKPANE 116428 . 117002)) (118438 119329 (TEDITWINDOWP 
-118448 . 119327)) (119366 122469 (TEDIT.GETINPUT 119376 . 121819) (\TEDIT.MAKEFILENAME 121821 . 122467
-)) (122518 130145 (TEDIT.PROMPTWINDOW 122528 . 122842) (TEDIT.PROMPTPRINT 122844 . 125471) (
-TEDIT.PROMPTCLEAR 125473 . 127192) (TEDIT.PROMPTFLASH 127194 . 128452) (\TEDIT.PROMPT.PAGEFULLFN 
-128454 . 130143)) (130383 140215 (\TEDIT.FILENAME 130393 . 131165) (\TEDIT.DEFAULT.TITLE 131167 . 
-133546) (\TEDIT.WINDOW.TITLE 133548 . 135717) (\TEDIT.LIKELY.FILENAME 135719 . 137697) (
-\TEDIT.UPDATE.TITLE 137699 . 140213)) (140258 151812 (TEDIT.DEACTIVATE.WINDOW 140268 . 147040) (
-\TEDIT.RESHAPEFN 147042 . 149127) (\TEDIT.REPAINTFN 149129 . 149353) (\TEDIT.CLOSEPANES 149355 . 
-151810)) (151813 194612 (\TEDIT.SCROLLFN 151823 . 154054) (\TEDIT.SCROLLCH.TOP 154056 . 156167) (
-\TEDIT.SCROLLCH.BOTTOM 156169 . 160499) (\TEDIT.SCROLLUP 160501 . 166227) (\TEDIT.TOPLINE.YTOP 166229
- . 167898) (\TEDIT.SCROLLDOWN 167900 . 174939) (\TEDIT.SCROLL.CARET 174941 . 177779) (
-\TEDIT.VISIBLECARETP 177781 . 180075) (\TEDIT.VISIBLECHARP 180077 . 181168) (\TEDIT.BITMAPLINES 181170
- . 185090) (\TEDIT.SETPANE.TOPLINE 185092 . 185704) (\TEDIT.SHIFTLINES 185706 . 194610)) (194613 
-205482 (\TEDIT.ONSCREEN? 194623 . 199174) (\TEDIT.ONSCREEN.REGION 199176 . 202827) (\TEDIT.AFTERMOVEFN
- 202829 . 203726) (OFFSCREENP 203728 . 205480)) (205524 208338 (\TEDIT.PROCIDLEFN 205534 . 207194) (
-\TEDIT.PROCENTRYFN 207196 . 207641) (\TEDIT.PROCEXITFN 207643 . 208336)) (208417 221642 (
-\TEDIT.DOWNCARET 208427 . 209220) (\TEDIT.FLASHCARET 209222 . 211333) (\TEDIT.UPCARET 211335 . 212439)
- (TEDIT.NORMALIZECARET 212441 . 215659) (\TEDIT.SETCARET 215661 . 221012) (\TEDIT.CARET 221014 . 
-221640)))))
+  (FILEMAP (NIL (17223 18119 (TEDIT.DEFER.UPDATES 17233 . 18117)) (18120 43541 (\TEDIT.WINDOW.CREATE 
+18130 . 25150) (\TEDIT.WINDOW.GETREGION 25152 . 28642) (\TEDIT.WINDOW.SETUP 28644 . 32866) (
+\TEDIT.MINIMAL.WINDOW.SETUP 32868 . 40279) (\TEDIT.CLEARPANE 40281 . 40998) (\TEDIT.FILL.PANES 41000
+ . 43539)) (43542 67272 (\TEDIT.CURSORMOVEDFN 43552 . 49162) (\TEDIT.CURSOROUTFN 49164 . 49609) (
+\TEDIT.ACTIVE.WINDOWP 49611 . 50681) (\TEDIT.EXPANDFN 50683 . 51246) (\TEDIT.MAINW 51248 . 52528) (
+\TEDIT.MAINSTREAM 52530 . 52864) (\TEDIT.PRIMARYPANE 52866 . 53636) (\TEDIT.PANELIST 53638 . 54134) (
+\TEDIT.NEWREGIONFN 54136 . 56652) (\TEDIT.SET.WINDOW.EXTENT 56654 . 61908) (\TEDIT.SHRINK.ICONCREATE 
+61910 . 64643) (\TEDIT.SHRINKFN 64645 . 65054) (\TEDIT.PANEREGION 65056 . 67270)) (67304 100026 (
+\TEDIT.BUTTONEVENTFN 67314 . 80186) (\TEDIT.BUTTONEVENTFN.DOOPERATION 80188 . 87339) (
+\TEDIT.BUTTONEVENTFN.GETOPERATION 87341 . 89183) (\TEDIT.BUTTONEVENTFN.CURSEL.INIT 89185 . 92750) (
+\TEDIT.BUTTONEVENTFN.INACTIVE 92752 . 95176) (\TEDIT.BUTTONEVENTFN.INTITLE 95178 . 97013) (
+\TEDIT.COPYINSERTFN 97015 . 98147) (\TEDIT.FOREIGN.COPY 98149 . 100024)) (100027 117108 (
+\TEDIT.PANE.SPLIT 100037 . 103985) (\TEDIT.SPLITW 103987 . 111345) (\TEDIT.UNSPLITW 111347 . 115765) (
+\TEDIT.LINKPANES 115767 . 116530) (\TEDIT.UNLINKPANE 116532 . 117106)) (118542 119433 (TEDITWINDOWP 
+118552 . 119431)) (119470 122573 (TEDIT.GETINPUT 119480 . 121923) (\TEDIT.MAKEFILENAME 121925 . 122571
+)) (122622 130249 (TEDIT.PROMPTWINDOW 122632 . 122946) (TEDIT.PROMPTPRINT 122948 . 125575) (
+TEDIT.PROMPTCLEAR 125577 . 127296) (TEDIT.PROMPTFLASH 127298 . 128556) (\TEDIT.PROMPT.PAGEFULLFN 
+128558 . 130247)) (130487 140319 (\TEDIT.FILENAME 130497 . 131269) (\TEDIT.DEFAULT.TITLE 131271 . 
+133650) (\TEDIT.WINDOW.TITLE 133652 . 135821) (\TEDIT.LIKELY.FILENAME 135823 . 137801) (
+\TEDIT.UPDATE.TITLE 137803 . 140317)) (140362 151579 (TEDIT.DEACTIVATE.WINDOW 140372 . 147430) (
+\TEDIT.RESHAPEFN 147432 . 149517) (\TEDIT.REPAINTFN 149519 . 149743) (\TEDIT.CLOSESPLITS 149745 . 
+151577)) (151580 194379 (\TEDIT.SCROLLFN 151590 . 153821) (\TEDIT.SCROLLCH.TOP 153823 . 155934) (
+\TEDIT.SCROLLCH.BOTTOM 155936 . 160266) (\TEDIT.SCROLLUP 160268 . 165994) (\TEDIT.TOPLINE.YTOP 165996
+ . 167665) (\TEDIT.SCROLLDOWN 167667 . 174706) (\TEDIT.SCROLL.CARET 174708 . 177546) (
+\TEDIT.VISIBLECARETP 177548 . 179842) (\TEDIT.VISIBLECHARP 179844 . 180935) (\TEDIT.BITMAPLINES 180937
+ . 184857) (\TEDIT.SETPANE.TOPLINE 184859 . 185471) (\TEDIT.SHIFTLINES 185473 . 194377)) (194380 
+205249 (\TEDIT.ONSCREEN? 194390 . 198941) (\TEDIT.ONSCREEN.REGION 198943 . 202594) (\TEDIT.AFTERMOVEFN
+ 202596 . 203493) (OFFSCREENP 203495 . 205247)) (205291 208105 (\TEDIT.PROCIDLEFN 205301 . 206961) (
+\TEDIT.PROCENTRYFN 206963 . 207408) (\TEDIT.PROCEXITFN 207410 . 208103)) (208184 221409 (
+\TEDIT.DOWNCARET 208194 . 208987) (\TEDIT.FLASHCARET 208989 . 211100) (\TEDIT.UPCARET 211102 . 212206)
+ (TEDIT.NORMALIZECARET 212208 . 215426) (\TEDIT.SETCARET 215428 . 220779) (\TEDIT.CARET 220781 . 
+221407)))))
 STOP

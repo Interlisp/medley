@@ -931,7 +931,7 @@ do
         ;;
       --maikodir)
         # for use in loadups
-        if [ "$2" = "-" ] || [ "$2" == "--" ]
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
         then
           maikodir_arg=""
           maikodir_stage=""
@@ -1360,34 +1360,45 @@ check_for_maiko_exe () {
 
 if [ -z "${maikodir_arg}" ]
 then
-  if check_for_maiko_exe "${MEDLEYDIR}/maiko"
+  # No MAIKODIR specified.  But is lde (or ldeinit) on the PATH?
+  # If so, use it.
+  maiko_exe="$(command -v "${maikoprog_arg}")"
+  if [ -z "${maiko_exe}" ]
   then
-    maikodir_arg="${MEDLEYDIR}/maiko"
-  elif check_for_maiko_exe "${MEDLEYDIR}/../maiko"
-  then
-    maikodir_arg="$(cd "${MEDLEYDIR}/../maiko"; pwd)"
-  else
-    if ! check_if_maiko_dir "${MEDLEYDIR}/maiko" && ! check_if_maiko_dir "${MEDLEYDIR}/../maiko"
+    # Lde (or ledinit) is not on the PATH, check in MEDLEYDIR/maiko and in MEDLEYDIR/../maiko
+    if check_for_maiko_exe "${MEDLEYDIR}/maiko"
     then
-      err_msg="ERROR: Cannot find the Maiko directory at either
-\"${MEDLEYDIR}/maiko\" or \"${MEDLEYDIR}/../maiko\".
+      maikodir_arg="${MEDLEYDIR}/maiko"
+    elif check_for_maiko_exe "${MEDLEYDIR}/../maiko"
+    then
+      maikodir_arg="$(cd "${MEDLEYDIR}/../maiko"; pwd)"
+    else
+      # Not in MEDLEYDIR/maiko and in MEDLEYDIR/../maiko, put out the appropriate error msg and exit
+      if ! check_if_maiko_dir "${MEDLEYDIR}/maiko" && ! check_if_maiko_dir "${MEDLEYDIR}/../maiko"
+      then
+        err_msg="ERROR: The maiko executable ($maikoprog_arg) is not on the PATH and cannot find
+the Maiko directory at either \"${MEDLEYDIR}/maiko\"
+or \"${MEDLEYDIR}/../maiko\".
 You can use the --maikodir argument or the MAIKODIR env variable
 to specify the Maiko directory.
 Exiting."
-      output_error_msg "${err_msg}"
-      exit 53
-    else
-      err_msg="ERROR: Cannot find the Maiko executable (${maiko_exe_subdir}/${maikoprog_arg}) in either
-\"${MEDLEYDIR}/maiko\" or \"${MEDLEYDIR}/../maiko\".
+        output_error_msg "${err_msg}"
+        exit 53
+      else
+        err_msg="ERROR: The maiko executable ($maikoprog_arg) is not on the PATH and cannot find
+the Maiko executable (${maiko_exe_subdir}/${maikoprog_arg}) in either \"${MEDLEYDIR}/maiko\"
+or \"${MEDLEYDIR}/../maiko\".
 Exiting."
-      output_error_msg "${err_msg}"
-      exit 54
+        output_error_msg "${err_msg}"
+        exit 54
+      fi
     fi
   fi
 elif ! check_if_maiko_dir "${maikodir_arg}" || ! check_for_maiko_exe "${maikodir_arg}"
 then
+  # MAIKODIR is specified but lde (or ldeinit) is not in fact there.  Error exit.
   err_msg="In ${maikodir_stage}:
-ERROR: The value provided by \$MAIKODIR or by the  --maikodir argument ("${maikodir_arg}") is not
+ERROR: The value provided by \$MAIKODIR or by the  --maikodir argument (${maikodir_arg}) is not
 in fact a directory containing the Maiko emulator (${maiko_exe_subdir}/${maikoprog_arg}).
 Exiting."
   output_error_msg "${err_msg}"

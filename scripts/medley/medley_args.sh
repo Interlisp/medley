@@ -341,7 +341,7 @@ do
         ;;
       --maikodir)
         # for use in loadups
-        if [ "$2" = "-" ] || [ "$2" == "--" ]
+        if [ "$2" = "-" ] || [ "$2" = "--" ]
         then
           maikodir_arg=""
           maikodir_stage=""

@@ -30,8 +30,8 @@ sysout_stage=""
 title=""
 use_vnc=false
 windows=false
-maikodir_arg=""
-maikodir_stage=""
+maikodir_arg="${MAIKODIR}"
+maikodir_stage="MAIKODIR env variable"
 maikoprog_arg=""
 greet_arg=""
 noscroll=false
@@ -341,10 +341,16 @@ do
         ;;
       --maikodir)
         # for use in loadups
-        check_for_dash_or_end "$1" "$2"
-        check_dir_exists "$1" "2"
-        maikodir_arg="$2"
-        maikodir_stage="${args_stage}"
+        if [ "$2" = "-" ] || [ "$2" == "--" ]
+        then
+          maikodir_arg=""
+          maikodir_stage=""
+        else
+          check_for_dash_or_end "$1" "$2"
+          check_dir_exists "$1" "2"
+          maikodir_arg="$2"
+          maikodir_stage="${args_stage}"
+        fi
         shift;
         ;;
       -prog | --maikoprog)

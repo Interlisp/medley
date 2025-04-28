@@ -246,7 +246,8 @@ then
     then
       err_msg="ERROR: Cannot find the Maiko directory at either
 \"${MEDLEYDIR}/maiko\" or \"${MEDLEYDIR}/../maiko\".
-You can use the --maikodir argument to specify the Maiko directory.
+You can use the --maikodir argument or the MAIKODIR env variable
+to specify the Maiko directory.
 Exiting."
       output_error_msg "${err_msg}"
       exit 53
@@ -261,8 +262,8 @@ Exiting."
 elif ! check_if_maiko_dir "${maikodir_arg}" || ! check_for_maiko_exe "${maikodir_arg}"
 then
   err_msg="In ${maikodir_stage}:
-ERROR: The value of the --maikodir argument is not in fact a directory containing
-the Maiko emulator (${maiko_exe_subdir}/${maikoprog_arg}).
+ERROR: The value provided by \$MAIKODIR or by the  --maikodir argument ("${maikodir_arg}") is not
+in fact a directory containing the Maiko emulator (${maiko_exe_subdir}/${maikoprog_arg}).
 Exiting."
   output_error_msg "${err_msg}"
   exit 53

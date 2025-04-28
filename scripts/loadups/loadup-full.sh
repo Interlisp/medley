@@ -1,20 +1,12 @@
 #!/bin/sh
-
+#
+#   Redirect loadup-full.sh to omnibus loadup script
+#
 main() {
 
-	# shellcheck source=./loadup-setup.sh
-	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
+    "${LOADUP_SCRIPTDIR}"/loadup -target full
 
-	echo ">>>>> START ${script_name}"
-
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/fuller.database "${LOADUP_OUTDIR}"
-	/bin/sh "${LOADUP_SCRIPTDIR}/cpv" "${LOADUP_WORKDIR}"/fuller.dribble "${LOADUP_OUTDIR}"
-
-	echo "<<<<< END ${script_name}"
-	echo ""
-	exit 0
 }
-
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${LOADUP_SCRIPTDIR}" ]

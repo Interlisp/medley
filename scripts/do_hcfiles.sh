@@ -38,6 +38,13 @@ main() {
 	"
 	EOF
 
+        # Make sure loadups/build is not included in HCFILES
+        if [ -d "${MEDLEYDIR}/loadups/build" ]
+        then
+          touch "${MEDLEYDIR}/loadups/build/.skip"
+        fi
+
+
         /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"     \
              --config -                                          \
              --id hcfiles_+                                      \

@@ -23,8 +23,8 @@ main() {
 
     cat >"${shellfile}" <<-'EOF'
 	#!/bin/sh
-	git status --porcelain "$1" | grep --quiet --no-messages "??"
-	if [ $? -eq 0 ]
+	x=$(git ls-files "$1" 2>/dev/null)
+	if [ -z "$x" ]
 	then
 	rm -f "$1"
 	rm -f "$1".~*~

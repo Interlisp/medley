@@ -249,13 +249,39 @@ process_maikodir() {
 export LOADUP_LOCKFILE="${LOADUP_WORKDIR}"/lock
 
 check_run_lock() {
-  if [ -e "${LOADUP_LOCKFILE}" ]
-  then
-    output_error_msg "Error: Another loadup is already running with PID $(cat "${LOADUP_LOCKFILE}")${EOL}Exiting."
-    exit 1
-  fi
-  echo "$$" > "${LOADUP_LOCKFILE}"
-  LOADUP_LOCK="$$"
+    set +x
+    if [ -e "${LOADUP_LOCKFILE}" ]
+    then
+      output_warn_msg "Warning: Another loadup is already running with PID $(cat "${LOADUP_LOCKFILE}")"
+      if [ "${override_lock}" = true ]
+      then
+	output_warn_msg "Overriding lock preventing simultaneous loadups due to command line argument --override${EOL}Continuing."
+      else
+        loop_done=false
+        while [ "${loop_done}" = "false" ]
+        do
+          output_warn_msg "Do you want to override the lock guarding against simultaneous loadups?"
+          output_warn_msg "Answer [y, Y, n or N, default n] followed by RETURN"
+          read resp
+          if [ -z "${resp}" ]; then resp=n; fi
+          case "${resp}" in
+            n* | N* )
+              output_error_msg "Ok.  Exiting"
+              exit 5
+              ;;
+            y* | Y* )
+              output_warn_msg "Ok. Overriding lock and continuing"
+              loop_done=true
+              ;;
+            * )
+              output_warn_msg "Answer not one of Y, y, N, or n.  Retry."
+              ;;
+          esac
+        done
+      fi
+    fi
+    echo "$$" > "${LOADUP_LOCKFILE}"
+    LOADUP_LOCK="$$"
 }
 
 remove_run_lock() {

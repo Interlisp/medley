@@ -51,7 +51,7 @@ The two independent stages that can be run if the first 4 sequential stages comp
 Loadup does all of its work in a work directory (\<MEDLEYDIR>loadups/build).  The target files are copied from this work directory to the loadups directory if the loadup is successful.  Each stage of the loadup also creates a dribble file containing the terminal output from within the Medley environment.  These dribble files are not copied to the loadups directory, but remain available in the work directory after the loadup completes.
 
 
-Only one instance (per \<MEDLEIDIR>) of loadup can be run at a time.  (The lock file is in the work directory and is named ***lock***.  It can be removed in case of an uncontrolled failure of the loadup procedure.)
+Only one instance (per \<MEDLEIDIR>) of loadup can be run at a time.  There is lock file to prevent simultaneous loadups in the work directory (named ***lock***) that can be manually removed.  The lock can also be automatically overridden (see the --override flag below). Alternatively, if a lock is encountered at run time, the user will be asked to choose whether to override or simply exit the loadup.
 
 Note: **MEDLEYDIR** is an environment variable set by the loadup script.  It is set to the top level directory of the Medley installation that contains the specific loadup script that
 is invoked after all symbolic links are resolved.  In the standard global installation this will 
@@ -119,6 +119,9 @@ OPTIONS
 
 **-a-, \-\-apps-, -apps-, -5-**
 : Synonym for "--target apps"
+
+**-ov, \-\-override, -override**
+: Automatically override the lock that prevents two loadups from running simultaneously.  If this flag is not set and an active lock is encountered, the user will be asked to choose whether to override or exit.
 
 **-nc, \-\-nocopy, -nocopy**
 : Run the specified loadups, but do not copy results into loadups directory.

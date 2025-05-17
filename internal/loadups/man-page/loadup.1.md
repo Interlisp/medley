@@ -48,7 +48,7 @@ The two independent stages that can be run if the first 4 sequential stages comp
 >+ **DB:**: creates the *fuller.database* file.  Fuller.database is a Mastercope database created by analyzing all of the source code included in full.sysout. (Stage 4)  Fuller.database is copied into the loadups directory.
 
 
-Loadup does all of its work in a work directory (\<MEDLEYDIR>loadups/build).  The target files are copied from this work directory to the loadups directory if the loadup is successful.  Each stage of the loadup also creates a dribble file containing the terminal output from within the Medley environment.  These dribble files are not copied to the loadups directory, but remain available in the work directory after the loadup completes.
+Loadup does all of its work in a work directory (\<MEDLEYDIR>loadups/build).  The target files are copied from this work directory to the loadups directory if the loadup is successful.  Each stage of the loadup also creates a dribble file containing the terminal output from within the Medley environment.  These dribble files are also copied to the loadups directory, but also remain available in the work directory after the loadup completes.
 
 
 Only one instance (per \<MEDLEIDIR>) of loadup can be run at a time.  There is lock file to prevent simultaneous loadups in the work directory (named ***lock***) that can be manually removed.  The lock can also be automatically overridden (see the --override flag below). Alternatively, if a lock is encountered at run time, the user will be asked to choose whether to override or simply exit the loadup.

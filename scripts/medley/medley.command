@@ -586,6 +586,8 @@ flags:
 
     -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
+    -am | --automation         : this call to medley is being used in automation, adjust timings.  Relevant in -vnc case only.
+
     -cm FILE | --rem.cm FILE   : use FILE as the REM.CM when starting up Medley.  FILE must be absolute pathname.
 
     -cm - | --rem.cm -         : do not use an REM.CM.  Negate any prior setting, e.g., from config file.
@@ -638,6 +640,7 @@ pixelscale_arg=""
 borderwidth_arg=""
 remcm_arg="${LDEREMCM}"
 repeat_cm=""
+automation=false
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -914,6 +917,9 @@ do
           /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
         fi
         exit 0
+        ;;
+      -am | --automation)
+        automation=true
         ;;
       -nf | -NF | --nofork)
         # for use in loadups
@@ -1702,7 +1708,7 @@ do
                  "$(ip_addr)":"${VNC_PORT}"            \
                  >>"${LOG}" 2>&1                       &
   wait $!
-  if [ $(( $(date +%s) - start_time )) -lt 5 ]
+  if [ "${automation}" = false ] && [ $(( $(date +%s) - start_time )) -lt 5 ]
   then
     if [ -z "$(pgrep -f "Xvnc ${DISPLAY}")" ]
     then

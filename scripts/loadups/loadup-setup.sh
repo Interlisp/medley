@@ -161,6 +161,7 @@ loadup_finish () {
   exit ${exit_code}
 }
 
+force_vnc="-"
 run_medley () {
     /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"         \
              --config -                                          \
@@ -171,6 +172,8 @@ run_medley () {
              --rem.cm "${cmfile}"                                \
              --greet "${initfile}"                               \
              --sysout "$1"                                       \
+             --automation                                        \
+             --vnc "${force_vnc}"                                \
              "$2" "$3" "$4" "$5" "$6" "$7"                       ;
     exit_code=$?
 }

@@ -215,7 +215,7 @@
                  "$(ip_addr)":"${VNC_PORT}"            \
                  >>"${LOG}" 2>&1                       &
   wait $!
-  if [ $(( $(date +%s) - start_time )) -lt 5 ]
+  if [ "${automation}" = false ] && [ $(( $(date +%s) - start_time )) -lt 5 ]
   then
     if [ -z "$(pgrep -f "Xvnc ${DISPLAY}")" ]
     then

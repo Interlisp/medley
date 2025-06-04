@@ -247,9 +247,13 @@ process_maikodir() {
 }
 
 export LOADUP_LOCKFILE="${LOADUP_WORKDIR}"/lock
+LOADUP_LOCK=""
+override_lock=false
+ignore_lock=false
 
 check_run_lock() {
-    set +x
+  if [ "${ignore_lock}" = false ]
+  then
     if [ -e "${LOADUP_LOCKFILE}" ]
     then
       output_warn_msg "Warning: Another loadup is already running with PID $(cat "${LOADUP_LOCKFILE}")"
@@ -282,6 +286,7 @@ check_run_lock() {
     fi
     echo "$$" > "${LOADUP_LOCKFILE}"
     LOADUP_LOCK="$$"
+  fi
 }
 
 remove_run_lock() {

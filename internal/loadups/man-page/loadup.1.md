@@ -132,8 +132,14 @@ OPTIONS
 **-tl, \-\-thinl, -thinl**
 : Before running loadups (if any), thin the loadups directory by deleting all versioned (*.~[0-9]*~) files.
 
-**-d DIR \-\-maikodir DIR, -maikodir DIR**
+**-d DIR, \-\-maikodir DIR, -maikodir DIR**
 :  Use DIR as the directory from which to execute lde (Miko) when running Medley in the loadup process.  If this flag is not present, the value of the environment variable MAIKODIR will be used instead.  And if MAIKODIR does not exist, then the default Maiko directory search within Medley will be used.
+
+**-v, \-\-vnc, -vnc**
+: Relevant to Linux (including WSLv1 and WSLv2) platforms only.  Use Xvnc for the Medley display during this loadup.
+By default, the Medley display will use X Windows.
+This flag is most useful on Windows System for Linux v1, where Xvnc is commonly used in
+running Medley in the absence of an Xwindows server.
 
 DEFAULTS
 ====

@@ -171,6 +171,7 @@ run_medley () {
              --rem.cm "${cmfile}"                                \
              --greet "${initfile}"                               \
              --sysout "$1"                                       \
+             --vnc "${LOADUP_USE_VNC}"                           \
              "$2" "$3" "$4" "$5" "$6" "$7"                       ;
     exit_code=$?
 }

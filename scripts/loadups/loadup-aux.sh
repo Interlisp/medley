@@ -8,6 +8,13 @@ main() {
 
 	loadup_start
 
+	SYSOUT="${LOADUP_OUTDIR}/full.sysout"
+	if [ ! -f "${SYSOUT}" ]
+	then
+	  output_error_msg "Error: cannot find ${SYSOUT}.${EOL}Exiting."
+	  exit 1
+	fi
+
         initfile="-"
 	cat >"${cmfile}" <<-"EOF"
 	"
@@ -33,7 +40,7 @@ main() {
 	"
 	EOF
 
-	run_medley "${LOADUP_WORKDIR}/full.sysout"
+	run_medley "${SYSOUT}"
 
 	loadup_finish "whereis.hash" "whereis.hash" "exports.all"
 }

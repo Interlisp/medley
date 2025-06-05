@@ -71,14 +71,17 @@ popd >/dev/null 2>/dev/null
 
 
 # For linux and wsl create packages for each arch
-for wslp in linux wsl
+for wslp in linux wsl2 wsl1
 do
   # For each arch create a deb file
   for arch_base in x86_64^amd64 armv7l^armhf aarch64^arm64
   do
-    if [[ ${wslp} = wsl && ${arch_base} = armv7l^armhf ]];
+    if [ "${arch_base}" = armv7l^armhf ]
     then
-      continue
+      if [ "${wslp}" = wsl1 ] || [ "${wslp}" = wsl2 ]
+      then
+        continue
+      fi
     fi
     arch=${arch_base%^*}
     debian_arch=${arch_base#*^}
@@ -99,8 +102,14 @@ do
     MEDLEYDIR=${il_dir#${pkg_dir}}/medley
     #    Maiko and Medley files to il_dir (/usr/local/interlisp)
     mkdir -p ${il_dir}
-    tar -x -z -C ${il_dir} \
-              -f "${tarball_dir}/maiko-${maiko_release}-linux.${arch}.tgz"
+    if [ "${wslp}" = wsl1 ]
+    then
+      tar -x -z -C ${il_dir} \
+                -f "${tarball_dir}/maiko-${maiko_release}-wsl1.${arch}.tgz"
+    else
+      tar -x -z -C ${il_dir} \
+                -f "${tarball_dir}/maiko-${maiko_release}-linux.${arch}.tgz"
+    fi
     tar -x -z -C ${il_dir} \
               -f "${tarball_dir}/medley-${medley_release}-runtime.tgz"
     tar -x -z -C ${il_dir} \
@@ -117,14 +126,17 @@ do
     sed -e "s>--MEDLEYDIR-->${MEDLEYDIR}>g" <postrm >${pkg_dir}/DEBIAN/postrm
     chmod +x ${pkg_dir}/DEBIAN/postrm
     #     For wsl scripts, include the vncviewer.exe
-    if [[ ${wslp} = wsl && ${arch} = x86_64 ]];
+    if [ "${wslp}" = wsl1 ] || [ "${wslp}" = wsl2 ]
     then
-      pushd ./tmp >/dev/null
-      rm -rf vncviewer64-1.12.0.exe
-      wget -q https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
-      popd >/dev/null
-      mkdir -p ${il_dir}/wsl
-      cp -p tmp/vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
+      if [ "${arch}" = x86_64 ]
+      then
+        pushd ./tmp >/dev/null
+        rm -rf vncviewer64-1.12.0.exe
+        wget -q https://sourceforge.net/projects/tigervnc/files/stable/1.12.0/vncviewer64-1.12.0.exe
+        popd >/dev/null
+        mkdir -p ${il_dir}/wsl
+        cp -p tmp/vncviewer64-1.12.0.exe ${il_dir}/wsl/vncviewer64-1.12.0.exe
+      fi
     fi
     #
     #  Make sure all files are owned by root

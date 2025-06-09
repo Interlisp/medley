@@ -115,6 +115,8 @@ flags:
 
     -x - | --logindir -        : use MEDLEYDIR/logindir as LOGINDIR in Medley
 
+    -am | --automation         : this call to medley is being used in automation, adjust timings.  Relevant in -vnc case only.
+
     -cm FILE | --rem.cm FILE   : use FILE as the REM.CM when starting up Medley.  FILE must be absolute pathname.
 
     -cm - | --rem.cm -         : do not use an REM.CM.  Negate any prior setting, e.g., from config file.

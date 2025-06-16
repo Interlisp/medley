@@ -6,12 +6,20 @@ main() {
 
 	loadup_start
 
-	SYSOUT="${MEDLEYDIR}/loadups/full.sysout"
-	if [ ! -f "${SYSOUT}" ];
+	SYSOUT="${LOADUP_OUTDIR}/full.sysout"
+	if [ ! -f "${SYSOUT}" ]
 	then
 	  output_error_msg "Error: cannot find ${SYSOUT}.${EOL}Exiting."
 	  exit 1
 	fi
+
+        # Check to make sure exports.all exists and is newer than full.sysout
+        # if not, run loadup-aux to create a new exports.all
+        EXPORTS="${LOADUP_OUTDIR}/exports.all"
+        if [ ! -f "${EXPORTS}" ] || [ "$(find "${SYSOUT}" -newer "${EXPORTS}" -exec echo true \; )" = true ]
+        then
+          "${MEDLEYDIR}"/scripts/loadups/loadup --aux --ignore_lock --noendmsg
+        fi
 
         initfile="-"
 	cat >"${cmfile}" <<-"EOF"

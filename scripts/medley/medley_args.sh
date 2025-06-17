@@ -48,6 +48,7 @@ pixelscale_arg=""
 borderwidth_arg=""
 remcm_arg="${LDEREMCM}"
 repeat_cm=""
+automation=false
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -324,6 +325,9 @@ do
           /usr/bin/man -l "${MEDLEYDIR}/docs/man-page/medley.1.gz"
         fi
         exit 0
+        ;;
+      -am | --automation)
+        automation=true
         ;;
       -nf | -NF | --nofork)
         # for use in loadups

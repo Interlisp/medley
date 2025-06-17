@@ -48,6 +48,7 @@ pixelscale_arg=""
 borderwidth_arg=""
 remcm_arg="${LDEREMCM}"
 repeat_cm=""
+automation=false
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -325,6 +326,9 @@ do
         fi
         exit 0
         ;;
+      -am | --automation)
+        automation=true
+        ;;
       -nf | -NF | --nofork)
         # for use in loadups
         case $2 in
@@ -411,10 +415,4 @@ do
   fi
   shift
 done
-
-# if running on WSL1, force use_vnc
-if [ "${wsl}" = true ] && [ "${wsl_ver}" -eq 1 ]
-then
-  use_vnc=true
-fi
 

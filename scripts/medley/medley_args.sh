@@ -416,9 +416,3 @@ do
   shift
 done
 
-# if running on WSL1, force use_vnc
-if [ "${wsl}" = true ] && [ "${wsl_ver}" -eq 1 ]
-then
-  use_vnc=true
-fi
-

@@ -1008,12 +1008,6 @@ do
   shift
 done
 
-# if running on WSL1, force use_vnc
-if [ "${wsl}" = true ] && [ "${wsl_ver}" -eq 1 ]
-then
-  use_vnc=true
-fi
-
 
 # Process run_id
 # if it doesn't end in #, make sure that there is not another instance currently running with this same id

@@ -216,7 +216,7 @@ specified in the Medley file system, not the host Windows file system.
     If the given value is "-",  Medley will start up without using REM&#46;CM file.
 
     There is no default Medley REM&#46;CM file.
-    
+
     On Windows/Cygwin installations, *FILE* is
 specified in the Medley file system, not the host Windows file system.
 
@@ -254,9 +254,14 @@ for the parameter will be reset to the default value - which in the case of *Hos
 
 -cc \[*FILE* | -], \-\-repeat \[*FILE* | -]
 : Run Medley once.  And then as long as *FILE* exists and is greater then zero length, repeatedly run Medley using *FILE* as the REM&#46;CM file that Medley reads and executes at startup.  Each run of Medley can change the contents of *FILE* to effect the subsequent run of Medley.  To end the cycle, Medley needs to delete *FILE*.  WIthin Medley, *FILE* can be found as the value of the environment variable LDEREPEATCM.
-    
+
     On Windows/Cygwin installations, *FILE* is
 specified in the Medley file system, not the host Windows file system.
+
+-am, --automation
+: Useful only when using --vnc (and always on WSL1).  When calling medley as part of an automation script, often Medley
+will run for a very short time (< a couple of seconds).  This can cause issues with medley code that detects Xvnc server failures.
+Setting this flag notifies Medley that very short Medley sessions are possible and the Xvnc error detection needs to be adjusted accordingly.
 
 
 Other Options

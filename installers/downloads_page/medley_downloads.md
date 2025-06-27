@@ -12,11 +12,17 @@
 
              [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARMv7 machines](@@@DOWNLOAD_URL@@@/medley-full-linux-armv7l-@@@COMBINED.RELEASE.TAG@@@.deb)
 
-             * #### Windows System for Linux
+             * #### Windows System for Linux v1
 
-             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\.64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl-x86\_64-@@@COMBINED.RELEASE.TAG@@@.deb)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\.64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl1-x86\_64-@@@COMBINED.RELEASE.TAG@@@.deb)
 
-             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl-aarch64-@@@COMBINED.RELEASE.TAG@@@.deb)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl1-aarch64-@@@COMBINED.RELEASE.TAG@@@.deb)
+
+             * #### Windows System for Linux v2
+
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\.64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl2-x86\_64-@@@COMBINED.RELEASE.TAG@@@.deb)
+
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl2-aarch64-@@@COMBINED.RELEASE.TAG@@@.deb)
 
          *    ### Local Installations (for any Linux distro)
 
@@ -28,11 +34,17 @@
 
              [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARMv7 machines](@@@DOWNLOAD_URL@@@/medley-full-linux-armv7l-@@@COMBINED.RELEASE.TAG@@@.tgz)
 
-             * #### Windows System for Linux
+             * #### Windows System for Linux v1
 
-             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl-x86\_64-@@@COMBINED.RELEASE.TAG@@@.tgz)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl1-x86\_64-@@@COMBINED.RELEASE.TAG@@@.tgz)
 
-             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl-aarch64-@@@COMBINED.RELEASE.TAG@@@.tgz)
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl1-aarch64-@@@COMBINED.RELEASE.TAG@@@.tgz)
+
+             * #### Windows System for Linux v2
+
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for x86\_64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl2-x86\_64-@@@COMBINED.RELEASE.TAG@@@.tgz)
+
+             [Release @@@MEDLEY.SHORT.RELEASE.TAG@@@ for ARM64 machines](@@@DOWNLOAD_URL@@@/medley-full-wsl2-aarch64-@@@COMBINED.RELEASE.TAG@@@.tgz)
 
      *    ## WINDOWS 10/11 (Single install based on cygwin - Docker install deprecated)
 

@@ -49,6 +49,7 @@ borderwidth_arg=""
 remcm_arg="${LDEREMCM}"
 repeat_cm=""
 automation=false
+use_branch=""
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -62,6 +63,16 @@ do
       -a | --apps)
         sysout_arg="apps"
         sysout_stage="${args_stage}"
+        ;;
+      -br | -branch | -git-branch | --branch | --git-branch)
+        if [ "$2" = "-" ]
+        then
+          use_branch="-"
+        else
+          check_for_dash_or_end "$1" "$2"
+          use_branch="$2"
+        fi
+        shift
         ;;
       -c | --config)
         # already handled so just skip both flag and value
@@ -416,3 +427,14 @@ do
   shift
 done
 
+# expand on use_branch, if needed
+
+if [ "${use_branch}" = "-" ]
+then
+  git_commit_info "${MEDLEYDIR}"
+  use_branch="${BRANCH}"
+  if [ -z "${use_branch}" ]
+  then
+    output_warn_msg "A \"--git-branch -\" (\"--branch -\", \"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --git-branch argument.${EOL}"
+  fi
+fi

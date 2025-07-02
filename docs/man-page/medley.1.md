@@ -263,6 +263,15 @@ specified in the Medley file system, not the host Windows file system.
 will run for a very short time (< a couple of seconds).  This can cause issues with medley code that detects Xvnc server failures.
 Setting this flag notifies Medley that very short Medley sessions are possible and the Xvnc error detection needs to be adjusted accordingly.
 
+-br [*BRANCH* | -], --branch [*BRANCH* | -], --git-branch [*BRANCH* | -]
+: By default, sysout files are loaded from the MEDLEYDIR/loadups directory.  If the --branch *BRANCH*
+(or any of its synonyms) is specified, then by default sysout files are loaded the
+MEDLEYDIR/loadups/branches/BRANCH directory.  The sysouts in these directories are created using
+a loadups script with the --branch (or one of its synonyms) flag set.  See the loadup man page.
+If *BRANCH* is "-", then the name of the active git branch for MEDLEYDIR (if any) is used as
+*BRANCH*. 
+
+
 
 Other Options
 -------------

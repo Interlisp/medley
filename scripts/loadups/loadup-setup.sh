@@ -12,10 +12,32 @@ then
   export LOADUP_SOURCEDIR
 fi
 
+git_commit_info () {
+  if [ -f "$(command -v git)" ] && [ -x "$(command -v git)" ]
+  then
+    if git -C "$1" rev-parse >/dev/null 2>/dev/null
+    then
+      # This does NOT indicate if there are any modified files!
+      COMMIT_ID="$(git -C "$1" rev-parse --short HEAD)"
+      BRANCH="$(git -C "$1" rev-parse --abbrev-ref HEAD)"
+    fi
+  fi
+}
+
+git_commit_info "${LOADUP_SOURCEDIR}"
+export LOADUP_COMMIT_ID="${COMMIT_ID}"
+export LOADUP_BRANCH="${BRANCH}"
+
+slash_branch=""
+if [ -n "${LOADUP_BRANCH}" ] && [ "${use_branch}" = true ]
+then
+  slash_branch="/branches/${LOADUP_BRANCH}"
+fi
+
+
 if [ -z "${LOADUP_OUTDIR}" ]
 then
-  LOADUP_OUTDIR="${MEDLEYDIR}/loadups"
-  export LOADUP_OUTDIR
+    export LOADUP_OUTDIR="${MEDLEYDIR}/loadups${slash_branch}"
 fi
 
 if [ ! -d "${LOADUP_OUTDIR}" ];
@@ -62,37 +84,6 @@ then
     exit 1
   fi
 fi
-
-if [ -f "$(command -v git)" ] && [ -x "$(command -v git)" ]
-then
-  export HAS_GIT=true
-else
-  export HAS_GIT=false
-fi
-
-is_git_dir () {
-  if [ "${HAS_GIT}" = true ]
-  then
-    return "$(git -C "$1" rev-parse >/dev/null 2>/dev/null; echo $?)"
-  else
-    return 1
-  fi
-}
-
-git_commit_ID () {
-  if [ "${HAS_GIT}" = true ]
-  then
-    if is_git_dir "$1"
-      then
-      # This does NOT indicate if there are any modified files!
-      COMMIT_ID="$(git -C "$1" rev-parse --short HEAD)"
-    fi
-  fi
-}
-
-git_commit_ID "${LOADUP_SOURCEDIR}"
-LOADUP_COMMIT_ID="${COMMIT_ID}"
-export LOADUP_COMMIT_ID
 
 # obsolete? scr="-sc 1024x768 -g 1042x790"
 geometry=1024x768

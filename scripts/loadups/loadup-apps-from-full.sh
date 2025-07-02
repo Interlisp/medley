@@ -32,7 +32,7 @@ main() {
 	    exit 1
 	fi
 
-	git_commit_ID "${NOTECARDSDIR}"
+	git_commit_info "${NOTECARDSDIR}"
 	NOTECARDS_COMMIT_ID="${COMMIT_ID}"
 	export NOTECARDS_COMMIT_ID
 

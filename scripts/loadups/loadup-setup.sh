@@ -28,10 +28,15 @@ git_commit_info "${LOADUP_SOURCEDIR}"
 export LOADUP_COMMIT_ID="${COMMIT_ID}"
 export LOADUP_BRANCH="${BRANCH}"
 
-slash_branch=""
-if [ -n "${LOADUP_BRANCH}" ] && [ "${use_branch}" = true ]
+if [ "${use_branch}" = "-" ]
 then
-  slash_branch="/branches/${LOADUP_BRANCH}"
+  use_branch="${LOADUP_BRANCH}"
+fi
+
+slash_branch=""
+if [ -n "${use_branch}" ]
+then
+  slash_branch="/branches/${use_branch}"
 fi
 
 
@@ -178,6 +183,7 @@ fi
 
 EOL="
 "
+
 output_error_msg() {
   local_oem_file="${TMPDIR:-/tmp}"/oem_$$
   echo "$1" >"${local_oem_file}"

@@ -64,7 +64,7 @@ do
         sysout_arg="apps"
         sysout_stage="${args_stage}"
         ;;
-      -br | -branch | -git-branch | --branch | --git-branch)
+      -br | -branch | --branch)
         if [ "$2" = "-" ]
         then
           use_branch="-"
@@ -435,6 +435,6 @@ then
   use_branch="${BRANCH}"
   if [ -z "${use_branch}" ]
   then
-    output_warn_msg "A \"--git-branch -\" (\"--branch -\", \"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --git-branch argument.${EOL}"
+    output_warn_msg "A \"--branch -\" (\"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --branch argument.${EOL}"
   fi
 fi

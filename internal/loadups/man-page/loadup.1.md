@@ -123,14 +123,14 @@ OPTIONS
 **-ov, \-\-override, -override**
 : Automatically override the lock that prevents two loadups from running simultaneously.  If this flag is not set and an active lock is encountered, the user will be asked to choose whether to override or exit.
 
-**-br, \-\-branch, \-\-git-branch**
+**-br [ BRANCH | -], \-\-branch [ BRANCH | - ]**
 : By default the sysouts and other files produced by loadup are placed at the top level of
-the \<MEDLEYDIR>/loadups directory.  If this flag is specified, then the sysout and other output files
-are placed in the directory \<MEDLEYDIR>/loadups/branches/BRANCH, where BRANCH is the name of the
-currently active git branch of \<MEDLEYDIR>.  The medley script has a corresponding --branch
-(and synonyms) argument to access these files.
-If git is not installled on the current system or if \<MEDLEYDIR> is not a git directory,
-then this flag is ignored.
+the \<MEDLEYDIR>/loadups directory.  If this flag is specified, then the sysout and other
+output files are placed in the directory \<MEDLEYDIR>/loadups/branches/BRANCH. 
+If BRANCH is "-" or not specified at all, then BRANCH is the name of the currently active
+git branch of \<MEDLEYDIR>, except if git is not installled on the current system
+or if \<MEDLEYDIR> is not a git directory, in which case then this flag is ignored.
+The medley script has a corresponding \-\-branch argument to load these sysout files.
 
 **-nc, \-\-nocopy, -nocopy**
 : Run the specified loadups, but do not copy results into loadups directory.

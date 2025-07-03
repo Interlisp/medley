@@ -15,6 +15,9 @@
 
 is_tput="$(command -v tput)"
 
+export EOL="
+"
+
 output_error_msg() {
   local_oem_file="${TMPDIR:-/tmp}"/oem_$$
   echo "$1" >"${local_oem_file}"
@@ -26,6 +29,16 @@ output_error_msg() {
     else
       echo "${line}"
     fi
+  done <"${local_oem_file}"
+  rm -f "${local_oem_file}"
+}
+
+output_warn_msg() {
+  local_oem_file="${TMPDIR:-/tmp}"/oem_$$
+  echo "$1" >"${local_oem_file}"
+  while read -r line
+  do
+      echo "$(${is_tput} setab 3)$(${is_tput} setaf 4)${line}$(${is_tput} sgr0)"
   done <"${local_oem_file}"
   rm -f "${local_oem_file}"
 }
@@ -160,5 +173,18 @@ parse_nethub_data() {
   if [ "${nh_debug}" = "${x}" ]; then nh_debug=""; return 0; fi
   nh_debug="${nh_debug%:}"
   return 0
+}
+
+
+git_commit_info () {
+  if [ -f "$(command -v git)" ] && [ -x "$(command -v git)" ]
+  then
+    if git -C "$1" rev-parse >/dev/null 2>/dev/null
+    then
+      # This does NOT indicate if there are any modified files!
+      COMMIT_ID="$(git -C "$1" rev-parse --short HEAD)"
+      BRANCH="$(git -C "$1" rev-parse --abbrev-ref HEAD)"
+    fi
+  fi
 }
 

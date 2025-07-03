@@ -161,6 +161,9 @@ SCRIPTDIR="$(get_script_dir "$0")"
 
 is_tput="$(command -v tput)"
 
+export EOL="
+"
+
 output_error_msg() {
   local_oem_file="${TMPDIR:-/tmp}"/oem_$$
   echo "$1" >"${local_oem_file}"
@@ -172,6 +175,16 @@ output_error_msg() {
     else
       echo "${line}"
     fi
+  done <"${local_oem_file}"
+  rm -f "${local_oem_file}"
+}
+
+output_warn_msg() {
+  local_oem_file="${TMPDIR:-/tmp}"/oem_$$
+  echo "$1" >"${local_oem_file}"
+  while read -r line
+  do
+      echo "$(${is_tput} setab 3)$(${is_tput} setaf 4)${line}$(${is_tput} sgr0)"
   done <"${local_oem_file}"
   rm -f "${local_oem_file}"
 }
@@ -306,6 +319,19 @@ parse_nethub_data() {
   if [ "${nh_debug}" = "${x}" ]; then nh_debug=""; return 0; fi
   nh_debug="${nh_debug%:}"
   return 0
+}
+
+
+git_commit_info () {
+  if [ -f "$(command -v git)" ] && [ -x "$(command -v git)" ]
+  then
+    if git -C "$1" rev-parse >/dev/null 2>/dev/null
+    then
+      # This does NOT indicate if there are any modified files!
+      COMMIT_ID="$(git -C "$1" rev-parse --short HEAD)"
+      BRANCH="$(git -C "$1" rev-parse --abbrev-ref HEAD)"
+    fi
+  fi
 }
 
 
@@ -641,6 +667,7 @@ borderwidth_arg=""
 remcm_arg="${LDEREMCM}"
 repeat_cm=""
 automation=false
+use_branch=""
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -654,6 +681,16 @@ do
       -a | --apps)
         sysout_arg="apps"
         sysout_stage="${args_stage}"
+        ;;
+      -br | -branch | -git-branch | --branch | --git-branch)
+        if [ "$2" = "-" ]
+        then
+          use_branch="-"
+        else
+          check_for_dash_or_end "$1" "$2"
+          use_branch="$2"
+        fi
+        shift
         ;;
       -c | --config)
         # already handled so just skip both flag and value
@@ -1008,6 +1045,17 @@ do
   shift
 done
 
+# expand on use_branch, if needed
+
+if [ "${use_branch}" = "-" ]
+then
+  git_commit_info "${MEDLEYDIR}"
+  use_branch="${BRANCH}"
+  if [ -z "${use_branch}" ]
+  then
+    output_warn_msg "A \"--git-branch -\" (\"--branch -\", \"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --git-branch argument.${EOL}"
+  fi
+fi
 
 # Process run_id
 # if it doesn't end in #, make sure that there is not another instance currently running with this same id
@@ -1100,7 +1148,21 @@ export LDEDESTSYSOUT
 
 # Figure out the sysout situation
 
-loadups_dir="${MEDLEYDIR}/loadups"
+slash_branch=""
+if [ -n "${use_branch}" ]
+then
+  slash_branch="/branches/${use_branch}"
+fi
+
+loadups_dir="${MEDLEYDIR}/loadups${slash_branch}"
+export MEDLEY_LOADUPS_DIR="${loadups_dir}"
+
+if [ -n "${use_branch}" ] && [ ! -d "${loadups_dir}" ]
+then
+  output_error_msg "The \"--git-branch ${use_branch}\" argument was given on the command line${EOL}but the directory \"${loadups_dir}\" does not exist.${EOL}Exiting."
+  exit 1
+fi
+
 if [ -z "${sysout_arg}" ]
 then
   if [ -f "${LDEDESTSYSOUT}" ]

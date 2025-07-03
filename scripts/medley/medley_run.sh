@@ -54,7 +54,21 @@ export LDEDESTSYSOUT
 
 # Figure out the sysout situation
 
-loadups_dir="${MEDLEYDIR}/loadups"
+slash_branch=""
+if [ -n "${use_branch}" ]
+then
+  slash_branch="/branches/${use_branch}"
+fi
+
+loadups_dir="${MEDLEYDIR}/loadups${slash_branch}"
+export MEDLEY_LOADUPS_DIR="${loadups_dir}"
+
+if [ -n "${use_branch}" ] && [ ! -d "${loadups_dir}" ]
+then
+  output_error_msg "The \"--git-branch ${use_branch}\" argument was given on the command line${EOL}but the directory \"${loadups_dir}\" does not exist.${EOL}Exiting."
+  exit 1
+fi
+
 if [ -z "${sysout_arg}" ]
 then
   if [ -f "${LDEDESTSYSOUT}" ]

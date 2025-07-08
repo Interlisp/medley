@@ -100,6 +100,7 @@ geometry=1024x768
 touch "${LOADUP_WORKDIR}"/loadup.timestamp
 
 script_name=$(basename "$0" ".sh")
+script_name_for_id=$(echo "$script_name" | sed -e "s/-/_/g")
 cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
 initfile="${LOADUP_WORKDIR}/${script_name}.init"
 
@@ -165,7 +166,7 @@ force_vnc="-"
 run_medley () {
     /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"         \
              --config -                                          \
-             --id loadup_+                                       \
+             --id "${script_name_for_id}"                        \
              --geometry "${geometry}"                            \
              --noscroll                                          \
              --logindir "${LOADUP_LOGINDIR}"                     \

@@ -36,6 +36,16 @@ main() {
 	NOTECARDS_COMMIT_ID="${COMMIT_ID}"
 	export NOTECARDS_COMMIT_ID
 
+        if [ -n "${NOTECARDS_COMMIT_ID}" ]
+        then
+          {
+            echo ;
+            echo "--------------------------------------------" ;
+            echo "Notecards Commit: ${NOTECARDS_COMMIT_ID}" ;
+            git -C "${NOTECARDSDIR}" status ;
+          } >> "${LOADUP_OUTDIR}/gitinfo"
+        fi
+
         initfile="-"
 	cat >"${cmfile}" <<-EOF
 	"

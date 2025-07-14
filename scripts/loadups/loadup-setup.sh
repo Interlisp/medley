@@ -36,6 +36,7 @@ fi
 slash_branch=""
 if [ -n "${use_branch}" ]
 then
+  use_branch="$(printf %s "${use_branch}" | sed "s/[^a-zA-Z0-9_.-]/_/g")"
   slash_branch="/branches/${use_branch}"
 fi
 

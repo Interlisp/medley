@@ -50,6 +50,7 @@ The two independent stages that can be run if the first 4 sequential stages comp
 
 Loadup does all of its work in a work directory (\<MEDLEYDIR>/loadups/build).  The target files are copied from this work directory to the loadups directory if the loadup is successful.  Each stage of the loadup also creates a dribble file containing the terminal output from within the Medley environment.  These dribble files are also copied to the loadups directory, but also remain available in the work directory after the loadup completes.
 
+If \<MEDLEYDIR> is a git directory, then a file is created in the loadups output directory called *gitinfo* which contains the git commit, git branch and git status information for the directory at the time the loadup is run.
 
 Only one instance (per \<MEDLEIDIR>) of loadup can be run at a time.  There is lock file to prevent simultaneous loadups in the work directory (named ***lock***) that can be manually removed.  The lock can also be automatically overridden (see the --override flag below). Alternatively, if a lock is encountered at run time, the user will be asked to choose whether to override or simply exit the loadup.
 
@@ -130,6 +131,8 @@ output files are placed in the directory \<MEDLEYDIR>/loadups/branches/BRANCH.
 If BRANCH is "-" or not specified at all, then BRANCH is the name of the currently active
 git branch of \<MEDLEYDIR>, except if git is not installled on the current system
 or if \<MEDLEYDIR> is not a git directory, in which case then this flag is ignored.
+BRANCH can contain alphanumerics, dashes, underscores,and periods.
+Any other character is replaced by an underscore.
 The medley script has a corresponding \-\-branch argument to load these sysout files.
 
 **-nc, \-\-nocopy, -nocopy**

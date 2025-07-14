@@ -426,15 +426,3 @@ do
   fi
   shift
 done
-
-# expand on use_branch, if needed
-
-if [ "${use_branch}" = "-" ]
-then
-  git_commit_info "${MEDLEYDIR}"
-  use_branch="${BRANCH}"
-  if [ -z "${use_branch}" ]
-  then
-    output_warn_msg "A \"--branch -\" (\"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --branch argument.${EOL}"
-  fi
-fi

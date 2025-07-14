@@ -682,7 +682,7 @@ do
         sysout_arg="apps"
         sysout_stage="${args_stage}"
         ;;
-      -br | -branch | -git-branch | --branch | --git-branch)
+      -br | -branch | --branch)
         if [ "$2" = "-" ]
         then
           use_branch="-"
@@ -1045,18 +1045,6 @@ do
   shift
 done
 
-# expand on use_branch, if needed
-
-if [ "${use_branch}" = "-" ]
-then
-  git_commit_info "${MEDLEYDIR}"
-  use_branch="${BRANCH}"
-  if [ -z "${use_branch}" ]
-  then
-    output_warn_msg "A \"--git-branch -\" (\"--branch -\", \"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --git-branch argument.${EOL}"
-  fi
-fi
-
 # Process run_id
 # if it doesn't end in #, make sure that there is not another instance currently running with this same id
 # If it does end in #, find the right number to fill in for the #
@@ -1146,22 +1134,68 @@ else
 fi
 export LDEDESTSYSOUT
 
-# Figure out the sysout situation
+# expand on use_branch, if needed
+
+if [ "${use_branch}" = "-" ]
+then
+  git_commit_info "${MEDLEYDIR}"
+  use_branch="${BRANCH}"
+  if [ -z "${use_branch}" ]
+  then
+    output_warn_msg "A \"--branch -\" (\"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --branch argument.${EOL}"
+  fi
+fi
+
+# clean use_branch of no alphanumeric chars
+
+if [ -n "${use_branch}" ]
+then
+  use_branch="$(printf %s "${use_branch}" | sed "s/[^a-zA-Z0-9_.-]/_/g")"
+fi
+
+# Figure out the branch/loadupsdir situation
 
 slash_branch=""
 if [ -n "${use_branch}" ]
 then
-  slash_branch="/branches/${use_branch}"
+  branches_dir="${MEDLEYDIR}/loadups/branches"
+  mkdir -p "${branches_dir}"
+  matches="$(cd "${branches_dir}" && ls -d "${use_branch}"*)"
+  echo ${matches}
+  if [ -z "${matches}" ]
+  then
+    output_error_msg "The \"--branch ${use_branch}\" argument was given on the command line${EOL}but a directory matching \"${branches_dir}/${use_branch}*\" does not exist.${EOL}Exiting."
+    exit 1
+  else
+    count=0
+    new_branch=""
+    for match in ${matches}
+    do
+      if [ "${match}" = "${use_branch}" ]
+      then
+        new_branch="${match}"
+        count=1
+        break
+      else
+        new_branch="${match}"
+        count=$((count + 1))
+      fi
+    done
+    if [ "${count}" -ge 2 ]
+    then
+      output_error_msg "The \"--branch ${use_branch}\" argument was given on the command line${EOL}but more than one subdirectory in \"${branches_dir}\" matches \"${use_branch}*\".${EOL}Exiting."
+      exit 1
+    else
+      use_branch="${new_branch}"
+    fi
+    slash_branch="/branches/${use_branch}"
+  fi
 fi
 
 loadups_dir="${MEDLEYDIR}/loadups${slash_branch}"
 export MEDLEY_LOADUPS_DIR="${loadups_dir}"
 
-if [ -n "${use_branch}" ] && [ ! -d "${loadups_dir}" ]
-then
-  output_error_msg "The \"--git-branch ${use_branch}\" argument was given on the command line${EOL}but the directory \"${loadups_dir}\" does not exist.${EOL}Exiting."
-  exit 1
-fi
+# Figure out the sysout situation
 
 if [ -z "${sysout_arg}" ]
 then
@@ -1181,7 +1215,7 @@ but the directory \"${loadups_dir}\" where ${sysout_arg}.sysout is supposed to b
 cannot be found.
 Exiting."
         output_error_msg "${err_msg}"
-        exit 62
+        exit 1
       fi
       src_sysout="${loadups_dir}/${sysout_arg}.sysout"
       ;;
@@ -1195,6 +1229,7 @@ then
     err_msg="Error: Cannot find the specified sysout file \"${src_sysout}\".
 Exiting."
     output_error_msg "${err_msg}"
+    exit 1
 fi
 
 # Figure out screensize and geometry based on arguments
@@ -1375,15 +1410,21 @@ fi
 # figure out title situation
 if [ -z "${title}" ]
 then
-  title="Medley Interlisp %i"
+  title="Medley%b%i"
 fi
-if [ ! "${run_id}" = default ]
+if [ "${run_id}" = default ]
 then
-  title="$(printf %s "${title}" | sed -e "s/%i/:: ${run_id}/")"
-else
   title="$(printf %s "${title}" | sed -e "s/%i//")"
+else
+  title="$(printf %s "${title}" | sed -e "s/%i/::${run_id}/")"
 fi
-
+if [ -n "${use_branch}" ]
+then
+  short_branch="$(printf "%0.16s" "${use_branch}")"
+  title="$(printf %s "${title}" | sed -e "s/%b/::${short_branch}/")"
+else
+  title="$(printf %s "${title}" | sed -e "s/%b//")"
+fi
 
 # Figure out the maiko executable name
 # used for loadups (ldeinit)

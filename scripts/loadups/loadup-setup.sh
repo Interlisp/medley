@@ -12,10 +12,38 @@ then
   export LOADUP_SOURCEDIR
 fi
 
+git_commit_info () {
+  if [ -f "$(command -v git)" ] && [ -x "$(command -v git)" ]
+  then
+    if git -C "$1" rev-parse >/dev/null 2>/dev/null
+    then
+      # This does NOT indicate if there are any modified files!
+      COMMIT_ID="$(git -C "$1" rev-parse --short HEAD)"
+      BRANCH="$(git -C "$1" rev-parse --abbrev-ref HEAD)"
+    fi
+  fi
+}
+
+git_commit_info "${LOADUP_SOURCEDIR}"
+export LOADUP_COMMIT_ID="${COMMIT_ID}"
+export LOADUP_BRANCH="${BRANCH}"
+
+if [ "${use_branch}" = "-" ]
+then
+  use_branch="${LOADUP_BRANCH}"
+fi
+
+slash_branch=""
+if [ -n "${use_branch}" ]
+then
+  use_branch="$(printf %s "${use_branch}" | sed "s/[^a-zA-Z0-9_.-]/_/g")"
+  slash_branch="/branches/${use_branch}"
+fi
+
+
 if [ -z "${LOADUP_OUTDIR}" ]
 then
-  LOADUP_OUTDIR="${MEDLEYDIR}/loadups"
-  export LOADUP_OUTDIR
+    export LOADUP_OUTDIR="${MEDLEYDIR}/loadups${slash_branch}"
 fi
 
 if [ ! -d "${LOADUP_OUTDIR}" ];
@@ -63,43 +91,13 @@ then
   fi
 fi
 
-if [ -f "$(command -v git)" ] && [ -x "$(command -v git)" ]
-then
-  export HAS_GIT=true
-else
-  export HAS_GIT=false
-fi
-
-is_git_dir () {
-  if [ "${HAS_GIT}" = true ]
-  then
-    return "$(git -C "$1" rev-parse >/dev/null 2>/dev/null; echo $?)"
-  else
-    return 1
-  fi
-}
-
-git_commit_ID () {
-  if [ "${HAS_GIT}" = true ]
-  then
-    if is_git_dir "$1"
-      then
-      # This does NOT indicate if there are any modified files!
-      COMMIT_ID="$(git -C "$1" rev-parse --short HEAD)"
-    fi
-  fi
-}
-
-git_commit_ID "${LOADUP_SOURCEDIR}"
-LOADUP_COMMIT_ID="${COMMIT_ID}"
-export LOADUP_COMMIT_ID
-
 # obsolete? scr="-sc 1024x768 -g 1042x790"
 geometry=1024x768
 
 touch "${LOADUP_WORKDIR}"/loadup.timestamp
 
 script_name=$(basename "$0" ".sh")
+script_name_for_id=$(echo "${script_name}" | sed -e "s/-/_/g")
 cmfile="${LOADUP_WORKDIR}/${script_name}.cm"
 initfile="${LOADUP_WORKDIR}/${script_name}.init"
 
@@ -165,7 +163,7 @@ force_vnc="-"
 run_medley () {
     /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"         \
              --config -                                          \
-             --id loadup_+                                       \
+             --id "${script_name_for_id}_+"                       \
              --geometry "${geometry}"                            \
              --noscroll                                          \
              --logindir "${LOADUP_LOGINDIR}"                     \
@@ -187,6 +185,7 @@ fi
 
 EOL="
 "
+
 output_error_msg() {
   local_oem_file="${TMPDIR:-/tmp}"/oem_$$
   echo "$1" >"${local_oem_file}"

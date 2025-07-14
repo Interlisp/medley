@@ -3,9 +3,6 @@
 
 main() {
 
-	# shellcheck source=./loadup-setup.sh
-	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
-
 	# process args
         start=""
         start_s=""
@@ -20,6 +17,9 @@ main() {
         override_lock=false
         ignore_lock=false
         export LOADUP_USE_VNC="-"
+        man_flg=false
+        use_branch=""
+        branch_requested=false
 
         while [ "$#" -ne 0 ];
       	do
@@ -123,6 +123,22 @@ main() {
               end=1
               end_s=init
               ;;
+            -br | -branch | --branch)
+              branch_requested=true
+              if [ "$2" = "-" ]
+              then
+                 use_branch="-"
+                 shift
+              else
+                if check_for_no_arg "$2"
+                then
+                  use_branch="-"
+                else
+		  use_branch="$2"
+                  shift
+                fi
+              fi
+              ;;
             -nc | -nocopy | --nocopy)
               nocopy=true
               ;;
@@ -168,13 +184,7 @@ main() {
               force_vnc="+"
               ;;
             -z | -man | --man )
-              if [ "$(uname)" = "Darwin" ]
-              then
-                /usr/bin/man "${LOADUP_SOURCEDIR}/man-page/loadup.1.gz"
-              else
-                /usr/bin/man -l "${LOADUP_SOURCEDIR}/man-page/loadup.1.gz"
-              fi
-              exit 0
+              man_flg=true
               ;;
             *)
               output_error_msg "Error: unknown flag: $1${EOL}Exiting"
@@ -184,6 +194,27 @@ main() {
           shift
 	done
 
+	#
+        #  Source loadup-setup.sh script to set all the standard loadup env variables
+        #
+
+	# shellcheck source=./loadup-setup.sh
+	. "${LOADUP_SCRIPTDIR}/loadup-setup.sh"
+
+        #
+        #  if --man flag is set, then show man page and exit
+        #
+        if [ "${man_flg}" = true ]
+        then
+          if [ "$(uname)" = "Darwin" ]
+          then
+            /usr/bin/man "${LOADUP_SOURCEDIR}/man-page/loadup.1.gz"
+          else
+            /usr/bin/man -l "${LOADUP_SOURCEDIR}/man-page/loadup.1.gz"
+          fi
+          exit 0
+        fi
+
         #
         #
         # check arguments
@@ -191,6 +222,12 @@ main() {
         #
 
         no_loadups=false
+
+        # check --branch is used correctly
+        if [ "${branch_requested}" = true ] && [ -z "${use_branch}" ]
+        then
+          output_warn_msg "The --branch (-br) flag was used.  But either git is not installed on this system or \"${LOADUP_SOURCEDIR}\" is not a git directory.${EOL}The --branch flag will be ignored"
+        fi
 
         #
         # check for no args or only maikodir arg and set defaults appropriately
@@ -297,6 +334,16 @@ main() {
               exit 1
             fi
           fi
+        fi
+
+        #
+        # Save git informatiom into LOADUP_OUTDIR
+        #
+
+        if [ -n "${LOADUP_COMMIT_ID}" ]
+        then
+          echo "Commit:  ${LOADUP_COMMIT_ID}" > "${LOADUP_OUTDIR}"/gitinfo
+          git status >> "${LOADUP_OUTDIR}"/gitinfo
         fi
 
         #
@@ -433,7 +480,6 @@ main() {
 	        fi
         fi
 
-
         #
         #  OK we're done, exit cleanly
         #
@@ -442,6 +488,43 @@ main() {
         exit 0
 
 }
+
+is_tput="$(command -v tput)"
+if [ -z "${is_tput}" ]
+then
+  is_tput="$(command -v true)"
+fi
+
+
+EOL="
+"
+
+output_error_msg() {
+  local_oem_file="${TMPDIR:-/tmp}"/oem_$$
+  echo "$1" >"${local_oem_file}"
+  while read -r line
+  do
+      echo "$(${is_tput} setab 1)$(${is_tput} setaf 7)${line}$(${is_tput} sgr0)"
+  done <"${local_oem_file}"
+  rm -f "${local_oem_file}"
+}
+
+check_for_no_arg() {
+  if [ -z "$1" ]
+  then
+    return 0
+  else
+    case "$1" in
+       -*)
+         return 0
+         ;;
+       *)
+         return 1
+         ;;
+    esac
+  fi
+}
+
 
 
 # shellcheck disable=SC2164,SC2034

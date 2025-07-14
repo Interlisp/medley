@@ -49,6 +49,7 @@ borderwidth_arg=""
 remcm_arg="${LDEREMCM}"
 repeat_cm=""
 automation=false
+use_branch=""
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -62,6 +63,16 @@ do
       -a | --apps)
         sysout_arg="apps"
         sysout_stage="${args_stage}"
+        ;;
+      -br | -branch | --branch)
+        if [ "$2" = "-" ]
+        then
+          use_branch="-"
+        else
+          check_for_dash_or_end "$1" "$2"
+          use_branch="$2"
+        fi
+        shift
         ;;
       -c | --config)
         # already handled so just skip both flag and value
@@ -415,4 +426,3 @@ do
   fi
   shift
 done
-

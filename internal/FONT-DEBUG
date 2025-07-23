@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "17-Jul-2025 13:24:05" {MEDLEY}<internal>FONT-DEBUG.;3 15965  
+(FILECREATED "19-Jul-2025 16:43:34" {WMEDLEY}<internal>FONT-DEBUG.;46 19345  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS CSBMSIZE)
+      :CHANGES-TO (FNS CSBMSIZE FONTSIZE CSSIZE EQCHARBM)
+                  (VARS FONT-DEBUGCOMS)
 
-      :PREVIOUS-DATE "17-Jul-2025 13:15:51" {MEDLEY}<internal>FONT-DEBUG.;2)
+      :PREVIOUS-DATE "19-Jul-2025 12:36:48" {WMEDLEY}<internal>FONT-DEBUG.;41)
 
 
 (PRETTYCOMPRINT FONT-DEBUGCOMS)
@@ -14,8 +15,9 @@
 (RPAQQ FONT-DEBUGCOMS (
                        (* ;; "Little tools to help in debugging display fonts")
 
-                       (FNS DEBUGCHARSET IBM ICS CSBMSIZE SHOWCACHE SHOWCSBITMAP EQCSBM CHARSETCHARS
-                            CHARBMDIFFS SHOWCSCHAR CSCOMPARE SHOWBMS SHOWCHARBITMAPS CANDS)))
+                       (FNS DEBUGCHARSET IBM ICS SHOWCACHE SHOWCSBITMAP EQCSBM EQCHARBM CHARSETCHARS
+                            CHARBMDIFFS SHOWCSCHAR CSCOMPARE SHOWBMS SHOWCHARBITMAPS CANDS)
+                       (FNS FONTSIZE CSSIZE CSBMSIZE)))
 
 
 
@@ -102,26 +104,6 @@
                         CSINFO)
            else "NO CSINFO"])
 
-(CSBMSIZE
-  [LAMBDA (FONT CHARSET FILETOO NOERROR)                     (* ; "Edited 17-Jul-2025 13:23 by rmk")
-
-    (* ;; "Returns the number of bytes in the CHARSET bitmap for FONT, what's in core unless FILETOO")
-
-    (if (SETQ FONT (FONTCREATE FONT NIL NIL NIL 'DISPLAY NOERROR))
-        then (CL:UNLESS CHARSET
-                 (PRINTOUT T "Using CHARSET 0" T)
-                 (SETQ CHARSET 0))
-             (LET ((CSINFO (if FILETOO
-                               then (DEBUGCHARSET FONT CHARSET)
-                             else (\XGETCHARSETINFO FONT CHARSET)))
-                   BM)
-                  (if (AND CSINFO (SETQ BM (fetch (CHARSETINFO CHARSETBITMAP) of CSINFO)))
-                      then (IQUOTIENT (ITIMES (BITMAPWIDTH BM)
-                                             (BITMAPHEIGHT BM))
-                                  8)
-                    else (PRINTOUT T "No charset/bitmap")))
-      else 0])
-
 (SHOWCACHE
   [LAMBDA NIL                                                (* ; "Edited 29-Jun-2025 17:19 by rmk")
                                                              (* ; "Edited 18-Jun-2025 22:50 by rmk")
@@ -162,6 +144,25 @@
     (SETQ CS2 (DEBUGCHARSET CS2 CHARSETINCLUDEMEDLEYFONT))
     (EQUALALL (fetch (CHARSETINFO CHARSETBITMAP) of CS1)
            (fetch (CHARSETINFO CHARSETBITMAP) of CS2])
+
+(EQCHARBM
+  [LAMBDA (CHAR1 CHAR2 CS1 CS2 EXCLUDEMEDLEYFONT)            (* ; "Edited 19-Jul-2025 12:46 by rmk")
+
+    (* ;; 
+    "True if the character bitmap for CHAR1 in CS1 is equivalent to the bitmap for CHAR2 in CS2.  ")
+
+    (CL:UNLESS (CHARCODEP CHAR1)
+        (SETQ CHAR1 (CHARCODE.DECODE CHAR1)))
+    (CL:UNLESS (CHARCODEP CHAR2)
+        (SETQ CHAR2 (CHARCODE.DECODE CHAR2)))
+    (SETQ CS1 (DEBUGCHARSET CS1 (\CHARSET CHAR1)
+                     (NOT EXCLUDEMEDLEYFONT)))
+    (SETQ CS2 (DEBUGCHARSET CS2 (\CHARSET CHAR2)
+                     (NOT EXCLUDEMEDLEYFONT)))
+    (EQUALALL (\GETCHARBITMAP.CSINFO (\CHAR8CODE CHAR1)
+                     CS1)
+           (\GETCHARBITMAP.CSINFO (\CHAR8CODE CHAR2)
+                  CS2])
 
 (CHARSETCHARS
   [LAMBDA (CSINFO CHARSET INCLUDEMEDLEYFONT)                 (* ; "Edited  6-Jul-2025 22:04 by rmk")
@@ -277,9 +278,75 @@
          (SHOWCHARBITMAPS NIL CINFOS CHARSET INCLUDEMEDLEYFONT T)
          CINFOS])
 )
+(DEFINEQ
+
+(FONTSIZE
+  [LAMBDA (FONT CHARSETS FILETOO NOERROR)                    (* ; "Edited 19-Jul-2025 16:42 by rmk")
+    (SETQ FONT (FONTCREATE FONT NIL NIL NIL 'DISPLAY NOERROR))
+    (CL:UNLESS CHARSETS
+        (SETQ CHARSETS (for CS CSINFO BM from 0 to 255 when (SETQ CSINFO (\XGETCHARSETINFO FONT CS))
+                          unless (fetch (CHARSETINFO CSSLUGP) of CSINFO) collect CS)))
+    (PRINTOUT T "Charsets: ")
+    (for CS CSINFO inside CHARSETS sum (PRINTOUT T CS " ")
+                                       (CSSIZE (\XGETCHARSETINFO FONT CS)
+                                              T) finally (PRINTOUT T T])
+
+(CSSIZE
+  [LAMBDA (CSINFO INCLUDEBM)                                 (* ; "Edited 19-Jul-2025 16:37 by rmk")
+
+    (* ;; "Returns")
+
+    (LET ((BLOCKSIZE (UNFOLD (IPLUS \MAXCHARSET 3)
+                            2))
+          BM)
+         (IPLUS (CL:IF (fetch (CHARSETINFO OFFSETS) of CSINFO)
+                    BLOCKSIZE
+                    0)
+                (CL:IF (fetch (CHARSETINFO WIDTHS) of CSINFO)
+                    BLOCKSIZE
+                    0)
+                (CL:IF (AND (NEQ (fetch (CHARSETINFO WIDTHS) of CSINFO)
+                                 (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO))
+                            (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO))
+                    BLOCKSIZE
+                    0)
+                (CL:IF (fetch (CHARSETINFO YWIDTHS) of CSINFO)
+                    BLOCKSIZE
+                    0)
+                (CL:IF (ARRAYP (fetch (CHARSETINFO LEFTKERN) of CSINFO))
+                    (UNFOLD (ARRAYSIZE (fetch (CHARSETINFO LEFTKERN) of CSINFO))
+                           4)
+                    0)
+                (CL:IF (AND INCLUDEBM (SETQ BM (fetch (CHARSETINFO CHARSETBITMAP) of CSINFO)))
+                    (IQUOTIENT (ITIMES (BITMAPWIDTH BM)
+                                      (BITMAPHEIGHT BM))
+                           8)
+                    0)])
+
+(CSBMSIZE
+  [LAMBDA (FONT CHARSETS FILETOO NOERROR)                    (* ; "Edited 19-Jul-2025 16:14 by rmk")
+                                                             (* ; "Edited 17-Jul-2025 13:23 by rmk")
+
+    (* ;; "Returns the number of bytes in the CHARSET bitmap for FONT, what's in core unless FILETOO")
+
+    (if (SETQ FONT (FONTCREATE FONT NIL NIL NIL 'DISPLAY NOERROR))
+        then (CL:UNLESS CHARSETS
+                 (SETQ CHARSETS (for CS CSINFO BM from 0 to 255 when (SETQ CSINFO (\XGETCHARSETINFO
+                                                                                   FONT CS))
+                                   unless (fetch (CHARSETINFO CSSLUGP) of CSINFO) collect CS)))
+             (PRINTOUT T "Charsets: ")
+             (for CS CSINFO BM inside CHARSETS sum (PRINTOUT T CS " ")
+                                                   (SETQ BM (fetch (CHARSETINFO CHARSETBITMAP)
+                                                               of (\XGETCHARSETINFO FONT CS)))
+                                                   (IQUOTIENT (ITIMES (BITMAPWIDTH BM)
+                                                                     (BITMAPHEIGHT BM))
+                                                          8) finally (PRINTOUT T T))
+      else 0])
+)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (695 15942 (DEBUGCHARSET 705 . 3884) (IBM 3886 . 4594) (ICS 4596 . 5890) (CSBMSIZE 5892
- . 6879) (SHOWCACHE 6881 . 7228) (SHOWCSBITMAP 7230 . 8344) (EQCSBM 8346 . 9232) (CHARSETCHARS 9234 . 
-9900) (CHARBMDIFFS 9902 . 10778) (SHOWCSCHAR 10780 . 11215) (CSCOMPARE 11217 . 13809) (SHOWBMS 13811
- . 13989) (SHOWCHARBITMAPS 13991 . 15582) (CANDS 15584 . 15940)))))
+  (FILEMAP (NIL (818 15839 (DEBUGCHARSET 828 . 4007) (IBM 4009 . 4717) (ICS 4719 . 6013) (SHOWCACHE 6015
+ . 6362) (SHOWCSBITMAP 6364 . 7478) (EQCSBM 7480 . 8366) (EQCHARBM 8368 . 9129) (CHARSETCHARS 9131 . 
+9797) (CHARBMDIFFS 9799 . 10675) (SHOWCSCHAR 10677 . 11112) (CSCOMPARE 11114 . 13706) (SHOWBMS 13708
+ . 13886) (SHOWCHARBITMAPS 13888 . 15479) (CANDS 15481 . 15837)) (15840 19322 (FONTSIZE 15850 . 16535)
+ (CSSIZE 16537 . 17946) (CSBMSIZE 17948 . 19320)))))
 STOP

@@ -12,15 +12,39 @@ main() {
 
     if [ "$1" = "w" ] || [ "$1" = "lw" ] || [ "$1" = "wl" ]
     then
-      find "${LOADUP_WORKDIR}" -name "*.~[0-9]*~" -delete
+      if [ ! "$2" = "+" ]
+      then
+        find "${LOADUP_WORKDIR}" -name "*.~[0-9]*~" -delete
+      else
+        rm -rf "${LOADUP_WORKDIR}"/*
+        if istagged "${LOADUP_WORKDIR}"
+        then
+          rm -rf "${LOADUP_WORKDIR}"
+        fi
+      fi
     fi
     if [ "$1" = "l" ] || [ "$1" = "lw" ] || [ "$1" = "wl" ]
     then
-      find "${LOADUP_OUTDIR}" -name "*.~[0-9]*~" -delete
+      if [ ! "$2" = "+" ]
+      then
+        find "${LOADUP_OUTDIR}" -name "$(basename "${LOADUP_WORKDIR}")" -prune \
+                                -o -name "*.~[0-9]*~" -exec rm -f {} \;
+      else
+        find "${LOADUP_OUTDIR}" ! -name "$(basename "${LOADUP_WORKDIR}")" -delete
+        if istagged "${LOADUP_OUTDIR}" && [ ! -e "${LOADUP_WORKDIR}" ]
+        then
+          rm -rf "${LOADUP_OUTDIR}"
+        fi
+      fi
     fi
-
 }
 
+
+
+istagged() {
+  echo "$1" | grep -q "^${MEDLEYDIR}/loadups/tagged"
+  return $?
+}
 
 
 # shellcheck disable=SC2164,SC2034

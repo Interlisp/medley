@@ -20,6 +20,10 @@ main() {
         if istagged "${LOADUP_WORKDIR}"
         then
           rm -rf "${LOADUP_WORKDIR}"
+          if istagged "${LOADUP_OUTDIR}" && [ -z "$(ls -a -1 "${LOADUP_OUTDIR}" | tail +3)" ]
+          then
+            rmdir "${LOADUP_OUTDIR}"
+          fi
         fi
       fi
     fi
@@ -30,7 +34,10 @@ main() {
         find "${LOADUP_OUTDIR}" -name "$(basename "${LOADUP_WORKDIR}")" -prune \
                                 -o -name "*.~[0-9]*~" -exec rm -f {} \;
       else
-        find "${LOADUP_OUTDIR}" ! -name "$(basename "${LOADUP_WORKDIR}")" -delete
+        find "${LOADUP_OUTDIR}" \( -name "$(basename "${LOADUP_WORKDIR}")" -prune \) \
+                                -o -path "${LOADUP_OUTDIR}" \
+                                -o -exec rm -rf {} \;  2>&1 >/dev/null  \
+              | grep -v "No such file"
         if istagged "${LOADUP_OUTDIR}" && [ ! -e "${LOADUP_WORKDIR}" ]
         then
           rm -rf "${LOADUP_OUTDIR}"

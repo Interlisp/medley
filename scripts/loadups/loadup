@@ -14,12 +14,13 @@ main() {
         nocopy=false
         thinw=false
         thinl=false
+        thinall=false
         override_lock=false
         ignore_lock=false
         export LOADUP_USE_VNC="-"
         man_flg=false
-        use_branch=""
-        branch_requested=false
+        use_tag=""
+        tag_requested=false
 
         while [ "$#" -ne 0 ];
       	do
@@ -123,18 +124,18 @@ main() {
               end=1
               end_s=init
               ;;
-            -br | -branch | --branch)
-              branch_requested=true
+            -tg | -tag | --tag)
+              tag_requested=true
               if [ "$2" = "-" ]
               then
-                 use_branch="-"
+                 use_tag="-"
                  shift
               else
                 if check_for_no_arg "$2"
                 then
-                  use_branch="-"
+                  use_tag="-"
                 else
-		  use_branch="$2"
+		  use_tag="$2"
                   shift
                 fi
               fi
@@ -142,11 +143,29 @@ main() {
             -nc | -nocopy | --nocopy)
               nocopy=true
               ;;
+            -th | -thin | --thin)
+              thinall=true
+              if [ "$2" = "+" ]
+              then
+                 thinall="+"
+                 shift
+              fi
+              ;;
             -tw | -thinw | --thinw)
               thinw=true
+              if [ "$2" = "+" ]
+              then
+                 thinw="+"
+                 shift
+              fi
               ;;
             -tl | -thinl | --thinl)
               thinl=true
+              if [ "$2" = "+" ]
+              then
+                 thinl="+"
+                 shift
+              fi
               ;;
             -d | -maikodir | --maikodir)
               if [ -n "$2" ]
@@ -178,13 +197,15 @@ main() {
               # internal
               noendmsg=true
               ;;
-            --forcevnc)
-              # internal - for testing
-              # WSL only -otherwise warning msg from medley
-              force_vnc="+"
-              ;;
-            -z | -man | --man )
+            -z | -man | --man | -h | -help | --help)
               man_flg=true
+              if [ "$2" = "+" ]
+              then
+                 man_no_pager=true
+                 shift
+              else
+                 man_no_pager=false
+              fi
               ;;
             *)
               output_error_msg "Error: unknown flag: $1${EOL}Exiting"
@@ -206,6 +227,10 @@ main() {
         #
         if [ "${man_flg}" = true ]
         then
+          if [ "${man_no_pager}" = true ]
+          then
+            export PAGER=cat
+          fi
           if [ "$(uname)" = "Darwin" ]
           then
             /usr/bin/man "${LOADUP_SOURCEDIR}/man-page/loadup.1.gz"
@@ -223,10 +248,10 @@ main() {
 
         no_loadups=false
 
-        # check --branch is used correctly
-        if [ "${branch_requested}" = true ] && [ -z "${use_branch}" ]
+        # check --tag is used correctly
+        if [ "${tag_requested}" = true ] && [ -z "${use_tag}" ]
         then
-          output_warn_msg "The --branch (-br) flag was used.  But either git is not installed on this system or \"${LOADUP_SOURCEDIR}\" is not a git directory.${EOL}The --branch flag will be ignored"
+          output_warn_msg "The --tag (-tg) flag was used.  But either git is not installed on this system or \"${LOADUP_SOURCEDIR}\" is not a git directory.${EOL}The --tg flag will be ignored"
         fi
 
         #
@@ -241,7 +266,7 @@ main() {
             start_sysout=starter.sysout
             aux=true
             db=false
-            if [ "${thinw}" = true ] || [ "${thinl}" = true ] 
+            if [ ! "${thinw}" = false ] || [ ! "${thinl}" = false ] || [ ! "${thinall}" = false ]
             then
               no_loadups=true
               nocopy=true
@@ -312,13 +337,32 @@ main() {
 
         # if requested, thin the loadups and workdirs by eliminating all versioned (*.~[0-9]*~) files
         # from these directories
-        if [ "${thinw}" = true ]
+        case "${thinall}" in
+          true) "${LOADUP_SCRIPTDIR}"/thin_loadups.sh lw      ;;
+          +)    "${LOADUP_SCRIPTDIR}"/thin_loadups.sh lw +    ;;
+          *)
+            case "${thinw}" in
+              true) "${LOADUP_SCRIPTDIR}"/thin_loadups.sh w   ;;
+              +)    "${LOADUP_SCRIPTDIR}"/thin_loadups.sh w + ;;
+            esac
+            case "${thinl}" in
+              true) "${LOADUP_SCRIPTDIR}"/thin_loadups.sh l   ;;
+              +)    "${LOADUP_SCRIPTDIR}"/thin_loadups.sh l + ;;
+            esac
+          ;;
+        esac
+
+        # Exit if there's no more work to be done
+        # Otherwise recreate ${LOADUP_WORKDIR} & ${LOADUP_OUTDIR} if they were
+        # deleted during the thin process, if any
+        if [ "${no_loadups}" = true ] && [ "${nocopy}" = true ]
         then
-          "${LOADUP_SCRIPTDIR}"/thin_loadups.sh w
-        fi
-        if [ "${thinl}" = true ]
-        then
-          "${LOADUP_SCRIPTDIR}"/thin_loadups.sh l
+          echo "+++++ loadup: SUCCESS +++++"
+          remove_run_lock
+          exit 0
+        else
+          mkdir -p "${LOADUP_OUTDIR}"
+          mkdir -p "${LOADUP_WORKDIR}"
         fi
 
 	# find and place starting sysout

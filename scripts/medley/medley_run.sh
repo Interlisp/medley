@@ -52,65 +52,73 @@ else
 fi
 export LDEDESTSYSOUT
 
-# expand on use_branch, if needed
+# expand on use_tag, if needed
 
-if [ "${use_branch}" = "-" ]
+if [ "${use_tag}" = "-" ]
 then
   git_commit_info "${MEDLEYDIR}"
-  use_branch="${BRANCH}"
-  if [ -z "${use_branch}" ]
+  use_tag="${BRANCH}"
+  if [ -z "${use_tag}" ]
   then
-    output_warn_msg "A \"--branch -\" (\"-br -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --branch argument.${EOL}"
+    output_warn_msg "A \"--tag -\" (\"-tg -\") argument was given on the command line.${EOL}But either there is no git installed on this system or MEDLEYDIR (\"${MEDLEYDIR}\") is not a git directory.${EOL}Ignoring --tag argument.${EOL}"
   fi
 fi
 
-# clean use_branch of no alphanumeric chars
+# clean use_tag of no alphanumeric chars
 
-if [ -n "${use_branch}" ]
+if [ -n "${use_tag}" ]
 then
-  use_branch="$(printf %s "${use_branch}" | sed "s/[^a-zA-Z0-9_.-]/_/g")"
+  use_tag="$(printf %s "${use_tag}" | sed "s/[^a-zA-Z0-9_.-]/_/g")"
 fi
 
-# Figure out the branch/loadupsdir situation
+# Figure out the tag/loadupsdir situation
 
-slash_branch=""
-if [ -n "${use_branch}" ]
+slash_tag=""
+if [ -n "${use_tag}" ]
 then
-  branches_dir="${MEDLEYDIR}/loadups/branches"
-  mkdir -p "${branches_dir}"
-  matches="$(cd "${branches_dir}" && ls -d "${use_branch}"*)"
+  # Set things up to use new tagged directory instead of old branches directory
+  # but set up symlink for backward compatibility
+  if [ -d "${MEDLEYDIR}/loadups/branches" ] && [ ! -e "${MEDLEYDIR}/loadups/tagged" ]
+  then
+    mv "${MEDLEYDIR}/loadups/branches" "${MEDLEYDIR}/loadups/tagged"
+    ln -s "${MEDLEYDIR}/loadups/tagged" "${MEDLEYDIR}/loadups/branches"
+  fi
+  #
+  tagged_dir="${MEDLEYDIR}/loadups/tagged"
+  mkdir -p "${tagged_dir}"
+  matches="$(cd "${tagged_dir}" && ls -d "${use_tag}"*)"
   echo ${matches}
   if [ -z "${matches}" ]
   then
-    output_error_msg "The \"--branch ${use_branch}\" argument was given on the command line${EOL}but a directory matching \"${branches_dir}/${use_branch}*\" does not exist.${EOL}Exiting."
+    output_error_msg "The \"--tag ${use_tag}\" argument was given on the command line${EOL}but a directory matching \"${tagged_dir}/${use_tag}*\" does not exist.${EOL}Exiting."
     exit 1
   else
     count=0
-    new_branch=""
+    new_tag=""
     for match in ${matches}
     do
-      if [ "${match}" = "${use_branch}" ]
+      if [ "${match}" = "${use_tag}" ]
       then
-        new_branch="${match}"
+        new_tag="${match}"
         count=1
         break
       else
-        new_branch="${match}"
+        new_tag="${match}"
         count=$((count + 1))
       fi
     done
     if [ "${count}" -ge 2 ]
     then
-      output_error_msg "The \"--branch ${use_branch}\" argument was given on the command line${EOL}but more than one subdirectory in \"${branches_dir}\" matches \"${use_branch}*\".${EOL}Exiting."
+      output_error_msg "The \"--tag ${use_tag}\" argument was given on the command line${EOL}but more than one subdirectory in \"${tagged_dir}\" matches \"${use_tag}*\".${EOL}Exiting."
       exit 1
     else
-      use_branch="${new_branch}"
+      use_tag="${new_tag}"
     fi
-    slash_branch="/branches/${use_branch}"
+    slash_tag="/tagged/${use_tag}"
   fi
 fi
 
-loadups_dir="${MEDLEYDIR}/loadups${slash_branch}"
+loadups_dir="${MEDLEYDIR}/loadups${slash_tag}"
 export MEDLEY_LOADUPS_DIR="${loadups_dir}"
 
 # Figure out the sysout situation
@@ -257,10 +265,10 @@ then
 else
   title="$(printf %s "${title}" | sed -e "s/%i/::${run_id}/")"
 fi
-if [ -n "${use_branch}" ]
+if [ -n "${use_tag}" ]
 then
-  short_branch="$(printf "%0.16s" "${use_branch}")"
-  title="$(printf %s "${title}" | sed -e "s/%b/::${short_branch}/")"
+  short_tag="$(printf "%0.16s" "${use_tag}")"
+  title="$(printf %s "${title}" | sed -e "s/%b/::${short_tag}/")"
 else
   title="$(printf %s "${title}" | sed -e "s/%b//")"
 fi

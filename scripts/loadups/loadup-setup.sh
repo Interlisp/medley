@@ -28,27 +28,34 @@ git_commit_info "${LOADUP_SOURCEDIR}"
 export LOADUP_COMMIT_ID="${COMMIT_ID}"
 export LOADUP_BRANCH="${BRANCH}"
 
-if [ "${use_branch}" = "-" ]
+if [ "${use_tag}" = "-" ]
 then
-  use_branch="${LOADUP_BRANCH}"
+  use_tag="${LOADUP_BRANCH}"
 fi
 
-slash_branch=""
-if [ -n "${use_branch}" ]
+slash_tag=""
+if [ -n "${use_tag}" ]
 then
-  use_branch="$(printf %s "${use_branch}" | sed "s/[^a-zA-Z0-9_.-]/_/g")"
-  slash_branch="/branches/${use_branch}"
+  use_tag="$(printf %s "${use_tag}" | sed "s/[^a-zA-Z0-9_.-]/_/g")"
+  slash_tag="/tagged/${use_tag}"
+  # update dir structure for to use tag nomenclature rather than branch nomenclature
+  # but keep compatibilty with branch nomenclature for now
+  if [ -d "${MEDLEYDIR}/loadups/branches" ] && [ ! -h "${MEDLEYDIR}/loadups/branches" ]
+  then
+     mv "${MEDLEYDIR}/loadups/branches" "${MEDLEYDIR}/loadups/tagged"
+     ln -s "${MEDLEYDIR}/loadups/tagged" "${MEDLEYDIR}/loadups/branches"
+  fi
 fi
 
 
 if [ -z "${LOADUP_OUTDIR}" ]
 then
-    export LOADUP_OUTDIR="${MEDLEYDIR}/loadups${slash_branch}"
+    export LOADUP_OUTDIR="${MEDLEYDIR}/loadups${slash_tag}"
 fi
 
-if [ ! -d "${LOADUP_OUTDIR}" ];
+if [ ! -d "${LOADUP_OUTDIR}" ]
 then
-  if [ ! -e "${LOADUP_OUTDIR}" ];
+  if [ ! -e "${LOADUP_OUTDIR}" ]
   then
     mkdir -p "${LOADUP_OUTDIR}"
   else
@@ -159,7 +166,6 @@ loadup_finish () {
   exit ${exit_code}
 }
 
-force_vnc="-"
 run_medley () {
     /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"         \
              --config -                                          \

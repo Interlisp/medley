@@ -61,8 +61,9 @@ hence MEDLEYDIR is computed on each invocation of loadup.
 
 OPTIONS
 =======
-**-z, \-\-man, \-man**
-: Print this manual page on the screen.
+**-z [+], \-\-man [+], \-man [+], -h [+], --help [+]**
+: Print this manual page on the screen.  If the **+** parameter is specified, then no pager is used when
+displaying the man page.
 
 **-t STAGE, \-\-target STAGE, -target STAGE**
 : Run the sequential loadup procedure until the STAGE is complete, starting from the files created by the previously run STAGE specified in the --start option.
@@ -124,25 +125,37 @@ OPTIONS
 **-ov, \-\-override, -override**
 : Automatically override the lock that prevents two loadups from running simultaneously.  If this flag is not set and an active lock is encountered, the user will be asked to choose whether to override or exit.
 
-**-br [ BRANCH | -], \-\-branch [ BRANCH | - ]**
+**-tg [ TAG | -], \-\-tag [ TAG | - ]**
 : By default the sysouts and other files produced by loadup are placed at the top level of
 the \<MEDLEYDIR>/loadups directory.  If this flag is specified, then the sysout and other
-output files are placed in the directory \<MEDLEYDIR>/loadups/branches/BRANCH. 
-If BRANCH is "-" or not specified at all, then BRANCH is the name of the currently active
+output files are placed in the directory \<MEDLEYDIR>/loadups/tagged/TAG. 
+If TAG is "-" or not specified at all, then TAG is the name of the currently active
 git branch of \<MEDLEYDIR>, except if git is not installled on the current system
 or if \<MEDLEYDIR> is not a git directory, in which case then this flag is ignored.
-BRANCH can contain alphanumerics, dashes, underscores,and periods.
+TAG can contain alphanumerics, dashes, underscores,and periods.
 Any other character is replaced by an underscore.
-The medley script has a corresponding \-\-branch argument to load these sysout files.
+The medley script has a corresponding \-\-tag (-tg)  argument to load these sysout files.
 
 **-nc, \-\-nocopy, -nocopy**
 : Run the specified loadups, but do not copy results into loadups directory.
 
-**-tw, \-\-thinw, -thinw**
-: Before running loadups (if any), thin the working directory by deleting all versioned (*.~[0-9]*~) files.
+**-tw [+], \-\-thinw [+], -thinw [+]**
+: Before running loadups (if any), thin the working directory by deleting all versioned (*.~[0-9]*~)
+files therein.  If the **+** parameter is used, then instead of deleting just the versioned files, the 
+working directory (and all files and subdirectories it contains) is deleted.
 
-**-tl, \-\-thinl, -thinl**
-: Before running loadups (if any), thin the loadups directory by deleting all versioned (*.~[0-9]*~) files.
+**-tl [+], \-\-thinl [+], -thinl [+]**
+: Before running loadups (if any), thin the loadups directory by deleting all versioned (*.~[0-9]*~)
+files except for those contained in the working directory.
+If the **+** parameter is used, then instead of deleting just the versioned files, all files and
+subdirectories are deleted except for those contained in the working directory.  If **+** is used and
+there is no working directory and *--tag TAG* is also specified,
+then the tagged loadups directory (\<MEDLEYDIR>/loadups/tagged/TAG) is also deleted. 
+
+**-th [+], \-\-thin [+], -thin [+]**
+: Equivalent to specifying both -tw [+] and -tl [+].  If *--tag TAG* is also specified and
+the **+** parameter is used here, then the tagged loadups directory (\<MEDLEYDIR>/loadups/tagged/TAG)
+is removed. 
 
 **-d DIR, \-\-maikodir DIR, -maikodir DIR**
 :  Use DIR as the directory from which to execute lde (Miko) when running Medley in the loadup process.  If this flag is not present, the value of the environment variable MAIKODIR will be used instead.  And if MAIKODIR does not exist, then the default Maiko directory search within Medley will be used.

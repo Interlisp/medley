@@ -106,7 +106,7 @@ than the window, there will be no way to pan to the non-visible parts of the vir
 
 -g [*WxH* | -], \-\-geometry [*WxH* | -]
 : Sets the size of the X Window (or VNC window) that Medley runs in to be Width x Height. (Full X Windows
-geomtery specification with +X+Y is not currently supported).
+geometry specification with +X+Y is not currently supported).
 
     If a value of "-" is given, geometry is set to the default value.
 

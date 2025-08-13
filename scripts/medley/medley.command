@@ -947,6 +947,11 @@ do
         shift
         ;;
       -z | --man)
+        if [ "$2" = "+" ]
+        then
+          export PAGER=cat
+          shift
+        fi
         if [ "${darwin}" = true ]
         then
           /usr/bin/man "${MEDLEYDIR}/docs/man-page/medley.1.gz"

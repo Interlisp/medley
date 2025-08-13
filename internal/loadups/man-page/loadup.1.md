@@ -61,8 +61,9 @@ hence MEDLEYDIR is computed on each invocation of loadup.
 
 OPTIONS
 =======
-**-z, \-\-man, \-man**
-: Print this manual page on the screen.
+**-z [+], \-\-man [+], \-man [+], -h [+], --help [+]**
+: Print this manual page on the screen.  If the **+** parameter is specified, then no pager is used when
+displaying the man page.
 
 **-t STAGE, \-\-target STAGE, -target STAGE**
 : Run the sequential loadup procedure until the STAGE is complete, starting from the files created by the previously run STAGE specified in the --start option.

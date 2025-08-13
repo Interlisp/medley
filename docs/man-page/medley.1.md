@@ -38,8 +38,9 @@ Flags
 -h, \-\-help
 : Prints out a brief summary of the flags and arguments to medley.
 
--z, \-\-man
-: Show the man page for medley
+-z [+], \-\-man [+]
+: Show the man page for medley. If the **+** parameter is specified, then no pager is used when
+displaying the man page.
 
 -c [*FILE* | -], \-\-config [*FILE* | -]
 : Use *FILE* as the config file for this run of Medley. See information on *CONFIG FILE* below.

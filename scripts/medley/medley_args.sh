@@ -49,7 +49,7 @@ borderwidth_arg=""
 remcm_arg="${LDEREMCM}"
 repeat_cm=""
 automation=false
-use_branch=""
+use_tag=""
 
 # Add marker at end of args so we can accumulate pass-on args in args array
 set -- "$@" "--start_of_pass_args"
@@ -64,13 +64,13 @@ do
         sysout_arg="apps"
         sysout_stage="${args_stage}"
         ;;
-      -br | -branch | --branch)
+      -tg | -tag | --tag)
         if [ "$2" = "-" ]
         then
-          use_branch="-"
+          use_tag="-"
         else
           check_for_dash_or_end "$1" "$2"
-          use_branch="$2"
+          use_tag="$2"
         fi
         shift
         ;;
@@ -329,6 +329,11 @@ do
         shift
         ;;
       -z | --man)
+        if [ "$2" = "+" ]
+        then
+          export PAGER=cat
+          shift
+        fi
         if [ "${darwin}" = true ]
         then
           /usr/bin/man "${MEDLEYDIR}/docs/man-page/medley.1.gz"

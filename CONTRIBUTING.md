@@ -3,7 +3,7 @@
 First, we want to thank you for helping reach the goal of restoring Medley Interlisp
 to the point where it is as useful today as it was 30 years ago.
 
-This guide is meant to help you make useful contributions, whether to the [Maiko](https://github.com/Interlisp/maiko) C-based virtual machine implementation, the [Medley](https://github.com/Interlisp/medley) Lisp code (in Interlisp and Common Lisp), or [documentation](https://github.com/Interlisp/medley/wiki). There are a number of [GitHub](https://github.com/Interlisp/medley/discussions/categories/github-use) problems that could use some attention.
+This guide is meant to help you make useful contributions, whether to the [Maiko](https://github.com/Interlisp/maiko) C-based virtual machine implementation, the [Medley](https://github.com/Interlisp/medley) Lisp code (in Interlisp and Common Lisp), or [documentation](https://interlisp.org/software/using-medley). There are a number of [GitHub](https://github.com/Interlisp/medley/discussions/categories/github-use) problems that could use some attention.
 
 ## Working with Maiko
 
@@ -17,6 +17,8 @@ The current arrangement of files and extentions is awkward for working on the im
 * The most useful contributions are reproducible errors -- things that don't work as documented.
 * Second most useful are reports of unexpected behavior -- things that aren't documented but behave unexpectedly.
 
+To report these errors and behaviors [open an issue](https://github.com/Interlisp/medley/issues).
+
 ## Reporting a bug or feature request
 * Ensure the bug was not already reported by searching on GitHub under [Issues](https://github.com/Interlisp/medley/issues) or [Discussions](https://github.com/Interlisp/medley/discussions). Note that all issues and Discussions are found in the Medley repository, using labels to distinguish. Discussions are for questions or topics where there is some disagreement or uncertainty about the "right" direction.
 * If you're unable to find a discussion or open issue addressing the problem, open a new one. Be sure to include a title 
@@ -24,7 +26,7 @@ and clear description, as much relevant information as possible. Use the issue t
 
 ## Did you write a patch that fixes a bug?  
 * Some bug fixes and "improvements" have unintended consequences, well beyond what you might expect for well-written modern code. We don't have testing new builds automated or integrated. Be sure you've tested your patch.
-* Open a new [GitHub pull request](https://github.com/Interlisp/maiko/pulls) with the patch.
+* Open a new GitHub pull request with the patch.
 * Ensure the PR description clearly describes the problem and solution. Include the relevant issue number if applicable.
 * Keep Pull Requests small and easily reviewable.  https://www.thedroidsonroids.com/blog/splitting-pull-request for
 a writeup of good practices.

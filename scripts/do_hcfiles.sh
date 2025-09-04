@@ -56,6 +56,7 @@ main() {
              --apps
 
         # save dribble file to loadups; extract and save fails
+        cat ${logindir}/HCFILES.DRIBBLE
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/HCFILES.DRIBBLE "${MEDLEYDIR}"/loadups/hcfiles.dribble
         grep "IL:FAIL" < "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/fails "${MEDLEYDIR}"/loadups/hcfiles-fails.txt

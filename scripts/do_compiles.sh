@@ -13,6 +13,7 @@
 
 doCompile() {
 
+
 	cat >"${cmfile}" <<-EOF
 	"
 
@@ -56,6 +57,10 @@ main() {
 
         for f in "${SOURCESDIR}"/*.LCOM "${SOURCESDIR}"/*.lcom
         do
+          if [ "$f" = "${SOURCESDIR}/*.LCOM" ] || [ "$f" = "${SOURCESDIR}/*.lcom" ]
+          then
+            continue
+          fi
           gg="$(basename $f .LCOM)"
           hh="$(basename $f .lcom)"
           if [ "$gg" = "$f" ]
@@ -65,18 +70,22 @@ main() {
             ff="$gg"
           fi
 
-          if grep -i ":FAKE-COMPILE-FILE" "$f"
+          if grep "COMPILED-FILEd" "$f" 2> /dev/null
           then
-            doCompile "$ff"  "IL:FAKE-COMPILE-FILE"
+            doCompile "$ff"  "IL:FAKE-COMPILE-FILE" "$f"
           else
-            doCompile "$ff" "IL:TCOMPL"
+            doCompile "$ff" "IL:TCOMPL" "$f"
 
           fi
         done
 
         #
-        for f in "${SOURCESDIR}/*.DFASL" "${SOURCESDIR}/*.dfasl"
+        for f in ${SOURCESDIR}/*.DFASL ${SOURCESDIR}/*.dfasl
         do
+          if [ "$f" = "${SOURCESDIR}/*.DFASL" ] || [ "$f" = "${SOURCESDIR}/*.dfasl" ]
+          then
+            continue
+          fi
           gg="$(basename $f .DFASL)"
           hh="$(basename $f .dfasl)"
           if [ "$gg" = "$f" ]
@@ -85,7 +94,7 @@ main() {
           else
             ff="$gg"
           fi
-          doCompile "$ff" "CL:COMPILE-FILE"
+          doCompile "$ff" "CL:COMPILE-FILE" "$f"
         done
 }
 

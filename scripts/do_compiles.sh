@@ -1,18 +1,58 @@
 #!/bin/sh
 #
-#  do_hcfiles.sh
+#  do_compiles.sh
 #
-#  Script to run HCFILES in Medley to create PDFs of Medley files as well as
-#  index.html files so that the Medley directory tree plus the generated PDFs can be
-#  stored on and accessed from a web server
+#  Script to compile all files in MEDLEYDIR sources, one at a time each time in a fresh MEDLEY
 #
-#  FGH 2024-07-15
+#  FGH 2025-09-30
 #
-#  Copyright 2024 Interlisp.org
+#  Copyright 2025 Interlisp.org
 #
+
+main() {
+        MEDLEYDIR=$(cd "${SCRIPTDIR}/.." && pwd)
+        export MEDLEYDIR
+        SOURCESDIR="${MEDLEYDIR}/sources"
+        logindir=/tmp/compiles
+        mkdir -p "${logindir}"
+        cmfile=${logindir}/compile.cm
+
+        nextDribble
+
+        for f in "${SOURCESDIR}"/*.LCOM "${SOURCESDIR}"/*.lcom
+        do
+          if [ "$f" = "${SOURCESDIR}/*.LCOM" ] || [ "$f" = "${SOURCESDIR}/*.lcom" ]
+          then
+            continue
+          fi
+          ff="$(basename "$f" | sed -e s-.lcom\$-- -e s-.LCOM\$--)"
+          if grep "COMPILED-FILEd" "$f" 2> /dev/null
+          then
+            doCompile "$ff"  "IL:FAKE-COMPILE-FILE" "$f"
+          else
+            doCompile "$ff" "IL:TCOMPL" "$f"
+          fi
+        done
+
+        #
+        for f in ${SOURCESDIR}/*.DFASL ${SOURCESDIR}/*.dfasl
+        do
+          if [ "$f" = "${SOURCESDIR}/*.DFASL" ] || [ "$f" = "${SOURCESDIR}/*.dfasl" ]
+          then
+            continue
+          fi
+          ff="$(basename "$f" | sed -e s-\.dfasl\$-- -e s-\.DFASL\$--)"
+          doCompile "$ff" "CL:COMPILE-FILE" "$f"
+        done
+}
+
+
 
 doCompile() {
 
+
+        findMaxVersion "$3"
+        oldver=$?
 
 	cat >"${cmfile}" <<-EOF
 	"
@@ -21,10 +61,11 @@ doCompile() {
           (IL:MEDLEY-INIT-VARS 'IL:GREET)
           (IL:FILESLOAD ${MEDLEYDIR}/loadups/exports.all)
           (IL:ADVISE 'IL:ASKUSER :BEFORE '(RETURN (IL:QUOTE IL:F)))
-          (IL:DRIBBLE '{DSK}/tmp/compiler.dribble T)
+          (IL:DRIBBLE '${DRIBBLE} T)
           (PRINT '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>)
           (PRINT '$1)
           (PRINT '$2)
+          (IL:CNDIR '${MEDLEYDIR}/sources)
           ($2 '$1)
           (PRINT '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<)
           (IL:DRIBBLE)
@@ -44,58 +85,66 @@ doCompile() {
              --rem.cm "${cmfile}"                                \
              --full
 
+        findMaxVersion "$3"
+        newver=$?
+
+        if [ $newver -eq $oldver ]
+        then
+          echo " " >> "${DRIBBLE}"
+          echo !!!!!!!!!!!!!!!!!!!! FAIL "$3"  >> "${DRIBBLE}"
+          echo !!!!!!!!!!!!!!!!!!!! FAIL "$3"
+        fi
+
 }
 
 
-main() {
-        MEDLEYDIR=$(cd "${SCRIPTDIR}/.." && pwd)
-        export MEDLEYDIR
-        SOURCESDIR="${MEDLEYDIR}/sources"
-        logindir=/tmp/compiles
-        mkdir -p "${logindir}"
-        cmfile=${logindir}/compile.cm
+nextDribble() {
 
-        for f in "${SOURCESDIR}"/*.LCOM "${SOURCESDIR}"/*.lcom
-        do
-          if [ "$f" = "${SOURCESDIR}/*.LCOM" ] || [ "$f" = "${SOURCESDIR}/*.lcom" ]
-          then
-            continue
-          fi
-          gg="$(basename $f .LCOM)"
-          hh="$(basename $f .lcom)"
-          if [ "$gg" = "$f" ]
-          then
-            ff="$hh"
-          else
-            ff="$gg"
-          fi
+        export DRIBBLE="${MEDLEYDIR}/loadups/compiles.dribble"
+        dest="${DRIBBLE}"
+        if [ ! -e "$dest" ]
+        then
+          touch $dest
+        fi
 
-          if grep "COMPILED-FILEd" "$f" 2> /dev/null
-          then
-            doCompile "$ff"  "IL:FAKE-COMPILE-FILE" "$f"
-          else
-            doCompile "$ff" "IL:TCOMPL" "$f"
+        findMaxVersion $dest
 
-          fi
-        done
+	if [ $max -eq 0 ]; then		# no current versions
+	    mv $dest $dest.~1~		# change version to version 1
+	    new=2
+	else
+	    if cmp -q $dest $dest.~$max~ >/dev/null 2>&1
+	    then			# they're different
+		max=`expr $max + 1`	# make newer version
+		mv $dest $dest.~$max~
+		new=`expr $max + 1`
+	    else			# dest and dest.~nn~ are equal so
+		rm $dest		# delete dest leave old version behind
+		new=`expr $max + 1`
+	    fi
+	fi
+        DRIBBLE="$dest.~$new~"
 
-        #
-        for f in ${SOURCESDIR}/*.DFASL ${SOURCESDIR}/*.dfasl
-        do
-          if [ "$f" = "${SOURCESDIR}/*.DFASL" ] || [ "$f" = "${SOURCESDIR}/*.dfasl" ]
-          then
-            continue
-          fi
-          gg="$(basename $f .DFASL)"
-          hh="$(basename $f .dfasl)"
-          if [ "$gg" = "$f" ]
-          then
-            ff="$hh"
-          else
-            ff="$gg"
-          fi
-          doCompile "$ff" "CL:COMPILE-FILE" "$f"
-        done
+}
+
+
+findMaxVersion() {
+        dest="$1"
+   	# find maximum version of dest
+	max=0
+	for vf in "$dest".~[1-9]*~
+	do vn=`echo $vf | sed -e 's/^.*\.~\([1-9][0-9]*\)~$/\1/'`
+	   if [ -f $dest.~$vn~ ]; then
+	       if [ $max -lt $vn ]; then
+		   max=$vn
+	       fi
+	   fi
+	done
+        if [ $max -eq 0 ]; then
+           ln $dest $dest.~1~
+           max=1
+        fi
+        return $max
 }
 
 # shellcheck disable=SC2164,SC2034

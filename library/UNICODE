@@ -1,12 +1,14 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 5-Oct-2025 17:44:17" {WMEDLEY}<library>UNICODE.;174 111834 
+(FILECREATED "11-Oct-2025 13:01:09" {WMEDLEY}<library>UNICODE.;179 113928 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS SHOWCHARS)
+      :CHANGES-TO (VARS UNICODECOMS)
+                  (FNS XCCSTOMCCS-MAPPING READ-UNICODE-MAPPING MAKE-UNICODE-TRANSLATION-TABLES 
+                       MERGE-UNICODE-TRANSLATION-TABLES UNICODE-EXTEND-TRANSLATION?)
 
-      :PREVIOUS-DATE " 9-Sep-2025 08:59:44" {WMEDLEY}<library>UNICODE.;171)
+      :PREVIOUS-DATE " 5-Oct-2025 17:44:17" {WMEDLEY}<library>UNICODE.;174)
 
 
 (PRETTYCOMPRINT UNICODECOMS)
@@ -37,8 +39,8 @@
               (FNS READ-UNICODE-MAPPING-FILENAMES READ-UNICODE-MAPPING))
         [COMS                                                (* ; 
                                                   "Make translation tables for  UTF external formats")
-              (FNS MAKE-UNICODE-TRANSLATION-TABLES MERGE-UNICODE-TRANSLATION-TABLES UNICODE.UNMAPPED
-                   UNICODE-EXTEND-TRANSLATION?)
+              (FNS MAKE-UNICODE-TRANSLATION-TABLES XCCSTOMCCS-MAPPING 
+                   MERGE-UNICODE-TRANSLATION-TABLES UNICODE.UNMAPPED UNICODE-EXTEND-TRANSLATION?)
               (FNS ALL-UNICODE-MAPPINGS XCCSJAPANESECHARSETS)
               (INITVARS (*MCCSTOUNICODE*)
                      (*UNICODETOMCCS*)
@@ -1209,7 +1211,8 @@
      (FUNCTION STRING.EQUAL])
 
 (READ-UNICODE-MAPPING
-  [LAMBDA (FILESPEC PRINT NOERROR)                           (* ; "Edited  4-Sep-2025 00:17 by rmk")
+  [LAMBDA (FILESPEC PRINT NOERROR)                           (* ; "Edited 11-Oct-2025 12:08 by rmk")
+                                                             (* ; "Edited  4-Sep-2025 00:17 by rmk")
                                                              (* ; "Edited 24-Apr-2025 15:32 by rmk")
                                                              (* ; "Edited 31-Jan-2025 17:43 by rmk")
                                                              (* ; "Edited 17-Jan-2025 16:41 by rmk")
@@ -1231,7 +1234,7 @@
 
     (* ;; "")
 
-    (* ;; "Result is a list of (fromcode tocode1 ... tocoden) integer lists (almost always with only a single tocode, where fromcode is an MCCS code and the tocodes are corresponding Unicodes.")
+    (* ;; "Result is a list of (fromcode tocode1 ... tocoden) integer lists (almost always with only a single tocode, where fromcode is an XCCS code and the tocodes are corresponding Unicodes.")
 
     (for FILE [SEPBITTABLE _ (MAKEBITTABLE (CHARCODE (TAB SPACE] in (READ-UNICODE-MAPPING-FILENAMES
                                                                      FILESPEC)
@@ -1266,8 +1269,6 @@
                                            finally (CL:WHEN (CDDR $$VAL)
                                                              (* ; "Combiners go into a CADR list")
                                                        (RPLACD $$VAL (CONS (CDR $$VAL))))]
-                            (change (CAR MAP)
-                                   (XTOMCODE DATUM))
                             MAP])
 )
 
@@ -1278,7 +1279,8 @@
 (DEFINEQ
 
 (MAKE-UNICODE-TRANSLATION-TABLES
-  [LAMBDA (MAPPING REINSTALL)                                (* ; "Edited  4-Sep-2025 00:30 by rmk")
+  [LAMBDA (MAPPING REINSTALL)                                (* ; "Edited 11-Oct-2025 11:54 by rmk")
+                                                             (* ; "Edited  4-Sep-2025 00:30 by rmk")
                                                              (* ; "Edited 24-Apr-2025 15:47 by rmk")
                                                              (* ; "Edited 31-Jan-2025 17:46 by rmk")
                                                              (* ; "Edited 26-Jan-2025 19:36 by rmk")
@@ -1287,8 +1289,10 @@
                                                              (* ; "Edited 18-Jan-2025 11:52 by rmk")
                                                              (* ; "Edited  3-Feb-2024 00:24 by rmk")
                                                              (* ; "Edited 30-Jan-2024 09:54 by rmk")
-                                                            (* ; "Edited 21-Aug-2021 13:12 by rmk:")
-                                                            (* ; "Edited 17-Aug-2020 08:46 by rmk:")
+                                                            (* ; "Edited 21-Aug-2021 13:12 by rmk:")
+
+    (* ;; "MAPPING is the list of numeric code correspondence pairs constructed by applying READ-UNICODE-MAPPING to XCCS-to-Unicode mapping files. This applies the XCCS-to-MCCS translations, and then updates or produces two recoding arrays, one maps left-side codes into right-side codes (e.g. MCCS or ISO8859-1 to Unicode), for printing, the other maps right-side (Unicode) codes to corresponding right-side codes (e.g. MCCS).")
+                                                            (* ; "Edited 17-Aug-2020 08:46 by rmk:")
     (CL:UNLESS [AND (LISTP MAPPING)
                     (FOR PAIR R IN MAPPING AS I TO 10
                        ALWAYS (AND (LISTP PAIR)
@@ -1299,8 +1303,7 @@
         (* ;; "Seems like the argument is not already a list of mapping pairs (perhaps with a combiner), presumably a list of charsets to be read.")
 
         (SETQ MAPPING (READ-UNICODE-MAPPING MAPPING)))
-
-    (* ;; "MAPPING is the list of numeric code correspondence pairs constructed by applying READ-UNICODE-MAPPING to Unicode mapping files.")
+    (SETQ MAPPING (XCCSTOMCCS-MAPPING MAPPING))
 
     (* ;; "This updates or produces two recoding arrays, one maps left-side codes into right-side codes (e.g. XCCS or ISO8859-1 to Unicode), for printing, the other maps right-side (Unicode) codes to corresponding right-side codes (e.g. XCCS).")
 
@@ -1325,8 +1328,32 @@
                (SETQ *NEXT-PRIVATE-UNICODE* FIRST-PRIVATE-UNICODE))
            (MERGE-UNICODE-TRANSLATION-TABLES NIL MAPPING])
 
+(XCCSTOMCCS-MAPPING
+  [LAMBDA (XTOUMAPPING)                                      (* ; "Edited 11-Oct-2025 12:57 by rmk")
+
+    (* ;; 
+    "This translates the pairs that map XCCS to Unicode into pairs that translate MCCS to Unicode.")
+
+    (* ;; 
+   "We grab the affected pairs before we make any changes so that we don't get into ordering issues.")
+
+    (LET* ([XTOMCODES (CHARCODE ((Currency Dollar)
+                                 (Dollar Currency)
+                                 (Uparrow Circumflex)
+                                 (Circumflex Uparrow)
+                                 (Leftarrow Lowline)
+                                 (Lowline Leftarrow]
+           (AFFECTED (for MP in XTOUMAPPING when (thereis XP in XTOMCODES
+                                                    suchthat (EQ (CAR MP)
+                                                                 (CAR XP))) collect MP)))
+          (for AP in AFFECTED do (RPLACA AP (CADR (ASSOC (CAR AP)
+                                                         XTOMCODES)))
+             finally (push XTOUMAPPING (CHARCODE (DEL DEL)))
+                   (RETURN XTOUMAPPING])
+
 (MERGE-UNICODE-TRANSLATION-TABLES
-  [LAMBDA (INVERSE MAPPING TABLE INVERSETABLE)               (* ; "Edited 24-Apr-2025 15:28 by rmk")
+  [LAMBDA (INVERSE MAPPING TABLE INVERSETABLE)               (* ; "Edited 11-Oct-2025 10:24 by rmk")
+                                                             (* ; "Edited 24-Apr-2025 15:28 by rmk")
                                                              (* ; "Edited  1-Feb-2025 21:42 by rmk")
                                                              (* ; "Edited 26-Jan-2025 12:58 by rmk")
                                                              (* ; "Edited 22-Jan-2025 08:20 by rmk")
@@ -1336,7 +1363,7 @@
                                                              (* ; "Edited  3-Feb-2024 12:46 by rmk")
                                                              (* ; "Edited 31-Jan-2024 10:06 by rmk")
 
-    (* ;; "MAPPINGS is a list of pairs that map domain codes to range codes.  TABLE and INVERSETABLE default to *XCCSTOUNICODE* *UNICODETOXCCS* respectively.   ")
+    (* ;; "MAPPINGS is a list of pairs that map domain codes to range codes.  TABLE and INVERSETABLE default to *MCCSTOUNICODE* *UNICODETOMCCS* respectively.   ")
 
     (CL:UNLESS TABLE
         [SETQ TABLE (OR *MCCSTOUNICODE* (SETQ *MCCSTOUNICODE* (HASHARRAY (LENGTH MAPPING])
@@ -1415,7 +1442,8 @@
               (RETURN (CONS RANGE)))])
 
 (UNICODE-EXTEND-TRANSLATION?
-  [LAMBDA (CODE TABLE)                                       (* ; "Edited  4-Sep-2025 00:34 by rmk")
+  [LAMBDA (CODE TABLE)                                       (* ; "Edited 11-Oct-2025 09:49 by rmk")
+                                                             (* ; "Edited  4-Sep-2025 00:34 by rmk")
                                                              (* ; "Edited 29-Jun-2025 16:44 by rmk")
                                                              (* ; "Edited 24-Apr-2025 15:49 by rmk")
                                                              (* ; "Edited 26-Jan-2025 11:26 by rmk")
@@ -1448,7 +1476,7 @@
                  (push *MCCS-LOADED-CHARSETS* CHARSET))
              (SETQ FILE (FINDFILE (CL:IF INVERSE
                                       'UNICODE-TO-MCCS-MAPPINGS
-                                      MCCS-TO-UNICODE-MAPPINGS)
+                                      'MCCS-TO-UNICODE-MAPPINGS)
                                T UNICODEDIRECTORIES))
 
              (* ;; "The mappings files are indexed by CHARSET.")
@@ -1983,25 +2011,25 @@
 
 (PUTPROPS UNICODE FILETYPE :TCOMPL)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4369 19617 (UTF8.OUTCHARFN 4379 . 7395) (UTF8.SLUG.OUTCHARFN 7397 . 8061) (
-UTF8.INCCODEFN 8063 . 13784) (UTF8.PEEKCCODEFN 13786 . 18635) (\UTF8.BACKCCODEFN 18637 . 19615)) (
-19618 24308 (UTF16BE.OUTCHARFN 19628 . 20647) (UTF16BE.INCCODEFN 20649 . 21774) (UTF16BE.PEEKCCODEFN 
-21776 . 23116) (\UTF16BE.BACKCCODEFN 23118 . 24306)) (24309 29032 (UTF16LE.OUTCHARFN 24319 . 25435) (
-UTF16LE.INCCODEFN 25437 . 26562) (UTF16LE.PEEKCCODEFN 26564 . 27840) (\UTF16LE.BACKCCODEFN 27842 . 
-29030)) (29033 32080 (READBOM 29043 . 31112) (WRITEBOM 31114 . 32078)) (32110 35675 (
-MAKE-UNICODE-FORMATS 32120 . 35673)) (35772 40266 (UTF8.BINCODE 35782 . 38470) (\UTF8.FETCHCODE 38472
- . 40264)) (40267 45894 (UTF8.VALIDATE 40277 . 42874) (NUTF8-BYTE1-BYTES 42876 . 43613) (
-NUTF8-CODE-BYTES 43615 . 44672) (NUTF8-STRING-BYTES 44674 . 45570) (N-MCHARS 45572 . 45892)) (47622 
-56491 (MTOUCODE 47632 . 48019) (UTOMCODE 48021 . 48411) (MTOUCODE? 48413 . 49446) (UTOMCODE? 49448 . 
-50412) (MTOUSTRING 50414 . 50999) (UTOMSTRING 51001 . 51586) (MTOUTF8STRING 51588 . 55594) (
-UTF8TOMSTRING 55596 . 56489)) (56492 62194 (XTOUCODE 56502 . 57020) (UTOXCODE 57022 . 57530) (
-XTOUCODE? 57532 . 58593) (UTOXCODE? 58595 . 59678) (XTOUSTRING 59680 . 60373) (UTOXSTRING 60375 . 
-61116) (XTOUTF8STRING 61118 . 62192)) (63431 71727 (READ-UNICODE-MAPPING-FILENAMES 63441 . 67238) (
-READ-UNICODE-MAPPING 67240 . 71725)) (71794 84136 (MAKE-UNICODE-TRANSLATION-TABLES 71804 . 75114) (
-MERGE-UNICODE-TRANSLATION-TABLES 75116 . 77660) (UNICODE.UNMAPPED 77662 . 80986) (
-UNICODE-EXTEND-TRANSLATION? 80988 . 84134)) (84137 90973 (ALL-UNICODE-MAPPINGS 84147 . 89636) (
-XCCSJAPANESECHARSETS 89638 . 90971)) (92564 103832 (WRITE-UNICODE-MAPPING 92574 . 96324) (
-WRITE-UNICODE-INCLUDED 96326 . 101048) (WRITE-UNICODE-MAPPING-HEADER 101050 . 102298) (
-WRITE-UNICODE-MAPPING-FILENAME 102300 . 103830)) (103833 104509 (XCCS-UTF8-AFTER-OPEN 103843 . 104507)
-) (107034 109251 (UTF8HEXSTRING 107044 . 109249)) (109278 111320 (SHOWCHARS 109288 . 111318)))))
+  (FILEMAP (NIL (4573 19821 (UTF8.OUTCHARFN 4583 . 7599) (UTF8.SLUG.OUTCHARFN 7601 . 8265) (
+UTF8.INCCODEFN 8267 . 13988) (UTF8.PEEKCCODEFN 13990 . 18839) (\UTF8.BACKCCODEFN 18841 . 19819)) (
+19822 24512 (UTF16BE.OUTCHARFN 19832 . 20851) (UTF16BE.INCCODEFN 20853 . 21978) (UTF16BE.PEEKCCODEFN 
+21980 . 23320) (\UTF16BE.BACKCCODEFN 23322 . 24510)) (24513 29236 (UTF16LE.OUTCHARFN 24523 . 25639) (
+UTF16LE.INCCODEFN 25641 . 26766) (UTF16LE.PEEKCCODEFN 26768 . 28044) (\UTF16LE.BACKCCODEFN 28046 . 
+29234)) (29237 32284 (READBOM 29247 . 31316) (WRITEBOM 31318 . 32282)) (32314 35879 (
+MAKE-UNICODE-FORMATS 32324 . 35877)) (35976 40470 (UTF8.BINCODE 35986 . 38674) (\UTF8.FETCHCODE 38676
+ . 40468)) (40471 46098 (UTF8.VALIDATE 40481 . 43078) (NUTF8-BYTE1-BYTES 43080 . 43817) (
+NUTF8-CODE-BYTES 43819 . 44876) (NUTF8-STRING-BYTES 44878 . 45774) (N-MCHARS 45776 . 46096)) (47826 
+56695 (MTOUCODE 47836 . 48223) (UTOMCODE 48225 . 48615) (MTOUCODE? 48617 . 49650) (UTOMCODE? 49652 . 
+50616) (MTOUSTRING 50618 . 51203) (UTOMSTRING 51205 . 51790) (MTOUTF8STRING 51792 . 55798) (
+UTF8TOMSTRING 55800 . 56693)) (56696 62398 (XTOUCODE 56706 . 57224) (UTOXCODE 57226 . 57734) (
+XTOUCODE? 57736 . 58797) (UTOXCODE? 58799 . 59882) (XTOUSTRING 59884 . 60577) (UTOXSTRING 60579 . 
+61320) (XTOUTF8STRING 61322 . 62396)) (63635 71937 (READ-UNICODE-MAPPING-FILENAMES 63645 . 67442) (
+READ-UNICODE-MAPPING 67444 . 71935)) (72004 86230 (MAKE-UNICODE-TRANSLATION-TABLES 72014 . 75770) (
+XCCSTOMCCS-MAPPING 75772 . 76989) (MERGE-UNICODE-TRANSLATION-TABLES 76991 . 79644) (UNICODE.UNMAPPED 
+79646 . 82970) (UNICODE-EXTEND-TRANSLATION? 82972 . 86228)) (86231 93067 (ALL-UNICODE-MAPPINGS 86241
+ . 91730) (XCCSJAPANESECHARSETS 91732 . 93065)) (94658 105926 (WRITE-UNICODE-MAPPING 94668 . 98418) (
+WRITE-UNICODE-INCLUDED 98420 . 103142) (WRITE-UNICODE-MAPPING-HEADER 103144 . 104392) (
+WRITE-UNICODE-MAPPING-FILENAME 104394 . 105924)) (105927 106603 (XCCS-UTF8-AFTER-OPEN 105937 . 106601)
+) (109128 111345 (UTF8HEXSTRING 109138 . 111343)) (111372 113414 (SHOWCHARS 111382 . 113412)))))
 STOP

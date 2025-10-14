@@ -38,8 +38,9 @@ Flags
 -h, \-\-help
 : Prints out a brief summary of the flags and arguments to medley.
 
--z, \-\-man
-: Show the man page for medley
+-z [+], \-\-man [+]
+: Show the man page for medley. If the **+** parameter is specified, then no pager is used when
+displaying the man page.
 
 -c [*FILE* | -], \-\-config [*FILE* | -]
 : Use *FILE* as the config file for this run of Medley. See information on *CONFIG FILE* below.
@@ -106,7 +107,7 @@ than the window, there will be no way to pan to the non-visible parts of the vir
 
 -g [*WxH* | -], \-\-geometry [*WxH* | -]
 : Sets the size of the X Window (or VNC window) that Medley runs in to be Width x Height. (Full X Windows
-geomtery specification with +X+Y is not currently supported).
+geometry specification with +X+Y is not currently supported).
 
     If a value of "-" is given, geometry is set to the default value.
 
@@ -263,14 +264,13 @@ specified in the Medley file system, not the host Windows file system.
 will run for a very short time (< a couple of seconds).  This can cause issues with medley code that detects Xvnc server failures.
 Setting this flag notifies Medley that very short Medley sessions are possible and the Xvnc error detection needs to be adjusted accordingly.
 
--br [*BRANCH* | -], \-\-branch [*BRANCH* | -]
+-tg [*TAG* | -], \-\-tag [*TAG* | -]
 : By default, sysout files are loaded from the MEDLEYDIR/loadups directory.
-If "\-\-branch *BRANCH*" is specified, then by default sysout files are loaded from the
-MEDLEYDIR/loadups/branches/BRANCH directory.  The sysouts in these directories are created using
-a loadups script with the \-\-branch flag set.  See the loadup man page.
-If *BRANCH* is "-", then the name of the active git branch for MEDLEYDIR (if any) is used as
-*BRANCH*. 
-
+If "\-\-tag *TAG*" is specified, then by default sysout files are loaded from the
+MEDLEYDIR/loadups/tagged/TAG directory.  The sysouts in these directories are created using
+a loadups script with the \-\-tag flag set.  See the loadup man page.
+If *TAG* is "-", then the name of the active git branch for MEDLEYDIR (if any) is used as
+*TAG*. 
 
 
 Other Options

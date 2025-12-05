@@ -11,6 +11,7 @@ main() {
 	(* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
 
 	(SETQ MEDLEYDIR NIL)
+	(SETATOMVAL (QUOTE MEDLEY-INIT-VARS) (QUOTE NOBIND))
 	(LOAD (CONCAT (UNIX-GETENV "MEDLEYDIR") "/sources/MEDLEYDIR.LCOM"))
 	(MEDLEY-INIT-VARS)
 	(PUTASSOC (QUOTE MEDLEY) (LIST (UNIX-GETENV (QUOTE LOADUP_COMMIT_ID))) SYSOUTCOMMITS)

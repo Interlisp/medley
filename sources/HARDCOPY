@@ -1,14 +1,14 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 4-Nov-2025 22:43:57" {WMEDLEY}<sources>HARDCOPY.;85 147281 
+(FILECREATED " 5-Dec-2025 17:24:03" {WMEDLEY}<sources>HARDCOPY.;93 149900 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS GetImageFile HARDCOPYIMAGEW.TOFILE CAN.PRINT.DIRECTLY HARDCOPY.SOMEHOW 
-                       CONVERT.FILE.TO.TYPE.FOR.PRINTER)
+      :CHANGES-TO (FNS HARDCOPYIMAGEW.TOPRINTER PRINTERTYPE NewPrinter PRINTERS SEND.FILE.TO.PRINTER
+                       CAN.PRINT.DIRECTLY MakeMenuOfPrinters DEFAULTPRINTER PRINTERTYPEP)
                   (VARS HARDCOPYCOMS)
 
-      :PREVIOUS-DATE " 4-Oct-2025 16:37:56" {WMEDLEY}<sources>HARDCOPY.;76)
+      :PREVIOUS-DATE " 5-Dec-2025 10:37:26" {WMEDLEY}<sources>HARDCOPY.;87)
 
 
 (PRETTYCOMPRINT HARDCOPYCOMS)
@@ -36,11 +36,12 @@
                                                              "Interface for PRINTERS and IMAGEFILES")
               (FNS DEFAULTPRINTER CONVERT.FILE.TO.TYPE.FOR.PRINTER CAN.PRINT.DIRECTLY EMPRESS 
                    HARDCOPYW LISTFILES1 PRINTER.BITMAPFILE PRINTER.BITMAPSCALE PRINTER.SCRATCH.FILE 
-                   PRINTERPROP PRINTERSTATUS PRINTERTYPE PRINTERNAME PRINTFILETYPE 
+                   PRINTERPROP PRINTERSTATUS PRINTERTYPE PRINTERNAME PRINTFILETYPE PRINTERTYPEP 
                    SEND.FILE.TO.PRINTER)
               (FNS PRINTERDEVICE PRINTERDEVICE.OPENFN PRINTERDEVICE.CLOSEFN PRINTERDEVICEP 
                    PRINTERNAME)
               [DECLARE%: DONTEVAL@LOAD DOCOPY (P (PRINTERDEVICE 'LPT]
+              (FNS PRINTERS)
               (INITVARS (DEFAULTPRINTINGHOST)
                      (DEFAULTPRINTERTYPE 'PDF)
                      (EMPRESS.SCRATCH)
@@ -176,12 +177,13 @@
     (HARDCOPY.SOMEHOW W (GetImageFile W])
 
 (HARDCOPYIMAGEW.TOPRINTER
-  [LAMBDA (W DEFAULTPRINTER)                                 (* ; "Edited 19-Sep-2025 15:54 by rmk")
+  [LAMBDA (W DEFAULTPRINTER)                                 (* ; "Edited  5-Dec-2025 17:23 by rmk")
+                                                             (* ; "Edited 19-Sep-2025 15:54 by rmk")
                                                              (* ; "Edited 18-Oct-2022 18:45 by lmm")
                                                              (* ; "Edited 22-Apr-98 16:19 by rmk:")
                                                              (* ; "Edited 11-Jul-90 13:55 by jds")
     (LET ((PRINTERCHOICE (CL:IF DEFAULTPRINTER
-                             DEFAULTPRINTINGHOST
+                             (CAR (PRINTERS))
                              (GetPrinterName)))
           PRINTERTYPE)
          (if (LISTP PRINTERCHOICE)
@@ -189,13 +191,14 @@
                                             "Got back a list, which is (TYPE NAME).  Break it apart.")
                   (SETQ PRINTERTYPE (CAR PRINTERCHOICE))
                   (SETQ PRINTERCHOICE (CADR PRINTERCHOICE))
-           elseif PRINTERCHOICE
-             then                                            (* ; "Got back just a name.")
-                  (SETQ PRINTERTYPE (PRINTERTYPE PRINTERCHOICE)))
-         (CL:WHEN PRINTERCHOICE
-             (SEND.FILE.TO.PRINTER (HARDCOPY.SOMEHOW W (OPENSTREAM '{NODIRCORE} 'OUTPUT)
-                                          PRINTERTYPE)
-                    PRINTERCHOICE))])
+           else                                              (* ; "Got back just a name.")
+                (SETQ PRINTERTYPE (PRINTERTYPE PRINTERCHOICE)))
+
+         (* ;; "HARDCOPY.SOMEHOW applies the window's HARDCOPYFN, or HARDCOPYW.  But maybe the window should just be passed as a file to SEND.FILE.TO.PRINTER, and let its heuristics figure out what to do (CANPRINT, PREFERRED, etc.).")
+
+         (SEND.FILE.TO.PRINTER (HARDCOPY.SOMEHOW W (OPENSTREAM '{NODIRCORE} 'OUTPUT)
+                                      PRINTERTYPE)
+                PRINTERCHOICE])
 
 (HARDCOPYREGION.TOFILE
   [LAMBDA NIL                                                (* ; "Edited 26-Aug-87 14:08 by Snow")
@@ -259,26 +262,25 @@
 (DEFINEQ
 
 (MakeMenuOfPrinters
-  [LAMBDA (MENUTITLE)                                        (* ; "Edited 22-Jun-2023 17:30 by rmk")
+  [LAMBDA (MENUTITLE)                                        (* ; "Edited  5-Dec-2025 12:47 by rmk")
+                                                             (* ; "Edited 22-Jun-2023 17:30 by rmk")
                                                              (* ; "Edited 29-May-93 14:18 by rmk:")
                                                              (* ; "Edited 11-Jul-90 13:35 by jds")
     (DECLARE (GLOBALVARS DEFAULTPRINTINGHOST))
-    (CREATE MENU
-           ITEMS _ (APPEND (FOR P INSIDE DEFAULTPRINTINGHOST
-                              COLLECT (LIST (COND
-                                               ((LISTP P)
-                                                (IF (CADDR P)
-                                                    THEN (CONCAT (CADR P)
-                                                                " "
-                                                                (CADDR P))
-                                                  ELSE (CADR P)))
-                                               (T (CL:IF (OR (NULL P)
-                                                             (ZEROP (NCHARS P)))
-                                                      "(Default printer)"
-                                                      P)))
-                                            (KWOTE P)))
-                          (LIST (LIST "Other..." (KWOTE 'OTHER)
-                                      "You will be prompted for a printer")))
+    (create MENU
+           ITEMS _ `(("(Default printer)" NIL)
+                     ,@(for P in (PRINTERS) unless (OR (NULL P)
+                                                       (ZEROP (NCHARS P)))
+                          collect                            (* ; "Skipped the NIL %"%" defaults")
+                                (LIST (CL:IF (LISTP P)
+                                          (CL:IF (CADDR P)
+                                              (CONCAT (CADR P)
+                                                     " "
+                                                     (CADDR P))
+                                              (CADR P))
+                                          P)
+                                      (KWOTE P)))
+                     ("Other..." 'OTHER "You will be prompted for a printer"))
            TITLE _ MENUTITLE
            WHENSELECTEDFN _ (FUNCTION PRINTERS.WHENSELECTEDFN])
 
@@ -385,32 +387,27 @@
                        (CAR RESPONSE))])])
 
 (NewPrinter
-  [LAMBDA (PRINTER NEW-DEFAULT?)                             (* ; "Edited 11-Jul-90 13:48 by jds")
+  [LAMBDA (PRINTER NEW-DEFAULT?)                             (* ; "Edited  5-Dec-2025 13:21 by rmk")
+                                                             (* ; "Edited 11-Jul-90 13:48 by jds")
 
 (* ;;; "If Printer is unknown it will be added to DEFAULTPRINTINGHOST. In addition, if NEW-DEFAULT? is true the printer will be pushed to the head of DEFAULTPRINTINGHOST, thus making it the default printer.")
 
     (DECLARE (GLOBALVARS DEFAULTPRINTINGHOST))
-    (CL:WHEN (NOT (LISTP DEFAULTPRINTINGHOST))               (* ; 
-                                                             "If DEFAULTPRINTINGHOST Is an atom  ")
-        (SETQ DEFAULTPRINTINGHOST (LIST DEFAULTPRINTINGHOST)))
-    (LET* ((PRINTER-NAME (COND
-                            ((LISTP PRINTER)
-                             (CADR PRINTER))
-                            (T PRINTER)))
-           [MEMBER? (CL:MEMBER PRINTER-NAME DEFAULTPRINTINGHOST :TEST
-                           '(LAMBDA (PRINTER ENTRY)
-                              (STRING-EQUAL PRINTER (CL:IF (LISTP ENTRY)
-                                                        (CADR ENTRY)
-                                                        ENTRY)]
+    (LET* ((PRINTERS (PRINTERS))
+           (PRINTER-NAME (CL:IF (LISTP PRINTER)
+                             (CADR PRINTER)
+                             PRINTER))
+           [MEMBER? (CL:MEMBER PRINTER-NAME PRINTERS :TEST '(LAMBDA (PRINTER ENTRY)
+                                                              (STRING-EQUAL PRINTER
+                                                                     (CL:IF (LISTP ENTRY)
+                                                                         (CADR ENTRY)
+                                                                         ENTRY)]
            (ENTRY (CL:IF MEMBER?
                       (CAR MEMBER?)
                       PRINTER)))
-          (CL:IF NEW-DEFAULT?
-              (SETQ DEFAULTPRINTINGHOST (CONS ENTRY (REMOVE ENTRY DEFAULTPRINTINGHOST)))
-              (CL:IF (NOT MEMBER?)
-                  (RPLACD (LAST DEFAULTPRINTINGHOST)
-                         (CONS ENTRY))))
-          DEFAULTPRINTINGHOST])
+          (SETQ DEFAULTPRINTINGHOST (CL:IF NEW-DEFAULT?
+                                        (CONS ENTRY (REMOVE ENTRY PRINTERS))
+                                        (NCONC1 PRINTERS ENTRY))])
 
 (GetPrinterName
   [LAMBDA NIL                                                (* ; "Edited 29-May-93 13:58 by rmk:")
@@ -468,11 +465,9 @@
 (DEFINEQ
 
 (DEFAULTPRINTER
-  [LAMBDA NIL                                                (* ; "Edited 26-Aug-87 14:11 by Snow")
-    (COND
-       ((LISTP DEFAULTPRINTINGHOST)
-        (CAR DEFAULTPRINTINGHOST))
-       (T DEFAULTPRINTINGHOST])
+  [LAMBDA NIL                                                (* ; "Edited  5-Dec-2025 12:46 by rmk")
+                                                             (* ; "Edited 26-Aug-87 14:11 by Snow")
+    (CAR (PRINTERS])
 
 (CONVERT.FILE.TO.TYPE.FOR.PRINTER
   [LAMBDA (FILE FILETYPE PRINTERTYPE HEADING PRINTOPTIONS)   (* ; "Edited 29-Oct-2025 18:50 by rmk")
@@ -491,12 +486,11 @@
        do (RETURN IMAGEFILE])
 
 (CAN.PRINT.DIRECTLY
-  [LAMBDA (PRINTERTYPE IMAGEFILETYPE)                        (* ; "Edited  3-Nov-2025 15:46 by rmk")
-                                                             (* ; "Edited 26-Aug-87 14:11 by Snow")
-    (LET [(CANPRINT (PRINTERPROP (OR PRINTERTYPE (PRINTERTYPE DEFAULTPRINTINGHOST))
-                           'CANPRINT]
-         (CAR (OR (AND IMAGEFILETYPE (FMEMB IMAGEFILETYPE CANPRINT))
-                  CANPRINT])
+  [LAMBDA (PRINTERTYPE IMAGEFILETYPE)                        (* ; "Edited  5-Dec-2025 14:44 by rmk")
+                                                             (* ; "Edited  3-Nov-2025 15:46 by rmk")
+    (CL:WHEN IMAGEFILETYPE
+        [CAR (FMEMB IMAGEFILETYPE (PRINTERPROP (OR PRINTERTYPE (PRINTERTYPE DEFAULTPRINTINGHOST))
+                                         'CANPRINT])])
 
 (EMPRESS
   [LAMBDA (FILE %#COPIES HOST HEADING %#SIDES PRINTOPTIONS)  (* ; "Edited 26-Aug-87 14:17 by Snow")
@@ -621,7 +615,8 @@
          (AND STATUSFN (APPLY* STATUSFN PRINTER])
 
 (PRINTERTYPE
-  [LAMBDA (HOST PREFERRED)                                   (* ; "Edited 19-Sep-2025 10:18 by rmk")
+  [LAMBDA (HOST PREFERRED)                                   (* ; "Edited  5-Dec-2025 12:51 by rmk")
+                                                             (* ; "Edited 19-Sep-2025 10:18 by rmk")
                                                              (* ; "Edited 27-Apr-98 16:16 by rmk:")
                                                            (* ; "Edited 15-Feb-91 14:14 by gadener")
 
@@ -639,7 +634,7 @@
         (LET [(TYPE (OR (AND PREFERRED (CADDR HOST))
                         (CAR HOST]
              (SETQ HOST (CADR HOST))
-             (CL:UNLESS (for X in PRINTERTYPES thereis (EQMEMB TYPE (CAR X)))
+             (CL:UNLESS (PRINTERTYPEP TYPE)
                     (ERROR "Undefined printer-type:" TYPE))
              TYPE))
        ((NULL HOST)
@@ -655,27 +650,23 @@
                                                              (* ; 
                       "Try the predicates for each printer type for recognizing their own host names")
                                                                 (RETURN (CAAR TYPE]
-       [(for PRINTER in (MKLIST DEFAULTPRINTINGHOST) do 
+       [(for PRINTER in (PRINTERS) when (AND (LISTP PRINTER)
+                                             (STRING-EQUAL (CADR PRINTER)
+                                                    HOST)) do 
 
                                                       (* ;; 
         "Try looking for literal match before doing canonical hostname, cause that may be expensive.")
 
-                                                        (COND
-                                                           ((AND (LISTP PRINTER)
-                                                                 (STRING-EQUAL (CADR PRINTER)
-                                                                        HOST))
-                                                            (RETURN (CAR PRINTER]
-       [(for PRINTER in (MKLIST DEFAULTPRINTINGHOST)
-           do (COND
-                 ((AND (LISTP PRINTER)
-                       (STRING-EQUAL (OR (CANONICAL.HOSTNAME (CADR PRINTER))
-                                         (CADR PRINTER))
-                              HOST))
-                  (RETURN (CAR PRINTER]
+                                                              (RETURN (CAR PRINTER]
+       [(for PRINTER in (PRINTERS) when (AND (LISTP PRINTER)
+                                             (STRING-EQUAL (OR (CANONICAL.HOSTNAME (CADR PRINTER))
+                                                               (CADR PRINTER))
+                                                    HOST)) do (RETURN (CAR PRINTER]
        (T DEFAULTPRINTERTYPE])
 
 (PRINTERNAME
-  [LAMBDA (PRINTER)                                          (* ; "Edited 19-Sep-2025 09:59 by rmk")
+  [LAMBDA (PRINTER)                                          (* ; "Edited  5-Dec-2025 09:35 by rmk")
+                                                             (* ; "Edited 19-Sep-2025 09:59 by rmk")
 
     (* ;; 
     "If PRINTER designates a printer (a printer-spec or stream/filename, returns the printer's name.")
@@ -690,7 +681,8 @@
                       (STREAMPROP PRINTER 'PRINTERNAME))
                else (SETQ FDEV (TRUEDEVICE PRINTER))
                     (if (EQ 'LPT (fetch (FDEV DEVICENAME) of FDEV))
-                        then (FILENAMEFIELD PRINTER 'NAME)
+                        then (CL:UNLESS [EQ '%. (SETQ PRINTER (FILENAMEFIELD PRINTER 'NAME]
+                                    PRINTER)
                       else (fetch (FDEV DEVICENAME) of FDEV])])
 
 (PRINTFILETYPE
@@ -698,8 +690,14 @@
                                                              (* ; "For backward compatibility")
     (IMAGEFILETYPE FILE DONTOPEN])
 
+(PRINTERTYPEP
+  [LAMBDA (X)                                                (* ; "Edited  5-Dec-2025 12:23 by rmk")
+    (CL:WHEN (for PTYPE in PRINTERTYPES thereis (EQMEMB X (CAR PTYPE)))
+           X])
+
 (SEND.FILE.TO.PRINTER
-  [LAMBDA (FILE HOST PRINTOPTIONS)                           (* ; "Edited 27-Sep-2025 07:43 by rmk")
+  [LAMBDA (FILE HOST PRINTOPTIONS)                           (* ; "Edited  5-Dec-2025 14:41 by rmk")
+                                                             (* ; "Edited 27-Sep-2025 07:43 by rmk")
                                                              (* ; "Edited 25-Sep-2025 21:34 by rmk")
                                                              (* ; "Edited 20-Sep-2025 13:23 by rmk")
                                                              (* ; "Edited 19-Sep-2025 00:15 by rmk")
@@ -712,33 +710,39 @@
         (SETQ FILE (FINDFILE FILE T)))
     (RESETLST
         (LET ((IMAGETYPE (LISTGET PRINTOPTIONS 'IMAGETYPE))
+              (PRINTERS (PRINTERS))
               PRINTERTYPE SENDFN HEADING PRINTER CONVERTED)
 
              (* ;; "If IMAGETYPE is specified as what should be sent to the printer, we first make sure that FILE is of that type, and then we use that type to find the printer, if it wasn't also clearly specified.")
 
              (if (AND IMAGETYPE (NEQ IMAGETYPE (IMAGEFILETYPE FILE)))
-                 then (SETQ FILE (CONVERT.TO.IMAGEFILE FILE NIL IMAGETYPE PRINTOPTIONS))
+                 then (SETQ FILE (CONVERT.TO.IMAGEFILE FILE NIL IMAGETYPE PRINTOPTIONS))
                else (SETQ IMAGETYPE (IMAGEFILETYPE FILE)))
 
              (* ;; "")
 
-             (SETQ PRINTER (if (EQUAL HOST DEFAULTPRINTINGHOST)
-                               then DEFAULTPRINTINGHOST
-                             elseif (AND HOST (PRINTERDEVICEP HOST))
+             (SETQ PRINTER (if (OR (NULL HOST)
+                                   (EQ 0 (NCHARS HOST)))
+                               then (CAR PRINTERS)
+                             elseif (PRINTERDEVICEP HOST)
                              elseif (for X on PRINTOPTIONS by (CDDR X)
                                        when (MEMB (U-CASE (CAR X))
                                                   '(HOST SERVER)) do (RETURN (CADR X)))
-                             elseif (find X inside (OR DEFAULTPRINTINGHOST '(NIL))
-                                       suchthat (CAN.PRINT.DIRECTLY (PRINTERTYPE X)
-                                                       IMAGETYPE))
-                             elseif (find X inside (OR DEFAULTPRINTINGHOST '(NIL))
-                                       suchthat (thereis CPT in (PRINTERPROP (PRINTERTYPE X)
-                                                                       'CANPRINT)
-                                                   suchthat (LISTGET (CAR (GETMULTI PRINTFILETYPES 
-                                                                                 CPT 'CONVERSION))
-                                                                   IMAGETYPE)))
+                             elseif (for X in PRINTERS when (CAN.PRINT.DIRECTLY (PRINTERTYPE X)
+                                                                   IMAGETYPE)
+                                       do 
+                                          (* ;; "Find returns T for NIL")
+
+                                          (RETURN X))
+                             elseif (for X in PRINTERS
+                                       when (thereis CPT in (PRINTERPROP (PRINTERTYPE X)
+                                                                   'CANPRINT)
+                                               suchthat (LISTGET (CAR (GETMULTI PRINTFILETYPES CPT
+                                                                             'CONVERSION))
+                                                               IMAGETYPE)) do (RETURN X))
                              else (ERROR "Can't find printer for " FILE)))
-             (SETQ PRINTERTYPE (PRINTERTYPE PRINTER))
+             (CL:WHEN (PRINTERDEVICEP PRINTER)
+                 (SETQ PRINTERTYPE (PRINTERTYPE PRINTER)))
              (CL:UNLESS (SETQ SENDFN (PRINTERPROP PRINTERTYPE 'SEND))
                  (ERROR (CONCAT "Don't know how to send to a " PRINTERTYPE " printer")
                         PRINTER))
@@ -757,7 +761,7 @@
                                          PRINTER)
                              (CL:IF (CAN.PRINT.DIRECTLY PRINTERTYPE IMAGETYPE)
                                  FILE
-                                 (SETQ CONVERTED (CONVERT.TO.IMAGEFILE FILE NIL PRINTERTYPE)))
+                                 (SETQ CONVERTED (CONVERT.TO.IMAGEFILE FILE NIL PRINTERTYPE)))
                              `(HEADING ,HEADING ,@PRINTOPTIONS %#COPIES 1 DOCUMENTNAME ,FILE]
                  (CL:WHEN (AND CONVERTED (LISTGET PRINTOPTIONS 'DELETE))
                         (DELFILE CONVERTED))
@@ -853,7 +857,8 @@
                         (fetch (FDEV DEVICENAME) of FDEV))))])
 
 (PRINTERNAME
-  [LAMBDA (PRINTER)                                          (* ; "Edited 19-Sep-2025 09:59 by rmk")
+  [LAMBDA (PRINTER)                                          (* ; "Edited  5-Dec-2025 09:35 by rmk")
+                                                             (* ; "Edited 19-Sep-2025 09:59 by rmk")
 
     (* ;; 
     "If PRINTER designates a printer (a printer-spec or stream/filename, returns the printer's name.")
@@ -868,12 +873,41 @@
                       (STREAMPROP PRINTER 'PRINTERNAME))
                else (SETQ FDEV (TRUEDEVICE PRINTER))
                     (if (EQ 'LPT (fetch (FDEV DEVICENAME) of FDEV))
-                        then (FILENAMEFIELD PRINTER 'NAME)
+                        then (CL:UNLESS [EQ '%. (SETQ PRINTER (FILENAMEFIELD PRINTER 'NAME]
+                                    PRINTER)
                       else (fetch (FDEV DEVICENAME) of FDEV])])
 )
 (DECLARE%: DONTEVAL@LOAD DOCOPY 
 
 (PRINTERDEVICE 'LPT)
+)
+(DEFINEQ
+
+(PRINTERS
+  [LAMBDA (NAMESONLY)                                        (* ; "Edited  5-Dec-2025 14:28 by rmk")
+
+    (* ;; "The spec for DEFAULTPRINTINGHOSTS is ambiguous because a list whose CAR is a printertype could be a (PRINTERTYPE PRINTER) singleton. This tries to normalize that case to ((PRINTERTYPE PRINTER)")
+
+    (DECLARE (GLOBALVARS DEFAULTPRINTINGHOST))
+    (for P in (if (OR (NULL DEFAULTPRINTINGHOST)
+                      (EQ 0 (NCHARS DEFAULTPRINTINGHOST)))
+                elseif (LITATOM DEFAULTPRINTINGHOST)
+                  then (CONS DEFAULTPRINTINGHOST)
+                elseif [AND (LISTP DEFAULTPRINTINGHOST)
+                            (PRINTERTYPEP (CAR DEFAULTPRINTINGHOST))
+                            (OR (NULL (CDDR DEFAULTPRINTINGHOST))
+                                (GETMULTI PRINTFILETYPES (CADDR DEFAULTPRINTINGHOST]
+                  then 
+                       (* ;; 
+                      "Trying to decode FOO (PDF) and (PDF FOO) as singletons. The spec is ambiguous")
+
+                       (CONS DEFAULTPRINTINGHOST)
+                else DEFAULTPRINTINGHOST) eachtime (SETQ P (CL:IF NAMESONLY
+                                                               (CL:IF (LISTP P)
+                                                                   (CADR P)
+                                                                   P)
+                                                               P)) unless (MEMB P $$VAL) collect
+                                                                                         P])
 )
 
 (RPAQ? DEFAULTPRINTINGHOST )
@@ -2376,38 +2410,39 @@
 (ADDTOVAR LAMA )
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (6497 13569 (HARDCOPY.SOMEHOW 6507 . 8743) (HARDCOPYIMAGEW 8745 . 9195) (
-HARDCOPYIMAGEW.TOFILE 9197 . 9489) (HARDCOPYIMAGEW.TOPRINTER 9491 . 10889) (HARDCOPYREGION.TOFILE 
-10891 . 11433) (HARDCOPYREGION.TOPRINTER 11435 . 12548) (COPY.WINDOW.TO.BITMAP 12550 . 13567)) (13641 
-26122 (MakeMenuOfPrinters 13651 . 15183) (PRINTERS.WHENSELECTEDFN 15185 . 16808) (MakeMenuOfImageTypes
- 16810 . 17629) (GetNewPrinterFromUser 17631 . 18073) (PopUpWindowAndGetAtom 18075 . 19526) (
-PopUpWindowAndGetList 19528 . 21098) (NewPrinter 21100 . 22599) (GetPrinterName 22601 . 22889) (
-GetImageFile 22891 . 25870) (FetchDefaultPrinter 25872 . 26120)) (26177 43647 (DEFAULTPRINTER 26187 . 
-26427) (CONVERT.FILE.TO.TYPE.FOR.PRINTER 26429 . 27406) (CAN.PRINT.DIRECTLY 27408 . 27880) (EMPRESS 
-27882 . 28457) (HARDCOPYW 28459 . 33363) (LISTFILES1 33365 . 33542) (PRINTER.BITMAPFILE 33544 . 33933)
- (PRINTER.BITMAPSCALE 33935 . 34419) (PRINTER.SCRATCH.FILE 34421 . 34732) (PRINTERPROP 34734 . 34984) 
-(PRINTERSTATUS 34986 . 35261) (PRINTERTYPE 35263 . 37988) (PRINTERNAME 37990 . 38889) (PRINTFILETYPE 
-38891 . 39153) (SEND.FILE.TO.PRINTER 39155 . 43645)) (43648 50020 (PRINTERDEVICE 43658 . 44635) (
-PRINTERDEVICE.OPENFN 44637 . 45357) (PRINTERDEVICE.CLOSEFN 45359 . 48444) (PRINTERDEVICEP 48446 . 
-49117) (PRINTERNAME 49119 . 50018)) (50376 50934 (SCALEREGION 50386 . 50932)) (51158 58221 (
-TEXTTOIMAGEFILE 51168 . 52027) (COPY.TEXT.TO.IMAGE 52029 . 58219)) (58283 60026 (
-\BLTSHADE.GENERICPRINTER 58293 . 60024)) (60093 97259 (MAKEHARDCOPYSTREAM 60103 . 61819) (
-UNMAKEHARDCOPYSTREAM 61821 . 62751) (HARDCOPYSTREAMTYPE 62753 . 63160) (\CHARWIDTH.HDCPYDISPLAY 63162
- . 63982) (\DSPFONT.HDCPYDISPLAY 63984 . 66779) (\DSPRIGHTMARGIN.HDCPYDISPLAY 66781 . 67636) (
-\DSPXPOSITION.HDCPYDISPLAY 67638 . 68013) (\DSPYPOSITION.HDCPYDISPLAY 68015 . 68390) (
-\STRINGWIDTH.HDCPYDISPLAY 68392 . 69347) (\STRINGWIDTH.HCPYDISPLAYAUX 69349 . 74689) (\HDCPYBLTCHAR 
-74691 . 79588) (\HDCPYDISPLAY.FIX.XPOS 79590 . 80347) (\HDCPYDISPLAY.FIX.YPOS 80349 . 81090) (
-\HDCPYDISPLAYINIT 81092 . 82782) (\HDCPYDSPPRINTCHAR 82784 . 88697) (\SLOWHDCPYBLTCHAR 88699 . 95315) 
-(\CHANGECHARSET.HDCPYDISPLAY 95317 . 97257)) (97574 147125 (MAKEHARDCOPYMODESTREAM 97584 . 100305) (
-UNMAKEHARDCOPYMODESTREAM 100307 . 101897) (\HCPYDISPLAYIMAGEOPS 101899 . 104719) (\BLTSHADE.HCPYMODE 
-104721 . 105387) (\BITBLT.HCPYMODE 105389 . 106137) (\BRUSHCONVERT.HCPYMODE 106139 . 106688) (
-\CHANGECHARSET.HCPYMODE 106690 . 109952) (\DASHINGCONVERT.HCPYMODE 109954 . 110295) (
-\CHARWIDTH.HCPYMODE 110297 . 110734) (\DRAWLINE.HCPYMODE 110736 . 111265) (\DRAWCURVE.HCPYMODE 111267
- . 111854) (\DRAWCIRCLE.HCPYMODE 111856 . 112341) (\DRAWELLIPSE.HCPYMODE 112343 . 113027) (
-\DSPFONT.HCPYMODE 113029 . 115713) (\DSPLEFTMARGIN.HCPYMODE 115715 . 116457) (\DSPLINEFEED.HCPYMODE 
-116459 . 117092) (\DSPRIGHTMARGIN.HCPYMODE 117094 . 118162) (\DSPSPACEFACTOR.HCPYMODE 118164 . 118939)
- (\DSPXPOSITION.HCPYMODE 118941 . 119959) (\DSPYPOSITION.HCPYMODE 119961 . 120611) (\MOVETO.HCPYMODE 
-120613 . 120827) (\FONTCREATE.HCPYMODE 120829 . 122786) (\CREATECHARSET.HCPYMODE 122788 . 124511) (
-\STRINGWIDTH.HCPYMODE 124513 . 125308) (\HCPYMODEBLTCHAR 125310 . 131060) (\HCPYMODEDSPPRINTCHAR 
-131062 . 136996) (\SLOWHCPYMODEBLTCHAR 136998 . 143627) (\SFFixY.HCPYMODE 143629 . 147123)))))
+  (FILEMAP (NIL (6578 13917 (HARDCOPY.SOMEHOW 6588 . 8824) (HARDCOPYIMAGEW 8826 . 9276) (
+HARDCOPYIMAGEW.TOFILE 9278 . 9570) (HARDCOPYIMAGEW.TOPRINTER 9572 . 11237) (HARDCOPYREGION.TOFILE 
+11239 . 11781) (HARDCOPYREGION.TOPRINTER 11783 . 12896) (COPY.WINDOW.TO.BITMAP 12898 . 13915)) (13989 
+26293 (MakeMenuOfPrinters 13999 . 15457) (PRINTERS.WHENSELECTEDFN 15459 . 17082) (MakeMenuOfImageTypes
+ 17084 . 17903) (GetNewPrinterFromUser 17905 . 18347) (PopUpWindowAndGetAtom 18349 . 19800) (
+PopUpWindowAndGetList 19802 . 21372) (NewPrinter 21374 . 22770) (GetPrinterName 22772 . 23060) (
+GetImageFile 23062 . 26041) (FetchDefaultPrinter 26043 . 26291)) (26348 44438 (DEFAULTPRINTER 26358 . 
+26619) (CONVERT.FILE.TO.TYPE.FOR.PRINTER 26621 . 27598) (CAN.PRINT.DIRECTLY 27600 . 28033) (EMPRESS 
+28035 . 28610) (HARDCOPYW 28612 . 33516) (LISTFILES1 33518 . 33695) (PRINTER.BITMAPFILE 33697 . 34086)
+ (PRINTER.BITMAPSCALE 34088 . 34572) (PRINTER.SCRATCH.FILE 34574 . 34885) (PRINTERPROP 34887 . 35137) 
+(PRINTERSTATUS 35139 . 35414) (PRINTERTYPE 35416 . 38051) (PRINTERNAME 38053 . 39139) (PRINTFILETYPE 
+39141 . 39403) (PRINTERTYPEP 39405 . 39630) (SEND.FILE.TO.PRINTER 39632 . 44436)) (44439 50998 (
+PRINTERDEVICE 44449 . 45426) (PRINTERDEVICE.OPENFN 45428 . 46148) (PRINTERDEVICE.CLOSEFN 46150 . 49235
+) (PRINTERDEVICEP 49237 . 49908) (PRINTERNAME 49910 . 50996)) (51060 52700 (PRINTERS 51070 . 52698)) (
+52995 53553 (SCALEREGION 53005 . 53551)) (53777 60840 (TEXTTOIMAGEFILE 53787 . 54646) (
+COPY.TEXT.TO.IMAGE 54648 . 60838)) (60902 62645 (\BLTSHADE.GENERICPRINTER 60912 . 62643)) (62712 99878
+ (MAKEHARDCOPYSTREAM 62722 . 64438) (UNMAKEHARDCOPYSTREAM 64440 . 65370) (HARDCOPYSTREAMTYPE 65372 . 
+65779) (\CHARWIDTH.HDCPYDISPLAY 65781 . 66601) (\DSPFONT.HDCPYDISPLAY 66603 . 69398) (
+\DSPRIGHTMARGIN.HDCPYDISPLAY 69400 . 70255) (\DSPXPOSITION.HDCPYDISPLAY 70257 . 70632) (
+\DSPYPOSITION.HDCPYDISPLAY 70634 . 71009) (\STRINGWIDTH.HDCPYDISPLAY 71011 . 71966) (
+\STRINGWIDTH.HCPYDISPLAYAUX 71968 . 77308) (\HDCPYBLTCHAR 77310 . 82207) (\HDCPYDISPLAY.FIX.XPOS 82209
+ . 82966) (\HDCPYDISPLAY.FIX.YPOS 82968 . 83709) (\HDCPYDISPLAYINIT 83711 . 85401) (\HDCPYDSPPRINTCHAR
+ 85403 . 91316) (\SLOWHDCPYBLTCHAR 91318 . 97934) (\CHANGECHARSET.HDCPYDISPLAY 97936 . 99876)) (100193
+ 149744 (MAKEHARDCOPYMODESTREAM 100203 . 102924) (UNMAKEHARDCOPYMODESTREAM 102926 . 104516) (
+\HCPYDISPLAYIMAGEOPS 104518 . 107338) (\BLTSHADE.HCPYMODE 107340 . 108006) (\BITBLT.HCPYMODE 108008 . 
+108756) (\BRUSHCONVERT.HCPYMODE 108758 . 109307) (\CHANGECHARSET.HCPYMODE 109309 . 112571) (
+\DASHINGCONVERT.HCPYMODE 112573 . 112914) (\CHARWIDTH.HCPYMODE 112916 . 113353) (\DRAWLINE.HCPYMODE 
+113355 . 113884) (\DRAWCURVE.HCPYMODE 113886 . 114473) (\DRAWCIRCLE.HCPYMODE 114475 . 114960) (
+\DRAWELLIPSE.HCPYMODE 114962 . 115646) (\DSPFONT.HCPYMODE 115648 . 118332) (\DSPLEFTMARGIN.HCPYMODE 
+118334 . 119076) (\DSPLINEFEED.HCPYMODE 119078 . 119711) (\DSPRIGHTMARGIN.HCPYMODE 119713 . 120781) (
+\DSPSPACEFACTOR.HCPYMODE 120783 . 121558) (\DSPXPOSITION.HCPYMODE 121560 . 122578) (
+\DSPYPOSITION.HCPYMODE 122580 . 123230) (\MOVETO.HCPYMODE 123232 . 123446) (\FONTCREATE.HCPYMODE 
+123448 . 125405) (\CREATECHARSET.HCPYMODE 125407 . 127130) (\STRINGWIDTH.HCPYMODE 127132 . 127927) (
+\HCPYMODEBLTCHAR 127929 . 133679) (\HCPYMODEDSPPRINTCHAR 133681 . 139615) (\SLOWHCPYMODEBLTCHAR 139617
+ . 146246) (\SFFixY.HCPYMODE 146248 . 149742)))))
 STOP

@@ -1,16 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "20-Jan-2023 22:44:05" {DSK}<home>frank>il>medley>gmedley>library>UNIXPRINT.;4 13651  
+(FILECREATED " 5-Dec-2025 11:47:35" {WMEDLEY}<library>UNIXPRINT.;7 13933  
 
-      :CHANGES-TO (VARS UNIXPRINTCOMS)
+      :EDIT-BY rmk
 
-      :PREVIOUS-DATE "18-Jan-2023 13:28:36" {DSK}<home>frank>il>medley>gmedley>library>UNIXPRINT.;3
-)
+      :CHANGES-TO (FNS UnixPrint)
 
+      :PREVIOUS-DATE " 5-Dec-2025 09:40:47" {WMEDLEY}<library>UNIXPRINT.;6)
 
-(* ; "
-Copyright (c) 1990-1993, 1995, 1997, 1999, 2001, 2018, 2023 by Venue.
-")
 
 (PRETTYCOMPRINT UNIXPRINTCOMS)
 
@@ -48,7 +45,10 @@ Copyright (c) 1990-1993, 1995, 1997, 1999, 2001, 2018, 2023 by Venue.
                             (CDR x])
 
 (UnixPrint
-  [LAMBDA (HOST FILE PRINTOPTIONS)                          (* ; "Edited  7-Dec-2001 14:55 by rmk:")
+  [LAMBDA (HOST FILE PRINTOPTIONS)                           (* ; "Edited  5-Dec-2025 11:46 by rmk")
+                                                             (* ; "Edited 13-Sep-2025 20:28 by rmk")
+                                                             (* ; "Edited 11-Sep-2025 20:48 by rmk")
+                                                            (* ; "Edited  7-Dec-2001 14:55 by rmk:")
                                                            (* ; "Edited 20-May-92 14:13 by nilsson")
 
     (* ;; "Given a print FILE, use the Unix %"lpr%" command to spool it to a printer.")
@@ -56,7 +56,8 @@ Copyright (c) 1990-1993, 1995, 1997, 1999, 2001, 2018, 2023 by Venue.
     (* ;; "The printer is named by HOST or UnixPrinterName, a Global variable.")
 
     [LET*
-     ((PRINTER (OR HOST UnixPrinterName))
+     ((PRINTER (CL:IF (MEMB HOST '(NIL LPT '{LPT})
+                            UnixPrinterName HOST)))
       (COPIES (LISTGET PRINTOPTIONS '%#COPIES))
       (NAME (LISTGET PRINTOPTIONS 'DOCUMENT.NAME))
       (NSIDES (LISTGET PRINTOPTIONS '%#SIDES))
@@ -68,6 +69,7 @@ Copyright (c) 1990-1993, 1995, 1997, 1999, 2001, 2018, 2023 by Venue.
 
      [COND
         ((OR (NULL NAME)
+             (EQ NAME 'LPT)
              (STRPOS "{LPT}" NAME 1 NIL T))
          (SETQ NAME "Medley Output"))
         ((EQ (CHCON1 NAME)
@@ -88,58 +90,57 @@ Copyright (c) 1990-1993, 1995, 1997, 1999, 2001, 2018, 2023 by Venue.
 
      (* ;; "The temp file's name will be of the form medleyprint.<idate>, so all such files can be found for deletion on a subsequent call after a certain amount of time (2 minutes) has gone by.  If we delete immediately, it may happen before lpr has done its thing.  ")
 
-     (CL:MULTIPLE-VALUE-BIND (tmpstream tmpname)
-         (UnixTempFile 'medleyprint.)
-       (COND
-          (tmpstream 
+     (CL:MULTIPLE-VALUE-BIND
+      (tmpstream tmpname)
+      (UnixTempFile 'medleyprint.)
+      (COND
+         (tmpstream 
 
-                 (* ;; "First, copy the lisp file to /tmp so lpr can find it.")
+                (* ;; "First, copy the lisp file to /tmp so lpr can find it.")
 
-                 [CL:WITH-OPEN-STREAM
-                  (out tmpstream)
-                  (CL:WITH-OPEN-STREAM
-                   (in (OPENSTREAM FILE 'INPUT))
-                   (printout PROMPTWINDOW .TAB0 0 "Spooling output to Unix printer"
-                          (COND
-                             (PRINTER (CONCAT " '" PRINTER "'"))
-                             (T ""))
-                          "...")
-                   (IF NSIDES
-                       THEN 
-                            (* ;; "Have to put magic simplex/duplex stuff in the tmp file itself, after the first line, cause there is no other way to control some duplex printers.")
+                [CL:WITH-OPEN-STREAM
+                 (out tmpstream)
+                 (CL:WITH-OPEN-STREAM
+                  (in (OPENSTREAM FILE 'INPUT))
+                  (printout PROMPTWINDOW .TAB0 0 "Sending output to Unix printer " (OR PRINTER "")
+                         " ")
+                  (IF NSIDES
+                      THEN 
+                           (* ;; "Have to put magic simplex/duplex stuff in the tmp file itself, after the first line, cause there is no other way to control some duplex printers.")
 
-                            (BIND C SAWCR
-                               DO (SETQ C (BIN in))
-                                  (IF (MEMB C (CHARCODE (CR LF)))
-                                      THEN (BOUT out C)
-                                           (SETQ SAWCR T)
-                                    ELSEIF SAWCR
-                                      THEN 
-                                           (* ;; "First char of 2nd line:  nonCR/LF after CR/LF")
+                           (BIND C SAWCR
+                              DO (SETQ C (BIN in))
+                                 (IF (MEMB C (CHARCODE (CR LF)))
+                                     THEN (BOUT out C)
+                                          (SETQ SAWCR T)
+                                   ELSEIF SAWCR
+                                     THEN 
+                                          (* ;; "First char of 2nd line:  nonCR/LF after CR/LF")
 
-                                           (* ;; "Put out simplex header, then print character in C")
+                                          (* ;; "Put out simplex header, then print character in C")
 
-                                           (PRINTOUT out "%%BeginSetup" T)
-                                           (PRINTOUT out "[{" T "%%%%BeginFeature: *Duplex Simplex" T
-                                                  "<< /Duplex " (CL:IF (EQ NSIDES 1)
-                                                                    "false"
-                                                                    "true")
-                                                  " /Tumble false >> setpagedevice" T 
-                                                  "%%%%EndFeature" T "} stopped cleartomark" T)
-                                           (PRINTOUT out "%%EndSetup" T)
-                                           (BOUT out C)
-                                           (COPYCHARS in out (GETFILEPTR in)
-                                                  -1)
-                                           (RETURN)
-                                    ELSE (BOUT out C)))
-                     ELSE (COPYCHARS in out 0 -1]
+                                          (PRINTOUT out "%%BeginSetup" T)
+                                          (PRINTOUT out "[{" T "%%%%BeginFeature: *Duplex Simplex" T
+                                                 "<< /Duplex " (CL:IF (EQ NSIDES 1)
+                                                                   "false"
+                                                                   "true")
+                                                 " /Tumble false >> setpagedevice" T "%%%%EndFeature"
+                                                 T "} stopped cleartomark" T)
+                                          (PRINTOUT out "%%EndSetup" T)
+                                          (BOUT out C)
+                                          (COPYCHARS in out (GETFILEPTR in)
+                                                 -1)
+                                          (RETURN)
+                                   ELSE (BOUT out C)))
+                    ELSE (COPYCHARS in out 0 -1]
 
-                 (* ;; "Now make Unix print the /tmp file.")
+                (* ;; "Now make Unix print the /tmp file.")
 
-                 (ShellCommand (UnixPrintCommand PRINTER COPIES NAME tmpname)
-                        PROMPTWINDOW)
-                 (printout PROMPTWINDOW "done" T))
-          (T (ERROR "Couldn't create unix temp file"))))]
+                (ShellCommand (UnixPrintCommand PRINTER COPIES NAME tmpname)
+                       PROMPTWINDOW)
+                (CL:WHEN NIL                                 (* ; "This should be conditioned an error code--don't want to say %"done%" if it didn't happen.  If we put this back, then put in ... in the Sending printout above")
+                    (printout PROMPTWINDOW "done" T)))
+         (T (ERROR "Couldn't create unix temp file"]
     T])
 
 (UnixShellQuote
@@ -303,9 +304,8 @@ Copyright (c) 1990-1993, 1995, 1997, 1999, 2001, 2018, 2023 by Venue.
 
 (ADDTOVAR LAMA )
 )
-(PUTPROPS UNIXPRINT COPYRIGHT ("Venue" 1990 1991 1992 1993 1995 1997 1999 2001 2018 2023))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1389 11216 (InstallUnixPrinter 1399 . 1991) (UnixPrint 1993 . 6875) (UnixShellQuote 
-6877 . 8306) (UnixTempFile 8308 . 9531) (UnixPrintCommand 9533 . 11214)) (11550 13243 (
-UnixPrintCommand 11560 . 13241)))))
+  (FILEMAP (NIL (1272 11589 (InstallUnixPrinter 1282 . 1874) (UnixPrint 1876 . 7248) (UnixShellQuote 
+7250 . 8679) (UnixTempFile 8681 . 9904) (UnixPrintCommand 9906 . 11587)) (11923 13616 (
+UnixPrintCommand 11933 . 13614)))))
 STOP

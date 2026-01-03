@@ -1,10 +1,11 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 2-Jan-2026 23:57:09" {WMEDLEY}<library>TEDIT>TEDIT-ABBREV.;38 15982  
+(FILECREATED " 3-Jan-2026 13:13:31" {MEDLEY}<library>tedit>TEDIT-ABBREV.;2 14965  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS \TEDIT.ABBREV.PARSE \TEDIT.ABBREV.EXPAND \TEDIT.ABBREV.TREE \TEDIT.TRY.ABBREV)
+      :CHANGES-TO (FNS \TEDIT.ABBREV.EXPAND \TEDIT.ABBREV.PARSE \TEDIT.ABBREV.TREE 
+                       \TEDIT.ABBREV.EXPANSION \TEDIT.TRY.ABBREV)
                   (VARS TEDIT-ABBREVCOMS)
 
       :PREVIOUS-DATE " 6-Sep-2025 00:10:45" {WMEDLEY}<library>tedit>TEDIT-ABBREV.;30)
@@ -13,7 +14,7 @@
 (PRETTYCOMPRINT TEDIT-ABBREVCOMS)
 
 (RPAQQ TEDIT-ABBREVCOMS
-       [(FNS \TEDIT.ABBREV.EXPAND \TEDIT.ABBREV.PARSE \TEDIT.TRY.ABBREV \TEDIT.ABBREV.TREE)
+       [(FNS \TEDIT.ABBREV.EXPAND \TEDIT.ABBREV.PARSE \TEDIT.ABBREV.EXPANSION \TEDIT.ABBREV.TREE)
         (FNS \TEDIT.EXPAND.DATE)
         (GLOBALVARS TEDIT.ABBREVS \TEDIT.ABBREVS.TREE \TEDIT.ABBREVS.INTREE)
         [INITVARS (\TEDIT.ABBREVS.TREE NIL)
@@ -46,7 +47,7 @@
                                 ("L" "0,243" English-pound)
                                 ("o" "0,260" Degree)
                                 ("Y" "0,245" Yen)
-                                ("+" "0,261" PlusMinus)
+                                ("+-" "0,261" PlusMinus)
                                 ("x" "0,264" Times)
                                 ("/" "0,270" Divide)
                                 ("lra" "357,121")
@@ -85,74 +86,68 @@
 (DEFINEQ
 
 (\TEDIT.ABBREV.EXPAND
-  [LAMBDA (TSTREAM TEXTOBJ SEL)                              (* ; "Edited  2-Jan-2026 23:41 by rmk")
+  [LAMBDA (TSTREAM TEXTOBJ SEL)                              (* ; "Edited  3-Jan-2026 13:13 by rmk")
                                                              (* ; "Edited 20-Apr-2025 23:30 by rmk")
                                                              (* ; "Edited 20-Mar-2025 21:52 by rmk")
                                                              (* ; "Edited 30-May-91 19:27 by jds")
                                                              (* ; "Expand an abbvreviation")
     (\TEDIT.ABBREV.TREE)
-    (LET* ((MATCH (\TEDIT.ABBREV.PARSE TSTREAM SEL))
-           (FIRSTCHAR (CAR MATCH))
-           (ABBREV (CADR MATCH))
-           (EXPANSION (\TEDIT.TRY.ABBREV ABBREV TSTREAM)))
-          (if EXPANSION
-              then (TEDIT.PROMPTCLEAR TSTREAM)
-                   (\TEDIT.UPDATE.SEL SEL FIRSTCHAR (NCHARS (CAR ABBREV))
-                          'RIGHT
-                          'NORMAL)                           (* ; "Set the target")
-                   (\TEDIT.REPLACE.SELPIECES (\TEDIT.SELPIECES.FROM.STRING EXPANSION TEXTOBJ NIL
-                                                    (PCHARLOOKS (\TEDIT.CHTOPC FIRSTCHAR TEXTOBJ)))
-                          TSTREAM SEL)
-            else (TEDIT.PROMPTPRINT TSTREAM "No abbreviation to expand" T])
+    (LET ((LASTCHAR (GETSEL SEL CHLAST))
+          ABBREV EXPANSION LEN FIRSTCHAR STRING)
+         (CL:WHEN (MEMB (TEDIT.NTHCHARCODE TSTREAM LASTCHAR)
+                        (CHARCODE (EOL FORM Meta,EOL)))
+
+             (* ;; "Line or paragraph selection: back up over the terminator.  Maybe we should back up over spaces too--except for the no-breaking space abbreviation?")
+
+             (add LASTCHAR -1))
+         (if (AND [SETQ ABBREV (OR (\TEDIT.ABBREV.PARSE TSTREAM SEL LASTCHAR)
+                                   (\TEDIT.ABBREV.PARSE TSTREAM SEL LASTCHAR T)
+                                   (CL:WHEN (CHARCODE.DECODE [SETQ STRING
+                                                              (TEDIT.SEL.AS.STRING
+                                                               TSTREAM
+                                                               (GETSEL SEL CH#)
+                                                               (ADD1 (IDIFFERENCE LASTCHAR
+                                                                            (GETSEL SEL CH#]
+                                                   T)
+                                          (LIST STRING STRING]
+                  (SETQ EXPANSION (\TEDIT.ABBREV.EXPANSION ABBREV TSTREAM)))
+             then (TEDIT.PROMPTCLEAR TSTREAM)
+                  (SETQ LEN (NCHARS (CAR ABBREV)))
+                  (SETQ FIRSTCHAR (ADD1 (IDIFFERENCE LASTCHAR LEN)))
+                  (\TEDIT.UPDATE.SEL SEL FIRSTCHAR LEN 'RIGHT 'NORMAL) 
+                                                             (* ; "Set the target")
+                  (\TEDIT.REPLACE.SELPIECES (\TEDIT.SELPIECES.FROM.STRING EXPANSION TEXTOBJ NIL
+                                                   (PCHARLOOKS (\TEDIT.CHTOPC FIRSTCHAR TEXTOBJ)))
+                         TSTREAM SEL)
+           else (TEDIT.PROMPTPRINT TSTREAM "No abbreviation to expand" T])
 
 (\TEDIT.ABBREV.PARSE
-  [LAMBDA (TSTREAM SEL)                                      (* ; "Edited  2-Jan-2026 23:56 by rmk")
+  [LAMBDA (TSTREAM SEL LASTCHAR CASEINSENSITIVE)             (* ; "Edited  3-Jan-2026 12:38 by rmk")
 
-    (* ;; "For the longest match returns (firstchar abbrev)) where abbrev is a (key expansion) pair.  If the longest explicit match is not found and the selection itself is a character name cname, a (cname cname) abbreviation is manufactured.")
+    (* ;; "Returns the  (key expansion) pair for the longest match backwards starting at LASTCHAR. ")
 
-    (LET ((LASTCHAR (SUB1 (FGETSEL SEL CHLIM)))
-          (FIRSTCHAR (FGETSEL SEL CH#))
-          ABBREV STRING)
-         (CL:WHEN (SETQ ABBREV (SELECTQ (FGETSEL SEL SELKIND)
-                                   (* ;; "We pick the longest match for the characters before the point. If nothing matches, then we try to decode  the prefix to the last word boundary as a character name.  In that case, we skip over comma (e.g. 357,201). ")
-                                   ((CHAR LINE) 
-                                        (if (ILEQ (FGETSEL SEL DCH)
-                                                  1)
-                                            then             (* ; 
-                                                      "Point or 1-character selection, walk backward")
-                                                 (SETQ FIRSTCHAR (ADD1 LASTCHAR))
-                                                 (bind CH (TREE _ \TEDIT.ABBREVS.TREE)
-                                                    eachtime (add FIRSTCHAR -1)
-                                                    while (SETQ TREE (GETMULTI TREE (
-                                                                                    TEDIT.NTHCHARCODE
-                                                                                     TSTREAM 
-                                                                                     FIRSTCHAR)))
-                                                    do (SETQ $$VAL (GETMULTI TREE 'ABBREV))
-                                                    finally (add FIRSTCHAR 1))
-                                          else (SETQ STRING (TEDIT.SEL.AS.STRING TSTREAM FIRSTCHAR
-                                                                   (FGETSEL SEL DCH)))
-                                               (if [FETCHMULTI \TEDIT.ABBREVS.TREE
-                                                          (DREVERSE (CONS 'ABBREV (CHCON STRING]
-                                                 elseif (CHARCODE.DECODE STRING T)
-                                                   then 
+    (for CHNO CH MATCH (TREE _ \TEDIT.ABBREVS.TREE) by -1 from LASTCHAR
+       to (CL:IF (ILEQ (FGETSEL SEL DCH)
+                       1)
+              1
+              (FGETSEL SEL CH#)) while [PROGN (SETQ CH (TEDIT.NTHCHAR TSTREAM CHNO))
+                                              (SETQ TREE (CL:IF CASEINSENSITIVE
+                                                             (CL:ASSOC CH TREE :TEST
+                                                                    (FUNCTION STRING.EQUAL))
+                                                             (ASSOC CH TREE))]
+       when (SETQ MATCH (CDR (ASSOC 'ABBREV TREE))) do (SETQ $$VAL MATCH)
+       finally 
 
-                                             (* ;; "The CHARCODE case: the whole selection must be the character name %"TAB%" or %"Greek,A%".  But no singletons:  E")
+             (* ;; 
+           "Return NIL for a multi-char selection if the longest match doesn't cover the whole thing")
 
-                                                        (LIST STRING STRING))))
-                                   (WORD 
-                                         (* ;; 
-                  "A word selection either matches a whole key or it matches a whole character name.")
+             (CL:WHEN [AND $$VAL (IGREATERP (FGETSEL SEL DCH)
+                                        1)
+                           (NEQ (FGETSEL SEL DCH)
+                                (NCHARS (CAR MATCH]
+                    (RETURN NIL])
 
-                                         (SETQ STRING (TEDIT.SEL.AS.STRING TSTREAM FIRSTCHAR
-                                                             (FGETSEL SEL DCH)))
-                                         (OR [FETCHMULTI \TEDIT.ABBREVS.TREE
-                                                    (DREVERSE (CONS 'ABBREV (CHCON STRING]
-                                             (AND (CHARCODE.DECODE STRING T)
-                                                  (LIST STRING STRING))))
-                                   (SHOULDNT)))
-                (LIST FIRSTCHAR ABBREV])
-
-(\TEDIT.TRY.ABBREV
+(\TEDIT.ABBREV.EXPANSION
   [LAMBDA (ABBREV TSTREAM)                                   (* ; "Edited  2-Jan-2026 22:46 by rmk")
                                                              (* ; "Edited  6-Sep-2025 00:09 by rmk")
                                                              (* ; "Edited 20-Mar-2025 21:52 by rmk")
@@ -219,14 +214,15 @@
                   (EVAL EXPANSION])
 
 (\TEDIT.ABBREV.TREE
-  [LAMBDA NIL                                                (* ; "Edited  2-Jan-2026 23:41 by rmk")
-    (CL:UNLESS (EQ TEDIT.ABBREVS \TEDIT.ABBREVS.INTREE)
+  [LAMBDA NIL                                                (* ; "Edited  3-Jan-2026 11:35 by rmk")
+    (CL:UNLESS (EQUAL TEDIT.ABBREVS \TEDIT.ABBREVS.INTREE)
         (SETQ \TEDIT.ABBREVS.TREE NIL)
         (for A in TEDIT.ABBREVS unless (EQ (CAR A)
                                            '*) do (STOREMULTI \TEDIT.ABBREVS.TREE
-                                                         [DREVERSE (CONS 'ABBREV (CHCON (CAR A]
+                                                         [DREVERSE (CONS 'ABBREV (UNPACK (CAR A]
                                                          A))
-        (SETQ \TEDIT.ABBREVS.INTREE TEDIT.ABBREVS))])
+        (SETQ \TEDIT.ABBREVS.INTREE TEDIT.ABBREVS)
+        \TEDIT.ABBREVS.TREE)])
 )
 (DEFINEQ
 
@@ -282,7 +278,7 @@
          ("L" "0,243" English-pound)
          ("o" "0,260" Degree)
          ("Y" "0,245" Yen)
-         ("+" "0,261" PlusMinus)
+         ("+-" "0,261" PlusMinus)
          ("x" "0,264" Times)
          ("/" "0,270" Divide)
          ("lra" "357,121")
@@ -322,7 +318,7 @@
 (\TEDIT.ABBREV.TREE)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4321 12912 (\TEDIT.ABBREV.EXPAND 4331 . 5698) (\TEDIT.ABBREV.PARSE 5700 . 9261) (
-\TEDIT.TRY.ABBREV 9263 . 12321) (\TEDIT.ABBREV.TREE 12323 . 12910)) (12913 13558 (\TEDIT.EXPAND.DATE 
-12923 . 13556)))))
+  (FILEMAP (NIL (4374 11894 (\TEDIT.ABBREV.EXPAND 4384 . 6889) (\TEDIT.ABBREV.PARSE 6891 . 8205) (
+\TEDIT.ABBREV.EXPANSION 8207 . 11271) (\TEDIT.ABBREV.TREE 11273 . 11892)) (11895 12540 (
+\TEDIT.EXPAND.DATE 11905 . 12538)))))
 STOP

@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "10-Sep-2025 19:05:00" {WMEDLEY}<library>tedit>TEDIT-HCPY.;179 30623  
+(FILECREATED "15-Jan-2026 11:08:15" {WMEDLEY}<library>tedit>TEDIT-HCPY.;196 32421  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS TEDIT-HCPYCOMS)
+      :CHANGES-TO (FNS TEDIT.IMAGEFILE.MESSAGE TEDIT.FORMAT.HARDCOPY)
 
-      :PREVIOUS-DATE " 9-Sep-2025 21:52:28" {WMEDLEY}<library>tedit>TEDIT-HCPY.;177)
+      :PREVIOUS-DATE "24-Dec-2025 11:16:22" {WMEDLEY}<library>tedit>TEDIT-HCPY.;194)
 
 
 (PRETTYCOMPRINT TEDIT-HCPYCOMS)
@@ -15,9 +15,10 @@
        ((COMS 
               (* ;; "Generic interface functions and common code")
 
-              (FNS TEDIT.HARDCOPY \TEDIT.PRINT.MENU TEDIT.HCPYFILE \TEDIT.HARDCOPY.DISPLAYLINE 
-                   \TEDIT.HARDCOPY.FORMATLINE.HEADINGS \TEDIT.HARDCOPY.MODIFYLOOKS \TEDIT.HCPYFMTSPEC
-                   \TEDIT.INTEGER.IMAGEBOX \TEDIT.DISPLAY.DIACRITIC))
+              (FNS TEDIT.HARDCOPY TEDIT.FORMAT.HARDCOPY TEDIT.IMAGEFILE.MESSAGE \TEDIT.PRINT.MENU 
+                   \TEDIT.HARDCOPY.DISPLAYLINE \TEDIT.HARDCOPY.FORMATLINE.HEADINGS 
+                   \TEDIT.HARDCOPY.MODIFYLOOKS \TEDIT.HCPYFMTSPEC \TEDIT.INTEGER.IMAGEBOX 
+                   \TEDIT.DISPLAY.DIACRITIC))
         (COMS 
               (* ;; "Functions for scaling regions as needed during hardcopy.")
 
@@ -27,9 +28,9 @@
               (INITVARS (TEDIT.DEFAULTPAGEREGION (\TEDIT.SCALEREGION MICASPERINCH
                                                         (CREATEREGION 1.1 0.75 6.4 9.25]
         (COMS 
-              (* ;; "Support for the window-menu's HARDCOPY button, LISTFILES, etc.  THIS IS SCREWY")
+              (* ;; "Support for the window-menu's HARDCOPY button, LISTFILES, etc.  Eliminated postscript, but this still may be screwy")
 
-              (FNS TEDIT.HARDCOPYFN \TEDIT.HARDCOPYFILEFN \TEDIT.POSTSCRIPT.HARDCOPY))
+              (FNS \TEDIT.HARDCOPYFILEFN))
         [COMS 
               (* ;; "vars for Japanese Line Break")
 
@@ -56,68 +57,120 @@
 
 (TEDIT.HARDCOPY
   [LAMBDA (STREAM FILE DONTSEND BREAKPAGETITLE SERVER PRINTOPTIONS)
+                                                             (* ; "Edited 17-Dec-2025 01:06 by rmk")
                                                              (* ; "Edited  6-Mar-2024 23:33 by rmk")
                                                              (* ; "Edited  5-Jan-88 16:09 by jds")
 
     (* ;; "Send the text to a printer, unless DONTSEND.   If DONTSEND and we can't find a server, we'll get the DEFAULTPRINTERTYPE.")
 
-    (CL:UNLESS SERVER (SETQ SERVER DEFAULTPRINTINGHOST))
+    (CL:UNLESS SERVER
+        (SETQ SERVER (CAR (DEFAULTPRINTERS))))
     (COND
        [(OR SERVER DONTSEND)
         (for IMAGETYPE in (PRINTERPROP (PRINTERTYPE SERVER)
                                  'CANPRINT)
-           do (RETURN (TEDIT.FORMAT.HARDCOPY STREAM FILE DONTSEND BREAKPAGETITLE SERVER PRINTOPTIONS
+           do (RETURN (TEDIT.FORMAT.HARDCOPY STREAM FILE DONTSEND BREAKPAGETITLE SERVER PRINTOPTIONS
                              IMAGETYPE)) finally (ERROR (CONCAT "Can't print TEDIT documents on a "
                                                                (PRINTERTYPE SERVER)
                                                                " printer."]
        (T (TEDIT.PROMPTPRINT (TEXTOBJ STREAM)
                  "Can't HARDCOPY:  No print server specified." T])
 
+(TEDIT.FORMAT.HARDCOPY
+  [LAMBDA (TSTREAM IMAGESTREAM DONTSEND BREAKPAGETITLE SERVER PRINTOPTIONS IMAGETYPE FIRSTPG# STARTPG
+                 ENDPG QUIET)                                (* ; "Edited 15-Jan-2026 08:52 by rmk")
+                                                             (* ; "Edited 14-Dec-2025 17:40 by rmk")
+                                                             (* ; "Edited  8-Dec-2025 18:08 by rmk")
+                                                             (* ; "Edited  7-Dec-2025 15:06 by rmk")
+                                                             (* ; "Edited 19-Sep-2025 22:04 by rmk")
+                                                             (* ; "Edited 18-Sep-2025 10:11 by rmk")
+                                                             (* ; "Edited 12-Sep-2025 23:54 by rmk")
+                                                             (* ; "Edited  5-Jun-2025 08:24 by rmk")
+                                                             (* ; "Edited 22-Apr-2025 08:12 by rmk")
+                                                             (* ; "Edited 30-Aug-2024 15:45 by rmk")
+                                                             (* ; "Edited  5-Apr-2024 08:01 by rmk")
+                                                             (* ; "Edited 19-Jan-2024 23:39 by rmk")
+                                                             (* ; "Edited 15-Nov-2023 23:56 by rmk")
+                                                             (* ; "Edited  4-Jul-2023 11:16 by rmk")
+                                                             (* ; "Edited  2-Oct-2022 00:00 by rmk")
+                                                             (* ; 
+                                                        "Edited 25-May-93 13:06 by sybalsky:mv:envos")
+
+    (* ;; "Format a document for hardcopy.   Returns NIL if the before-print-fn said not to print.")
+
+    (* ;; "TEXTSTREAM is either already a textstream or somehow denotes a tedit-formatted file, otherwise an error. We don't here try to decide that a non-formatted file is a plain text file, as opposed binary or anything else.")
+
+    (RESETLST
+        (TEDIT.PROMPTCLEAR TSTREAM)
+        (LET [(IMAGEFILE (TEDIT.TO.IMAGEFILE TSTREAM IMAGESTREAM (OR IMAGETYPE DEFAULTPRINTERTYPE)
+                                `(,@PRINTOPTIONS FIRSTPG# ,FIRSTPG# STARTPG ,STARTPG ENDPG
+                                        ,ENDPG DOCUMENT.NAME ,BREAKPAGETITLE]
+             (CL:UNLESS (OR DONTSEND (EQ IMAGEFILE IMAGESTREAM))
+
+                 (* ;; "If the caller gave us an already open image  stream, not just a filename (or NIL), we assume that the caller will close it and send to the printer, if necessary.")
+
+                 (SEND.FILE.TO.PRINTER IMAGEFILE SERVER `(DOCUMENT.NAME ,BREAKPAGETITLE 
+                                                                ,@PRINTOPTIONS DOCUMENT.NAME 
+                                                                "TEdit Hardcopy Output")))
+             (CL:UNLESS QUIET (TEDIT.IMAGEFILE.MESSAGE TSTREAM SERVER))
+             IMAGEFILE))])
+
+(TEDIT.IMAGEFILE.MESSAGE
+  [LAMBDA (TSTREAM SERVER)                                   (* ; "Edited 15-Jan-2026 11:07 by rmk")
+                                                             (* ; "Edited 14-Dec-2025 17:40 by rmk")
+
+    (* ;; "Description of last imagefile goes in promptwindow")
+
+    (LET* [(LASTIMAGEFILE (GETTEXTPROP TSTREAM 'LASTIMAGEFILE))
+           (NPAGES (pop LASTIMAGEFILE))
+           (IMAGEFILE (pop LASTIMAGEFILE))
+           (PRINTERNAME (OR (pop LASTIMAGEFILE)
+                            (CL:IF (LISTP SERVER)
+                                (CADR SERVER)
+                                SERVER)]
+          (TEDIT.PROMPTPRINT TSTREAM [CONCAT NPAGES " page" (CL:IF (EQ 1 NPAGES)
+                                                                ""
+                                                                "s")
+                                            (if PRINTERNAME
+                                                then (CONCAT " printed on " PRINTERNAME)
+                                              elseif (STREAMP IMAGEFILE)
+                                                then " printed"
+                                              else (CONCAT " on " (PSEUDOFILENAME IMAGEFILE]
+                 T])
+
 (\TEDIT.PRINT.MENU
-  [LAMBDA (TSTREAM)                                          (* ; "Edited 28-Jun-2024 22:09 by rmk")
-                                                             (* ; "Edited 25-Jun-2023 13:16 by rmk")
-                                                             (* ; "Edited  6-Jun-2023 17:48 by rmk")
-    (LET ((W (GETTOBJ (TEXTOBJ TSTREAM)
-                    PRIMARYPANE)))
+  [LAMBDA (TSTREAM)                                          (* ; "Edited 17-Dec-2025 00:09 by rmk")
+                                                             (* ; "Edited 14-Dec-2025 17:38 by rmk")
+                                                             (* ; "Edited 13-Dec-2025 08:35 by rmk")
+                                                             (* ; "Edited 19-Sep-2025 07:43 by rmk")
+                                                             (* ; "Edited 28-Jun-2024 22:09 by rmk")
+                                                             (* ; "Edited 25-Jun-2023 13:16 by rmk")
+    (SETQ TSTREAM (TEXTSTREAM (GETTOBJ (TEXTOBJ TSTREAM)
+                                     PRIMARYPANE)))
+    (TEDIT.PROMPTCLEAR TSTREAM)                              (* ; "Edited  6-Jun-2023 17:48 by rmk")
+    (LET (FILE&TYPE)
          (SELECTQ [MENU (create MENU
                                ITEMS _ '(("Print to a file" 'FILE 
                                               "Puts image on a file; prompts for filename and format"
                                                 )
                                          ("Send to a printer" 'PRINTER 
                                                 "Sends image to a printer of your choosing"]
-             (FILE (HARDCOPYIMAGEW.TOFILE W))
-             (PRINTER (HARDCOPYIMAGEW.TOPRINTER W))
-             NIL])
-
-(TEDIT.HCPYFILE
-  [LAMBDA (TSTREAM FILE BREAKPAGETITLE)                      (* ; "Edited 29-Jun-2024 16:33 by rmk")
-                                                             (* ; "Edited  4-Oct-2022 09:23 by rmk")
-                                                             (* ; "Edited  1-Oct-2022 22:12 by rmk")
-                                                            (* ; "Edited 12-Jun-90 18:36 by mitani")
-
-    (* ;; "Create a hardcopy-format FILE from the text on TSTREAM, with the file type depending on what the default printer is.")
-
-    (LET ([IMAGETYPE (CAR (PRINTERPROP (PRINTERTYPE)
-                                 'CANPRINT]
-          (TEXTOBJ (TEXTOBJ TSTREAM))
-          FILENM TXTFILE)
-         (CL:WHEN [SETQ FILENM (OR FILE (\TEDIT.MAKEFILENAME
-                                         (TEDIT.GETINPUT TEXTOBJ (CONCAT IMAGETYPE " file name:  ")
-                                                (COND
-                                                   ((type? STREAM (SETQ TXTFILE (fetch (TEXTOBJ
-                                                                                        TXTFILE)
-                                                                                   of TEXTOBJ)))
-                                                             (* ; 
-                                                             "There was a file, so supply default")
-                                                    (PACKFILENAME 'VERSION NIL 'EXTENSION
-                                                           (OR (CAR (PRINTFILETYPE IMAGETYPE
-                                                                           'EXTENSION))
-                                                               'HCPY)
-                                                           'BODY
-                                                           (fetch (STREAM FULLFILENAME) of TXTFILE]
-             (if FILENM
-                 then (TEDIT.FORMAT.HARDCOPY TSTREAM FILENM T BREAKPAGETITLE NIL NIL IMAGETYPE)
-               else (TEDIT.PROMPTPRINT TSTREAM "No hardcopy file--aborted" T T)))])
+             (FILE [LET [(FILENAME (GETTEXTPROP TSTREAM 'FILENAME]
+                        (CL:WHEN FILENAME
+                            (SETQ FILENAME (PACKFILENAME
+                                            'VERSION NIL 'EXTENSION
+                                            [L-CASE (CAR (EXTENSIONS.FOR.IMAGEFILETYPE
+                                                          (CAR (PRINTERPROP (PRINTERTYPE 
+                                                                                   :DEFAULTPRINTER)
+                                                                      'CANPRINT]
+                                            'BODY FILENAME)))
+                        (CL:WHEN (SETQ FILE&TYPE (GetImageFile FILENAME))
+                            (TEDIT.TO.IMAGEFILE TSTREAM (CAR FILE&TYPE)
+                                   (CDR FILE&TYPE)))])
+             (PRINTER [SEND.FILE.TO.PRINTER TSTREAM (GetPrinterName)
+                             `(HEADING ,(GETTEXTPROP TSTREAM 'FILENAME])
+             NIL)
+         (TEDIT.IMAGEFILE.MESSAGE TSTREAM])
 
 (\TEDIT.HARDCOPY.DISPLAYLINE
   [LAMBDA (TSTREAM LINE REGION PRSTREAM FORMATTINGSTATE)     (* ; "Edited 21-Apr-2025 19:02 by rmk")
@@ -415,30 +468,11 @@
 
 
 
-(* ;; "Support for the window-menu's HARDCOPY button, LISTFILES, etc.  THIS IS SCREWY")
+(* ;; 
+"Support for the window-menu's HARDCOPY button, LISTFILES, etc.  Eliminated postscript, but this still may be screwy"
+)
 
 (DEFINEQ
-
-(TEDIT.HARDCOPYFN
-  [LAMBDA (WINDOW IMAGESTREAM)                               (* ; "Edited 13-Dec-2024 22:33 by rmk")
-                                                             (* ; "Edited 29-Jun-2024 14:42 by rmk")
-                                                             (* ; "Edited 20-Mar-2024 10:49 by rmk")
-                                                             (* ; "Edited 25-Sep-2023 16:29 by rmk")
-                                                             (* ; "Edited  4-Jul-2023 11:16 by rmk")
-                                                            (* ; "Edited 21-Sep-2021 15:33 by rmk:")
-
-    (* ;; 
-   "This is the TEdit HARDCOPYFN, hooking into the system's standard Hardcopy window-menu operation.")
-
-    (LET ((TEXTSTREAM (TEXTSTREAM WINDOW)))
-
-         (* ;; "TEXTSTREAM is bound here so we don't drop the steam on the floor if the window goes away, since the TEXTOBJ only has an XPOINTER to the stream in it.  Please don't remove this binding!")
-
-         (TEDIT.FORMAT.HARDCOPY (CL:IF (FGETTOBJ (TEXTOBJ WINDOW)
-                                              MENUFLG)
-                                    (\TEDIT.MAINW WINDOW)
-                                    WINDOW)
-                IMAGESTREAM])
 
 (\TEDIT.HARDCOPYFILEFN
   [LAMBDA (W EXT)                                            (* ; "Edited 25-Sep-2023 16:19 by rmk")
@@ -452,22 +486,6 @@
              (PACKFILENAME 'VERSION NIL 'EXTENSION (OR EXT 'IMAGEFILE)
                     'BODY
                     (FULLNAME STRM)))])
-
-(\TEDIT.POSTSCRIPT.HARDCOPY
-  [LAMBDA (FILE PFILE)                                       (* ; "Edited  4-Oct-2022 10:40 by rmk")
-                                                             (* ; "Edited  1-Oct-2022 22:08 by rmk")
-                                                            (* ; "Edited 12-Jun-90 18:35 by mitani")
-
-    (* ;; "Send the document FILE to the printer (or to a print file, as determined by PFILE).")
-
-    (CL:WITH-OPEN-STREAM (TEXT-STREAM (OPENTEXTSTREAM FILE))
-           (RESETLST
-               [RESETSAVE (\TEDIT.MARKACTIVE (TEXTOBJ TEXT-STREAM))
-                      '(AND (\TEDIT.MARKINACTIVE OLDVALUE]
-               [RESETSAVE NIL `(AND (CLOSEF? ',PFILE]
-               (replace (TEXTOBJ EDITOPACTIVE) of (TEXTOBJ TEXT-STREAM) with 'Hardcopy)
-               (TEDIT.FORMAT.HARDCOPY TEXT-STREAM PFILE T NIL NIL NIL 'POSTSCRIPT)
-               PFILE)])
 )
 
 
@@ -505,11 +523,10 @@
          (CLOSEF DOC])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (2652 25209 (TEDIT.HARDCOPY 2662 . 3795) (\TEDIT.PRINT.MENU 3797 . 4763) (TEDIT.HCPYFILE
- 4765 . 6939) (\TEDIT.HARDCOPY.DISPLAYLINE 6941 . 16164) (\TEDIT.HARDCOPY.FORMATLINE.HEADINGS 16166 . 
-17895) (\TEDIT.HARDCOPY.MODIFYLOOKS 17897 . 20078) (\TEDIT.HCPYFMTSPEC 20080 . 23538) (
-\TEDIT.INTEGER.IMAGEBOX 23540 . 24211) (\TEDIT.DISPLAY.DIACRITIC 24213 . 25207)) (25284 26114 (
-\TEDIT.SCALEREGION 25294 . 26112)) (26367 29180 (TEDIT.HARDCOPYFN 26377 . 27682) (
-\TEDIT.HARDCOPYFILEFN 27684 . 28245) (\TEDIT.POSTSCRIPT.HARDCOPY 28247 . 29178)) (29799 30600 (
-TEDIT-BOOK 29809 . 30598)))))
+  (FILEMAP (NIL (2727 29208 (TEDIT.HARDCOPY 2737 . 3995) (TEDIT.FORMAT.HARDCOPY 3997 . 7234) (
+TEDIT.IMAGEFILE.MESSAGE 7236 . 8533) (\TEDIT.PRINT.MENU 8535 . 10938) (\TEDIT.HARDCOPY.DISPLAYLINE 
+10940 . 20163) (\TEDIT.HARDCOPY.FORMATLINE.HEADINGS 20165 . 21894) (\TEDIT.HARDCOPY.MODIFYLOOKS 21896
+ . 24077) (\TEDIT.HCPYFMTSPEC 24079 . 27537) (\TEDIT.INTEGER.IMAGEBOX 27539 . 28210) (
+\TEDIT.DISPLAY.DIACRITIC 28212 . 29206)) (29283 30113 (\TEDIT.SCALEREGION 29293 . 30111)) (30405 30978
+ (\TEDIT.HARDCOPYFILEFN 30415 . 30976)) (31597 32398 (TEDIT-BOOK 31607 . 32396)))))
 STOP

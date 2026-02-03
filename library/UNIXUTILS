@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED "26-Nov-2025 14:21:13" {WMEDLEY}<library>UNIXUTILS.;35 18084  
+(FILECREATED "19-Jan-2026 14:09:03" {WMEDLEY}<library>UNIXUTILS.;55 20711  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS UNIXUTILSCOMS)
+      :CHANGES-TO (FNS UNIX-FILE-NAME)
 
-      :PREVIOUS-DATE " 4-Nov-2025 10:11:10" {WMEDLEY}<library>UNIXUTILS.;34)
+      :PREVIOUS-DATE "17-Jan-2026 23:16:17" {WMEDLEY}<library>UNIXUTILS.;54)
 
 
 (PRETTYCOMPRINT UNIXUTILSCOMS)
@@ -21,7 +21,8 @@
         (FUNCTIONS ShellCommand ShellWhich)
         (ADDVARS (MEDLEY-INIT-VARS (ShellBrowser NIL RESET)
                         (ShellOpener NIL RESET)))
-        (FNS ShellBrowser ShellBrowse ShellOpener ShellOpen PROCESS-COMMAND SLASHIT UNIX-FILE-NAME)
+        (FNS ShellBrowser ShellBrowse ShellOpener ShellOpen PROCESS-COMMAND SLASHIT UNIX-FILE-NAME 
+             UNIX-TMP-FILE-NAME)
         (PROPS (UNIXUTILS FILETYPE))))
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 
@@ -147,7 +148,8 @@
                                                   "true"])
 
 (ShellOpen
-  [LAMBDA (FilenameOrURL)                                    (* ; "Edited 10-Sep-2025 15:29 by rmk")
+  [LAMBDA (FilenameOrURL)                                    (* ; "Edited 28-Dec-2025 18:26 by rmk")
+                                                             (* ; "Edited 10-Sep-2025 15:29 by rmk")
                                                              (* ; "Edited  4-May-2025 11:14 by rmk")
 
     (* ;; "Open the  file or URL using the generic %"opener%" for this machine via a shell call.")
@@ -184,7 +186,11 @@
                      then (CONCAT "File not found: " FilenameOrURL)
                    elseif (STREQUAL OPENER "true")
                      then (CONCAT "Unable to find a file opener to open: " FilenameOrURL)
-                   else (LET* ((VERSION.SPECIFIED (FILENAMEFIELD FilenameOrURL 'VERSION))
+                   else (SETQ FilenameOrURL (TRUEFILENAME FilenameOrURL)) 
+
+                        (* ;; "RMK:  UNVERSIONED is in the Lisp space, I removed the SLASHIT there because it adds \ in front of spaces which screws up the following INFILEP.")
+
+                        (LET* ((VERSION.SPECIFIED (FILENAMEFIELD FilenameOrURL 'VERSION))
                                (UNPACKED (UNPACKFILENAME.STRING FULLNAME))
                                (NEWNAME (CONCAT (LISTGET UNPACKED 'NAME)
                                                "~"
@@ -197,8 +203,7 @@
                                                  (SETQ FN (PACKFILENAME.STRING UNPACKED))
                                                  (if (STREQUAL (SUBSTRING FN -1)
                                                             ".")
-                                                     then (SETQ FN (SUBSTRING UNIXFILE 1 -2)))
-                                                 (SETQ FN (SLASHIT FN]
+                                                     then (SETQ FN (SUBSTRING UNIXFILE 1 -2]
                                (UNVERSIONED.EXISTS (INFILEP (CONCAT "{UNIX}" UNVERSIONED)))
                                (TMPDIR (CONCAT "/tmp/" (RAND 1000 9999)))
                                (TARGETFILE.LISP (PACKFILENAME.STRING 'HOST "{UNIX}" 'DIRECTORY TMPDIR
@@ -240,7 +245,8 @@
                                                  0))) DO (BLOCK) FINALLY (RETURN CODE])
 
 (SLASHIT
-  [LAMBDA (X LCASEDIRS NOHOST)                               (* ; "Edited  4-Nov-2025 10:10 by rmk")
+  [LAMBDA (X LCASEDIRS NOHOST KEEPDOT)                       (* ; "Edited 17-Jan-2026 23:15 by rmk")
+                                                             (* ; "Edited  4-Nov-2025 10:10 by rmk")
                                                              (* ; "Edited 22-Oct-2025 13:05 by rmk")
                                                              (* ; "Edited 25-Sep-2025 09:57 by rmk")
                                                              (* ; "Edited 23-Sep-2023 15:27 by rmk")
@@ -249,7 +255,7 @@
 
     (* ;; "Perhaps this should be a per file-device operation that maps device names into the local file system.")
 
-    (* ;; "This is a first approximation to a utility that converts a filename X on a host whose files physically reside in the local Unix file system into the strings that shell commands can use to reference that file.  For now, this just involves replacing directory brackets with /, removing the host, and perhaps lower-casing the directory.  It probably should be extended to deal with version number translation, for now it just keeps the ; version. ")
+    (* ;; "This is a first approximation to a utility that converts a filename X on a host whose files physically reside in the local Unix file system into the strings that shell commands can use to reference that file.  For now, this just involves replacing directory brackets with /, removing the host, perhaps lower-casing the directory, and perhaps removing a final dot.  It probably should be extended to deal with version number translation, for now it just keeps the ; version. ")
 
     (LET [LASTDIRPOS SLASHED (DIRPOS (ADD1 (OR (STRPOS "}" X)
                                                0]
@@ -267,22 +273,34 @@
              (SETQ SLASHED (CONCAT (L-CASE (SUBSTRING SLASHED 1 LASTDIRPOS))
                                   (OR (SUBSTRING SLASHED (ADD1 LASTDIRPOS))
                                       ""))))
-         (CL:IF (OR (EQ DIRPOS 1)
-                    NOHOST)
-             SLASHED
-             (CONCAT (SUBSTRING X 1 (SUB1 DIRPOS))
-                    SLASHED))])
+         (CL:UNLESS (OR (EQ DIRPOS 1)
+                        NOHOST)
+             (SETQ SLASHED (CONCAT (SUBSTRING X 1 (SUB1 DIRPOS))
+                                  SLASHED)))
+         (CL:UNLESS (OR KEEPDOT (NEQ (CHARCODE %.)
+                                     (NTHCHARCODE SLASHED -1)))
+             (SETQ SLASHED (CL:IF (EQ (CHARCODE %')
+                                      (NTHCHARCODE SLASHED -2))
+                               (CONCAT (SUBSTRING SLASHED 1 -3)
+                                      ".")
+                               (SUBSTRING SLASHED 1 -2))))
+         SLASHED])
 
 (UNIX-FILE-NAME
-  [LAMBDA (FILE ACCESS COPY)                                 (* ; "Edited 27-Sep-2025 16:24 by rmk")
+  [LAMBDA (FILE ACCESS COPY EXTENSION)                       (* ; "Edited 19-Jan-2026 14:05 by rmk")
+                                                             (* ; "Edited 17-Jan-2026 22:32 by rmk")
+                                                             (* ; "Edited 11-Jan-2026 23:54 by rmk")
+                                                             (* ; "Edited 27-Dec-2025 21:24 by rmk")
+                                                             (* ; "Edited 26-Dec-2025 10:58 by rmk")
+                                                             (* ; "Edited 27-Sep-2025 16:24 by rmk")
                                                              (* ; "Edited 19-Sep-2025 07:29 by rmk")
                                                              (* ; "Edited 13-Sep-2025 18:37 by rmk")
                                                              (* ; "Edited  1-Oct-2023 20:52 by rmk")
 
-    (* ;; "Forces an extension %"ufn%" if there isn't one already, to avoid the dot/no-dot question")
+    (* ;; "Tries to return the string that would reference FILE in a Unix shell, for the use of PROCESS-COMMAND and ShellCommand.  If VERSION is 1, it assumes that the Unix file doesn't have the Medley version convention.  If FILE does not have a corresponding Unix name (e.g. NODIRCORE), COPY is non-NIL, and ACCESS is INPUT, FILE will be copied to a unix tmp file (with COPY in its name) and that name will be returned.")
 
-    (* ;; "Tries to return the string that would reference FILE in a Unix shell, for the use of PROCESS-COMMAND and ShellCommand.  If VERSION is 1, it assumes that the Unix file is doesn't have the Medley version convention.  If FILE does not have a corresponding Unix name, COPY is non-NIL, and ACCESS is INPUT, FILE will be copied to a unix tmp file (with COPY in its name) and that name will be returned.")
-                                                             (* ; "Might catch NODIRCORE")
+    (* ;; "NOTE:  The value does not have a host field--no {UNIX}.")
+
     (CL:WHEN FILE
         (SETQ FILE (TRUEFILENAME FILE))
         (CL:UNLESS (STREAMP FILE)
@@ -292,42 +310,58 @@
                                               (NIL (SETQ ACCESS 'INPUT)
                                                    'OLD)
                                               (\ILLEGAL.ARG ACCESS])
-        (LET (UNAME VERSION)
-             [SELECTQ (FILENAMEFIELD FILE 'HOST)
-                 ((UNIX DSK) 
-                      (SETQ UNAME FILE))
-                 (PROGN 
-                        (* ;; "Catch the streams as well as other devices (CORE, servers)")
+        [SLASHIT (SELECTQ (FILENAMEFIELD FILE 'HOST)
+                     (UNIX (CL:IF [AND EXTENSION (NEQ (L-CASE EXTENSION)
+                                                      (L-CASE (FILENAMEFIELD FILE 'EXTENSION]
+                               (COPYFILE FILE (PACKFILENAME 'EXTENSION EXTENSION 'BODY FILE))
+                               FILE))
+                     (DSK [LET ((VERSION (FILENAMEFIELD FILE 'VERSION))
+                                (UNAME (PACKFILENAME 'VERSION NIL 'BODY FILE)))
+                               (CL:UNLESS (EQ VERSION 1)
+                                   (CONCAT UNAME (CONCAT "~" VERSION "~")))])
+                     (LET (UNAME)
 
-                        [SETQ UNAME (OUTFILEP (CONCAT "{DSK}/tmp/medley-" (CL:IF COPY
-                                                                              (CONCAT (L-CASE COPY)
-                                                                                     "-")
-                                                                              "")
-                                                     (IDATE]
-                        (CL:WHEN (AND COPY FILE)
-                            (RESETLST
-                                (CL:WHEN (\GETSTREAM FILE 'INPUT T)
+                          (* ;; "Catch the streams as well as other devices (CORE, servers)")
+
+                          (SETQ UNAME (UNIX-TMP-FILE-NAME FILE EXTENSION))
+                          (CL:IF (AND COPY FILE)
+                              (RESETLST
+                                  (CL:WHEN (\GETSTREAM FILE 'INPUT T)
                                                              (* ; "Hope it's randaccess")
-                                    [RESETSAVE (GETFILEPTR FILE)
-                                           `(PROGN (SETFILEPTR ,FILE OLDVALUE])
+                                      [RESETSAVE (GETFILEPTR FILE)
+                                             `(PROGN (SETFILEPTR ,FILE OLDVALUE])
+                                  (COPYFILE FILE UNAME))
+                              UNAME)])])
 
-                                (* ;; "Let DSK pick a new version number, rather than RAND")
+(UNIX-TMP-FILE-NAME
+  [LAMBDA (NAME EXT HOST)                                    (* ; "Edited 17-Jan-2026 22:28 by rmk")
+                                                             (* ; "Edited 13-Jan-2026 15:41 by rmk")
+                                                             (* ; "Edited 26-Dec-2025 17:37 by rmk")
 
-                                (COPYFILE FILE UNAME)))]
-             (SETQ VERSION (FILENAMEFIELD UNAME 'VERSION))   (* ; "Convert to Unix version. ")
-             (SETQ UNAME (PACKFILENAME 'VERSION NIL 'BODY UNAME))
-             (CL:WHEN (AND VERSION (IGREATERP VERSION 1))
-                 (SETQ UNAME (CONCAT UNAME ".~" VERSION "~")))
-             (SETQ UNAME (SLASHIT UNAME NIL T))
-             (CL:IF (EQ (CHARCODE %.)
-                        (NTHCHARCODE UNAME -1))
-                 (SUBSTRING UNAME 1 -2)
-                 UNAME)))])
+    (* ;; "Returns a unique {UNIX}/tmp/medley name that includes NAME as a hint and perhaps a useful extension.  This goes through random candidates hoping to find a name that doesn't yet exist, and that can be %"reserved%" before anybody else gets it.  There is a race-condition window where somebody could get in.")
+
+    (* ;; " ")
+
+    (* ;; "If DSK names were reformatted so that the ~version~ came before the intended extension, we could just open on an output stream on DSK to get a unique version number, then convert to the UNIX formatted string.")
+
+    (bind UNAME (DATEPREFIX _ (CONCAT "{UNIX}/tmp/medley-" (IDATE)
+                                     "-"))
+          (SUFFIX _ (CONCAT (CL:IF NAME
+                                [OR (AND (STREAMP (FULLNAME NAME))
+                                         "stream")
+                                    (L-CASE (FILENAMEFIELD NAME 'NAME]
+                                "unamed")
+                           (CL:IF EXT
+                               (CONCAT "." (L-CASE EXT))
+                               ""))) eachtime (SETQ UNAME (CONCAT DATEPREFIX (RAND 1 1000)
+                                                                 "-" SUFFIX))
+       unless (INFILEP UNAME) do (RETURN (SLASHIT (CLOSEF (OPENSTREAM UNAME 'OUTPUT 'NEW])
 )
 
 (PUTPROPS UNIXUTILS FILETYPE CL:COMPILE-FILE)
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1137 1510 (ShellCommand 1137 . 1510)) (1512 1909 (ShellWhich 1512 . 1909)) (2019 18006 
-(ShellBrowser 2029 . 3801) (ShellBrowse 3803 . 4488) (ShellOpener 4490 . 6178) (ShellOpen 6180 . 11659
-) (PROCESS-COMMAND 11661 . 12274) (SLASHIT 12276 . 14731) (UNIX-FILE-NAME 14733 . 18004)))))
+  (FILEMAP (NIL (1170 1543 (ShellCommand 1170 . 1543)) (1545 1942 (ShellWhich 1545 . 1942)) (2052 20633 
+(ShellBrowser 2062 . 3834) (ShellBrowse 3836 . 4521) (ShellOpener 4523 . 6211) (ShellOpen 6213 . 11982
+) (PROCESS-COMMAND 11984 . 12597) (SLASHIT 12599 . 15623) (UNIX-FILE-NAME 15625 . 18952) (
+UNIX-TMP-FILE-NAME 18954 . 20631)))))
 STOP

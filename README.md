@@ -1,12 +1,14 @@
 # Medley 
 
-This repository is for the Lisp environment of [Medley](https://interlisp.org).
+The [Medley Interlisp Project](https://interlisp.org) aims to preserve, revive, and modernize the [Interlisp](https://interlisp.org) software development environment for rapid prototyping, research and Artificial Intelligence created at Xerox PARC since the 1970s.
 
-[Install and Run](https://interlisp.org/software/install-and-run) covers ways to install and start up Medley on Linux systems, MacOS, and Windows (with or without WSL).
+This repository is for the Lisp environment of the [Medley](https://interlisp.org) release of Interlisp. Other repositories hold additional subsystems and applications such as [Maiko](https://github.com/Interlisp/maiko), the implementation (in C) of the Medley virtual machine, the [LOOPS](https://github.com/Interlisp/loops) object-oriented extension of Interlisp, and the [NoteCards](https://github.com/Interlisp/notecards) hypermedia system.
+
+[Install and Run](https://interlisp.org/software/install-and-run) covers ways to install and start up Medley on Linux systems, MacOS, Windows (with or without WSL), and in a web browser.
 
 [Using Medley](https://interlisp.org/software/using-medley/) has an overview and pointers to documentation.
 
-[Interlisp/maiko](https://github.com/Interlisp/maiko), is the repo for the implementation (in C) of the Medley virtual machine. 
+The [Glossary](https://interlisp.org/history/glossary) defines system-specific terms such as "loadup" and "sysout".
 
 ## Releases
 
@@ -67,25 +69,9 @@ If you have a high-resolution display, note that much of the graphics was design
 
 Medley presumes you have a 3-button mouse; the scroll-wheel on some mice acts as one, with some difficulty. Go into XQuartz Preferences/Input and check "Emulate three button mouse" option.
 
-### Running Medley Interlisp (obsolete)
+### Running Medley Interlisp
 
-The `run-medley` script in this repo sets up some convenient defaults. Running Medley can be done by typing:
-```
-$ cd medley
-$ ./run-medley
-```
-
-Or, if you wish to start Medley up with a different SYSOUT:
-
-```
-$ cd medley
-$ ./run-medley <SYSOUT-file-name>
-```
-The first time the system is run it loads the system image that comes
-with the system.  When you exit the system (or "do a `SaveVM`" menu
-option) the state of your machine is saved in a file named
-`~/lisp.virtualmem`.  Subsequent system startups load the
-`~/lisp.virtualmem` image by default.
+The primer [Medley Interlisp for the Newcomer](https://primer.interlisp.org) eases new users into the Interlisp environment. It assumes no prior knowledge of Lisp and covers the user interface, programming and debugging, windows and graphics, and more. We recommend consulting this document to learn how to run and use the system.
 
 ### Exiting The System
 
@@ -123,7 +109,7 @@ Each directory should have a README.md, but briefly
 * BUILDING.md -- instructions on how to make your own loadups
 * clos -- early implementation of Common Lisp Object System
 * CLTL2 -- files submitted to bring Medley up to the conformance to "Common Lisp, the Language" 2nd edition. Not enough to conform to the ANSI standard lisp.
-* docs -- Documentation files (in TEdit format, PDFs, or online help; look [here](https://github.com/Interlisp/medley/Documentation))
+* docs -- Documentation files (in TEdit format, PDFs, or online help
 * fonts -- raster fonts (or font widths) in various resolutions for display, postscript, interpress, press formats
 * greetfiles -- various configuration setups
 * internal -- These _were_ internal to Venue

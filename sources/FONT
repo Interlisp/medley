@@ -1,12 +1,13 @@
 (DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
 
-(FILECREATED " 8-Dec-2025 22:19:01" {WMEDLEY}<sources>FONT.;645 281352 
+(FILECREATED "26-Jan-2026 16:37:58" {WMEDLEY}<sources>FONT.;664 276319 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (MACROS SPREADFONTSPEC)
+      :CHANGES-TO (VARS FONTCOMS)
+                  (FNS \CREATEFONT FONTPROP)
 
-      :PREVIOUS-DATE " 4-Dec-2025 09:46:06" {WMEDLEY}<sources>FONT.;644)
+      :PREVIOUS-DATE "22-Jan-2026 14:25:36" {WMEDLEY}<sources>FONT.;659)
 
 
 (PRETTYCOMPRINT FONTCOMS)
@@ -28,7 +29,7 @@
               (FNS FONTCREATE FONTCREATE1 FONTCREATE.SLUGFD \FONT.CHECKARGS1 \FONTCREATE1.NOFN 
                    FONTFILEP \READCHARSET)
               (FNS \FONT.CHECKARGS \CHARSET.CHECK)
-              (FNS COERCEFONTSPEC)
+              (FNS COERCEFONTSPEC COERCEFONTSPEC.TARGETFACE)
               (DECLARE%: EVAL@COMPILE DONTCOPY (MACROS COERCEFONTSPEC.MATCH COERCEFONTSPEC.TARGET))
               (MACROS SPREADFONTSPEC)
               (FNS MAKEFONTSPEC)
@@ -46,21 +47,11 @@
               (FNS MOVECHARBITMAP MOVEFONTCHARS \MOVEFONTCHAR \MOVEFONTCHARS.SOURCEDATA \MAKESLUGCHAR
                    SLUGCHARP.DISPLAY)
               (MACROS UPDATEINFOELEMENT))
-        (COMS 
-              (* ;; "\FINDFONTFILE \FONTFILENAME \SEARCHFONTFILES \FONTINFOFROMFILENAME are redefined to deal with character-set directories.  That behavior is conditioned on the setting of the global variable *USEOLDFONTDIRECTORIES*, T at PARC, maybe NIL most other places.  ")
-
-              (FNS FONTFILES \FINDFONTFILE \FONTFILENAMES \FONTFILENAME \FONTFILENAME.OLD 
-                   \FONTFILENAME.NEW FONTSPECFROMFILENAME \FONTINFOFROMFILENAME.OLD)
-              (*                                             (* ; "Do we still want old fonts?")
-                 (ADDVARS (*OLD-FONT-EXTENSIONS* STRIKE)))
-              (INITVARS (*OLD-FONT-EXTENSIONS* NIL))
-              (INITVARS (*USEOLDFONTDIRECTORIES* NIL))
-              (GLOBALVARS *OLD-FONT-EXTENSIONS* *USEOLDFONTDIRECTORIES*))
+        (FNS FONTFILES \FINDFONTFILE \FONTFILENAMES \FONTFILENAME FONTSPECFROMFILENAME)
         (FNS FONTCOPY FONTP FONTUNPARSE SETFONTDESCRIPTOR \STREAMCHARWIDTH \COERCECHARSET 
              \BUILDSLUGCSINFO \FONTSYMBOL \DEVICESYMBOL \FONTFACE \FONTFACE.COLOR SETFONTCHARENCODING
              )
-        (FNS FONTSAVAILABLE FONTEXISTS? \SEARCHFONTFILES FLUSHFONTCACHE FLUSHFONTSINCORE 
-             FINDFONTFILES SORTFONTSPECS)
+        (FNS FONTSAVAILABLE FONTEXISTS? \SEARCHFONTFILES FLUSHFONTCACHE FINDFONTFILES SORTFONTSPECS)
         (FNS MATCHFONTFACE MAKEFONTFACE FONTFACETOATOM)
         (INITVARS \FONTSINCORE \FONTEXISTS?-CACHE \FONTSAVAILABLEFILECACHE \DEFAULTDEVICEFONTS)
         
@@ -891,7 +882,11 @@
 (DEFINEQ
 
 (COERCEFONTSPEC
-  [LAMBDA (FONTSPEC COERCIONS)                               (* ; "Edited  9-Nov-2025 17:54 by rmk")
+  [LAMBDA (FONTSPEC COERCIONS ALL)                           (* ; "Edited 22-Dec-2025 22:56 by rmk")
+                                                             (* ; "Edited 18-Dec-2025 16:06 by rmk")
+                                                             (* ; "Edited  2-Dec-2025 17:24 by rmk")
+                                                             (* ; "Edited 25-Nov-2025 20:37 by rmk")
+                                                             (* ; "Edited  9-Nov-2025 17:54 by rmk")
                                                              (* ; "Edited  5-Oct-2025 09:41 by rmk")
                                                              (* ; "Edited 28-Aug-2025 14:41 by rmk")
                                                              (* ; "Edited 25-Aug-2025 10:22 by rmk")
@@ -902,44 +897,77 @@
                                                              (* ; "Edited  5-Aug-2025 17:27 by rmk")
                                                              (* ; "Edited 23-Jul-2025 15:39 by rmk")
 
-    (* ;; "Produces a list of coerced fontspecs, one for each coercion whose right side matches the given FONTSPEC parameters.")
+    (* ;; "If ALL, produces a list of coerced fontspecs, one for each coercion to an existing font whose right side matches the given FONTSPEC parameters.  Otherwise, returns the first matching coercion.")
 
-    (* ;; "Doesn't make sense to coerce the device, DEVICE and also CHARSET are just carried along.")
+    (* ;; "The recursion allows for coercions on multiple dimensions (e.g. family, and then size).")
 
+    (* ;; "Doesn't make sense to coerce the device, DEVICE is just carried along.")
+
+    (DECLARE (SPECVARS FONTSPEC))
     (CL:WHEN (LITATOM COERCIONS)
         [SETQ COERCIONS (FONTDEVICEPROP FONTSPEC (OR COERCIONS 'FONTCOERCIONS])
+    (for C RESULT MATCH TARGET MFAMILY MSIZE MFACE MROTATION TFAMILY TSIZE TFACE TROTATION COERCED 
+         FAMILY SIZE FACE ROTATION DEVICE in COERCIONS declare (SPECVARS FAMILY SIZE FACE ROTATION 
+                                                                      DEVICE)
+       first (SPREADFONTSPEC FONTSPEC)
+       when [SETQ COERCED (if (AND C (LITATOM C))
+                              then (APPLY* C FONTSPEC FAMILY SIZE FACE ROTATION DEVICE)
+                            else (SETQ MATCH (MKLIST (CAR C)))
+                                 (CL:WHEN [AND (COERCEFONTSPEC.MATCH (pop MATCH)
+                                                      FAMILY)
+                                               (COERCEFONTSPEC.MATCH (pop MATCH)
+                                                      SIZE)
+                                               (MATCHFONTFACE (\FONTFACE (OR (pop MATCH)
+                                                                             '*))
+                                                      FACE)
+                                               (COERCEFONTSPEC.MATCH (CAR MATCH)
+                                                      ROTATION)
+                                               (PROGN (SETQ TARGET (MKLIST (CADR C)))
+                                                      (SETQ TFAMILY (COERCEFONTSPEC.TARGET
+                                                                     (pop TARGET)
+                                                                     FAMILY))
+                                                      (SETQ TSIZE (COERCEFONTSPEC.TARGET (pop TARGET)
+                                                                         SIZE))
+                                                      (SETQ TFACE (COERCEFONTSPEC.TARGETFACE
+                                                                   (pop TARGET)
+                                                                   FACE))
+                                                      (SETQ TROTATION (COERCEFONTSPEC.TARGET
+                                                                       ROTATION
+                                                                       (pop TARGET)))
 
-    (* ;; "A NIL match component matches everything, and a NIL target component denotes the corresponding argument.")
+                                                      (* ;; 
+                                "Don't include the input in the output, if the coercions have a loop")
 
-    (for C MATCH TARGET MFAMILY MSIZE MFACE MROTATION TFAMILY TSIZE TFACE TROTATION COERCED FAMILY 
-         SIZE FACE ROTATION DEVICE in COERCIONS first (SPREADFONTSPEC FONTSPEC)
-       eachtime (SETQ MATCH (MKLIST (CAR C)))
-       when [AND (COERCEFONTSPEC.MATCH (pop MATCH)
-                        FAMILY)
-                 (COERCEFONTSPEC.MATCH (pop MATCH)
-                        SIZE)
-                 (MATCHFONTFACE (\FONTFACE (OR (pop MATCH)
-                                               '*))
-                        FACE)
-                 (COERCEFONTSPEC.MATCH (CAR MATCH)
-                        ROTATION)
-                 (PROGN (SETQ TARGET (MKLIST (CADR C)))
-                        (SETQ TFAMILY (COERCEFONTSPEC.TARGET (pop TARGET)
-                                             FAMILY))
-                        (SETQ TSIZE (COERCEFONTSPEC.TARGET (pop TARGET)
-                                           SIZE))
-                        (SETQ TFACE (COERCEFONTSPEC.TARGET (pop TARGET)
-                                           FACE))
-                        (SETQ TROTATION (COERCEFONTSPEC.TARGET ROTATION (pop TARGET)))
+                                                      (NOT (AND (EQ FAMILY TFAMILY)
+                                                                (EQ SIZE TSIZE)
+                                                                (EQUAL FACE TFACE)
+                                                                (EQ ROTATION TROTATION]
+                                        (MAKEFONTSPEC TFAMILY TSIZE TFACE TROTATION DEVICE]
+       unless (MEMBER COERCED RESULT)
+       when (SETQ COERCED (if (FONTEXISTS? COERCED NIL NIL NIL NIL T)
+                              then (CONS COERCED)
+                            elseif ALL
+                              then (COERCEFONTSPEC COERCED COERCIONS T)
+                            elseif (SETQ COERCED (COERCEFONTSPEC COERCED COERCIONS))
+                              then (CONS COERCED))) do 
 
-                        (* ;; "Don't include the input in the output, if the coercions have a loop")
+                                              (* ;; "If COERCED exists, it's a singleton whether or not ALL.  We always inflate it to a list, to simplify code")
 
-                        (NOT (AND (EQ FAMILY TFAMILY)
-                                  (EQ SIZE TSIZE)
-                                  (EQUAL FACE TFACE)
-                                  (EQ ROTATION TROTATION]
-       unless (MEMBER (SETQ COERCED (MAKEFONTSPEC TFAMILY TSIZE TFACE TROTATION DEVICE))
-                     $$VAL) collect COERCED])
+                                                       (for C in COERCED
+                                                          unless (MEMBER C RESULT)
+                                                          do (push RESULT C))
+       finally (RETURN (DREVERSE RESULT])
+
+(COERCEFONTSPEC.TARGETFACE
+  [LAMBDA (TFACE FFACE)                                      (* ; "Edited 22-Dec-2025 22:54 by rmk")
+    (if (MEMB TFACE '(NIL *))
+        then FFACE
+      else (MAKEFONTFACE (COERCEFONTSPEC.TARGET (fetch (FONTFACE WEIGHT) of TFACE)
+                                (fetch (FONTFACE WEIGHT) of FFACE))
+                  (COERCEFONTSPEC.TARGET (fetch (FONTFACE SLOPE) of TFACE)
+                         (fetch (FONTFACE SLOPE) of FFACE))
+                  (COERCEFONTSPEC.TARGET (fetch (FONTFACE EXPANSION) of TFACE)
+                         (fetch (FONTFACE EXPANSION) of FFACE])
 )
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (DECLARE%: EVAL@COMPILE 
@@ -1143,7 +1171,8 @@
     (fetch (FONTDESCRIPTOR \SFHeight) of (FONTCREATE FONTSPEC])
 
 (FONTPROP
-  [LAMBDA (FONT PROP)                                        (* ; "Edited  2-Dec-2025 16:01 by rmk")
+  [LAMBDA (FONT PROP)                                        (* ; "Edited 25-Jan-2026 20:08 by rmk")
+                                                             (* ; "Edited  2-Dec-2025 16:01 by rmk")
                                                              (* ; "Edited  2-Sep-2025 22:21 by rmk")
                                                              (* ; "Edited 12-Aug-2025 21:10 by rmk")
                                                              (* ; "Edited 10-Aug-2025 13:28 by rmk")
@@ -1220,6 +1249,7 @@
                                                                                           \MAXCHARSET
                      eachtime (SETQ CSINFO (\GETBASEPTR CSVECTOR (UNFOLD CS 2))) when CSINFO
                      unless (fetch (CHARSETINFO CSSLUGP) of CSINFO) collect CS))
+        (AVGCHARWIDTH (ffetch (FONTDESCRIPTOR FONTAVGCHARWIDTH) of FONT))
         (FONTTOMCCSFN (ffetch FONTTOMCCSFN of FONT))
         (\ILLEGAL.ARG PROP])
 
@@ -1784,13 +1814,6 @@
                                                 (freplace (CHARSETINFO FIELD) of DCSINFO with DBLOCK))
                                             (\FSETWIDTH DBLOCK DTHINCODE NEWVAL))])
 )
-
-
-
-(* ;; 
-"\FINDFONTFILE \FONTFILENAME \SEARCHFONTFILES \FONTINFOFROMFILENAME are redefined to deal with character-set directories.  That behavior is conditioned on the setting of the global variable *USEOLDFONTDIRECTORIES*, T at PARC, maybe NIL most other places.  "
-)
-
 (DEFINEQ
 
 (FONTFILES
@@ -1817,6 +1840,7 @@
 
 (\FINDFONTFILE
   [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE CHARSET DIRLST EXTLST)
+                                                             (* ; "Edited 22-Jan-2026 08:54 by rmk")
                                                              (* ; "Edited  3-Dec-2025 23:38 by rmk")
                                                              (* ; "Edited  9-Jun-2025 09:40 by rmk")
                                                              (* ; "Edited 15-May-2025 22:41 by rmk")
@@ -1828,13 +1852,9 @@
     (CL:UNLESS DIRLST
         (SETQ DIRLST (CONS NIL)))
 
-    (* ;; "Find any font file on any directory with any naming convention with any extension.  Note that ROTATION and DEVICE are just place holders.   DEVICE is irrelevant because DIRLST already incorporates the device information.  The variable *OLD-FONT-EXTENSIONS* can be set to suppress using the old-style lookup.  If set to a list of extensions, just those will be looked up with old-style conventions.")
+    (* ;; "Find any font file on any directory with any naming convention with any extension.  Note that ROTATION and DEVICE are just place holders.   DEVICE is irrelevant because DIRLST already incorporates the device information.  ")
 
-    (for EXT FONTFILE inside EXTLST join (SETQ FONTFILE (if (FMEMB EXT *OLD-FONT-EXTENSIONS*)
-                                                            then (\FONTFILENAME.OLD FAMILY SIZE FACE
-                                                                        EXT CHARSET)
-                                                          else (\FONTFILENAME FAMILY SIZE FACE EXT 
-                                                                      CHARSET)))
+    (for EXT FONTFILE inside EXTLST join (SETQ FONTFILE (\FONTFILENAME FAMILY SIZE FACE EXT CHARSET))
                                          (for DIR FOUND inside DIRLST
                                             when (SETQ FOUND (INFILEP (PACKFILENAME.STRING
                                                                        'DIRECTORY DIR 'BODY FONTFILE)
@@ -1847,165 +1867,61 @@
                  (RETURN (CAR $$VAL)))])
 
 (\FONTFILENAMES
-  [LAMBDA (FAMILY SIZE FACE DEVICE EXTENSIONS)               (* ; "Edited  7-Oct-2025 12:21 by rmk")
+  [LAMBDA (FAMILY SIZE FACE DEVICE EXTENSIONS)               (* ; "Edited 22-Jan-2026 09:01 by rmk")
+                                                             (* ; "Edited  7-Oct-2025 12:21 by rmk")
                                                              (* ; "Edited 17-May-2025 12:15 by rmk")
-    (APPEND [for EXT inside EXTENSIONS collect (IF (FMEMB EXT *OLD-FONT-EXTENSIONS*)
-                                                   THEN (\FONTFILENAME.OLD FAMILY SIZE FACE EXT
-                                                               'NOCHARSET)
-                                                 ELSE (\FONTFILENAME FAMILY SIZE FACE EXT
-                                                             'NOCHARSET]
-           (for EXT inside EXTENSIONS collect (IF (FMEMB EXT *OLD-FONT-EXTENSIONS*)
-                                                  THEN (\FONTFILENAME.OLD FAMILY SIZE FACE EXT 0)
-                                                ELSE (\FONTFILENAME FAMILY SIZE FACE EXT 0])
+    (APPEND (for EXT inside EXTENSIONS collect (\FONTFILENAME FAMILY SIZE FACE EXT 'NOCHARSET))
+           (for EXT inside EXTENSIONS collect (\FONTFILENAME FAMILY SIZE FACE EXT 0])
 
 (\FONTFILENAME
-  [LAMBDA (FAMILY SIZE FACE EXTENSION CHARSET)               (* ; "Edited 11-Jul-2025 09:39 by rmk")
+  [LAMBDA (FAMILY SIZE FACE EXTENSION CHARSET)               (* ; "Edited 22-Jan-2026 14:25 by rmk")
+                                                             (* ; "Edited 11-Jul-2025 09:39 by rmk")
                                                              (* ; "Edited 15-May-2025 15:51 by rmk")
                                                              (* ; "Edited  5-Mar-93 16:10 by rmk:")
 
     (* ;; "Strike file naming convention (w/o dashes, no charset) no longer supported.  New name is of the form %"familysize-face-Ccharset.ext%", e.g., MODERN12-MRR-C357.WD")
 
-    (* ;; "**bvm 10/5/89 Slight change: partition fonts into subdirectories by charset, e.g., all Charset zero fonts are in subdirectory C0>.  This significantly speeds up any font operation that requires any local directory work (e.g., NFS servers on both Sun and D machine), and FONTSAVAILABLE on any device (since it doesn't have to wade thru all those charsets).  This behavior is conditioned on the value of *USEOLDFONTDIRECTORIES*")
+    (* ;; "FAMILY can be a FONTSPEC")
 
+    (DECLARE (SPECVARS FAMILY SIZE FACE))
     (SETQ FACE (\FONTFACE FACE))                             (* ; "Validate face")
-    (LET* ([SIZEPATT (COND
-                        ((EQ SIZE '*)
-                         SIZE)
-                        ((FIXP SIZE)
-                         (if (< SIZE 10)
-                             then (CONCAT 0 SIZE)
-                           else SIZE))
-                        (T (\ILLEGAL.ARG SIZE]
-           (CSETNAME (COND
-                        ((OR (NULL CHARSET)
-                             (EQ CHARSET 0))                 (* ; "Charset defaults to zero.")
-                         "0")
-                        ((FIXP CHARSET)
-                         (LET ((*PRINT-BASE* 8)
-                               (*PRINT-RADIX* NIL))          (* ; "Longhand for (cl:write-to-string charset :radix nil :base 8), which is twice as slow, due to lousy keyword handling")
-                              (\PRINDATUM.TO.STRING CHARSET)))
-                        ((EQ CHARSET 'NOCHARSET)             (* ; "Don't want the charset indicated")
-                         NIL)
-                        (T                                   (* ; "Somebody made the string already?")
-                           CHARSET)))
-           [FACESPEC (LIST (CHCON1 (fetch (FONTFACE WEIGHT) of FACE))
-                           (CHCON1 (fetch (FONTFACE SLOPE) of FACE))
-                           (CHCON1 (fetch (FONTFACE EXPANSION) of FACE]
-           (TAIL FACESPEC))
-          [if (OR (EQ (CAR TAIL)
-                      (CHARCODE *))
-                  (EQ (CAR (SETQ TAIL (CDR TAIL)))
-                      (CHARCODE *)))
-              then                                           (* ; 
-              "Avoid adjacent wildcards because some devices (notably DSK) get exponentially slower.")
-                   (while (EQ (CADR TAIL)
-                              (CHARCODE *)) do (RPLACD TAIL (CDDR TAIL]
+    (LET (ROTATION DEVICE SIZEPATT CSETNAME FACESPEC STARPOS FILENAME)
+         (DECLARE (SPECVARS ROTATION DEVICE))
+         (CL:WHEN (type? FONTSPEC FAMILY)
+                (SPREADFONTSPEC FAMILY))
+         (SETQ SIZEPATT (CL:IF (OR (EQ SIZE '*)
+                                   (>= SIZE 10))
+                            SIZE
+                            (CONCAT "0" SIZE)))
+         (SETQ CSETNAME (if (FIXP CHARSET)
+                            then (OCTALSTRING CHARSET)
+                          elseif (MEMB CHARSET '(NIL NOCHARSET))
+                            then                             (* ; "Don't want the charset indicated")
+                                 NIL
+                          else                               (* ; "Somebody made the string already?")
+                               CHARSET))
 
-          (* ;; "Fortunately, CONCAT ignores packages.")
+         (* ;; "Fortunately, PACKFILENAME ignores packages")
 
-          (PACKFILENAME.STRING 'NAME (CONCAT (if *USEOLDFONTDIRECTORIES*
-                                                 then ""
-                                               elseif CSETNAME
-                                                 then (CONCAT (PROGN 
-                                                             (* ; 
-                     "Lowercase because it's in a directory name, so maybe Unix will find it sooner?")
-                                                                     "c")
-                                                             CSETNAME ">")
-                                               else "")
-                                            FAMILY SIZEPATT "-" (CONCATCODES FACESPEC)
-                                            (CL:IF CSETNAME
-                                                (CONCAT "-C" CSETNAME)
-                                                ""))
-                 'EXTENSION EXTENSION])
+         (SETQ FILENAME (PACKFILENAME.STRING 'NAME (CONCAT (CL:IF CSETNAME
+                                                               (CONCAT "c" CSETNAME ">")
+                                                               "")
+                                                          FAMILY SIZEPATT "-" (FONTFACETOATOM FACE)
+                                                          (CL:IF CSETNAME
+                                                              (CONCAT "-C" CSETNAME)
+                                                              ""))
+                               'EXTENSION EXTENSION))
 
-(\FONTFILENAME.OLD
-  [LAMBDA (FAMILY SIZE FACE EXTENSION CHARSET)           (* ; "Edited 23-Sep-92 18:22 by jds")
+         (* ;; 
+         " Avoid adjacent wildcards because some devices (notably old DSK) get exponentially slower.")
 
-    (* ;; "Returns old style font file names.  They were ambiguous because you could not ask for e.g. FACE (MEDIUM * REGULAR) because it maps to FamilySize-*-Charset, which also matches (BOLD * COMPRESSED), etc.  Keep this function around though for user's who don't rename their files.")
-                                                             (* ; 
-                     "Returns the name of the file that should contain the information for a font.")
-    (SETQ FACE (\FONTFACE FACE))                         (* ; "Force legal canonical face")
-    (SETQ FACE (COND
-                  ((AND (EQ (CAR FACE)
-                            '*)
-                        (EQ (CADR FACE)
-                            '*))
-
-                   (* ;; "Avoid  adjacent wildcards because DSK gets slower exponentially (can take loooong tiiiiiime).  No need to check compression.")
-
-                   '*)
-                  (T FACE)))
-    (PACKFILENAME.STRING 'NAME [PROGN 
-                                      (* ;; "DISPLAYFONT AC WD and the default case")
-
-                                      (CONCAT (CDR (SASSOC FAMILY *DISPLAY-FONT-NAME-MAP*))
-                                             (COND
-                                                ((EQ SIZE '*)
-                                                 SIZE)
-                                                ((FIXP SIZE)
-                                                 (COND
-                                                    ((< SIZE 10)
-                                                     (CONCAT 0 SIZE))
-                                                    (T SIZE)))
-                                                (T (\ILLEGAL.ARG SIZE)))
-                                             [COND
-                                                ((EQ FACE '*)
-                                                 '*)
-                                                (T (SELECTQ (fetch WEIGHT of FACE)
-                                                       (BOLD (SELECTQ (fetch SLOPE of FACE)
-                                                                 (ITALIC "D")
-                                                                 "B"))
-                                                       (SELECTQ (fetch SLOPE of FACE)
-                                                           (ITALIC "I")
-                                                           "R"]
-                                             (COND
-                                                ((FIXP CHARSET)
-                                                 (LET ((*PRINT-BASE* 8))
-                                                      (CL:FORMAT NIL "~O" CHARSET)))
-                                                (T "000"]
-           'EXTENSION EXTENSION])
-
-(\FONTFILENAME.NEW
-  [LAMBDA (FAMILY SIZE FACE EXTENSION CHARSET)           (* ; "Edited 30-Mar-87 20:00 by FS")
-
-    (* ;; "Strike file naming convention (w/o dashes, no charset) no longer supported.")
-
-    (LET (NAME SIZEPATT)
-         (SETQ FACE (\FONTFACE FACE))                    (* ; "Validate face")
-         [SETQ SIZEPATT (COND
-                           ((EQ SIZE '*)
-                            SIZE)
-                           ((FIXP SIZE)
-                            (if (< SIZE 10)
-                                then (CONCAT 0 SIZE)
-                              else SIZE))
-                           (T (\ILLEGAL.ARG SIZE]
-
-         (* ;; "Avoid adjacent wildcards because some devices (notably DSK) get exponentially slower.  Nicely, PACK & CONCAT ignore packages.")
-
-         (PACKFILENAME.STRING 'NAME (CONCAT FAMILY SIZEPATT "-"
-                                           [COND
-                                              ((EQUAL FACE '
-
-         (* * *)
-)
-                                               '*)
-                                              (T (CONCAT (NTHCHAR (fetch (FONTFACE WEIGHT)
-                                                                     of FACE)
-                                                                1)
-                                                        (NTHCHAR (fetch (FONTFACE SLOPE)
-                                                                    of FACE)
-                                                               1)
-                                                        (NTHCHAR (fetch (FONTFACE EXPANSION)
-                                                                    of FACE)
-                                                               1]
-                                           (COND
-                                              [(FIXP CHARSET)
-                                               (LET ((*PRINT-BASE* 8))
-                                                    (CONCAT "-C" (\PRINDATUM.TO.STRING CHARSET]
-                                              (CHARSET (CONCAT "-C" CHARSET))
-                                              (T "-C0")))
-                'EXTENSION EXTENSION])
+         (CL:IF (STRPOS "**" FILENAME)
+             (CONCATCODES (for I C from 1 while (SETQ C (NTHCHARCODE FILENAME I))
+                             unless [AND (EQ (CHARCODE *)
+                                             C)
+                                         (EQ (CHARCODE *)
+                                             (NTHCHARCODE FILENAME (ADD1 I] collect C))
+             FILENAME)])
 
 (FONTSPECFROMFILENAME
   [LAMBDA (FONTFILE DEVICE)                                  (* ; "Edited 23-Nov-2025 21:42 by rmk")
@@ -2084,56 +2000,6 @@
                        FSFACE _ FACE
                        FSROTATION _ 0
                        FSDEVICE _ DEVICE])
-
-(\FONTINFOFROMFILENAME.OLD
-  [LAMBDA (FONTFILE DEVICE)                              (* ; "Edited  1-Jan-87 01:29 by FS")
-
-    (* ;; "returns a list of the family size face rotation device of the font stored in the file name FONTFILE.")
-
-    (PROG ((FILENAMELIST (UNPACKFILENAME FONTFILE))
-           SIZEBEG SIZEND NAME FAMILY SIZE)
-          (SETQ NAME (LISTGET FILENAMELIST 'NAME))           (* ; 
-                                                           "find where the name and size are.")
-          (SETQ SIZEBEG (for CH# from 1 when (NUMBERP (NTHCHAR NAME CH#))
-                           do (RETURN CH#)))
-          [SETQ FAMILY (MKATOM (SUBSTRING NAME 1 (SUB1 SIZEBEG]
-          (SETQ SIZEND (for CH# from SIZEBEG when (NOT (NUMBERP (NTHCHAR NAME CH#)))
-                          do (RETURN CH#)))
-          [SETQ SIZE (MKATOM (SUBSTRING NAME SIZEBEG (SUB1 SIZEND]
-          (RETURN (LIST FAMILY SIZE (SELECTQ (LISTGET FILENAMELIST 'EXTENSION)
-                                        ((DISPLAYFONT AC WD) 
-                                             (LIST (COND
-                                                      ((STRPOS "-B" NAME SIZEND NIL T)
-                                                       'BOLD)
-                                                      (T 'MEDIUM))
-                                                   (COND
-                                                      ((STRPOS "-I" NAME SIZEND NIL)
-                                                       'ITALIC)
-                                                      (T 'REGULAR))
-                                                   'REGULAR))
-                                        (LIST (COND
-                                                 ((STRPOS "B" NAME SIZEND NIL T)
-                                                  'BOLD)
-                                                 (T 'MEDIUM))
-                                              (COND
-                                                 ((STRPOS "I" NAME SIZEND NIL)
-                                                  'ITALIC)
-                                                 (T 'REGULAR))
-                                              'REGULAR))
-                        0 DEVICE])
-)
-
-
-
-(* (* ; "Do we still want old fonts?") (ADDVARS (*OLD-FONT-EXTENSIONS* STRIKE)))
-
-
-(RPAQ? *OLD-FONT-EXTENSIONS* NIL)
-
-(RPAQ? *USEOLDFONTDIRECTORIES* NIL)
-(DECLARE%: DOEVAL@COMPILE DONTCOPY
-
-(GLOBALVARS *OLD-FONT-EXTENSIONS* *USEOLDFONTDIRECTORIES*)
 )
 (DEFINEQ
 
@@ -2333,7 +2199,8 @@
            (SHOULDNT])
 
 (\COERCECHARSET
-  [LAMBDA (FONTSPEC CHARSET CODE COERCIONS FONT)             (* ; "Edited  7-Oct-2025 17:25 by rmk")
+  [LAMBDA (FONTSPEC CHARSET CODE COERCIONS FONT)             (* ; "Edited 17-Dec-2025 21:51 by rmk")
+                                                             (* ; "Edited  7-Oct-2025 17:25 by rmk")
                                                              (* ; "Edited 31-Aug-2025 00:00 by rmk")
                                                              (* ; "Edited 28-Aug-2025 23:07 by rmk")
                                                              (* ; "Edited 27-Aug-2025 17:08 by rmk")
@@ -2345,7 +2212,7 @@
                                                              (* ; "Edited  7-Jun-2025 13:39 by rmk")
                                                              (* ; "Edited 21-May-2025 10:50 by rmk")
 
-    (* ;; "Returns the CHARSET's CSINFO from the first font that the requested font coerces to and that has a non-slug entry for THINCODE (if given). ")
+    (* ;; "Returns the CHARSET's CSINFO from the first font that the requested font coerces to and that has a non-slug entry for CODE (if given). ")
 
     (if (NULL COERCIONS)
         then [SETQ COERCIONS (FONTDEVICEPROP FONTSPEC (CL:IF CODE
@@ -2353,10 +2220,18 @@
                                                           'FONTCOERCIONS)]
       elseif (LITATOM COERCIONS)
         then (SETQ COERCIONS (FONTDEVICEPROP FONTSPEC COERCIONS)))
-    (for CFS CFONT CSINFO in (COERCEFONTSPEC FONTSPEC COERCIONS)
-       when (AND (SETQ CFONT (FONTCREATE1 CFS CHARSET))
-                 (SETQ CSINFO (\INSURECHARSETINFO CFONT CHARSET)))
-       unless (AND CODE (SLUGCHARP.DISPLAY CODE CFONT))
+
+    (* ;; "This creates a list of fontspecs for the coercions of FONTSPEC that exist, then looks for the first one with the required character. If we stopped at the first coercion and it failed, we wouldn't know how to continue the iteration")
+
+    (for CFS CFONT CSINFO in (COERCEFONTSPEC FONTSPEC COERCIONS T) eachtime 
+
+                                                                         (* ;; 
+                                                            "Font CFS exists, FONTCREATE1 can't fail")
+
+                                                                         (SETQ CFONT (FONTCREATE1
+                                                                                      CFS CHARSET))
+       when (SETQ CSINFO (\INSURECHARSETINFO CFONT CHARSET)) unless (AND CODE (SLUGCHARP.DISPLAY
+                                                                               CODE CFONT))
        do (CL:WHEN FONT
               (replace (FONTDESCRIPTOR FONTCHARENCODING) of FONT with (fetch (FONTDESCRIPTOR 
                                                                                     FONTCHARENCODING)
@@ -2794,7 +2669,10 @@
                                then FILEFONTS)))])
 
 (FONTEXISTS?
-  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE NOCOERCIONS)     (* ; "Edited 26-Sep-2025 10:10 by rmk")
+  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE NOCOERCIONS)     (* ; "Edited 22-Jan-2026 09:07 by rmk")
+                                                             (* ; "Edited 18-Dec-2025 13:10 by rmk")
+                                                             (* ; "Edited 25-Nov-2025 20:18 by rmk")
+                                                             (* ; "Edited 26-Sep-2025 10:10 by rmk")
                                                              (* ; "Edited 28-Aug-2025 22:16 by rmk")
                                                              (* ; "Edited 23-Aug-2025 12:45 by rmk")
                                                              (* ; "Edited 16-Aug-2025 17:49 by rmk")
@@ -2808,46 +2686,37 @@
  "Tries device specific coercions if the original request can't be satisfied and NOCOERCIONS is NIL.")
 
     (DECLARE (GLOBALVARS \FONTSINCORE \FONTEXISTS?-CACHE IMAGESTREAMTYPES))
-    (LET ((FONTSPEC (\FONT.CHECKARGS FAMILY SIZE FACE ROTATION DEVICE))
+    (LET ((FONTSPEC (\FONT.CHECKARGS FAMILY SIZE FACE ROTATION DEVICE T))
           VAL DEVICE)
-         (if (type? FONTDESCRIPTOR FONTSPEC)
-             then 
-                  (* ;; 
-                  "FAMILY was a font descriptor, unmodified by other args: record that it exists")
 
-                  (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC T)
-           else (if (FETCHMULTI \FONTSINCORE FONTSPEC T)
-                  elseif (SETQ VAL (FETCHMULTI \FONTEXISTS?-CACHE FONTSPEC T))
-                    then (CL:UNLESS (EQ VAL 'NO)
-                                VAL)
-                  else                                       (* ; 
+         (* ;; "SASSOC everywhere because of face")
+
+         (if (FETCHMULTI \FONTSINCORE FONTSPEC 'SASSOC)
+           elseif (SETQ VAL (FETCHMULTI \FONTEXISTS?-CACHE FONTSPEC 'SASSOC))
+             then (CL:UNLESS (EQ VAL 'NO)
+                         VAL)
+           else                                              (* ; 
                                                    "Only 0 really exists.  Cache just the first file")
-                       (SETQ DEVICE (fetch (FONTSPEC FSDEVICE) of FONTSPEC))
-                       (SETQ VAL (OR (CAR (FONTFILES (CL:IF (MEMB (fetch (FONTSPEC FSROTATION)
-                                                                     of FONTSPEC)
-                                                                  '(90 270))
-                                                         (create FONTSPEC using FONTSPEC FSROTATION _
-                                                                                0)
-                                                         FONTSPEC)))
-                                     (APPLY* (OR (CAR (GETMULTI IMAGESTREAMTYPES DEVICE 'FONTEXISTS?)
-                                                      )
-                                                 (CAR (GETMULTI IMAGESTREAMTYPES DEVICE 
-                                                             'FONTSAVAILABLE))
-                                                 (FUNCTION TRUE))
-                                            FONTSPEC)))
-                       (if VAL
-                           then (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC VAL T)
-                         elseif [AND (NOT NOCOERCIONS)
-                                     (find FS in (COERCEFONTSPEC FONTSPEC (FONTDEVICEPROP
-                                                                           DEVICE
-                                                                           'FONTCOERCIONS))
-                                        suchthat (SETQ VAL (FONTEXISTS? FS NIL NIL NIL NIL T]
-                           then 
-                                (* ;; "It's coerceable...but not yet coerced.")
+                (SETQ DEVICE (fetch (FONTSPEC FSDEVICE) of FONTSPEC))
+                (SETQ VAL (OR (CAR (FONTFILES (CL:IF (MEMB (fetch (FONTSPEC FSROTATION) of FONTSPEC)
+                                                           '(90 270))
+                                                  (create FONTSPEC using FONTSPEC FSROTATION _ 0)
+                                                  FONTSPEC)))
+                              (APPLY* (OR (CAR (GETMULTI IMAGESTREAMTYPES DEVICE 'FONTEXISTS?))
+                                          (CAR (GETMULTI IMAGESTREAMTYPES DEVICE 'FONTSAVAILABLE))
+                                          (FUNCTION NILL))
+                                     FONTSPEC)))
+                (if VAL
+                    then (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC VAL 'SASSOC)
+                  elseif [AND (NOT NOCOERCIONS)
+                              (SETQ VAL (COERCEFONTSPEC FONTSPEC (FONTDEVICEPROP DEVICE 
+                                                                        'FONTCOERCIONS]
+                    then 
+                         (* ;; "It's coerceable...even though coercion may not yet be instantiated")
 
-                                (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC VAL T)
-                         else (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC 'NO T)
-                              NIL])
+                         (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC VAL 'SASSOC)
+                  else (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC 'NO 'SASSOC)
+                       NIL])
 
 (\SEARCHFONTFILES
   [LAMBDA (FONTSPEC)                                         (* ; "Edited 28-Aug-2025 14:47 by rmk")
@@ -2934,10 +2803,6 @@
                                        (ADD NFLUSHED 1)
                                        (RPLACD DPAIR))]
                 (LIST TYPE NFLUSHED])
-
-(FLUSHFONTSINCORE
-  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE)                 (* ; "Edited 22-Nov-2025 10:23 by rmk")
-    (FLUSHFONTCACHE :INCORE FAMILY SIZE FACE ROTATION DEVICE])
 
 (FINDFONTFILES
   [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE DIRLST EXTLST)   (* ; "Edited 28-Aug-2025 14:45 by rmk")
@@ -3065,37 +2930,38 @@
            COLOR _ COLOR])
 
 (FONTFACETOATOM
-  [LAMBDA (FACE NOERROR)                                     (* ; "Edited  7-Sep-2025 09:19 by rmk")
-                                                             (* ; "Edited  4-Sep-2025 08:45 by rmk")
-    (if (type? FONTFACE FACE)
-        then [PACK (LIST* (SELECTQ (fetch (FONTFACE WEIGHT) of FACE)
-                              (MEDIUM 'M)
-                              (BOLD 'B)
-                              (LIGHT 'L)
-                              (fetch (FONTFACE WEIGHT) of FACE))
-                          (SELECTQ (fetch (FONTFACE SLOPE) of FACE)
-                              (ITALIC 'I)
-                              (REGULAR 'R)
-                              (fetch (FONTFACE SLOPE) of FACE))
-                          (SELECTQ (fetch (FONTFACE EXPANSION) of FACE)
-                              (REGULAR 'R)
-                              (COMPRESSED 'C)
-                              (EXPANDED 'E)
-                              (fetch (FONTFACE EXPANSION) of FACE))
-                          (CL:WHEN (fetch (FONTFACE COLOR) of FACE)
-                              (LIST "-" (fetch (FONTFACE BACKCOLOR) of FACE)
-                                    "-"
-                                    (fetch (FONTFACE FORECOLOR) of FACE)))]
-      elseif (AND FACE (LITATOM FACE)
-                  (MEMB (NTHCHARCODE FACE 1)
-                        (CHARCODE M B L))
-                  (MEMB (NTHCHARCODE FACE 2)
-                        (CHARCODE I R))
-                  (MEMB (NTHCHARCODE FACE 3)
-                        (CHARCODE R C E)))
-        then FACE
-      elseif (NOT NOERROR)
-        then (\ILLEGAL.ARG FACE])
+  [LAMBDA (FACE NOERROR)                                     (* ; "Edited 22-Jan-2026 08:13 by rmk")
+                                                             (* ; "Edited  7-Sep-2025 09:19 by rmk")
+    (LET (ATOM)
+         (SETQ ATOM (if (type? FONTFACE FACE)
+                        then [PACK (LIST* (SELECTQ (fetch (FONTFACE WEIGHT) of FACE)
+                                              (MEDIUM 'M)
+                                              (BOLD 'B)
+                                              (LIGHT 'L)
+                                              (fetch (FONTFACE WEIGHT) of FACE))
+                                          (SELECTQ (fetch (FONTFACE SLOPE) of FACE)
+                                              (ITALIC 'I)
+                                              (REGULAR 'R)
+                                              (fetch (FONTFACE SLOPE) of FACE))
+                                          (SELECTQ (fetch (FONTFACE EXPANSION) of FACE)
+                                              (REGULAR 'R)
+                                              (COMPRESSED 'C)
+                                              (EXPANDED 'E)
+                                              (fetch (FONTFACE EXPANSION) of FACE))
+                                          (CL:WHEN (fetch (FONTFACE COLOR) of FACE)
+                                              (LIST "-" (fetch (FONTFACE BACKCOLOR) of FACE)
+                                                    "-"
+                                                    (fetch (FONTFACE FORECOLOR) of FACE)))]
+                      elseif (AND FACE (LITATOM FACE)
+                                  (MEMB (NTHCHARCODE FACE 1)
+                                        (CHARCODE M B L *))
+                                  (MEMB (NTHCHARCODE FACE 2)
+                                        (CHARCODE I R *))
+                                  (MEMB (NTHCHARCODE FACE 3)
+                                        (CHARCODE R C E *)))
+                        then FACE
+                      elseif (NOT NOERROR)
+                        then (\ILLEGAL.ARG FACE])
 )
 
 (RPAQ? \FONTSINCORE NIL)
@@ -3219,7 +3085,8 @@
                       OFFSETS _ (\CREATECSINFOELEMENT)
                       CHARSETNO _ MAX.SMALLP)
 
-(RECORD FONTSPEC (FSFAMILY FSSIZE FSFACE FSROTATION FSDEVICE))
+(RECORD FONTSPEC (FSFAMILY FSSIZE FSFACE FSROTATION FSDEVICE)
+                 (TYPE? LISTP))
 )
 
 (/DECLAREDATATYPE 'FONTCLASS '(BYTE POINTER POINTER POINTER POINTER POINTER)
@@ -3586,7 +3453,9 @@
 (DEFINEQ
 
 (\CREATEFONT
-  [LAMBDA (FONTSPEC)                                         (* ; "Edited 25-Sep-2025 21:24 by rmk")
+  [LAMBDA (FONTSPEC)                                         (* ; "Edited 26-Jan-2026 15:24 by rmk")
+                                                             (* ; "Edited 25-Dec-2025 10:58 by rmk")
+                                                             (* ; "Edited 25-Sep-2025 21:24 by rmk")
                                                              (* ; "Edited 28-Aug-2025 14:30 by rmk")
                                                              (* ; "Edited 18-Aug-2025 00:17 by rmk")
                                                              (* ; "Edited 16-Aug-2025 20:52 by rmk")
@@ -3598,14 +3467,32 @@
 
     (* ;; "")
 
-    (LET [(FN (CAR (GETMULTI IMAGESTREAMTYPES (fetch (FONTSPEC FSDEVICE) of FONTSPEC)
+    (LET ([FN (CAR (GETMULTI IMAGESTREAMTYPES (fetch (FONTSPEC FSDEVICE) of FONTSPEC)
                           'FONTCREATE]
-         (CL:WHEN FN
-             (if (EQ (NARGS FN)
-                     1)
-                 then (APPLY* FN FONTSPEC)
-               else                                          (* ; "Old form: spreading FONTSPEC")
-                    (APPLY FN FONTSPEC)))])
+          FONT)
+         [if FN
+             then (SETQ FONT (if (EQ (NARGS FN)
+                                     1)
+                                 then (APPLY* FN FONTSPEC)
+                               else                          (* ; "Old form: spreading FONTSPEC")
+                                    (APPLY FN FONTSPEC)))
+                  (CL:UNLESS FONT
+                      (CL:WHEN (SETQ FONTSPEC (COERCEFONTSPEC FONTSPEC))
+                          (SETQ FONT (if (EQ (NARGS FN)
+                                             1)
+                                         then (APPLY* FN FONTSPEC)
+                                       else (APPLY FN FONTSPEC)))))
+           else (SETQ FONT (create FONTDESCRIPTOR
+                                  FONTFAMILY _ (fetch (FONTSPEC FSFAMILY) of FONTSPEC)
+                                  FONTSIZE _ (fetch (FONTSPEC FSSIZE) of FONTSPEC)
+                                  FONTFACE _ (fetch (FONTSPEC FSFACE) of FONTSPEC)
+                                  ROTATION _ (fetch (FONTSPEC FSROTATION) of FONTSPEC)
+                                  FONTDEVICE _ (fetch (FONTSPEC FSDEVICE) of FONTSPEC)
+                                  \SFAscent _ 0
+                                  \SFDescent _ 0
+                                  \SFHeight _ 0
+                                  FONTDEVICESPEC _ (create FONTSPEC using FONTSPEC]
+         FONT])
 
 (\CREATECHARSET
   [LAMBDA (CHARSET FONT)                                     (* ; "Edited 25-Sep-2025 21:24 by rmk")
@@ -3871,7 +3758,8 @@
          CSINFO])
 
 (\FONTEXISTS?.DISPLAY
-  [LAMBDA (FONTSPEC)                                         (* ; "Edited 28-Aug-2025 22:12 by rmk")
+  [LAMBDA (FONTSPEC)                                         (* ; "Edited 17-Dec-2025 20:56 by rmk")
+                                                             (* ; "Edited 28-Aug-2025 22:12 by rmk")
                                                              (* ; "Edited 25-Aug-2025 15:04 by rmk")
                                                              (* ; "Edited 17-Aug-2025 09:56 by rmk")
                                                              (* ; "Edited  8-Aug-2025 10:03 by rmk")
@@ -3896,9 +3784,8 @@
                   (FONTEXISTS? (create FONTSPEC using FONTSPEC FSFACE _
                                                       (create FONTFACE using FACE EXPANSION _
                                                                              'REGULAR]
-             (for FS VAL in [COERCEFONTSPEC FONTSPEC (APPEND (FONTDEVICEPROP 'DISPLAY 'FONTCOERCIONS)
-                                                            (FONTDEVICEPROP 'DISPLAY 'CHARCOERCIONS]
-                when (SETQ VAL (FONTEXISTS? FS)) do (RETURN VAL])
+             (COERCEFONTSPEC FONTSPEC (APPEND (FONTDEVICEPROP 'DISPLAY 'FONTCOERCIONS)
+                                             (FONTDEVICEPROP 'DISPLAY 'CHARCOERCIONS])
 )
 (DEFINEQ
 
@@ -4597,44 +4484,43 @@
 (ADDTOVAR LAMA FONTCOPY)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (12152 21865 (CHARWIDTH 12162 . 12947) (CHARWIDTHY 12949 . 14466) (STRINGWIDTH 14468 . 
-15561) (\CHARWIDTH.DISPLAY 15563 . 15976) (\STRINGWIDTH.DISPLAY 15978 . 16402) (\STRINGWIDTH.GENERIC 
-16404 . 21863)) (21866 28386 (DEFAULTFONT 21876 . 23161) (FONTCLASS 23163 . 25325) (FONTCLASSUNPARSE 
-25327 . 26226) (FONTCLASSCOMPONENT 26228 . 26816) (SETFONTCLASSCOMPONENT 26818 . 27260) (
-GETFONTCLASSCOMPONENT 27262 . 28384)) (30099 47603 (FONTCREATE 30109 . 33354) (FONTCREATE1 33356 . 
-35971) (FONTCREATE.SLUGFD 35973 . 37455) (\FONT.CHECKARGS1 37457 . 41980) (\FONTCREATE1.NOFN 41982 . 
-42196) (FONTFILEP 42198 . 43086) (\READCHARSET 43088 . 47601)) (47604 54680 (\FONT.CHECKARGS 47614 . 
-54363) (\CHARSET.CHECK 54365 . 54678)) (54681 57941 (COERCEFONTSPEC 54691 . 57939)) (60136 61475 (
-MAKEFONTSPEC 60146 . 61473)) (61476 69653 (COMPLETE.FONT 61486 . 64009) (COMPLETEFONTP 64011 . 64634) 
-(COMPLETE.CHARSET 64636 . 67321) (PRUNESLUGCSINFOS 67323 . 68248) (MONOSPACEFONTP 68250 . 69651)) (
-69692 77947 (FONTASCENT 69702 . 70086) (FONTDESCENT 70088 . 70573) (FONTHEIGHT 70575 . 70977) (
-FONTPROP 70979 . 77224) (\AVGCHARWIDTH 77226 . 77945)) (78604 79512 (FONTDEVICEPROP 78614 . 79510)) (
-79558 80412 (EDITCHAR 79568 . 80410)) (80458 92648 (GETCHARBITMAP 80468 . 81592) (PUTCHARBITMAP 81594
- . 83752) (\GETCHARBITMAP.CSINFO 83754 . 85770) (\PUTCHARBITMAP.CSINFO 85772 . 92646)) (92649 113129 (
-MOVECHARBITMAP 92659 . 94553) (MOVEFONTCHARS 94555 . 98515) (\MOVEFONTCHAR 98517 . 103360) (
-\MOVEFONTCHARS.SOURCEDATA 103362 . 109467) (\MAKESLUGCHAR 109469 . 112004) (SLUGCHARP.DISPLAY 112006
- . 113127)) (114062 135227 (FONTFILES 114072 . 115905) (\FINDFONTFILE 115907 . 118216) (\FONTFILENAMES
- 118218 . 119213) (\FONTFILENAME 119215 . 123198) (\FONTFILENAME.OLD 123200 . 126149) (
-\FONTFILENAME.NEW 126151 . 128408) (FONTSPECFROMFILENAME 128410 . 132946) (\FONTINFOFROMFILENAME.OLD 
-132948 . 135225)) (135494 171297 (FONTCOPY 135504 . 140567) (FONTP 140569 . 140868) (FONTUNPARSE 
-140870 . 142589) (SETFONTDESCRIPTOR 142591 . 144055) (\STREAMCHARWIDTH 144057 . 148221) (
-\COERCECHARSET 148223 . 150818) (\BUILDSLUGCSINFO 150820 . 154443) (\FONTSYMBOL 154445 . 155095) (
-\DEVICESYMBOL 155097 . 155966) (\FONTFACE 155968 . 163158) (\FONTFACE.COLOR 163160 . 170080) (
-SETFONTCHARENCODING 170082 . 171295)) (171298 191597 (FONTSAVAILABLE 171308 . 176662) (FONTEXISTS? 
-176664 . 180642) (\SEARCHFONTFILES 180644 . 183729) (FLUSHFONTCACHE 183731 . 185954) (FLUSHFONTSINCORE
- 185956 . 186153) (FINDFONTFILES 186155 . 189369) (SORTFONTSPECS 189371 . 191595)) (191598 195207 (
-MATCHFONTFACE 191608 . 192423) (MAKEFONTFACE 192425 . 193451) (FONTFACETOATOM 193453 . 195205)) (
-195838 196330 (\UNITWIDTHSVECTOR 195848 . 196328)) (210924 212991 (FONTDESCRIPTOR.DEFPRINT 210934 . 
-212513) (FONTCLASS.DEFPRINT 212515 . 212989)) (216820 219610 (\CREATEKERNELEMENT 216830 . 217188) (
-\FSETLEFTKERN 217190 . 217681) (\FGETLEFTKERN 217683 . 219608)) (219611 229247 (\CREATEFONT 219621 . 
-221060) (\CREATECHARSET 221062 . 224998) (\INSTALLCHARSETINFO 225000 . 228334) (
-\INSTALLCHARSETINFO.CHARENCODING 228336 . 229245)) (229569 230933 (\FONTRESETCHARWIDTHS 229579 . 
-230931)) (231563 241610 (\CREATEDISPLAYFONT 231573 . 233422) (\CREATECHARSET.DISPLAY 233424 . 239133) 
-(\FONTEXISTS?.DISPLAY 239135 . 241608)) (241611 256476 (STRIKEFONT.FILEP 241621 . 242509) (
-STRIKEFONT.GETCHARSET 242511 . 248103) (WRITESTRIKEFONTFILE 248105 . 253016) (STRIKECSINFO 253018 . 
-256474)) (256507 272824 (MAKEBOLD.CHARSET 256517 . 260166) (MAKEBOLD.CHAR 260168 . 261920) (
-MAKEITALIC.CHARSET 261922 . 265595) (MAKEITALIC.CHAR 265597 . 267943) (\SFMAKEBOLD 267945 . 270169) (
-\SFMAKEITALIC 270171 . 272822)) (272825 276974 (\SFMAKEROTATEDFONT 272835 . 274236) (\SFROTATECSINFO 
-274238 . 274875) (\SFROTATEFONTCHARACTERS 274877 . 275257) (\SFROTATECSINFOOFFSETS 275259 . 276972)) (
-276975 278356 (\SFMAKECOLOR 276985 . 278354)))))
+  (FILEMAP (NIL (11455 21168 (CHARWIDTH 11465 . 12250) (CHARWIDTHY 12252 . 13769) (STRINGWIDTH 13771 . 
+14864) (\CHARWIDTH.DISPLAY 14866 . 15279) (\STRINGWIDTH.DISPLAY 15281 . 15705) (\STRINGWIDTH.GENERIC 
+15707 . 21166)) (21169 27689 (DEFAULTFONT 21179 . 22464) (FONTCLASS 22466 . 24628) (FONTCLASSUNPARSE 
+24630 . 25529) (FONTCLASSCOMPONENT 25531 . 26119) (SETFONTCLASSCOMPONENT 26121 . 26563) (
+GETFONTCLASSCOMPONENT 26565 . 27687)) (29402 46906 (FONTCREATE 29412 . 32657) (FONTCREATE1 32659 . 
+35274) (FONTCREATE.SLUGFD 35276 . 36758) (\FONT.CHECKARGS1 36760 . 41283) (\FONTCREATE1.NOFN 41285 . 
+41499) (FONTFILEP 41501 . 42389) (\READCHARSET 42391 . 46904)) (46907 53983 (\FONT.CHECKARGS 46917 . 
+53666) (\CHARSET.CHECK 53668 . 53981)) (53984 60595 (COERCEFONTSPEC 53994 . 59906) (
+COERCEFONTSPEC.TARGETFACE 59908 . 60593)) (62790 64129 (MAKEFONTSPEC 62800 . 64127)) (64130 72307 (
+COMPLETE.FONT 64140 . 66663) (COMPLETEFONTP 66665 . 67288) (COMPLETE.CHARSET 67290 . 69975) (
+PRUNESLUGCSINFOS 69977 . 70902) (MONOSPACEFONTP 70904 . 72305)) (72346 80792 (FONTASCENT 72356 . 72740
+) (FONTDESCENT 72742 . 73227) (FONTHEIGHT 73229 . 73631) (FONTPROP 73633 . 80069) (\AVGCHARWIDTH 80071
+ . 80790)) (81449 82357 (FONTDEVICEPROP 81459 . 82355)) (82403 83257 (EDITCHAR 82413 . 83255)) (83303 
+95493 (GETCHARBITMAP 83313 . 84437) (PUTCHARBITMAP 84439 . 86597) (\GETCHARBITMAP.CSINFO 86599 . 88615
+) (\PUTCHARBITMAP.CSINFO 88617 . 95491)) (95494 115974 (MOVECHARBITMAP 95504 . 97398) (MOVEFONTCHARS 
+97400 . 101360) (\MOVEFONTCHAR 101362 . 106205) (\MOVEFONTCHARS.SOURCEDATA 106207 . 112312) (
+\MAKESLUGCHAR 112314 . 114849) (SLUGCHARP.DISPLAY 114851 . 115972)) (116632 128360 (FONTFILES 116642
+ . 118475) (\FINDFONTFILE 118477 . 120345) (\FONTFILENAMES 120347 . 120907) (\FONTFILENAME 120909 . 
+123820) (FONTSPECFROMFILENAME 123822 . 128358)) (128361 164936 (FONTCOPY 128371 . 133434) (FONTP 
+133436 . 133735) (FONTUNPARSE 133737 . 135456) (SETFONTDESCRIPTOR 135458 . 136922) (\STREAMCHARWIDTH 
+136924 . 141088) (\COERCECHARSET 141090 . 144457) (\BUILDSLUGCSINFO 144459 . 148082) (\FONTSYMBOL 
+148084 . 148734) (\DEVICESYMBOL 148736 . 149605) (\FONTFACE 149607 . 156797) (\FONTFACE.COLOR 156799
+ . 163719) (SETFONTCHARENCODING 163721 . 164934)) (164937 184598 (FONTSAVAILABLE 164947 . 170301) (
+FONTEXISTS? 170303 . 173842) (\SEARCHFONTFILES 173844 . 176929) (FLUSHFONTCACHE 176931 . 179154) (
+FINDFONTFILES 179156 . 182370) (SORTFONTSPECS 182372 . 184596)) (184599 188706 (MATCHFONTFACE 184609
+ . 185424) (MAKEFONTFACE 185426 . 186452) (FONTFACETOATOM 186454 . 188704)) (189337 189829 (
+\UNITWIDTHSVECTOR 189347 . 189827)) (204458 206525 (FONTDESCRIPTOR.DEFPRINT 204468 . 206047) (
+FONTCLASS.DEFPRINT 206049 . 206523)) (210354 213144 (\CREATEKERNELEMENT 210364 . 210722) (
+\FSETLEFTKERN 210724 . 211215) (\FGETLEFTKERN 211217 . 213142)) (213145 224220 (\CREATEFONT 213155 . 
+216033) (\CREATECHARSET 216035 . 219971) (\INSTALLCHARSETINFO 219973 . 223307) (
+\INSTALLCHARSETINFO.CHARENCODING 223309 . 224218)) (224542 225906 (\FONTRESETCHARWIDTHS 224552 . 
+225904)) (226536 236577 (\CREATEDISPLAYFONT 226546 . 228395) (\CREATECHARSET.DISPLAY 228397 . 234106) 
+(\FONTEXISTS?.DISPLAY 234108 . 236575)) (236578 251443 (STRIKEFONT.FILEP 236588 . 237476) (
+STRIKEFONT.GETCHARSET 237478 . 243070) (WRITESTRIKEFONTFILE 243072 . 247983) (STRIKECSINFO 247985 . 
+251441)) (251474 267791 (MAKEBOLD.CHARSET 251484 . 255133) (MAKEBOLD.CHAR 255135 . 256887) (
+MAKEITALIC.CHARSET 256889 . 260562) (MAKEITALIC.CHAR 260564 . 262910) (\SFMAKEBOLD 262912 . 265136) (
+\SFMAKEITALIC 265138 . 267789)) (267792 271941 (\SFMAKEROTATEDFONT 267802 . 269203) (\SFROTATECSINFO 
+269205 . 269842) (\SFROTATEFONTCHARACTERS 269844 . 270224) (\SFROTATECSINFOOFFSETS 270226 . 271939)) (
+271942 273323 (\SFMAKECOLOR 271952 . 273321)))))
 STOP

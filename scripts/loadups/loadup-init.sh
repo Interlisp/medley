@@ -8,6 +8,7 @@ main() {
 
         cmfile="-"
 	cat >"${initfile}" <<-"EOF"
+	(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10 FORMAT UTF-8)
 	(* "make init files; this file is loaded as a 'greet' file by scripts/loadup-init.sh")
 
 	(SETQ MEDLEYDIR NIL)

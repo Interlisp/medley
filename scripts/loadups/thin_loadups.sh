@@ -8,21 +8,21 @@
 main() {
 
     #shellcheck source=./loadup-setup.sh
-    . "${LOADUP_SCRIPTDIR}"/loadup-setup.sh
+    . "${LOADUP-SCRIPTDIR}"/loadup-setup.sh
 
     if [ "$1" = "w" ] || [ "$1" = "lw" ] || [ "$1" = "wl" ]
     then
       if [ ! "$2" = "+" ]
       then
-        find "${LOADUP_WORKDIR}" -name "*.~[0-9]*~" -delete
+        find "${LOADUP-WORKDIR}" -name "*.~[0-9]*~" -delete
       else
-        rm -rf "${LOADUP_WORKDIR}"/*
-        if istagged "${LOADUP_WORKDIR}"
+        rm -rf "${LOADUP-WORKDIR}"/*
+        if istagged "${LOADUP-WORKDIR}"
         then
-          rm -rf "${LOADUP_WORKDIR}"
-          if istagged "${LOADUP_OUTDIR}" && [ -z "$(ls -a -1 "${LOADUP_OUTDIR}" | tail +3)" ]
+          rm -rf "${LOADUP-WORKDIR}"
+          if istagged "${LOADUP-OUTDIR}" && [ -z "$(ls -a -1 "${LOADUP-OUTDIR}" | tail +3)" ]
           then
-            rmdir "${LOADUP_OUTDIR}"
+            rmdir "${LOADUP-OUTDIR}"
           fi
         fi
       fi

@@ -1,10 +1,12 @@
 #!/bin/sh
 #
-#  do_hcfiles.sh
+#  clean-hcfiles.sh
 #
-#  Script to run HCFILES in Medley to create PDFs of Medley files as well as
-#  index.html files so that the Medley directory tree plus the generated PDFs can be
-#  stored on and accessed from a web server
+#  Script to clean Medley directory after running do_hcfiles.sh.
+#  Removes pdf files and index.html files created by do_hcfiles.sh.
+#
+#  Caution: uses git clean - so it will delete any untracked files in
+#  the Medley directory tree.
 #
 #  FGH 2024-07-15
 #
@@ -12,58 +14,32 @@
 #
 
 main() {
-        MEDLEYDIR=$(cd "${SCRIPTDIR}/.." && pwd)
-        export MEDLEYDIR
-        logindir=/tmp/hcfiles-$$
-        mkdir -p "${logindir}"
-        cmfile=${logindir}/hcfiles.cm
 
-	cat >"${cmfile}" <<-EOF
-	"
+    MEDLEYDIR=$(cd "${SCRIPTDIR}/.." && pwd)
+    export MEDLEYDIR
+    cd "${MEDLEYDIR}" || exit
 
-	(PROGN
-          (IL:MEDLEY-INIT-VARS 'IL:GREET)
-	  (IL:FILESLOAD MEDLEY-UTILS PDFSTREAM GITFNS))
-          (IL:DRIBBLE '{DSK}${logindir}/hcfiles.dribble)
-          (IL:SETQ IL:*UPPER-CASE-FILE-NAMES* NIL)
-          (IL:SETQ IL:NO-HELP NIL)
-          (IL:ADVISE 'IL:UNSAFE.TO.MODIFY :BEFORE '(RETURN NIL))
-          (IL:ADVISE 'IL:HELP :BEFORE '(IL:COND (IL:NO-HELP (IL:ERROR IL:MESS1 IL:MESS2 T))))
-          (IL:LET ((IL:NO-HELP T)) (DECLARE (SPECIAL IL:NO-HELP)) (IL:HCFILES))
-          (IL:MAKE-INDEX-HTMLS)
-          (IL:DRIBBLE)
-          (IL:LOGOUT T)
-	)
+    shellfile=/tmp/checkgit-$$.sh
 
-	"
+    cat >"${shellfile}" <<-'EOF'
+	#!/bin/sh
+	x=$(git ls-files "$1" 2>/dev/null)
+	if [ -z "$x" ]
+	then
+	rm -f "$1"
+	rm -f "$1".~*~
+	fi
 	EOF
 
-        # Make sure loadups/build is not included in HCFILES
-        if [ -d "${MEDLEYDIR}/loadups/build" ]
-        then
-          touch "${MEDLEYDIR}/loadups/build/.skip"
-        fi
+    chmod +x "${shellfile}"
 
+    find . -iname index.html -exec "${shellfile}" {} \;
+    find . -iname \*.pdf -exec "${shellfile}" {} \;
 
-        /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"     \
-             --config -                                          \
-             --id hcfiles_+                                      \
-             --geometry 1024x768                                 \
-             --noscroll                                          \
-             --logindir "${logindir}"                            \
-             --greet -                                           \
-             --rem.cm "${cmfile}"                                \
-             --apps
-
-        # save dribble file to loadups; extract and save fails
-        "${MEDLEYDIR}"/scripts/cpv ${logindir}/HCFILES.DRIBBLE "${MEDLEYDIR}"/loadups/hcfiles.dribble
-        grep "IL:FAIL" < "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
-        "${MEDLEYDIR}"/scripts/cpv ${logindir}/fails "${MEDLEYDIR}"/loadups/hcfiles-fails.txt
-
-        # cleanup
-        rm -rf "${logindir}"
+    rm -f "${shellfile}"
 
 }
+
 
 # shellcheck disable=SC2164,SC2034
 if [ -z "${SCRIPTDIR}" ]

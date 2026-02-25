@@ -1,18 +1,16 @@
 (DEFINE-FILE-INFO PACKAGE (DEFPACKAGE "BDF" (USE "XCL" "LISP") (EXPORT "READ-BDF" "BUILD-COMPOSITE"
  "WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE") (IMPORT-FROM "IL" "BITBLT" "BITMAPBIT" "BITMAPCREATE" 
-"BITMAPHEIGHT" "BITMAPWIDTH" "BLACKSHADE" "BLTSHADE" "BOLD" "COMPRESSED" "CHARSETINFO" "CHARSETPROP" 
-"DISPLAY" "FONTDESCRIPTOR" "FONTP" "FONTPROP" "INPUT" "ITALIC" "LIGHT" "LRSH" "MCCS" "MEDIUM" 
-"REGULAR" "TCONC" "UTOMCODE?" "MEDLEYFONT.FILENAME" "MEDLEYFONT.WRITE.FONT")) READTABLE "XCL" BASE 
-10)
+"BITMAPHEIGHT" "BITMAPWIDTH" "BLACKSHADE" "BLTSHADE" "BOLD" "COMPRESSED" "CHARSETINFO" "DISPLAY" 
+"FONTDESCRIPTOR" "FONTP" "FONTPROP" "INPUT" "ITALIC" "LIGHT" "LRSH" "MCCS" "MEDIUM" "REGULAR" "TCONC" 
+"UTOMCODE?" "MEDLEYFONT.FILENAME" "MEDLEYFONT.WRITE.FONT")) READTABLE "XCL" BASE 10)
 
-(IL:FILECREATED " 8-Dec-2025 12:13:40" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;9| 51309  
+(IL:FILECREATED "23-Feb-2026 20:11:48" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;20| 54795  
 
       :EDIT-BY "mth"
 
-      :CHANGES-TO (IL:FUNCTIONS BDF-TO-CHARSETINFO BDF-TO-FONTDESCRIPTOR)
-                  (FILE-ENVIRONMENTS "READ-BDF")
+      :CHANGES-TO (IL:FUNCTIONS READ-GLYPH)
 
-      :PREVIOUS-DATE " 8-Dec-2025 12:12:47" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;8|
+      :PREVIOUS-DATE "23-Feb-2026 17:38:07" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;19|
 )
 
 
@@ -20,7 +18,7 @@
 
 (IL:RPAQQ IL:READ-BDFCOMS
           ((IL:STRUCTURES BDF-FONT GLYPH XLFD)
-           (IL:VARIABLES MAXCHARSET MAXTHINCHAR NOMAPPINGCHARSET)
+           (IL:VARIABLES GLYPH-PROCESSING-HOOK MAXCHARSET MAXTHINCHAR NOMAPPINGCHARSET)
            (IL:FUNCTIONS BDF-TO-CHARSETINFO BDF-TO-FONTDESCRIPTOR BUILD-COMPOSITE CHAR-PRESENT-BIT 
                   COUNT-MCHARS GLYPHS-BY-CHARSET PACKFILENAME.STRING READ-BDF 
                   READ-DELIMITED-LIST-FROM-STRING READ-GLYPH WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE 
@@ -70,6 +68,8 @@
    (AVERAGE¬WIDTH 0 :TYPE INTEGER)
    (CHARSET¬REGISTRY NIL :TYPE STRING)
    (CHARSET¬ENCODING NIL :TYPE STRING))
+
+(DEFVAR GLYPH-PROCESSING-HOOK NIL)
 
 (DEFCONSTANT MAXCHARSET 255)
 
@@ -126,7 +126,7 @@
                   (IMAGEWIDTHS (IL:\\CREATECSINFOELEMENT))
                   (DLEFT 0)
                   GLYPHS-LIMITS BMAP OFFSETS HEIGHT WIDTHS)
-                 (CHARSETPROP CSINFO 'IL:CSCHARENCODING 'MCCS)
+                 (IL:CHARSETPROP CSINFO 'IL:CSCHARENCODING 'MCCS)
                  (LOOP :FOR XGL :IN CSGLYPHS :DO (LET* ((MCODE (CAR XGL))
                                                         (GL (CDR XGL))
                                                         (GWIDTH (GLYPH-WIDTH GL))
@@ -309,7 +309,9 @@
                                          (LIST CSET)))))
             (LIST FONTDESC CHARSETS))))
 
-(DEFUN BUILD-COMPOSITE (FONTS &KEY VERBOSE)           (IL:* IL:\; "Edited  1-Dec-2025 23:07 by mth")
+(DEFUN BUILD-COMPOSITE (FONTS &KEY VERBOSE (BLOCKING T))
+                                                      (IL:* IL:\; "Edited 19-Feb-2026 21:45 by mth")
+                                                      (IL:* IL:\; "Edited  1-Dec-2025 23:07 by mth")
                                                       (IL:* IL:\; "Edited 30-Nov-2025 12:32 by mth")
                                                       (IL:* IL:\; "Edited 26-Nov-2025 21:23 by mth")
                                                       (IL:* IL:\; "Edited 18-Nov-2025 21:22 by mth")
@@ -327,53 +329,61 @@
              (WHEN VERBOSE
                  (FORMAT *STANDARD-OUTPUT* "~&Loading initial font file: ~A~%" (NAMESTRING BASE-FONT)
                         ))
-             (SETQ BASE-FONT (READ-BDF BASE-FONT :MCCS-ONLY T :VERBOSE VERBOSE)))
+             (SETQ BASE-FONT (READ-BDF BASE-FONT :MCCS-ONLY T :VERBOSE VERBOSE))
+             (WHEN BLOCKING (IL:BLOCK)))
             ((NOT (BDF-FONT-P BASE-FONT))
              (ERROR "Initial font (~S) is not a BDF-FONT, nor string, nor pathname." BASE-FONT)))
          (WHEN VERBOSE
              (FORMAT *STANDARD-OUTPUT* "~&Initial font contains ~D MCCS characters.~%"
                     (SETQ CHAR-COUNT (COUNT-MCHARS BASE-FONT))))
          (SETQ MCHAR-PRESENT (BF-MCHAR-PRESENT BASE-FONT))
-         (LOOP :FOR FILL-FONT :IN FILL-FROM :WITH PREV-CC :WHEN FILL-FONT :DO
-               (COND
-                  ((OR (STRINGP FILL-FONT)
-                       (PATHNAMEP FILL-FONT))
-                   (UNLESS (IL:INFILEP FILL-FONT)
-                       (ERROR "Subsequent font ~S doesn't exist or is unreadable." (NAMESTRING 
-                                                                                          FILL-FONT)))
-                   (WHEN VERBOSE
-                       (FORMAT *STANDARD-OUTPUT* "~&Loading subsequent font file: ~A~%" (NAMESTRING
-                                                                                         FILL-FONT)))
-                   (SETQ FILL-FONT (READ-BDF FILL-FONT :MCCS-ONLY T :VERBOSE VERBOSE)))
-                  ((NOT (BDF-FONT-P FILL-FONT))
-                   (ERROR "Subsequent font (~S) is not a BDF-FONT, nor string, nor pathname." 
-                          FILL-FONT)))
-               (SETQ PREV-CC CHAR-COUNT)
-               (LOOP :FOR GL :IN (BF-GLYPHS FILL-FONT)
-                     :WITH V :DO (SETQ V (GLYPH-ENCODING GL))
-                     (WHEN (AND (LISTP V)
-                                (EQ (FIRST V)
-                                    -1))
-                         (SETQ V (OR (SECOND V)
-                                     -1)))
+         (LOOP :FOR FILL-FONT :IN FILL-FROM :WITH PREV-CC :WITH FF-NAME :WHEN FILL-FONT :DO
+               (FLET ((MERGE-GLYPH (GL &AUX V)
+                             (SETQ V (GLYPH-ENCODING GL))
+                             (WHEN (AND (LISTP V)
+                                        (EQ (FIRST V)
+                                            -1))
+                                 (SETQ V (OR (SECOND V)
+                                             -1)))
 
-                     (IL:* IL:|;;| 
+                             (IL:* IL:|;;| 
         "Need to change this use of UTOMCODE? based on the CHARSET¬REGISTRY of the XLFD of FILL-FONT")
 
-                     (WHEN (AND (UTOMCODE? V)
-                                (ZEROP (CHAR-PRESENT-BIT MCHAR-PRESENT V)))
-                         (CHAR-PRESENT-BIT MCHAR-PRESENT V 1)
+                             (WHEN (AND (UTOMCODE? V)
+                                        (ZEROP (CHAR-PRESENT-BIT MCHAR-PRESENT V)))
+                                 (CHAR-PRESENT-BIT MCHAR-PRESENT V 1)
 
-                         (IL:* IL:|;;| 
+                                 (IL:* IL:|;;| 
                       "What other bookkeping of BASE-FONT needs to be done when adding a glyph? Any?")
 
-                         (PUSH GL (BF-GLYPHS BASE-FONT))))
-               (SETQ CHAR-COUNT (COUNT-MCHARS BASE-FONT))
-               (WHEN VERBOSE
-                   (FORMAT *STANDARD-OUTPUT* "~&Font ~A supplied ~D additional MCCS characters.~%"
-                          (NAMESTRING FILL-FONT)
-                          (- (SETQ CHAR-COUNT (COUNT-MCHARS BASE-FONT))
-                             PREV-CC))))
+                                 (PUSH GL (BF-GLYPHS BASE-FONT)))
+                             NIL))
+                     (COND
+                        ((OR (STRINGP FILL-FONT)
+                             (PATHNAMEP FILL-FONT))
+                         (SETQ FF-NAME (NAMESTRING FILL-FONT))
+                         (UNLESS (IL:INFILEP FILL-FONT)
+                                (ERROR "Subsequent font ~S doesn't exist or is unreadable." FF-NAME))
+                         (WHEN VERBOSE (FORMAT *STANDARD-OUTPUT* 
+                                              "~&Loading subsequent font file: ~A~%" FF-NAME))
+                         (LET ((GLYPH-PROCESSING-HOOK #'MERGE-GLYPH))
+                              (READ-BDF FILL-FONT :MCCS-ONLY T :VERBOSE VERBOSE)
+                              (SETQ FILL-FONT NIL))
+                         (WHEN BLOCKING (IL:BLOCK)))
+                        ((NOT (BDF-FONT-P FILL-FONT))
+                         (ERROR "Subsequent font (~S) is not a BDF-FONT, nor string, nor pathname." 
+                                FF-NAME)))
+                     (SETQ PREV-CC CHAR-COUNT)
+                     (WHEN FILL-FONT
+                         (LOOP :FOR GL :IN (BF-GLYPHS FILL-FONT)
+                               :DO
+                               (MERGE-GLYPH GL)))
+                     (SETQ CHAR-COUNT (COUNT-MCHARS BASE-FONT))
+                     (WHEN VERBOSE
+                         (FORMAT *STANDARD-OUTPUT* 
+                                "~&Font ~A supplied ~D additional MCCS characters.~%" FF-NAME
+                                (- (SETQ CHAR-COUNT (COUNT-MCHARS BASE-FONT))
+                                   PREV-CC)))))
          BASE-FONT))
 
 (DEFUN CHAR-PRESENT-BIT (BM MCODE &OPTIONAL (NEWBIT -1 SBIT)
@@ -472,6 +482,7 @@
                                                         Y))))
 
 (DEFUN READ-BDF (PATH &KEY VERBOSE MCCS-ONLY (EXTERNAL-FORMAT :ISO8859/1))
+                                                      (IL:* IL:\; "Edited 19-Feb-2026 21:42 by mth")
                                                       (IL:* IL:\; "Edited  1-Dec-2025 22:40 by mth")
                                                       (IL:* IL:\; "Edited 30-Nov-2025 11:59 by mth")
                                                       (IL:* IL:\; "Edited 28-Nov-2025 17:39 by mth")
@@ -586,13 +597,12 @@
                                       (PLUSP NGLYPHS))
                                 (ERROR "Invalid BDF file - CHARS count (~A) is invalid or missing." 
                                        NGLYPHS))
-                         (LOOP :REPEAT NGLYPHS :WITH ENC :WITH MC :DO (SETQ GL (READ-GLYPH 
-                                                                                      FILE-STREAM 
-                                                                                      FONT))
+                         (LOOP :REPEAT NGLYPHS :WITH ENC :WITH MC :DO
+                               (SETQ GL (READ-GLYPH FILE-STREAM FONT :MCCS-ONLY MCCS-ONLY))
                                (SETQ ENC (GLYPH-ENCODING GL))
                                (WHEN (AND (LISTP ENC)
-                                          (EQ (FIRST ENC)
-                                              -1))
+                                          (EQL (FIRST ENC)
+                                               -1))
                                    (SETQ ENC (OR (SECOND ENC)
                                                  -1)))
                                (COND
@@ -615,143 +625,195 @@
 
                                          (IL:* IL:|;;| "It ought to be safe to share the bitmap")
 
-                                         (TCONC MAPPED-GLYPHS CGL)
+                                         (WHEN (AND GLYPH-PROCESSING-HOOK (FUNCTIONP 
+                                                                                GLYPH-PROCESSING-HOOK
+                                                                                 ))
+                                             (SETQ CGL (FUNCALL GLYPH-PROCESSING-HOOK CGL)))
+                                         (WHEN CGL (TCONC MAPPED-GLYPHS CGL))
                                          (CHAR-PRESENT-BIT MCHAR-PRESENT CC 1)))
-                                  (T (TCONC UNMAPPED-GLYPHS GL))))
+                                  ((NOT MCCS-ONLY)
+                                   (WHEN (AND GLYPH-PROCESSING-HOOK (FUNCTIONP GLYPH-PROCESSING-HOOK)
+                                              )
+                                       (SETQ GL (FUNCALL GLYPH-PROCESSING-HOOK GL)))
+                                   (WHEN GL (TCONC UNMAPPED-GLYPHS GL)))))
                          (SETF (BF-GLYPHS FONT)
                                (CAR MAPPED-GLYPHS))
                          (SETF (BF-UNMAPPED¬GLYPHS FONT)
                                (CAR UNMAPPED-GLYPHS)))
-                      (ENDFONT (SETQ FONT-COMPLETE T))))))))
-     (WHEN VERBOSE
+                      (ENDFONT (SETQ FONT-COMPLETE T)))))))))
+    (WHEN VERBOSE
 
-         (IL:* IL:|;;| "The SIZE reported needs clarification:")
+        (IL:* IL:|;;| "The SIZE reported needs clarification:")
 
-         (FORMAT *STANDARD-OUTPUT* "Name: ~A~%Family: ~A~%Sizes: Font: ~A Pixel: ~A Point: ~A (decipoints)~%Weight: ~A~%Slant: ~A~%Expansion: ~A~%"
-                (BF-NAME FONT)
-                (XLFD-FAMILY XLFD)
-                (FIRST (BF-SIZE FONT))
-                (XLFD-PIXEL¬SIZE XLFD)
-                (XLFD-POINT¬SIZE XLFD)
-                (XLFD-WEIGHT XLFD)
-                (XLFD-SLANT XLFD)
-                (XLFD-SETWIDTH¬NAME XLFD)))
-     FONT)))
+        (FORMAT *STANDARD-OUTPUT* "Name: ~A~%Family: ~A~%Sizes: Font: ~A Pixel: ~A Point: ~A (decipoints)~%Weight: ~A~%Slant: ~A~%Expansion: ~A~%Glyphs: ~D~%Unmapped glyphs: ~D~%"
+               (BF-NAME FONT)
+               (XLFD-FAMILY XLFD)
+               (FIRST (BF-SIZE FONT))
+               (XLFD-PIXEL¬SIZE XLFD)
+               (XLFD-POINT¬SIZE XLFD)
+               (XLFD-WEIGHT XLFD)
+               (XLFD-SLANT XLFD)
+               (XLFD-SETWIDTH¬NAME XLFD)
+               (LENGTH (BF-GLYPHS FONT))
+               (LENGTH (BF-UNMAPPED¬GLYPHS FONT))))
+    FONT))
 
 (DEFUN READ-DELIMITED-LIST-FROM-STRING (INPUT-STRING &OPTIONAL (DELIMIT #\]))
                                                       (IL:* IL:\; "Edited 20-Aug-2024 16:46 by mth")
    (WITH-INPUT-FROM-STRING (SI (CONCATENATE 'STRING INPUT-STRING " " (STRING DELIMIT)))
           (READ-DELIMITED-LIST DELIMIT SI)))
 
-(DEFUN READ-GLYPH (FILE-STREAM FONT)                  (IL:* IL:\; "Edited 26-Nov-2025 23:32 by mth")
+(DEFUN READ-GLYPH (FILE-STREAM FONT &KEY MCCS-ONLY)   (IL:* IL:\; "Edited 23-Feb-2026 20:11 by mth")
+                                                      (IL:* IL:\; "Edited 19-Feb-2026 15:46 by mth")
+                                                      (IL:* IL:\; "Edited 26-Nov-2025 23:32 by mth")
                                                       (IL:* IL:\; "Edited 17-Nov-2025 20:03 by mth")
                                                       (IL:* IL:\; "Edited 23-Apr-2025 17:53 by mth")
                                                       (IL:* IL:\; "Edited 21-Apr-2025 13:37 by mth")
                                                       (IL:* IL:\; "Edited 19-Apr-2025 09:32 by mth")
                                                       (IL:* IL:\; "Edited 17-Apr-2025 18:14 by mth")
                                                       (IL:* IL:\; "Edited 21-Aug-2024 01:10 by mth")
-   (LET ((GLYPH (MAKE-GLYPH :SWIDTH (COPY-LIST (BF-SWIDTH FONT))
-                       :DWIDTH
-                       (COPY-LIST (BF-DWIDTH FONT))
-                       :SWIDTH1
-                       (COPY-LIST (BF-SWIDTH1 FONT))
-                       :DWIDTH1
-                       (COPY-LIST (BF-DWIDTH1 FONT))
-                       :VVECTOR
-                       (COPY-LIST (BF-VVECTOR FONT))))
-         CHAR-COMPLETE LINE ITEMS V KEY POS STARTED BBW BBH)
-        (LOOP :UNTIL CHAR-COMPLETE :DO (SETQ LINE (READ-LINE FILE-STREAM))
-              (WHEN LINE                                     (IL:* IL:\; "Ignore blank lines")
-                  (MULTIPLE-VALUE-SETQ (KEY POS)
-                         (READ-FROM-STRING LINE))
-                  (WHEN (<= POS (LENGTH LINE))
-                      (SETQ LINE (SUBSEQ LINE POS)))
-                  (COND
-                     ((EQ KEY 'COMMENT)                      (IL:* IL:\; "Ignore COMMENT lines")
+   (LET
+    ((GLYPH (MAKE-GLYPH :SWIDTH (COPY-LIST (BF-SWIDTH FONT))
+                   :DWIDTH
+                   (COPY-LIST (BF-DWIDTH FONT))
+                   :SWIDTH1
+                   (COPY-LIST (BF-SWIDTH1 FONT))
+                   :DWIDTH1
+                   (COPY-LIST (BF-DWIDTH1 FONT))
+                   :VVECTOR
+                   (COPY-LIST (BF-VVECTOR FONT))))
+     CHAR-COMPLETE ENC LINE ITEMS V KEY POS STARTED BBW BBH)
+    (LOOP
+     :UNTIL CHAR-COMPLETE :DO (SETQ LINE (READ-LINE FILE-STREAM))
+     (WHEN LINE                                              (IL:* IL:\; "Ignore blank lines")
+         (MULTIPLE-VALUE-SETQ (KEY POS)
+                (READ-FROM-STRING LINE))
+         (WHEN (<= POS (LENGTH LINE))
+             (SETQ LINE (SUBSEQ LINE POS)))
+         (COND
+            ((EQ KEY 'COMMENT)                               (IL:* IL:\; "Ignore COMMENT lines")
                                                              (IL:* IL:\; 
                                                             "Probably aren't \"legal\" here, anyway.")
-                      )
-                     ((EQ KEY 'STARTCHAR)
-                      (WHEN STARTED (ERROR "Invalid BDF file - STARTCHAR inside glyph."))
-                      (SETF STARTED T)
-                      (SETF (GLYPH-NAME GLYPH)
-                            (STRING LINE)))
-                     (T (UNLESS STARTED (ERROR 
+             )
+            ((EQ KEY 'STARTCHAR)
+             (WHEN STARTED (ERROR "Invalid BDF file - STARTCHAR inside glyph."))
+             (SETF STARTED T)
+             (SETF (GLYPH-NAME GLYPH)
+                   (STRING LINE)))
+            (T
+             (UNLESS STARTED (ERROR 
                                   "Invalid BDF file - glyph has not been started. STARTCHAR missing."
-                                               ))
-                        (SETQ ITEMS (READ-DELIMITED-LIST-FROM-STRING LINE))
-                        (CASE KEY
-                            (ENCODING (SETF (GLYPH-ENCODING GLYPH)
-                                            (IF (EQL -1 (FIRST ITEMS))
-                                                ITEMS
-                                                (FIRST ITEMS))))
-                            (SWIDTH (SETF (GLYPH-SWIDTH GLYPH)
-                                          ITEMS))
-                            (DWIDTH (SETF (GLYPH-DWIDTH GLYPH)
-                                          ITEMS))
-                            (SWIDTH1 (SETF (GLYPH-SWIDTH1 GLYPH)
-                                           ITEMS))
-                            (DWIDTH1 (SETF (GLYPH-DWIDTH1 GLYPH)
-                                           ITEMS))
-                            (VVECTOR (SETF (GLYPH-VVECTOR GLYPH)
-                                           ITEMS))
-                            (BBX (SETF (GLYPH-BBW GLYPH)
-                                       (SETQ BBW (FIRST ITEMS))
-                                       (GLYPH-BBH GLYPH)
-                                       (SETQ BBH (SECOND ITEMS))
-                                       (GLYPH-BBXOFF0 GLYPH)
-                                       (THIRD ITEMS)
-                                       (GLYPH-BBYOFF0 GLYPH)
-                                       (FOURTH ITEMS)))
-                            (BITMAP (UNLESS (ZEROP (* BBW BBH))
+                                    ))
+             (SETQ ITEMS (READ-DELIMITED-LIST-FROM-STRING LINE))
+             (CASE KEY
+                 (ENCODING (SETF (GLYPH-ENCODING GLYPH)
+                                 (SETQ ENC (IF (EQL -1 (FIRST ITEMS))
+                                               ITEMS
+                                               (FIRST ITEMS)))))
+                 (SWIDTH (SETF (GLYPH-SWIDTH GLYPH)
+                               ITEMS))
+                 (DWIDTH (SETF (GLYPH-DWIDTH GLYPH)
+                               ITEMS))
+                 (SWIDTH1 (SETF (GLYPH-SWIDTH1 GLYPH)
+                                ITEMS))
+                 (DWIDTH1 (SETF (GLYPH-DWIDTH1 GLYPH)
+                                ITEMS))
+                 (VVECTOR (SETF (GLYPH-VVECTOR GLYPH)
+                                ITEMS))
+                 (BBX (SETF (GLYPH-BBW GLYPH)
+                            (SETQ BBW (FIRST ITEMS))
+                            (GLYPH-BBH GLYPH)
+                            (SETQ BBH (SECOND ITEMS))
+                            (GLYPH-BBXOFF0 GLYPH)
+                            (THIRD ITEMS)
+                            (GLYPH-BBYOFF0 GLYPH)
+                            (FOURTH ITEMS)))
+                 (BITMAP 
+                    (UNLESS (ZEROP (* BBW BBH))              (IL:* IL:\; 
+                                                        "Don't bother creating a BITMAP with no area")
+                        (IF (AND MCCS-ONLY (NOT (UTOMCODE? ENC)))
+                            (PROGN 
+                                   (IL:* IL:|;;| 
+                            "This is the case of skipping over non-MCCS encoded glyph when MCCS-ONLY")
 
-                                        (IL:* IL:|;;| "Don't bother creating a BITMAP with no area")
+                                   (LOOP :REPEAT BBH :DO (READ-LINE FILE-STREAM)))
+                            (LET*
+                             ((BM (BITMAPCREATE BBW BBH 1))
+                              (BM.BASE (IL:|fetch| IL:BITMAPBASE IL:|of| BM))
+                              (BM.RASTERWIDTH (IL:|fetch| IL:BITMAPRASTERWIDTH IL:|of| BM))
+                              (NBYTES (CEILING BBW 8))
+                              (NCHARS (* 2 NBYTES))
+                              (NWORDS (CEILING BBW 16))
+                              BITS WORDINDEX)
+                             (LABELS ((CHAR-HEX-VALUE (C)
+                                             (IF (CHARACTERP C)
+                                                 (COND
+                                                    ((CHAR<= #\0 C #\9)
+                                                     (- (CHAR-CODE C)
+                                                        (IL:CONSTANT (CHAR-CODE #\0))))
+                                                    ((CHAR<= #\A C #\F)
 
-                                        (LET* ((BM (BITMAPCREATE BBW BBH 1))
-                                               (BM.BASE (IL:|fetch| IL:BITMAPBASE IL:|of| BM))
-                                               (BM.RASTERWIDTH (IL:|fetch| IL:BITMAPRASTERWIDTH
-                                                                  IL:|of| BM))
-                                               (NBYTES (CEILING BBW 8))
-                                               (NCHARS (* 2 NBYTES))
-                                               (NWORDS (CEILING BBW 16))
-                                               BITS BYTEPOS WORDINDEX)
-                                              (LOOP :WITH BITROW = 0 :REPEAT BBH :DO
-                                                    (SETQ LINE (STRING-TRIM '(#\Space #\Tab)
-                                                                      (READ-LINE FILE-STREAM)))
-                                                    (UNLESS (AND (EQUAL NCHARS (LENGTH LINE))
-                                                                 (SETQ BITS
-                                                                       (PARSE-INTEGER LINE :RADIX 16
-                                                                              :JUNK-ALLOWED T)))
-                                                           (ERROR 
-                                                          "Invalid BDF file - bad line in BITMAP: ~A"
-                                                                  LINE))
-                                                    (WHEN (ODDP NBYTES)
-                                                        (SETQ BITS (ASH BITS 8)))
-                                                    (SETQ WORDINDEX (* BITROW BM.RASTERWIDTH))
-                                                    (SETQ BYTEPOS (* 16 (1- NWORDS)))
-                                                    (LOOP :REPEAT NWORDS :DO
-                                                          (IL:\\PUTBASE BM.BASE WORDINDEX
-                                                                 (LDB (BYTE 16 BYTEPOS)
-                                                                      BITS))
-                                                          (INCF WORDINDEX)
-                                                          (DECF BYTEPOS 16))
-                                                    (INCF BITROW))
-                                              (SETF (GLYPH-BITMAP GLYPH)
-                                                    BM))))
-                            (ENDCHAR (SETQ CHAR-COMPLETE T)))))))
-        (SETF (GLYPH-ASCENT GLYPH)
-              (+ (GLYPH-BBH GLYPH)
-                 (GLYPH-BBYOFF0 GLYPH)))
-        (SETF (GLYPH-DESCENT GLYPH)
-              (ABS (MIN 0 (GLYPH-BBYOFF0 GLYPH))))
-        (SETF (GLYPH-WIDTH GLYPH)
-              (MAX (+ (MAX 0 (GLYPH-BBXOFF0 GLYPH))
-                      (GLYPH-BBW GLYPH))
-                   (FIRST (GLYPH-DWIDTH GLYPH))))
-        GLYPH))
+                                                     (IL:* IL:|;;| 
+                     "The (- (CHAR-CODE #\\A) 10) accomplishes adding 10 after the outer subtraction")
+
+                                                     (- (CHAR-CODE C)
+                                                        (IL:CONSTANT (- (CHAR-CODE #\A)
+                                                                        10))))
+                                                    ((CHAR<= #\a C #\f)
+
+                                                     (IL:* IL:|;;| 
+                     "The (- (CHAR-CODE #\\a) 10) accomplishes adding 10 after the outer subtraction")
+
+                                                     (- (CHAR-CODE C)
+                                                        (IL:CONSTANT (- (CHAR-CODE #\a)
+                                                                        10))))
+                                                    (T 0))
+                                                 0))
+                                      (PARSE-WORDS
+                                       NIL
+                                       (LOOP :FOR I :FROM 0 :TO (1- NCHARS)
+                                             :BY 4 :WITH C3LIMIT = (- NCHARS 3)
+                                             :WITH C4LIMIT = (- NCHARS 4)
+                                             :COLLECT
+                                             (+ (ASH (CHAR-HEX-VALUE (CHAR LINE I))
+                                                     12)
+                                                (ASH (CHAR-HEX-VALUE (CHAR LINE (+ 1 I)))
+                                                     8)
+                                                (ASH (CHAR-HEX-VALUE (AND (<= I C3LIMIT)
+                                                                          (CHAR LINE (+ 2 I))))
+                                                     4)
+                                                (CHAR-HEX-VALUE (AND (<= I C4LIMIT)
+                                                                     (CHAR LINE (+ 3 I))))))))
+                                    (LOOP :WITH BITROW = 0 :REPEAT BBH :DO
+                                          (SETQ LINE (STRING-TRIM '(#\Space #\Tab)
+                                                            (READ-LINE FILE-STREAM)))
+                                          (UNLESS (EQUAL NCHARS (LENGTH LINE))
+                                                 (ERROR "Invalid BDF file - bad line in BITMAP: ~A" 
+                                                        LINE))
+                                          (SETQ BITS (PARSE-WORDS))
+                                          (SETQ WORDINDEX (* BITROW BM.RASTERWIDTH))
+                                          (LOOP :REPEAT NWORDS :DO (IL:\\PUTBASE BM.BASE WORDINDEX
+                                                                          (POP BITS))
+                                                (INCF WORDINDEX))
+                                          (INCF BITROW)))
+                             (SETF (GLYPH-BITMAP GLYPH)
+                                   BM)))))
+                 (ENDCHAR (SETQ CHAR-COMPLETE T)))))))
+    (SETF (GLYPH-ASCENT GLYPH)
+          (+ (GLYPH-BBH GLYPH)
+             (GLYPH-BBYOFF0 GLYPH)))
+    (SETF (GLYPH-DESCENT GLYPH)
+          (ABS (MIN 0 (GLYPH-BBYOFF0 GLYPH))))
+    (SETF (GLYPH-WIDTH GLYPH)
+          (MAX (+ (MAX 0 (GLYPH-BBXOFF0 GLYPH))
+                  (GLYPH-BBW GLYPH))
+               (FIRST (GLYPH-DWIDTH GLYPH))))
+    GLYPH))
 
 (DEFUN WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE (BDFONT DEST-DIR &KEY FAMILY SIZE FACE ROTATION DEVICE 
-                                                  &AUX FULLFILENAME)
+                                                  TEST &AUX FULLFILENAME)
+                                                      (IL:* IL:\; "Edited 23-Feb-2026 15:57 by mth")
+                                                      (IL:* IL:\; "Edited 17-Feb-2026 14:17 by mth")
                                                       (IL:* IL:\; "Edited  2-Dec-2025 14:47 by mth")
                                                       (IL:* IL:\; "Edited 30-Nov-2025 16:03 by mth")
                                                       (IL:* IL:\; "Edited 28-Nov-2025 17:56 by mth")
@@ -769,8 +831,10 @@
 
           (IL:* IL:|;;| "CSETS correspond to the charsets actually present in the FONTDESC.")
 
-          (SETQ FULLFILENAME (MEDLEYFONT.WRITE.FONT FONTDESC (MEDLEYFONT.FILENAME FONTDESC NIL NIL 
-                                                                    DEST-DIR)))
+          (SETQ FULLFILENAME (IF TEST
+                                 "WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE  TEST"
+                                 (MEDLEYFONT.WRITE.FONT FONTDESC (MEDLEYFONT.FILENAME NIL FONTDESC 
+                                                                        NIL NIL DEST-DIR))))
           (LIST FULLFILENAME FONTDESC CSETS)))
 
 (DEFUN XLFD-SPLIT-FONT-NAME (NAME)                    (IL:* IL:\; "Edited 26-Nov-2025 09:43 by mth")
@@ -880,21 +944,21 @@
                                                            "BITMAPCREATE" "BITMAPHEIGHT" 
                                                            "BITMAPWIDTH" "BLACKSHADE" "BLTSHADE" 
                                                            "BOLD" "COMPRESSED" "CHARSETINFO" 
-                                                           "CHARSETPROP" "DISPLAY" "FONTDESCRIPTOR" 
-                                                           "FONTP" "FONTPROP" "INPUT" "ITALIC" 
-                                                           "LIGHT" "LRSH" "MCCS" "MEDIUM" "REGULAR" 
-                                                           "TCONC" "UTOMCODE?" "MEDLEYFONT.FILENAME"
+                                                           "DISPLAY" "FONTDESCRIPTOR" "FONTP" 
+                                                           "FONTPROP" "INPUT" "ITALIC" "LIGHT" "LRSH"
+                                                           "MCCS" "MEDIUM" "REGULAR" "TCONC" 
+                                                           "UTOMCODE?" "MEDLEYFONT.FILENAME" 
                                                            "MEDLEYFONT.WRITE.FONT"))
    :READTABLE "XCL"
    :COMPILER :COMPILE-FILE)
 
 (IL:PUTPROPS IL:READ-BDF IL:DATABASE IL:NO)
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (3116 10226 (BDF-TO-CHARSETINFO 3116 . 10226)) (10228 16847 (BDF-TO-FONTDESCRIPTOR 
-10228 . 16847)) (16849 20782 (BUILD-COMPOSITE 16849 . 20782)) (20784 21533 (CHAR-PRESENT-BIT 20784 . 
-21533)) (21535 21819 (COUNT-MCHARS 21535 . 21819)) (21821 24856 (GLYPHS-BY-CHARSET 21821 . 24856)) (
-24858 26283 (PACKFILENAME.STRING 24858 . 26283)) (26285 35760 (READ-BDF 26285 . 35760)) (35762 36085 (
-READ-DELIMITED-LIST-FROM-STRING 35762 . 36085)) (36087 43085 (READ-GLYPH 36087 . 43085)) (43087 44472 
-(WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE 43087 . 44472)) (44474 46891 (XLFD-SPLIT-FONT-NAME 44474 . 46891)
-) (46893 49905 (XLFD-TO-FACE 46893 . 49905)))))
+  (IL:FILEMAP (NIL (3086 10199 (BDF-TO-CHARSETINFO 3086 . 10199)) (10201 16820 (BDF-TO-FONTDESCRIPTOR 
+10201 . 16820)) (16822 21401 (BUILD-COMPOSITE 16822 . 21401)) (21403 22152 (CHAR-PRESENT-BIT 21403 . 
+22152)) (22154 22438 (COUNT-MCHARS 22154 . 22438)) (22440 25475 (GLYPHS-BY-CHARSET 22440 . 25475)) (
+25477 26902 (PACKFILENAME.STRING 25477 . 26902)) (26904 37150 (READ-BDF 26904 . 37150)) (37152 37475 (
+READ-DELIMITED-LIST-FROM-STRING 37152 . 37475)) (37477 46234 (READ-GLYPH 37477 . 46234)) (46236 47972 
+(WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE 46236 . 47972)) (47974 50391 (XLFD-SPLIT-FONT-NAME 47974 . 50391)
+) (50393 53405 (XLFD-TO-FACE 50393 . 53405)))))
 IL:STOP

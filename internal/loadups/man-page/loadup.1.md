@@ -52,7 +52,7 @@ Loadup does all of its work in a work directory (\<MEDLEYDIR>/loadups/build).  T
 
 If \<MEDLEYDIR> is a git directory, then a file is created in the loadups output directory called *gitinfo* which contains the git commit, git branch and git status information for the directory at the time the loadup is run.
 
-Only one instance (per \<MEDLEIDIR>) of loadup can be run at a time.  There is lock file to prevent simultaneous loadups in the work directory (named ***lock***) that can be manually removed.  The lock can also be automatically overridden (see the --override flag below). Alternatively, if a lock is encountered at run time, the user will be asked to choose whether to override or simply exit the loadup.
+Only one instance (per \<MEDLEIDIR>) of loadup can be run at a time.  There is lock file to prevent simultaneous loadups in the work directory (named ***lock***) that can be manually removed.  The lock can also be automatically overridden (see the \-\-override flag below). Alternatively, if a lock is encountered at run time, the user will be asked to choose whether to override or simply exit the loadup.
 
 Note: **MEDLEYDIR** is an environment variable set by the loadup script.  It is set to the top level directory of the Medley installation that contains the specific loadup script that
 is invoked after all symbolic links are resolved.  In the standard global installation this will 
@@ -61,12 +61,12 @@ hence MEDLEYDIR is computed on each invocation of loadup.
 
 OPTIONS
 =======
-**-z [+], \-\-man [+], \-man [+], -h [+], --help [+]**
+**-z [+], \-\-man [+], \-man [+], -h [+], \-\-help [+]**
 : Print this manual page on the screen.  If the **+** parameter is specified, then no pager is used when
 displaying the man page.
 
 **-t STAGE, \-\-target STAGE, -target STAGE**
-: Run the sequential loadup procedure until the STAGE is complete, starting from the files created by the previously run STAGE specified in the --start option.
+: Run the sequential loadup procedure until the STAGE is complete, starting from the files created by the previously run STAGE specified in the \-\-start option.
 
 >STAGE can be one of the following:
  
@@ -78,9 +78,9 @@ displaying the man page.
  
 >>f, full, 4: Run the loadup sequence through Stage 4 (full.sysout).  Full.sysout is copied into the loadups directory.
  
->>a, apps, 5: Run the loadup sequence through Stage 5 (apps.sysout). Also run the Aux stage as if --aux option had been specified. Apps.sysout and the Aux files are copied into the loadups directory.
+>>a, apps, 5: Run the loadup sequence through Stage 5 (apps.sysout). Also run the Aux stage as if \-\-aux option had been specified. Apps.sysout and the Aux files are copied into the loadups directory.
 
->>a-, apps-, 5-: Run the loadup sequence through Stage 5 (apps.sysout).  The Aux stage is not run unless otherwise specified. Apps.sysout is copied into the loadups directory.  Also run the Aux stage as if --aux option had been specified.
+>>a-, apps-, 5-: Run the loadup sequence through Stage 5 (apps.sysout).  The Aux stage is not run unless otherwise specified. Apps.sysout is copied into the loadups directory.  Also run the Aux stage as if \-\-aux option had been specified.
 
 
 **-s STAGE \-\-start STAGE, -start STAGE**
@@ -105,22 +105,22 @@ displaying the man page.
 : Run the DB loadup stage, creating the *fuller.database* file.  If this stage complete successfully, these files are copied into loadups.
 
 **-i, \-\-init, -init, -1**
-: Synonym for "--target init"
+: Synonym for "\-\-target init"
 
 **-m, \-\-mid, -mid, -2**
-: Synonym for "--target mid"
+: Synonym for "\-\-target mid"
 
 **-l, \-\-lisp, -lisp, -3**
-: Synonym for "--target lisp"
+: Synonym for "\-\-target lisp"
 
 **-f, \-\-full. -full, -4**
-: Synonym for "--target full"
+: Synonym for "\-\-target full"
 
 **-a, \-\-apps, -apps, -5**
-: Synonym for "--target apps"
+: Synonym for "\-\-target apps"
 
 **-a-, \-\-apps-, -apps-, -5-**
-: Synonym for "--target apps"
+: Synonym for "\-\-target apps"
 
 **-ov, \-\-override, -override**
 : Automatically override the lock that prevents two loadups from running simultaneously.  If this flag is not set and an active lock is encountered, the user will be asked to choose whether to override or exit.
@@ -149,11 +149,11 @@ working directory (and all files and subdirectories it contains) is deleted.
 files except for those contained in the working directory.
 If the **+** parameter is used, then instead of deleting just the versioned files, all files and
 subdirectories are deleted except for those contained in the working directory.  If **+** is used and
-there is no working directory and *--tag TAG* is also specified,
+there is no working directory and *\-\-tag TAG* is also specified,
 then the tagged loadups directory (\<MEDLEYDIR>/loadups/tagged/TAG) is also deleted. 
 
 **-th [+], \-\-thin [+], -thin [+]**
-: Equivalent to specifying both -tw [+] and -tl [+].  If *--tag TAG* is also specified and
+: Equivalent to specifying both -tw [+] and -tl [+].  If *\-\-tag TAG* is also specified and
 the **+** parameter is used here, then the tagged loadups directory (\<MEDLEYDIR>/loadups/tagged/TAG)
 is removed. 
 
@@ -168,21 +168,21 @@ running Medley in the absence of an Xwindows server.
 
 DEFAULTS
 ====
-The defaults for the Options context-dependent and somewhat complicated due to the goal of maintaining compatibility with legacy loadup scripts.  All of the following defaults rules hold independent of the --maikodir (-d) option.
+The defaults for the Options context-dependent and somewhat complicated due to the goal of maintaining compatibility with legacy loadup scripts.  All of the following defaults rules hold independent of the \-\-maikodir (-d) option.
 
-1. If none of --target, --start, --aux, and --db are specified, then:
+1. If none of \-\-target, \-\-start, \-\-aux, and \-\-db are specified, then:
 
->1A.  If neither --thinw nor --thinl are specified,  the options default to:
+>1A.  If neither \-\-thinw nor \-\-thinl are specified,  the options default to:
 
->> **--target full --start 0 --aux**
+>> **\-\-target full \-\-start 0 \-\-aux**
 
->1B.  If either --thinw or --thinl are specified, no loadups are run.
+>1B.  If either \-\-thinw or \-\-thinl are specified, no loadups are run.
 
-2. If neither --start nor --target are specified but either -aux or -db or both are, then --start defaults to *full* and --target is irrelevant.
+2. If neither \-\-start nor \-\-target are specified but either -aux or -db or both are, then \-\-start defaults to *full* and \-\-target is irrelevant.
 
-3. If --start is specified and --target is not, then --target defaults to *full*
+3. If \-\-start is specified and \-\-target is not, then \-\-target defaults to *full*
 
-4. If --target is specified and --start is not, then --start defaults to *0*
+4. If \-\-target is specified and \-\-start is not, then \-\-start defaults to *0*
 
 EXAMPLES
 ====
@@ -190,11 +190,11 @@ EXAMPLES
 
 **./loadup \-\-target full \-\-start lisp** : run loadup thru Stage 4 (full.sysout) starting from existing Stage 3 outputs (lisp.sysout).
 
-**./loadup -5 --aux** : run loadup from the beginning thru Stage 5 (apps.sysout) then run the Aux "stage" to create *whereis.hash* and *exports.all*
+**./loadup -5 \-\-aux** : run loadup from the beginning thru Stage 5 (apps.sysout) then run the Aux "stage" to create *whereis.hash* and *exports.all*
 
 **./loadup -db** : just run the DB "stage" starting from an existing full.sysout; do not run any of the sequential stages.
 
-**./loadup --maikodir ~/il/newmaiko** :   run loadup sequence from beginning to full plus the loadup Aux stage, while using *~/il/newmaiko* as the location for the lde executables when running Medley.
+**./loadup \-\-maikodir ~/il/newmaiko** :   run loadup sequence from beginning to full plus the loadup Aux stage, while using *~/il/newmaiko* as the location for the lde executables when running Medley.
 
 **./loadup -full** : run loadup sequence from beginning thru full
 

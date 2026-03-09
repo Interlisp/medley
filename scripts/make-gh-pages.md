@@ -5,17 +5,19 @@ HCFILES writes in {MEDLEYDIR} but it should write in something like (SRCDIR)
 
 ## Remove extraneous files
 
-There are lots of ways to get there but basically set up the execution environment with everything clean but notecards loops, test are copied in. If you don't make fresh, at least 'git clean'.
+There are lots of ways to get there but basically set up the execution environment with everything clean. If you don't make fresh, at least 'git clean'.
 
 ```
-gh repo clone interlisp/medley
-gh repo clone interlisp/notecards
-gh repo clone interlisp/loops
-gh repo clone interlisp/test
-
-cp -r notecards loops test medley
-rm -rf notecards/.git loops/.git test/.git
+git clone --recurse-submodules https://github.com/Interlisp/medley
 ```
+
+Or, if you already have a clone:
+
+```
+git submodule update --init --recursive
+```
+
+This will populate notecards, loops, test (and maiko) inside the medley directory.
 
 # making the .pdfs and index.html files
 
@@ -62,6 +64,5 @@ after you've done this, you can clean up (from the medley folder):
 ```
 find . -iname "*.pdf" -exec rm {} \;
 git remote set-url --push https://github.com/Interlisp/medley
-rm -rf loops notecards test
 ```
 

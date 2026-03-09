@@ -21,18 +21,18 @@ name: 'Build/Push Docker Image'
 on:
   workflow_dispatch:
     inputs:
+      medley_release:
+        description: "Tag for Medley release to use"
+        type: string
+        default: "Latest"
       draft:
         description: "Mark this as a draft release"
-        type: choice
-        options:
-        - 'false'
-        - 'true'
+        type: boolean
+        default: false
       force:
         description: "Force build even if build already successfully completed for this commit"
-        type: choice
-        options:
-        - 'false'
-        - 'true'
+        type: boolean
+        default: false
 
   workflow_call:
     outputs:
@@ -40,16 +40,21 @@ on:
         description: "'True' if medley docker build completed successully"
         value: ${{ jobs.complete.outputs.build_successful }}
     inputs:
+      medley_release:
+        description: "Tag for Medley release to use"
+        required: false
+        type: string
+        default: "Latest"
       draft:
         description: "Mark this as a draft release"
         required: false
-        type: string
-        default: 'false'
+        type: boolean
+        default: false
       force:
         description: "Force build even if build already successfully completed for this commit"
         required: false
-        type: string
-        default: 'false'
+        type: boolean
+        default: false
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -104,26 +109,28 @@ jobs:
     needs: [sentry]
     if: |
       needs.sentry.outputs.release_not_built == 'true'
-      || inputs.force == 'true'
+      || inputs.force == true
 
     steps:
       # Checkout latest commit
       - name: Checkout Medley
         uses: actions/checkout@v4
 
-      # Find latest release (draft or normal)
+      # Find named or latest release
       # and download its assets
-      - name: Download linux debs from latest (draft) release
+      - name: Download linux debs from named or latest release
         run: |
           tag=""
-          if [ "${{ inputs.draft }}" = "true" ];
-          then
-            tag=$(gh release list | grep Draft | head -n 1 | awk '{ print $3 }')
-          fi
-          if [ -z "${tag}" ];
+          if [ "${{ inputs.medley_release }}" = "Latest" ];
           then
             tag=$(gh release list | grep Latest | head -n 1 | awk '{ print $3 }')
-          fi
+          else
+            tag=$(echo "${{ inputs.medley_release }}" | sed 's/[[:space:]]//g')
+            set +e
+            gh release view ${tag} --repo ${{ github.repository_owner }}/medley
+            if [ $? -ne 0 ]; then echo "!!!!!!! Error:  Cannot find Medley release ${tag}. Exiting."; exit 1; fi
+            set -e
+         fi
           mkdir -p release_debs
           gh release download ${tag} -D release_debs -p '*-linux-*.deb'
         env:
@@ -142,7 +149,7 @@ jobs:
           echo "MEDLEY_RELEASE=${medley_release}"     >> ${GITHUB_ENV}
           echo "MAIKO_RELEASE=${maiko_release}"       >> ${GITHUB_ENV}
 
-          # regex="^[^0-9]*\([^_]*\)_\([^-]*-[^-]*\)-\([^-]*\)-\([^.]*\).*\$"
+          # re gex="^[^0-9]*\([^_]*\)_\([^-]*-[^-]*\)-\([^-]*\)-\([^.]*\).*\$"
 
       # Set repo env variables
       - name: Set repo/docker env variables

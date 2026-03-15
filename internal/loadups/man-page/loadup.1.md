@@ -52,7 +52,7 @@ Loadup does all of its work in a work directory (\<MEDLEYDIR>/loadups/build).  T
 
 If \<MEDLEYDIR> is a git directory, then a file is created in the loadups output directory called *gitinfo* which contains the git commit, git branch and git status information for the directory at the time the loadup is run.
 
-Only one instance (per \<MEDLEIDIR>) of loadup can be run at a time.  There is lock file to prevent simultaneous loadups in the work directory (named ***lock***) that can be manually removed.  The lock can also be automatically overridden (see the \-\-override flag below). Alternatively, if a lock is encountered at run time, the user will be asked to choose whether to override or simply exit the loadup.
+Only one instance (per \<MEDLEYDIR>) of loadup can be run at a time.  There is lock file to prevent simultaneous loadups in the work directory (named ***lock***) that can be manually removed.  The lock can also be automatically overridden (see the \-\-override flag below). Alternatively, if a lock is encountered at run time, the user will be asked to choose whether to override or simply exit the loadup.
 
 Note: **MEDLEYDIR** is an environment variable set by the loadup script.  It is set to the top level directory of the Medley installation that contains the specific loadup script that
 is invoked after all symbolic links are resolved.  In the standard global installation this will 

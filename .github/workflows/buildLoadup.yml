@@ -24,7 +24,7 @@ on:
         description: "What maiko release to use"
         type: string
         default: 'Latest'
-      draft:
+       draft:
         description: "Mark this as a draft release"
         type: boolean
         default: false
@@ -38,9 +38,9 @@ on:
       successful:
         description: "'True' if medley build completed successully"
         value: ${{ jobs.complete.outputs.build_successful }}
-      medley_release:
-        description: "Medley release tag for this run"
-        value: 
+      github_release_tag:
+        description: "Github Release tag for release created in this run""
+        value: ${{ jobs.loadup.outputs.github_release_tag }}
     inputs:
       maiko_release:
         description: "What maiko release to use"
@@ -81,7 +81,7 @@ jobs:
     steps:
       # Checkout the actions for this repo owner
       - name: Checkout Actions
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/.github
           path: ./Actions_${{ github.sha }}
@@ -108,6 +108,7 @@ jobs:
 
     outputs:
       combined_release_tag: ${{ steps.job_outputs.outputs.COMBINED_RELEASE_TAG }}
+      github_release_tag: ${{ steps.job_outputs.outputs.GITHUB_RELEASE_TAG }}
       medley_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_RELEASE_TAG }}
       medley_short_release_tag: ${{ steps.job_outputs.outputs.MEDLEY_SHORT_RELEASE_TAG }}
       debs_filename_base: ${{ steps.debs.outputs.DEBS_FILENAME_BASE }}
@@ -123,7 +124,7 @@ jobs:
     steps:
       # Checkout the actions for this repo owner
       - name: Checkout Actions
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/.github
           path: ./Actions_${{ github.sha }}
@@ -131,7 +132,7 @@ jobs:
 
       # Checkout latest commit
       - name: Checkout Medley
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Setup release tag
       - name: Setup Release Tag
@@ -148,7 +149,7 @@ jobs:
           then
             tag=$(gh release list --repo ${{ github.repository_owner }}/maiko | grep Latest | head -n 1 | awk '{ print $3 }')
           else
-            tag=$(echo "${{ inputs.maiko_release }}" | sed 's/[[:space:]]//g')
+        Merged into PR 544 (fgh_redo-linux-makefiles branch).  Closing without merge to master.    tag=$(echo "${{ inputs.maiko_release }}" | sed 's/[[:space:]]//g')
             set +e
             gh release view ${tag} --repo ${{ github.repository_owner }}/maiko
             if [ $? -ne 0 ]; then echo "!!!!!!! Error:  Cannot find Maiko release ${tag}. Exiting."; exit 1; fi
@@ -172,10 +173,12 @@ jobs:
       - name: Even More Environment Variables
         run: |
           echo "COMBINED_RELEASE_TAG=${MEDLEY_SHORT_RELEASE_TAG}_${MAIKO_SHORT_RELEASE_TAG}" >>${GITHUB_ENV}
+          echo "GITHUB_RELEASE_TAG=medley-${COMBINED_RELEASE_TAG}" >>${GITHUB_ENV}
       - name: Establish job outputs
         id: job_outputs
         run: |
           echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> ${GITHUB_OUTPUT}
+          echo "GITHUB_RELEASE_TAG=${GITHUB_RELEASE_TAG}" >> ${GITHUB_OUTPUT}
           echo "MEDLEY_RELEASE_TAG=${MEDLEY_RELEASE_TAG}" >> ${GITHUB_OUTPUT}
           echo "MEDLEY_SHORT_RELEASE_TAG=${MEDLEY_SHORT_RELEASE_TAG}" >> ${GITHUB_OUTPUT}
           echo "MAIKO_RELEASE_TAG=${MAIKO_RELEASE_TAG}" >> $GITHUB_OUTPUT;
@@ -198,7 +201,7 @@ jobs:
 
       # Checkout Notecards and tar it in the tarballsdir
       - name: Checkout Notecards
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/notecards
           path: ./notecards
@@ -228,19 +231,19 @@ jobs:
       - name: Delete existing release with same tag (if any)
         uses: cb80/delrel@latest
         with:
-            tag: ${{ env.MEDLEY_RELEASE_TAG }}
+            tag: ${{ env.GITHUB_RELEASE_TAG }}
         continue-on-error: true
 
       - name: Push the release
         id: push
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.21
         with:
           allowUpdates: true
           artifacts:
             # ${{ env.TARBALL_DIR }}/notecards.tgz,
             ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-loadups.tgz,
             ${{ env.TARBALL_DIR }}/${{ env.MEDLEY_RELEASE_TAG }}-runtime.tgz
-          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          tag: ${{ env.GITHUB_RELEASE_TAG }}
           draft: ${{ inputs.draft }}
           prerelease: false
           generateReleaseNotes: true
@@ -248,7 +251,7 @@ jobs:
 
       # Save the tarball directory for subsequent jobs
       - name: Save tarballs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tarballs
           path: ${{ env.TARBALL_DIR }}
@@ -273,7 +276,7 @@ jobs:
 
       # Checkout latest commit
       - name: Checkout Medley
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Environment variables
       - name: Environment variables
@@ -290,7 +293,7 @@ jobs:
 
       #  Get the tarballs
       - name: Get tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarballs
           path: ${{ env.TARBALL_DIR }}
@@ -305,13 +308,13 @@ jobs:
       # Push the debs and tgz up to github releases
       - name: Push the release
         id: push_release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.21
         with:
           allowUpdates: true
           artifacts:
             ${{ env.DEBS_DIR }}/*.deb,
             ${{ env.TARS_DIR }}/*.tgz
-          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          tag: ${{ env.GITHUB_RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           omitBodyDuringUpdate: true
           omitDraftDuringUpdate: true
@@ -324,7 +327,7 @@ jobs:
             mv  medley-full-linux-x86_64-*.tgz medley.tgz
 
       - name: Save medley tar for use in cygwin installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: medley-tar
           path: |
@@ -354,7 +357,7 @@ jobs:
 
       # Checkout latest commit
       - name: Checkout Medley
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Environment variables
       - name: Environment variables
@@ -371,7 +374,7 @@ jobs:
 
       #  Get the tarballs
       - name: Get tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarballs
           path: ${{ env.TARBALL_DIR }}
@@ -386,13 +389,13 @@ jobs:
       # Push the .dmg and .zip up to github releases
       - name: Push the release
         id: push_release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.21
         with:
           allowUpdates: true
           artifacts:
             # 2023-07-20 not yet building dmg -- ${{ env.ARTIFACTS_DIR }}/*.dmg,
             ${{ env.ARTIFACTS_DIR }}/*.zip
-          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          tag: ${{ env.GITHUB_RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           omitBodyDuringUpdate: true
           omitDraftDuringUpdate: true
@@ -423,7 +426,7 @@ jobs:
 
       # Checkout latest commit
       - name: Checkout Medley
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Store the values output from loadup job as environment variables
       - name: Environment Variables
@@ -431,6 +434,8 @@ jobs:
         run: |
           $crt="${{ needs.loadup.outputs.combined_release_tag }}"
           echo "COMBINED_RELEASE_TAG=$crt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          $grt="${{ needs.loadup.outputs.github_release_tag }}"
+          echo "GITHUB_RELEASE_TAG=$grt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           $mrt="${{ needs.loadup.outputs.medley_release_tag }}"
           echo "MEDLEY_RELEASE_TAG=$mrt" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           $msrt="${{ needs.loadup.outputs.medley_short_release_tag }}"
@@ -442,7 +447,7 @@ jobs:
 
       # Retrieve medley tars from artifact store
       - name: Retrieve medley tar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: medley-tar
           path: installers/cygwin/
@@ -492,11 +497,11 @@ jobs:
       # Upload windows installer to release
       - name: Upload windows installer to release
         id: push
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.21
         with:
           allowUpdates: true
           artifacts: installers/cygwin/${{ env.CYGWIN_INSTALLER }}
-          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          tag: ${{ env.GITHUB_RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           omitBodyDuringUpdate: true
           omitDraftDuringUpdate: true
@@ -526,6 +531,8 @@ jobs:
         run: |
           crt="${{ needs.loadup.outputs.combined_release_tag }}"
           echo "COMBINED_RELEASE_TAG=${crt}" >>${GITHUB_ENV}
+          grt="${{ needs.loadup.outputs.github_release_tag }}"
+          echo "GITHUB_RELEASE_TAG=${crt}" >>${GITHUB_ENV}
           mrt="${{ needs.loadup.outputs.medley_release_tag }}"
           echo "MEDLEY_RELEASE_TAG=${mrt}" >>${GITHUB_ENV}
           msrt="${{ needs.loadup.outputs.medley_short_release_tag }}"
@@ -535,7 +542,7 @@ jobs:
 
       # Checkout latest commit
       - name: Checkout Medley
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
 
       # Upload a dummy file to release
@@ -545,11 +552,11 @@ jobs:
       - run: echo "placeholder" >placeholder.txt
       - name: Upload windows placeholder.txt to release
         id: pushph
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.21
         with:
           allowUpdates: true
           artifacts: placeholder.txt
-          tag: ${{ env.MEDLEY_RELEASE_TAG }}
+          tag: ${{ env.GITHUB_RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           omitBodyDuringUpdate: true
           omitDraftDuringUpdate: true
@@ -621,14 +628,14 @@ jobs:
     steps:
       # Delete the tarballs artifact
       - name: Delete tarballs artifact
-        uses: geekyeggo/delete-artifact@v5
+        uses: geekyeggo/delete-artifact@v6
         with:
           name: tarballs
           failOnError: false
 
       # Checkout the actions for this repo owner
       - name: Checkout Actions
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/.github
           path: ./Actions_${{ github.sha }}

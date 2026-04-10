@@ -4,13 +4,14 @@
 "FONTDESCRIPTOR" "FONTP" "FONTPROP" "INPUT" "ITALIC" "LIGHT" "LRSH" "MCCS" "MEDIUM" "REGULAR" "TCONC" 
 "UTOMCODE?" "MEDLEYFONT.FILENAME" "MEDLEYFONT.WRITE.FONT")) READTABLE "XCL" BASE 10)
 
-(IL:FILECREATED "23-Feb-2026 20:11:48" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;20| 54795  
+(IL:FILECREATED "16-Mar-2026 16:37:31" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;22| 58094  
 
       :EDIT-BY "mth"
 
-      :CHANGES-TO (IL:FUNCTIONS READ-GLYPH)
+      :CHANGES-TO (IL:FUNCTIONS READ-GLYPH READ-BDF BDF-TO-FONTDESCRIPTOR GLYPHS-BY-CHARSET 
+                         WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE BDF-TO-CHARSETINFO)
 
-      :PREVIOUS-DATE "23-Feb-2026 17:38:07" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;19|
+      :PREVIOUS-DATE "23-Feb-2026 20:11:48" IL:|{DSK}<home>matt>Interlisp>medley>lispusers>READ-BDF.;21|
 )
 
 
@@ -77,7 +78,9 @@
 
 (DEFCONSTANT NOMAPPINGCHARSET (1+ MAXCHARSET))
 
-(DEFUN BDF-TO-CHARSETINFO (FONT CSET SLUGWIDTH)       (IL:* IL:\; "Edited  8-Dec-2025 12:13 by mth")
+(DEFUN BDF-TO-CHARSETINFO (FONT CSET SLUGWIDTH &KEY AS-UNICODE)
+                                                      (IL:* IL:\; "Edited 16-Mar-2026 16:35 by mth")
+                                                      (IL:* IL:\; "Edited  8-Dec-2025 12:13 by mth")
                                                       (IL:* IL:\; "Edited 30-Nov-2025 00:12 by mth")
                                                       (IL:* IL:\; "Edited 28-Nov-2025 16:37 by mth")
                                                       (IL:* IL:\; "Edited 26-Nov-2025 21:18 by mth")
@@ -107,7 +110,7 @@
             (IL:* IL:|;;| "If passed a BDF-FONT, look only at glyphs in the mapped charsets")
 
             (DESTRUCTURING-SETQ (GBCS SW)
-                   (GLYPHS-BY-CHARSET FONT)))
+                   (GLYPHS-BY-CHARSET FONT :AS-UNICODE AS-UNICODE)))
            (T (ERROR "Invalid FONT: ~S" FONT)))
         (UNLESS (AND (INTEGERP SLUGWIDTH)
                      (PLUSP SLUGWIDTH))
@@ -126,7 +129,9 @@
                   (IMAGEWIDTHS (IL:\\CREATECSINFOELEMENT))
                   (DLEFT 0)
                   GLYPHS-LIMITS BMAP OFFSETS HEIGHT WIDTHS)
-                 (IL:CHARSETPROP CSINFO 'IL:CSCHARENCODING 'MCCS)
+                 (IL:CHARSETPROP CSINFO 'IL:CSCHARENCODING (IF AS-UNICODE
+                                                               'IL:UNICODE
+                                                               'MCCS))
                  (LOOP :FOR XGL :IN CSGLYPHS :DO (LET* ((MCODE (CAR XGL))
                                                         (GL (CDR XGL))
                                                         (GWIDTH (GLYPH-WIDTH GL))
@@ -201,7 +206,8 @@
                         'IL:REPLACE)
                  CSINFO))))
 
-(DEFUN BDF-TO-FONTDESCRIPTOR (BDFONT FAMILY SIZE FACE ROTATION DEVICE)
+(DEFUN BDF-TO-FONTDESCRIPTOR (BDFONT FAMILY SIZE FACE ROTATION DEVICE &KEY AS-UNICODE)
+                                                      (IL:* IL:\; "Edited 16-Mar-2026 16:16 by mth")
                                                       (IL:* IL:\; "Edited  8-Dec-2025 12:11 by mth")
                                                       (IL:* IL:\; "Edited  2-Dec-2025 16:10 by mth")
                                                       (IL:* IL:\; "Edited 30-Nov-2025 15:59 by mth")
@@ -220,7 +226,8 @@
                                                      (OR SIZE (FONTPROP FAMILY 'IL:SIZE))
                                                      (OR FACE (FONTPROP FAMILY 'IL:FACE))
                                                      (OR ROTATION (FONTPROP FAMILY 'IL:ROTATION))
-                                                     (OR DEVICE (FONTPROP FAMILY 'IL:DEVICE)))))
+                                                     (OR DEVICE (FONTPROP FAMILY 'IL:DEVICE))
+                                                     :AS-UNICODE AS-UNICODE)))
        (WHEN (CONSP FAMILY)                                  (IL:* IL:\; 
                                                              "Because (LISTP NIL) == T !!!")
 
@@ -240,7 +247,8 @@
                                                          0)
                                                      (OR DEVICE (IL:|fetch| (IL:FONTSPEC IL:FSDEVICE)
                                                                    IL:|of| FAMILY)
-                                                         'DISPLAY))))
+                                                         'DISPLAY)
+                                                     :AS-UNICODE AS-UNICODE)))
        (LET ((XLFD (BF-XLFD BDFONT))
              FONTDESC GBCSL CHARSETS SLUGWIDTH)
             (SETQ FAMILY (IL:\\FONTSYMBOL (OR FAMILY (XLFD-FAMILY XLFD))))
@@ -280,7 +288,7 @@
                                           'IL:MRR)
                               NIL DEVICE))
             (DESTRUCTURING-SETQ (GBCSL SLUGWIDTH)
-                   (GLYPHS-BY-CHARSET BDFONT))
+                   (GLYPHS-BY-CHARSET BDFONT :AS-UNICODE AS-UNICODE))
             (UNLESS SLUGWIDTH
 
                 (IL:* IL:|;;| 
@@ -300,11 +308,14 @@
                              IL:ROTATION IL:_ ROTATION
                              IL:FONTDEVICESPEC IL:_ (LIST FAMILY SIZE FACE ROTATION DEVICE)
                              IL:FONTSLUGWIDTH IL:_ SLUGWIDTH
-                             IL:FONTCHARENCODING IL:_ 'MCCS))
+                             IL:FONTCHARENCODING IL:_ (IF AS-UNICODE
+                                                          'IL:UNICODE
+                                                          'MCCS)))
                 (SETQ CHARSETS (LOOP :FOR CS :IN GBCSL :WITH CSET :WITH CSINFO :NCONC
                                      (WHEN (<= 0 (SETQ CSET (FIRST CS))
                                                MAXCHARSET)
-                                         (SETQ CSINFO (BDF-TO-CHARSETINFO GBCSL CSET (1+ SLUGWIDTH)))
+                                         (SETQ CSINFO (BDF-TO-CHARSETINFO GBCSL CSET (1+ SLUGWIDTH)
+                                                             :AS-UNICODE AS-UNICODE))
                                          (IL:\\INSTALLCHARSETINFO FONTDESC CSINFO CSET)
                                          (LIST CSET)))))
             (LIST FONTDESC CHARSETS))))
@@ -411,7 +422,8 @@
        (LET ((MCPBM (BF-MCHAR-PRESENT BDFONT)))
             (LOOP :FOR MC :FROM 0 :TO 65535 :COUNT (PLUSP (CHAR-PRESENT-BIT MCPBM MC))))))
 
-(DEFUN GLYPHS-BY-CHARSET (FONT)                       (IL:* IL:\; "Edited 30-Nov-2025 17:36 by mth")
+(DEFUN GLYPHS-BY-CHARSET (FONT &KEY AS-UNICODE)       (IL:* IL:\; "Edited 16-Mar-2026 16:06 by mth")
+                                                      (IL:* IL:\; "Edited 30-Nov-2025 17:36 by mth")
                                                       (IL:* IL:\; "Edited 28-Nov-2025 17:24 by mth")
                                                       (IL:* IL:\; "Edited 26-Nov-2025 20:50 by mth")
                                                       (IL:* IL:\; "Edited 20-Nov-2025 12:01 by mth")
@@ -481,7 +493,8 @@
                                                               X))
                                                         Y))))
 
-(DEFUN READ-BDF (PATH &KEY VERBOSE MCCS-ONLY (EXTERNAL-FORMAT :ISO8859/1))
+(DEFUN READ-BDF (PATH &KEY VERBOSE MCCS-ONLY AS-UNICODE (EXTERNAL-FORMAT :ISO8859/1))
+                                                      (IL:* IL:\; "Edited 16-Mar-2026 16:11 by mth")
                                                       (IL:* IL:\; "Edited 19-Feb-2026 21:42 by mth")
                                                       (IL:* IL:\; "Edited  1-Dec-2025 22:40 by mth")
                                                       (IL:* IL:\; "Edited 30-Nov-2025 11:59 by mth")
@@ -598,7 +611,8 @@
                                 (ERROR "Invalid BDF file - CHARS count (~A) is invalid or missing." 
                                        NGLYPHS))
                          (LOOP :REPEAT NGLYPHS :WITH ENC :WITH MC :DO
-                               (SETQ GL (READ-GLYPH FILE-STREAM FONT :MCCS-ONLY MCCS-ONLY))
+                               (SETQ GL (READ-GLYPH FILE-STREAM FONT :MCCS-ONLY MCCS-ONLY :AS-UNICODE
+                                               AS-UNICODE))
                                (SETQ ENC (GLYPH-ENCODING GL))
                                (WHEN (AND (LISTP ENC)
                                           (EQL (FIRST ENC)
@@ -606,6 +620,33 @@
                                    (SETQ ENC (OR (SECOND ENC)
                                                  -1)))
                                (COND
+                                  (AS-UNICODE 
+
+                                         (IL:* IL:|;;| 
+                                         "IS THIS TRUE IF REMAINING IN UNICODE ENCODING?")
+
+                                 (IL:* IL:|;;| "This glyph must have either a non-zero-width \"image\" or a non-zero-width \"escapement\", otherwise it cannot be mapped, no matter the UTOMCODE? value.")
+
+                                         (IL:* IL:|;;| "For now, assuming NOT TRUE")
+
+                                         (WHEN (AND GLYPH-PROCESSING-HOOK (FUNCTIONP 
+                                                                                GLYPH-PROCESSING-HOOK
+                                                                                 ))
+                                             (SETQ GL (FUNCALL GLYPH-PROCESSING-HOOK GL)))
+                                         (WHEN GL
+
+                                             (IL:* IL:|;;| 
+                                             "Everything is mappable if in 0000-FFFF range")
+
+                                             (IF (<= 0 ENC 65535)
+                                                 (PROGN (SETF (GLYPH-MCODE GL)
+                                                              ENC)
+                                                        (TCONC MAPPED-GLYPHS GL))
+                                                 (TCONC UNMAPPED-GLYPHS GL)))
+
+                                         (IL:* IL:|;;| "Don't bother with MCHAR-PRESENT bits")
+
+                                         )
                                   ((AND (OR (PLUSP (GLYPH-BBW GL))
                                             (PLUSP (FIRST (GLYPH-DWIDTH GL))))
                                         (SETQ MC (UTOMCODE? ENC)))
@@ -663,7 +704,9 @@
    (WITH-INPUT-FROM-STRING (SI (CONCATENATE 'STRING INPUT-STRING " " (STRING DELIMIT)))
           (READ-DELIMITED-LIST DELIMIT SI)))
 
-(DEFUN READ-GLYPH (FILE-STREAM FONT &KEY MCCS-ONLY)   (IL:* IL:\; "Edited 23-Feb-2026 20:11 by mth")
+(DEFUN READ-GLYPH (FILE-STREAM FONT &KEY MCCS-ONLY AS-UNICODE)
+                                                      (IL:* IL:\; "Edited 16-Mar-2026 15:32 by mth")
+                                                      (IL:* IL:\; "Edited 23-Feb-2026 20:11 by mth")
                                                       (IL:* IL:\; "Edited 19-Feb-2026 15:46 by mth")
                                                       (IL:* IL:\; "Edited 26-Nov-2025 23:32 by mth")
                                                       (IL:* IL:\; "Edited 17-Nov-2025 20:03 by mth")
@@ -731,7 +774,9 @@
                  (BITMAP 
                     (UNLESS (ZEROP (* BBW BBH))              (IL:* IL:\; 
                                                         "Don't bother creating a BITMAP with no area")
-                        (IF (AND MCCS-ONLY (NOT (UTOMCODE? ENC)))
+                        (IF (AND (NOT AS-UNICODE)
+                                 MCCS-ONLY
+                                 (NOT (UTOMCODE? ENC)))
                             (PROGN 
                                    (IL:* IL:|;;| 
                             "This is the case of skipping over non-MCCS encoded glyph when MCCS-ONLY")
@@ -811,7 +856,8 @@
     GLYPH))
 
 (DEFUN WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE (BDFONT DEST-DIR &KEY FAMILY SIZE FACE ROTATION DEVICE 
-                                                  TEST &AUX FULLFILENAME)
+                                                  AS-UNICODE TEST &AUX FULLFILENAME)
+                                                      (IL:* IL:\; "Edited 16-Mar-2026 16:12 by mth")
                                                       (IL:* IL:\; "Edited 23-Feb-2026 15:57 by mth")
                                                       (IL:* IL:\; "Edited 17-Feb-2026 14:17 by mth")
                                                       (IL:* IL:\; "Edited  2-Dec-2025 14:47 by mth")
@@ -822,7 +868,7 @@
    (UNLESS (BDF-FONT-P BDFONT)
           (ERROR "Not a BDF-FONT: ~S ~%" BDFONT))
    (DESTRUCTURING-BIND (FONTDESC CSETS)
-          (BDF-TO-FONTDESCRIPTOR BDFONT FAMILY SIZE FACE ROTATION DEVICE)
+          (BDF-TO-FONTDESCRIPTOR BDFONT FAMILY SIZE FACE ROTATION DEVICE :AS-UNICODE AS-UNICODE)
           (UNLESS FONTDESC
 
               (IL:* IL:|;;| "Creation of the FONTDESCRIPTOR failed!")
@@ -954,11 +1000,11 @@
 
 (IL:PUTPROPS IL:READ-BDF IL:DATABASE IL:NO)
 (IL:DECLARE\: IL:DONTCOPY
-  (IL:FILEMAP (NIL (3086 10199 (BDF-TO-CHARSETINFO 3086 . 10199)) (10201 16820 (BDF-TO-FONTDESCRIPTOR 
-10201 . 16820)) (16822 21401 (BUILD-COMPOSITE 16822 . 21401)) (21403 22152 (CHAR-PRESENT-BIT 21403 . 
-22152)) (22154 22438 (COUNT-MCHARS 22154 . 22438)) (22440 25475 (GLYPHS-BY-CHARSET 22440 . 25475)) (
-25477 26902 (PACKFILENAME.STRING 25477 . 26902)) (26904 37150 (READ-BDF 26904 . 37150)) (37152 37475 (
-READ-DELIMITED-LIST-FROM-STRING 37152 . 37475)) (37477 46234 (READ-GLYPH 37477 . 46234)) (46236 47972 
-(WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE 46236 . 47972)) (47974 50391 (XLFD-SPLIT-FONT-NAME 47974 . 50391)
-) (50393 53405 (XLFD-TO-FACE 50393 . 53405)))))
+  (IL:FILEMAP (NIL (3216 10679 (BDF-TO-CHARSETINFO 3216 . 10679)) (10681 17828 (BDF-TO-FONTDESCRIPTOR 
+10681 . 17828)) (17830 22409 (BUILD-COMPOSITE 17830 . 22409)) (22411 23160 (CHAR-PRESENT-BIT 22411 . 
+23160)) (23162 23446 (COUNT-MCHARS 23162 . 23446)) (23448 26592 (GLYPHS-BY-CHARSET 23448 . 26592)) (
+26594 28019 (PACKFILENAME.STRING 26594 . 28019)) (28021 40051 (READ-BDF 28021 . 40051)) (40053 40376 (
+READ-DELIMITED-LIST-FROM-STRING 40053 . 40376)) (40378 49390 (READ-GLYPH 40378 . 49390)) (49392 51271 
+(WRITE-BDF-TO-MEDLEYDISPLAYFONT-FILE 49392 . 51271)) (51273 53690 (XLFD-SPLIT-FONT-NAME 51273 . 53690)
+) (53692 56704 (XLFD-TO-FACE 53692 . 56704)))))
 IL:STOP

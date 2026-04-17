@@ -57,7 +57,8 @@ main() {
 
         # save dribble file to loadups; extract and save fails
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/HCFILES.DRIBBLE "${MEDLEYDIR}"/loadups/hcfiles.dribble
-        grep "IL:FAIL" < "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
+        # grep "IL:FAIL" < "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
+        "${MEDLEYDIR}"/scripts/getFails.pl '^[^\n]*IL:FAIL' 'DONE' "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/fails "${MEDLEYDIR}"/loadups/hcfiles-fails.txt
 
         # cleanup

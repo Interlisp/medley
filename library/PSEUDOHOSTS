@@ -1,10 +1,16 @@
-(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
+(DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10)
 
-(FILECREATED "16-May-2025 12:07:44" {DSK}<home>frank>il>qmedley>library>PSEUDOHOSTS.;2 31408  
+(FILECREATED "26-Apr-2026 10:31:30" {MEDLEY}<library>PSEUDOHOSTS.;188 29278  
 
-      :CHANGES-TO (FNS PSEUDOHOSTS)
+      :EDIT-BY rmk
 
-      :PREVIOUS-DATE "31-Dec-2024 11:45:23" {DSK}<home>frank>il>qmedley>library>PSEUDOHOSTS.;1)
+      :CHANGES-TO (FNS CONTRACT.PH PSEUDOFILENAME OPENFILE.PH REOPENFILE.PH CDPSEUDO DELETEFILE.PH 
+                       NEXTFILEFN.PH GENERATEFILES.PH GETFILENAME.PH GETFILEINFO.PH 
+                       CONTRACT.PH.PREFIXMAP RENAMEFILE.PH PSEUDOHOST SETFILEINFO.PH)
+                  (MACROS PSEUDOHOST.NAME)
+                  (VARS PSEUDOHOSTSCOMS)
+
+      :PREVIOUS-DATE "26-Nov-2025 17:26:18" {MEDLEY}<library>PSEUDOHOSTS.;182)
 
 
 (PRETTYCOMPRINT PSEUDOHOSTSCOMS)
@@ -14,21 +20,17 @@
         (* ;; "Public entries")
 
         (FNS PSEUDOHOST PSEUDOHOSTP PSEUDOHOSTS TARGETHOST TRUEDEVICE TRUEFILENAME PSEUDOFILENAME)
+        (FNS CDPSEUDO)
         
         (* ;; "Internals")
 
         (FNS EXPAND.PH CONTRACT.PH UNSLASHIT GETHOSTINFO.PH)
-        (FNS CDPSEUDO)
         (FNS OPENFILE.PH GETFILENAME.PH DIRECTORYNAMEP.PH CLOSEFILE.PH REOPENFILE.PH DELETEFILE.PH 
-             OPENP.PH UNREGISTERFILE.PH REGISTERFILE.PH GENERATEFILES.PH GETFILEINFO.PH 
-             SETFILEINFO.PH NEXTFILEFN.PH FILEINFOFN.PH RENAMEFILE.PH)
-        (DECLARE%: DONTEVAL@LOAD DOCOPY (P (PSEUDOHOST 'LI LOGINHOST/DIR)))
+             GENERATEFILES.PH GETFILEINFO.PH SETFILEINFO.PH NEXTFILEFN.PH FILEINFOFN.PH)
         (P (MOVD? 'GETHOSTINFO 'GETHOSTINFO.ORIG)
            (MOVD 'GETHOSTINFO.PH 'GETHOSTINFO))
         (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS PHDEVICE PHGENFILESTATE TARGETDEVICE)
-               (MACROS PSEUDOHOST.NAME PSEUDOHOST.TARGETVAL)
-               (FILES (FROM LOADUPS)
-                      EXPORTS.ALL))))
+               (MACROS PSEUDOHOST.NAME PSEUDOHOST.TARGETVAL))))
 
 
 
@@ -37,7 +39,13 @@
 (DEFINEQ
 
 (PSEUDOHOST
-  [LAMBDA (HOST PREFIX)
+  [LAMBDA (HOST PREFIX CDSUFFIX NOERROR)
+
+    (* ;; "Edited 25-Apr-2026 15:51 by rmk")
+
+    (* ;; "Edited  2-Feb-2025 10:05 by rmk")
+
+    (* ;; "Edited 30-Jan-2025 23:32 by rmk")
 
     (* ;; "Edited  2-Nov-2023 10:53 by rmk")
 
@@ -58,8 +66,10 @@
                  (CHARCODE }))
         (SETQ HOST (SUBSTRING HOST 1 -2)))
     (SETQ HOST (U-CASE (MKATOM HOST)))
-    [if PREFIX
-        then (SETQ PREFIX (TRUEFILENAME PREFIX))
+    (if PREFIX
+        then (CL:UNLESS (SETQ PREFIX (TRUEFILENAME PREFIX NOERROR))
+                 (RETFROM (FUNCTION PSEUDOHOST)
+                        NIL))
              (CL:WHEN (PSEUDOHOSTP HOST)                     (* ; 
                                                        "Redefining: first clear out the previous one")
                  (PSEUDOHOST HOST NIL))
@@ -86,6 +96,8 @@
                       (UNIX (SETQ PREFIX (SLASHIT PREFIX)))
                       NIL)
                   (SETQ TARGETDEVICE (OR (\GETDEVICEFROMHOSTNAME TARGETHOST)
+                                         (AND NOERROR (RETFROM (FUNCTION PSEUDOHOST)
+                                                             NIL))
                                          (ERROR "UNKNOWN TARGET HOST" TARGETHOST)))
 
                   (* ;; "Save the last directory marker to pack on if needed.")
@@ -104,10 +116,9 @@
                                   REGISTERFILE _ (FUNCTION \ADD-OPEN-STREAM)
                                   GENERATEFILES _ (FUNCTION GENERATEFILES.PH)
                                   GETFILEINFO _ (FUNCTION GETFILEINFO.PH)
-                                  SETFILEINFO _ (FUNCTION SETFILEINFO.PH)
-                                  RENAMEFILE _ (FUNCTION RENAMEFILE.PH)))
+                                  SETFILEINFO _ (FUNCTION SETFILEINFO.PH)))
 
-                  (* ;; "The ultimate target device keeps a map of prefixes and the hostnames they map to.  The longest matching prefix is chosen when a name that expands to the target device is contracted.")
+                  (* ;; "The ultimate target device keeps a map of prefixes and the hostnames they map to.  The longest matching prefix is chosen when a name that expands to the target device is contracted, unless a PHHOST preference is provided.")
 
                   (change (fetch (TARGETDEVICE PREFIXMAP) OF TARGETDEVICE)
                          (SORT (CONS (LIST PREFIX HOST (CL:IF (EQ (CHARCODE /)
@@ -131,8 +142,14 @@
                                   (DREMOVE (ASSOC PREFIX DATUM)
                                          DATUM)))
                        (SETQ \FILEDEVICES (DREMOVE PHHOST \FILEDEVICES))
-                       (\DEFINEDEVICE HOST NIL))]
-    HOST])
+                       (\DEFINEDEVICE HOST NIL)))
+      elseif NOERROR
+      else (ERROR (CONCAT "PREFIX FOR PSEUDOHOST " HOST " NOT FOUND")))
+    (CL:WHEN (AND PREFIX CDSUFFIX)
+           (CDPSEUDO HOST CDSUFFIX))
+    (CL:WHEN PREFIX                                          (* ; 
+                                                           "If no prefix, we didn't get a pseudohost")
+        HOST)])
 
 (PSEUDOHOSTP
   [LAMBDA (HOST)                                             (* ; "Edited 16-Dec-2024 21:15 by rmk")
@@ -149,32 +166,10 @@
                           DEV)))])
 
 (PSEUDOHOSTS
-  [LAMBDA (NEW.HOSTS)                                        (* ; "Edited 17-Jan-2022 18:15 by rmk")
-                                                             (* ; "Edited 16-May-2025 9:16 by fgh")
-
-    (* ;; "")
-
-    (* ;; " Returns existing list of PSEUDOHOST pairs.  If NEW.HOSTS is T, all current pseudohosts are removed by calling (PSEUDOHOST HOST NIL) on each current pseudohost in turn.  Otherwise, NEW.HOSTS should be a list of (HOST PREFIX) pairs and all current pseudohosts are r(PSEUDOHOSTSemoved (as above) and the NEW.HOSTS pairs are used to create new pseudohosts by calling (PSEUDOHOST HOST PREFIX) sequentially in reverse order of the NEW.HOSTS list. Reverse order to ensure that (PSEUDOHOSTS (PSEUDOHOSTS))  doesn't impact the ordering in the PSEUDOHOST list.  This function is designed to be used cleanly with RESETSAVE.")
-
-    (* ;; "")
-
-    (LET [(CURRENT.HOSTS (for DEV in \FILEDEVICES when (type? FDEV (fetch (PHDEVICE TARGETDEV)
-                                                                      of DEV))
-                            collect (LIST (fetch (FDEV DEVICENAME) of DEV)
-                                          (fetch (PHDEVICE PREFIX) of DEV]
-         [COND
-            ((EQ NEW.HOSTS T)
-             (for HOST in CURRENT.HOSTS do (PSEUDOHOST (CAR HOST)
-                                                  NIL)))
-            [[AND (LISTP NEW.HOSTS)
-                  (for HOST in NEW.HOSTS always (AND (LISTP HOST)
-                                                     (NOT (CDDR HOST]
-             (for HOST in CURRENT.HOSTS do (PSEUDOHOST (CAR HOST)
-                                                  NIL))
-             (for HOST in (REVERSE NEW.HOSTS) do (PSEUDOHOST (CAR HOST)
-                                                        (CADR HOST]
-            (NEW.HOSTS (ERROR (CONCAT "PSEUDOHOSTS: Argument not valid:" NEW.HOSTS]
-         CURRENT.HOSTS])
+  [LAMBDA NIL                                                (* ; "Edited 17-Jan-2022 18:15 by rmk")
+    (FOR DEV IN \FILEDEVICES WHEN (TYPE? FDEV (FETCH (PHDEVICE TARGETDEV) OF DEV))
+       COLLECT (LIST (FETCH (FDEV DEVICENAME) OF DEV)
+                     (FETCH (PHDEVICE PREFIX) OF DEV])
 
 (TARGETHOST
   [LAMBDA (HOST)                                             (* ; "Edited 14-Dec-2024 15:26 by rmk")
@@ -203,7 +198,8 @@
            else DEV])
 
 (TRUEFILENAME
-  [LAMBDA (FILE)                                             (* ; "Edited  1-Oct-2023 20:16 by rmk")
+  [LAMBDA (FILE NOERROR)                                     (* ; "Edited  2-Feb-2025 09:12 by rmk")
+                                                             (* ; "Edited  1-Oct-2023 20:16 by rmk")
                                                              (* ; "Edited 26-Jul-2023 07:53 by rmk")
                                                              (* ; "Edited 26-Jan-2022 23:33 by rmk")
                                                              (* ; "Edited 25-Jan-2022 08:47 by rmk")
@@ -215,22 +211,45 @@
                                             FILE))
                          (SETQ DEVICE (FETCH (STREAM DEVICE) OF FILE))
                   ELSE (SETQ FILENAME (\ADD.CONNECTED.DIR FILE))
-                       (SETQ DEVICE (\GETDEVICEFROMNAME FILENAME)))
-                (CL:IF (TYPE? PHDEVICE DEVICE)
-                    (EXPAND.PH FILENAME DEVICE)
-                    FILENAME)])
+                       (SETQ DEVICE (\GETDEVICEFROMNAME FILENAME NOERROR)))
+                (CL:WHEN DEVICE
+                    (CL:IF (TYPE? PHDEVICE DEVICE)
+                        (EXPAND.PH FILENAME DEVICE)
+                        FILENAME))])
 
 (PSEUDOFILENAME
-  [LAMBDA (FILE)                                             (* ; "Edited 26-Jul-2023 12:34 by rmk")
+  [LAMBDA (FILE PHOST)                            (* ; "Edited 26-Apr-2026 09:00 by rmk: If PHOST is non-NIL and a pseudohost, that's the one that the caller wants.")
+                                                             (* ; "Edited 24-Apr-2026 22:52 by rmk")
+                                                             (* ; "Edited 26-Jul-2023 12:34 by rmk")
                                                              (* ; "Edited 29-Jan-2022 23:08 by rmk")
                                                              (* ; "Edited 28-Jan-2022 09:06 by rmk")
     (if (LISTP FILE)
-        then (for F in FILE collect (PSEUDOFILENAME F))
-      else (FOR D PN (FILENAME _ (IF (STREAMP FILE)
-                                     THEN (FETCH (STREAM FULLFILENAME) OF FILE)
-                                   ELSE (\ADD.CONNECTED.DIR FILE))) IN \FILEDEVICES
-              WHEN (TYPE? PHDEVICE D) UNLESS (EQ FILENAME (SETQ PN (CONTRACT.PH FILENAME D)))
-              DO (RETURN PN) FINALLY (RETURN FILENAME])
+        then (for F in FILE collect (PSEUDOFILENAME F PHOST))
+      else (for D PN (FILENAME _ (if (STREAMP FILE)
+                                     then (fetch (STREAM FULLFILENAME) of FILE)
+                                   else (\ADD.CONNECTED.DIR FILE))) in \FILEDEVICES
+              when (type? PHDEVICE D) unless (EQ FILENAME (SETQ PN (CONTRACT.PH FILENAME D PHOST)))
+              do (RETURN PN) finally (RETURN FILENAME])
+)
+(DEFINEQ
+
+(CDPSEUDO
+  [LAMBDA (PHOST CDSUFFIX FILEPKGFLG)                        (* ; "Edited 25-Apr-2026 23:53 by rmk")
+                                                             (* ; "Edited 21-Dec-2024 13:48 by rmk")
+                                                             (* ; "Edited  6-Feb-2024 15:50 by rmk")
+
+    (* ;; "Makes a cd command for PHOST. The command name is %"cd%" followed by the lower-case letters of CDSUFFIX (e.g. cdf for PHOST FOO and CDSUFFIX %"f%".")
+
+    (* ;; "Does not notify FILEPKG unless FILEPKGFLG")
+
+    (DECLARE (SPECVARS FILEPKGFLG))
+    (CL:WHEN (AND (SETQ PHOST (CAR (PSEUDOHOSTP PHOST)))
+                  CDSUFFIX)
+        [LET [(CNAME (PACK* "cd" (L-CASE CDSUFFIX]
+             (SETQ PHOST (CONCAT "{" PHOST "}"))
+             (EVAL `(DEFCOMMAND ,CNAME (SUBDIR) (/CNDIR (CL:IF SUBDIR
+                                                            (CONCAT ,PHOST "/" SUBDIR)
+                                                            ,PHOST)))])])
 )
 
 
@@ -265,44 +284,47 @@
       ELSE FILENAME])
 
 (CONTRACT.PH
-  [LAMBDA (NAME PHDEV)
+  [LAMBDA (NAME PHDEV PHOST)
+
+    (* ;; "Edited 26-Apr-2026 10:31 by rmk")
 
     (* ;; "Edited 22-Sep-2023 14:30 by rmk")
 
-    (* ;; "Edited 30-Jan-2022 00:20 by rmk: the smallest pseudoname for NAME.  If the NAME was constructed by expanding, then")
+    (* ;; "Finds the preferred pseudoname for NAME, the name on PHOST if given, else the shortest one.  The PHDEV is used only to find its targetdev, that's where we scan for matching prefixes.  This replaces the chosen prefix of NAME with the corresponding pseudohost.")
 
-    (* ;; "Finds the smallest pseudoname for NAME.  The PHDEV is used only to find its targetdev, that's where we scan for matching prefixes.  This is so we can find the lowest matching pseudohost in the target's prefix map.  If the hosts are defined as {DSK}...{H1}...{H2}, DSK knows the prefixes that lead to H1 and H2, picks the longest matching prefix and replaces it by the corresponding host.")
-
-    (* ;; "If pseudohosts are defined in terms of other pseudohosts (e.g. FUM is defined in terms of FOO which is defined in terms of LI which is rooted in DSK, then the pseudodevices presumably were created in that order, so the first name we encounter will be the one with the longest prefix.  So {DSK}... might collapse to {FUM}.  But {FOO}... will not.  ")
-
-    (CL:UNLESS (TYPE? FDEV PHDEV)
-        (SETQ PHDEV (\GETDEVICEFROMNAME PHDEV)))
     (CL:WHEN NAME
-        (FOR PM PREFIX SUFFIX CONNECTOR IN (FETCH (TARGETDEVICE PREFIXMAP) OF (FETCH (PHDEVICE 
-                                                                                            TARGETDEV
-                                                                                            )
-                                                                                 OF PHDEV))
-           WHEN (STRPOS (SETQ PREFIX (CAR PM))
-                       NAME 1 NIL T NIL FILEDIRCASEARRAY)
-           DO 
-              (* ;; "This is the lowest host.  ")
+        (CL:UNLESS (type? FDEV PHDEV)
+            (SETQ PHDEV (\GETDEVICEFROMNAME PHDEV)))
+        (CL:WHEN (EQ PHOST T)
+            (SETQ PHOST (fetch (FDEV DEVICENAME) of PHDEV)))
+        (LET ((PREFIXMAPS (fetch (TARGETDEVICE PREFIXMAP) of (fetch (PHDEVICE TARGETDEV) of PHDEV)))
+              PREFIXMNAP SUFFIX CONNECTOR)
 
-              [SETQ SUFFIX (SUBSTRING NAME (ADD1 (NCHARS PREFIX]
-              (CL:WHEN (STRPOS ">" SUFFIX 1 NIL NIL NIL FILEDIRCASEARRAY)
+             (* ;; "PREFIXMAPs of PHDEVare sorted so that the longest one comes first.")
 
-                  (* ;; "CONNECTOR tells us whether to use / or > depending on what the  prefix has")
+             [SETQ PREFIXMAP (OR [AND PHOST (find PM in PREFIXMAPS suchthat (EQ PHOST (CADR PM]
+                                 (find PM PREFIX in PREFIXMAPS
+                                    suchthat (STRPOS (CAR PM)
+                                                    NAME 1 NIL T NIL FILEDIRCASEARRAY]
 
-                  (SETQ CONNECTOR (CADDR PM))
-                  [SETQ SUFFIX (CONCAT CONNECTOR (IF (EQ CONNECTOR '/)
-                                                     THEN (SLASHIT SUFFIX)
-                                                   ELSE (UNSLASHIT SUFFIX])
-              (RETURN (PACK* '{ (CADR PM)
+             (* ;; "If we didn't find a prefix map, NAME was not related to any pseudohost descending from the target, it is a pure target name, presumably because something like a relative .. reference took it off all paths.  We return the original name.")
+
+             (if PREFIXMAP
+                 then (SETQ PREFIX (CAR PREFIXMAP))
+                      [SETQ SUFFIX (SUBSTRING NAME (ADD1 (NCHARS PREFIX]
+                      (CL:WHEN (STRPOS ">" SUFFIX)
+
+                          (* ;; 
+                         "CONNECTOR tells us whether to use / or > depending on what the  prefix has")
+
+                          (SETQ CONNECTOR (CADDR PREFIXMAP))
+                          [SETQ SUFFIX (CONCAT CONNECTOR (CL:IF (EQ CONNECTOR '/)
+                                                             (SLASHIT SUFFIX)
+                                                             (UNSLASHIT SUFFIX))])
+                      (PACK* '{ (CADR PREFIXMAP)
                              "}"
-                             (OR SUFFIX ""))) FINALLY 
-
-                                 (* ;; "If we didn't match a prefix, then this was not related to any pseudhost descending from the target, it is a pure target name, presumably because something like a relative .. reference took it off all paths.  We return the original name.")
-
-                                                    (RETURN NAME)))])
+                             (OR SUFFIX ""))
+               else NAME)))])
 
 (UNSLASHIT
   [LAMBDA (X LCASEDIRS)                                      (* ; "Edited 26-Jan-2022 15:09 by rmk")
@@ -338,36 +360,22 @@
 (GETHOSTINFO.PH
   [LAMBDA (HOST ATTRIBUTE)
 
+    (* ;; "Edited 26-Nov-2025 17:26 by rmk")
+
     (* ;; "Edited 24-Apr-2022 14:16 by rmk: the  info from the true host")
 
     (* ;; "Want the  info from the true host")
 
     (GETHOSTINFO.ORIG (OR (TARGETHOST HOST)
                           HOST)
-           HOST ATTRIBUTE])
-)
-(DEFINEQ
-
-(CDPSEUDO
-  [LAMBDA (PHOST CDSUFFIX FILEPKG)                           (* ; "Edited 21-Dec-2024 13:48 by rmk")
-                                                             (* ; "Edited  6-Feb-2024 15:50 by rmk")
-
-    (* ;; "Makes a cd command for PHOST. The command name is %"cd%" followed by the lower-case letters of CDSUFFIX (e.g. cdf for PHOST FOO and CDSUFFIX %"f%".")
-
-    (CL:WHEN (AND (SETQ PHOST (CAR (PSEUDOHOSTP PHOST)))
-                  CDSUFFIX)
-        [LET ((C (PACK* "cd" (L-CASE CDSUFFIX)))
-              (FILEPKGFLG FILEPKG))
-             (DECLARE (SPECVARS FILEPKGFLG))
-             (SETQ PHOST (CONCAT "{" PHOST "}"))
-             (EVAL `(DEFCOMMAND ,C (SUBDIR) (/CNDIR (CL:IF SUBDIR
-                                                        (CONCAT ,PHOST "/" SUBDIR)
-                                                        ,PHOST)))])])
+           ATTRIBUTE])
 )
 (DEFINEQ
 
 (OPENFILE.PH
   [LAMBDA (FILE ACCESS RECOG OTHERINFO FDEV OLDSTRING)
+
+    (* ;; "Edited 26-Apr-2026 10:25 by rmk")
 
     (* ;; "Edited 31-Oct-2022 23:32 by rmk")
 
@@ -379,18 +387,19 @@
 
     (* ;; "Edited 18-Jan-2022 10:29 by rmk")
 
-    (LET ((TARGETDEV (FETCH (PHDEVICE TARGETDEV) OF FDEV))
+    (LET ((TARGETDEV (fetch (PHDEVICE TARGETDEV) of FDEV))
           (STREAM (PSEUDOHOST.TARGETVAL OPENFILE (FILE ACCESS RECOG OTHERINFO FDEV OLDSTRING)
                          FDEV)))
          (CL:WHEN STREAM
              (FDEVOP 'UNREGISTERFILE TARGETDEV TARGETDEV STREAM)
-             (CHANGE (FETCH (STREAM FULLFILENAME) OF STREAM)
-                    (CONTRACT.PH DATUM FDEV))
-             (REPLACE (STREAM DEVICE) OF STREAM WITH FDEV))
+             (change (fetch (STREAM FULLFILENAME) of STREAM)
+                    (CONTRACT.PH DATUM FDEV T))
+             (replace (STREAM DEVICE) of STREAM with FDEV))
          STREAM])
 
 (GETFILENAME.PH
-  [LAMBDA (NAME RECOG FDEV)                                  (* ; "Edited 25-Jan-2022 22:56 by rmk")
+  [LAMBDA (NAME RECOG FDEV)                                  (* ; "Edited 25-Apr-2026 16:11 by rmk")
+                                                             (* ; "Edited 25-Jan-2022 22:56 by rmk")
                                                              (* ; "Edited 16-Jan-2022 20:27 by rmk")
     (PSEUDOHOST.NAME GETFILENAME (NAME RECOG FDEV])
 
@@ -413,52 +422,24 @@
            STREAM ABORTFLG])
 
 (REOPENFILE.PH
-  [LAMBDA (FILE ACCESS RECOG OTHERINFO FDEV OLDSTREAM)       (* ; "Edited 25-Jan-2022 12:50 by rmk")
+  [LAMBDA (FILE ACCESS RECOG OTHERINFO FDEV OLDSTREAM)       (* ; "Edited 26-Apr-2026 10:26 by rmk")
+                                                             (* ; "Edited 25-Jan-2022 12:50 by rmk")
                                                              (* ; "Edited 18-Jan-2022 11:41 by rmk")
     (LET ((STREAM (PSEUDOHOST.TARGETVAL REOPENFILE (FILE ACCESS RECOG OTHERINFO FDEV OLDSTREAM)
                          FDEV)))
-         (CHANGE (FETCH (STREAM FULLFILENAME) OF STREAM)
-                (CONTRACT.PH DATUM FDEV))
-         (REPLACE (STREAM DEVICE) OF STREAM WITH FDEV)
+         (CHANGE (fetch (STREAM FULLFILENAME) of STREAM)
+                (CONTRACT.PH DATUM FDEV T))
+         (replace (STREAM DEVICE) of STREAM with FDEV)
          STREAM])
 
 (DELETEFILE.PH
-  [LAMBDA (FILENAME DEV)                                     (* ; "Edited 25-Jan-2022 22:56 by rmk")
-                                                             (* ; "Edited 18-Jan-2022 10:23 by rmk")
+  [LAMBDA (FILENAME DEV)                                     (* ; "Edited 25-Apr-2026 23:41 by rmk")
+                                                             (* ; "Edited 25-Jan-2022 22:56 by rmk")
     (PSEUDOHOST.NAME DELETEFILE (FILENAME DEV])
 
-(OPENP.PH
-  [LAMBDA (FILENAME ACCESS DEVICE)
-
-    (* ;; "Edited 25-Jun-2022 15:48 by rmk: No longer called.  Streams are registered in the pseudohost, not in the target device.")
-
-    (* ;; "Edited 18-Jan-2022 10:29 by rmk")
-
-    (PSEUDOHOST.TARGETVAL OPENP (FILENAME ACCESS DEVICE])
-
-(UNREGISTERFILE.PH
-  [LAMBDA (DEVICE STREAM)                                    (* ; "Edited 25-Jun-2022 15:07 by rmk")
-                                                             (* ; "Edited 16-Jan-2022 16:47 by rmk")
-
-    (* ;; 
-   "This isn't called now because files are now registered in the pseudohost, not the target device.")
-
-    (APPLY* (FETCH (FDEV UNREGISTERFILE) OF (FETCH (PHDEVICE TARGETDEV) OF DEVICE))
-           (FETCH (PHDEVICE TARGETDEV) OF DEVICE)
-           STREAM])
-
-(REGISTERFILE.PH
-  [LAMBDA (DEVICE STREAM)                                    (* ; "Edited 25-Jun-2022 15:07 by rmk")
-                                                             (* ; "Edited 16-Jan-2022 16:46 by rmk")
-
-    (* ;; "This isn't called now, because the stream is registered in the pseudohost, not in the target device.")
-
-    (APPLY* (FETCH (FDEV REGISTERFILE) OF (FETCH (PHDEVICE TARGETDEV) OF DEVICE))
-           (FETCH (PHDEVICE TARGETDEV) OF DEVICE)
-           STREAM])
-
 (GENERATEFILES.PH
-  [LAMBDA (FDEV PATTERN DESIREDPROPS OPTIONS)                (* ; "Edited 17-Jan-2022 20:46 by rmk")
+  [LAMBDA (FDEV PATTERN DESIREDPROPS OPTIONS)                (* ; "Edited 25-Apr-2026 23:21 by rmk")
+                                                             (* ; "Edited 17-Jan-2022 20:46 by rmk")
 
     (* ;; "FDEV is the pseudohost. We will generate from the target directory using its GENFILESTATE, but fiddle the output so that it looks like it is coming from the pseudo host.")
 
@@ -473,26 +454,33 @@
          (CREATE FILEGENOBJ
                 NEXTFILEFN _ (FUNCTION NEXTFILEFN.PH)
                 FILEINFOFN _ (FUNCTION FILEINFOFN.PH)
-                GENFILESTATE _ (LIST FDEV TARGETGENOBJ])
+                GENFILESTATE _ (LIST FDEV TARGETGENOBJ (fetch (FDEV DEVICENAME) of FDEV])
 
 (GETFILEINFO.PH
-  [LAMBDA (STREAM ATTRIBUTE DEVICE)                          (* ; "Edited 25-Jan-2022 12:43 by rmk")
+  [LAMBDA (STREAM ATTRIBUTE DEVICE)                          (* ; "Edited 22-Apr-2026 18:12 by rmk")
+                                                             (* ; "Edited 20-Apr-2026 08:30 by rmk")
+                                                             (* ; "Edited 25-Jan-2022 12:43 by rmk")
                                                              (* ; "Edited 17-Jan-2022 18:21 by rmk")
-    (PSEUDOHOST.TARGETVAL GETFILEINFO (STREAM ATTRIBUTE DEVICE])
+    (GETFILEINFO (TRUEFILENAME STREAM)
+           ATTRIBUTE])
 
 (SETFILEINFO.PH
-  [LAMBDA (STREAM ATTRIBUTE VALUE DEVICE)                    (* ; "Edited 25-Jan-2022 12:37 by rmk")
-    (PSEUDOHOST.TARGETVAL SETFILEINFO (STREAM ATTRIBUTE VALUE DEVICE])
+  [LAMBDA (STREAM ATTRIBUTE VALUE DEVICE)                    (* ; "Edited 25-Apr-2026 15:52 by rmk")
+                                                             (* ; "Edited 25-Jan-2022 12:37 by rmk")
+    (SETFILEINFO (TRUEFILENAME STREAM)
+           ATTRIBUTE VALUE])
 
 (NEXTFILEFN.PH
-  [LAMBDA (GENFILESTATE NAMEONLY)                            (* ; "Edited 17-Jan-2022 21:27 by rmk")
+  [LAMBDA (GENFILESTATE NAMEONLY)                            (* ; "Edited 25-Apr-2026 23:21 by rmk")
+                                                             (* ; "Edited 17-Jan-2022 21:27 by rmk")
     (LET* ((TARGETGENOBJ (CADR GENFILESTATE))
            (TARGETGENFILESTATE (FETCH GENFILESTATE OF TARGETGENOBJ))
            (FILENAME (APPLY* (FETCH NEXTFILEFN OF TARGETGENOBJ)
                             TARGETGENFILESTATE NAMEONLY)))
           (CL:WHEN FILENAME
               (CL:UNLESS NAMEONLY
-                  (SETQ FILENAME (CONTRACT.PH FILENAME (CAR GENFILESTATE)))))
+                  (SETQ FILENAME (CONTRACT.PH FILENAME (CAR GENFILESTATE)
+                                        (CADDR GENFILESTATE)))))
           FILENAME])
 
 (FILEINFOFN.PH
@@ -500,27 +488,6 @@
     (APPLY* (FETCH FILEINFOFN OF (CADR GENFILESTATE))
            (FETCH GENFILESTATE OF (CADR GENFILESTATE))
            ATTRIBUTE])
-
-(RENAMEFILE.PH
-  [LAMBDA (OLD-DEVICE OLD-NAME NEW-DEVICE NEW-NAME)          (* ; "Edited 18-Jan-2022 09:52 by rmk")
-    (LET ((OLDTARGETDEV (FETCH (PHDEVICE TARGETDEV) OF OLD-DEVICE))
-          (NEWTARGETDEV (FETCH (PHDEVICE TARGETDEV) OF NEW-DEVICE))
-          (NEWTARGETNAME NEW-NAME)
-          RESULT)
-         (CL:WHEN (TYPE? FDEV NEWTARGETDEV)                  (* ; "NEW-DEVICE is a pseudo host")
-             (SETQ NEWTARGETNAME (EXPAND.PH NEW-NAME NEW-DEVICE)))
-         (SETQ RESULT (APPLY* (FETCH (FDEV RENAMEFILE) OF OLDTARGETDEV)
-                             OLDTARGETDEV
-                             (EXPAND.PH OLD-NAME OLD-DEVICE)
-                             (OR NEWTARGETDEV NEW-DEVICE)
-                             NEWTARGETNAME))
-         (CL:WHEN (AND RESULT (NEQ NEWTARGETDEV NEW-DEVICE))
-             (SETQ RESULT (CONTRACT.PH RESULT NEW-DEVICE)))
-         RESULT])
-)
-(DECLARE%: DONTEVAL@LOAD DOCOPY 
-
-(PSEUDOHOST 'LI LOGINHOST/DIR)
 )
 
 (MOVD? 'GETHOSTINFO 'GETHOSTINFO.ORIG)
@@ -551,14 +518,14 @@
                      (* ;; 
     "Assumes that the name is (CAR ARGS), the device is the last or args if not specified separately")
 
-                     `(CONTRACT.PH [APPLY* (FETCH (FDEV ,OPNAME) OF (FETCH (PHDEVICE TARGETDEV)
+                     `(CONTRACT.PH [APPLY* (fetch (FDEV ,OPNAME) of (fetch (PHDEVICE TARGETDEV)
                                                                        OF ,DEV))
                                           (EXPAND.PH ,(CAR ARGS)
                                                  ,DEV)
-                                          ,@(SUBST `(FETCH (PHDEVICE TARGETDEV) OF ,DEV)
+                                          ,@(SUBST `(fetch (PHDEVICE TARGETDEV) of ,DEV)
                                                    DEV
                                                    (CDR ARGS]
-                             ,DEV])
+                             ,DEV T])
 
 (PUTPROPS PSEUDOHOST.TARGETVAL MACRO
           [TAIL (LET [(OPNAME (CAR TAIL))
@@ -576,19 +543,14 @@
                                       DEV
                                       (CDR ARGS])
 )
-
-
-(FILESLOAD (FROM LOADUPS)
-       EXPORTS.ALL)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1331 13754 (PSEUDOHOST 1341 . 7049) (PSEUDOHOSTP 7051 . 7880) (PSEUDOHOSTS 7882 . 9925)
- (TARGETHOST 9927 . 10796) (TRUEDEVICE 10798 . 11754) (TRUEFILENAME 11756 . 12881) (PSEUDOFILENAME 
-12883 . 13752)) (13782 19797 (EXPAND.PH 13792 . 15045) (CONTRACT.PH 15047 . 17758) (UNSLASHIT 17760 . 
-19506) (GETHOSTINFO.PH 19508 . 19795)) (19798 20699 (CDPSEUDO 19808 . 20697)) (20700 28720 (
-OPENFILE.PH 20710 . 21783) (GETFILENAME.PH 21785 . 22074) (DIRECTORYNAMEP.PH 22076 . 22700) (
-CLOSEFILE.PH 22702 . 23169) (REOPENFILE.PH 23171 . 23736) (DELETEFILE.PH 23738 . 24022) (OPENP.PH 
-24024 . 24319) (UNREGISTERFILE.PH 24321 . 24863) (REGISTERFILE.PH 24865 . 25399) (GENERATEFILES.PH 
-25401 . 26445) (GETFILEINFO.PH 26447 . 26749) (SETFILEINFO.PH 26751 . 26950) (NEXTFILEFN.PH 26952 . 
-27498) (FILEINFOFN.PH 27500 . 27775) (RENAMEFILE.PH 27777 . 28718)))))
+  (FILEMAP (NIL (1417 13360 (PSEUDOHOST 1427 . 7879) (PSEUDOHOSTP 7881 . 8710) (PSEUDOHOSTS 8712 . 9073)
+ (TARGETHOST 9075 . 9944) (TRUEDEVICE 9946 . 10902) (TRUEFILENAME 10904 . 12191) (PSEUDOFILENAME 12193
+ . 13358)) (13361 14400 (CDPSEUDO 13371 . 14398)) (14428 20089 (EXPAND.PH 14438 . 15691) (CONTRACT.PH 
+15693 . 18005) (UNSLASHIT 18007 . 19753) (GETHOSTINFO.PH 19755 . 20087)) (20090 26711 (OPENFILE.PH 
+20100 . 21225) (GETFILENAME.PH 21227 . 21625) (DIRECTORYNAMEP.PH 21627 . 22251) (CLOSEFILE.PH 22253 . 
+22720) (REOPENFILE.PH 22722 . 23398) (DELETEFILE.PH 23400 . 23684) (GENERATEFILES.PH 23686 . 24880) (
+GETFILEINFO.PH 24882 . 25403) (SETFILEINFO.PH 25405 . 25714) (NEXTFILEFN.PH 25716 . 26432) (
+FILEINFOFN.PH 26434 . 26709)))))
 STOP

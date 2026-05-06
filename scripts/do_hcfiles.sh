@@ -57,7 +57,12 @@ main() {
 
         # save dribble file to loadups; extract and save fails
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/HCFILES.DRIBBLE "${MEDLEYDIR}"/loadups/hcfiles.dribble
-        grep "IL:FAIL" < "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
+        if [ -f "$(command -v perl)" ] && [ -x "$(command -v perl)" ]
+        then
+            perl "${MEDLEYDIR}"/scripts/getFails.pl '^[^\n]*IL:FAIL' 'DONE' "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
+        else
+            echo Unable to extract FAIL information from "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
+        fi
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/fails "${MEDLEYDIR}"/loadups/hcfiles-fails.txt
 
         # cleanup

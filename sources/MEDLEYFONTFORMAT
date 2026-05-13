@@ -1,12 +1,12 @@
-(DEFINE-FILE-INFO PACKAGE "INTERLISP" READTABLE "INTERLISP" BASE 10)
+(DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10)
 
-(FILECREATED "14-Feb-2026 00:39:34" {WMEDLEY}<sources>MEDLEYFONTFORMAT.;250 60733  
+(FILECREATED " 5-May-2026 11:06:05" {MEDLEY}<sources>MEDLEYFONTFORMAT.;317 67145  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS MEDLEYFONT.GETCHARSET MEDLEYFONT.READ.CHARSET)
+      :CHANGES-TO (FNS MEDLEYFONT.READ.FONT MEDLEYFONT.FILENAME)
 
-      :PREVIOUS-DATE "23-Jan-2026 15:10:16" {WMEDLEY}<sources>MEDLEYFONTFORMAT.;249)
+      :PREVIOUS-DATE " 4-May-2026 14:58:55" {MEDLEY}<sources>MEDLEYFONTFORMAT.;316)
 
 
 (PRETTYCOMPRINT MEDLEYFONTFORMATCOMS)
@@ -18,8 +18,8 @@
         
         (* ;; "Main public entries")
 
-        (FNS MEDLEYFONT.WRITE.FONT MEDLEYFONT.GETCHARSET MEDLEYFONT.CHARSET? MEDLEYFONT.GETFILEPROP 
-             MEDLEYFONT.FILEP)
+        (FNS MEDLEYFONT.WRITE.FONT MEDLEYFONT.GETCHARSET MEDLEYFONT.GETCHARSET.INTERNAL 
+             MEDLEYFONT.CHARSET? MEDLEYFONT.GETFILEPROP MEDLEYFONT.FILEP MEDLEYFONT.FILEVERSION)
         
         (* ;; "Reading")
 
@@ -59,191 +59,222 @@
 (DEFINEQ
 
 (MEDLEYFONT.WRITE.FONT
-  [LAMBDA (FONT FILE CHARSETNOS OTHERFONTPROPS NOINDIRECTS)  (* ; "Edited 20-Jan-2026 22:36 by rmk")
+  [LAMBDA (FONT FILE OTHERFONTPROPS NOINDIRECTS)             (* ; "Edited 30-Mar-2026 12:55 by rmk")
+                                                             (* ; "Edited 25-Mar-2026 10:48 by rmk")
+                                                             (* ; "Edited 22-Mar-2026 18:19 by rmk")
+                                                             (* ; "Edited 21-Mar-2026 15:32 by rmk")
+                                                             (* ; "Edited 18-Mar-2026 23:16 by rmk")
+                                                             (* ; "Edited 20-Jan-2026 22:36 by rmk")
                                                              (* ; "Edited  2-Sep-2025 23:01 by rmk")
                                                              (* ; "Edited 15-Jul-2025 16:43 by rmk")
                                                              (* ; "Edited  9-Jul-2025 09:32 by rmk")
                                                              (* ; "Edited 19-Jun-2025 10:59 by rmk")
                                                              (* ; "Edited  9-Jun-2025 12:17 by rmk")
-                                                             (* ; "Edited 25-May-2025 20:48 by rmk")
-                                                             (* ; "Edited 23-May-2025 14:59 by rmk")
-                                                             (* ; "Edited 22-May-2025 09:58 by rmk")
-                                                             (* ; "Edited 16-May-2025 20:17 by rmk")
                                                              (* ; "Edited 14-May-2025 17:45 by rmk")
+
+    (* ;; "This writes all of the information in the fontdescriptor FONT, this doesn't allow for selecting a subset of character sets to write.  The information allows all of the current CHARSETINFOs to be reconstructed when the font is read.  An uninstantiated charset (CSINFO is NIL) will be read as NIL, and the CSINFO for an empty charset (CSINFO is CSSLUGP) will be installed as the font's slug.  The reader can select a subset of the charsets for MEDLEYFONT.GETCHARSET to read. ")
+
     (SETQ FONT (FONTCREATE FONT))
-    (SETQ FILE (MEDLEYFONT.FILENAME FILE FONT CHARSETNOS))
-    (SETQ CHARSETNOS (SORT (MKLIST CHARSETNOS)))
-    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :OUTPUT :IF-EXISTS :NEW-VERSION)
-           (MEDLEYFONT.WRITE.HEADER STREAM OTHERFONTPROPS)
-           (LET ((CHARSETLOCS (CL:MAKE-ARRAY 256 :INITIAL-ELEMENT 0))
-                 (FONTCHARENCODING (FONTPROP FONT 'CHARENCODING))
-                 (*READTABLE* (FIND-READTABLE "INTERLISP"))
-                 CSVECTORPTRLOC CSVECTORLOC FILECHARSETS)
+    (CL:WITH-OPEN-FILE
+     (STREAM (MEDLEYFONT.FILENAME FILE)
+            :DIRECTION :OUTPUT :IF-EXISTS :NEW-VERSION)
+     (MEDLEYFONT.WRITE.HEADER STREAM OTHERFONTPROPS FONT)
 
-                (* ;; "Figure out the actual non empty/sluggish charsets that will be wrtitten.")
+     (* ;; "Right after the header, leave bytes for the maxcharset and a pointer to either the charset dispatch vector or a single-charset. Ptr is before fontproperties, vector is after, so MEDLEYFONT.GETCHARSET can skip the font stuff.")
 
-                (SETQ FILECHARSETS (for CSNO CSINFO from 0 to \MAXCHARSET
-                                      when (OR (NULL CHARSETNOS)
-                                               (MEMB CSNO CHARSETNOS))
-                                      when (SETQ CSINFO (\GETCHARSETINFO FONT CSNO))
-                                      unless (fetch (CHARSETINFO CSSLUGP) of CSINFO) collect CSNO))
-                (CL:UNLESS FILECHARSETS (ERROR "No character sets to write" FONT))
+     (MEDLEYFONT.WRITE.ITEM STREAM 'MAXCHARSET (MAXCHARSET FONT))
+     (LET ((CHARSETLOCS (CL:MAKE-ARRAY (ADD1 (MAXCHARSET FONT))
+                               :INITIAL-ELEMENT 0))
+           (FONTCHARENCODING (FONTPROP FONT 'CHARENCODING))
+           (*READTABLE* (FIND-READTABLE "INTERLISP"))
+           CSVECTORPTRLOC CSLOC SINGLECS)
+          [SETQ SINGLECS (AND (ILEQ (FONTPROP FONT 'NINSTANTIATEDCHARSETS)
+                                    1)
+                              (OR (EQ 0 (FONTPROP FONT 'NEMPTYCHARSETS))
+                                  (EQ 0 (FONTPROP FONT 'NUNINSTANTIATEDCHARSETS]
+          (SETQ CSVECTORPTRLOC (GETFILEPTR STREAM))
+          (\FIXPOUT STREAM 0)                                (* ; 
+                                                          "Space for the pointer to the charset info")
+          (MEDLEYFONT.WRITE.FONTPROPS STREAM FONT)
+          (PRINTOUT STREAM "CHARSET LOCATIONS" T)            (* ; "Signpost for debugging")
+          (SETQ CSLOC (GETFILEPTR STREAM))
+          (SETFILEPTR STREAM CSVECTORPTRLOC)                 (* ; 
+                                                             "Store the address of the charset info")
+          (\FIXPOUT STREAM (CL:IF SINGLECS
+                               (IMINUS CSLOC)
+                               CSLOC))                       (* ; "Negative for single")
+          (SETFILEPTR STREAM CSLOC)
+          [if SINGLECS
+              then 
+                   (* ;; "At most one instantiated, others are either all uninstantiated or all empty, no need for the vector")
 
-                (* ;; "Right after the header, leave 4 bytes for the pointer to the charset dispatch vector. If writing a single charset, we store the negative of the byte location so we can still easily skip the font properties without writing the whole vector. The byte in front of the single charset holds its number.")
+                   (if [SETQ SINGLECS (find CSNO CSINFO from 0 to (MAXCHARSET FONT)
+                                         suchthat (AND (SETQ CSINFO (\GETCHARSETINFO FONT CSNO))
+                                                       (NOT (fetch (CHARSETINFO CSSLUGP) of CSINFO]
+                       then (\FIXPOUT STREAM SINGLECS)       (* ; 
+                                                             "Charsetno prefix as cell, not byte")
+                            (\BOUT STREAM (CL:IF (EQ 0 (FONTPROP FONT 'NUNINSTANTIATEDCHARSETS))
+                                              1
+                                              2))            (* ; "All others")
+                            (MEDLEYFONT.WRITE.CHARSET FONT SINGLECS STREAM NOINDIRECTS)
+                     else 
+                          (* ;; 
+                    "Fake charset meaning all the same:   -1 if all empty, -2 if all uninstantiated.")
 
-                (* ;; "")
+                          (\FIXPOUT STREAM (CL:IF (EQ 0 (FONTPROP FONT 'NUNINSTANTIATEDCHARSETS))
+                                               -1
+                                               -2)))
+            else 
+                 (* ;; "Allocate the vector space")
 
-                (SETQ CSVECTORPTRLOC (GETFILEPTR STREAM))    (* ; 
-                                                      "Ptr is before fontproperties, vector is after")
-                (\FIXPOUT STREAM 0)
-                (MEDLEYFONT.WRITE.FONTPROPS STREAM FONT)
-                (if (CDR FILECHARSETS)
-                    then (PRINTOUT STREAM "CHARSET LOCATIONS" T) 
-                                                             (* ; 
-                                                             "Allocate the vector space if multiple")
-                         (SETQ CSVECTORLOC (GETFILEPTR STREAM))
-                         (for I from 0 to \MAXCHARSET do (\FIXPOUT STREAM 0))
-                         (TERPRI STREAM)
-                         (for CSNO in FILECHARSETS do 
+                 (for CSNO from 0 to (MAXCHARSET FONT) do (\FIXPOUT STREAM 0))
+                 (for CSNO CSINFO from 0 to (MAXCHARSET FONT) when (SETQ CSINFO (\GETCHARSETINFO
+                                                                                 FONT CSNO))
+                    do 
+                       (* ;; "LOC remains zero if the charset is NIL=uninstantiated. Could have initialized array to -1, flipped to zero here if uninstantiated")
 
-                                                    (* ;; 
-    "LOC remains zero for missing charsets, slug properties are determined by font-level properties.")
-
-                                                      (CL:SETF (CL:SVREF CHARSETLOCS CSNO)
-                                                             (GETFILEPTR STREAM))
-                                                      (MEDLEYFONT.WRITE.CHARSET FONT CSNO STREAM 
-                                                             NOINDIRECTS))
-                         (SETFILEPTR STREAM CSVECTORLOC)
-                         (for CSNO from 0 to \MAXCHARSET do (\FIXPOUT STREAM (CL:SVREF CHARSETLOCS 
-                                                                                    CSNO)))
-                  else 
-                       (* ;; "Only one.  The %"vector%" is the charset byte immediately before the charset, the sign bit tells the tale.")
-
-                       (SETQ CSVECTORLOC (IMINUS (GETFILEPTR STREAM)))
-                       (BOUT STREAM (CAR FILECHARSETS))
-                       (MEDLEYFONT.WRITE.CHARSET FONT (CAR FILECHARSETS)
-                              STREAM NOINDIRECTS))
-                (SETFILEPTR STREAM CSVECTORPTRLOC)
-                (\FIXPOUT STREAM CSVECTORLOC)                (* ; 
-             "Pointer to the charset dispatch vector--or negative of actual location for a singleton")
-                (FULLNAME STREAM])
+                       (if (fetch (CHARSETINFO CSSLUGP) of CSINFO)
+                           then (CL:SETF (CL:SVREF CHARSETLOCS CSNO)
+                                       -1)
+                         else (CL:SETF (CL:SVREF CHARSETLOCS CSNO)
+                                     (GETFILEPTR STREAM))
+                              (MEDLEYFONT.WRITE.CHARSET FONT CSNO STREAM NOINDIRECTS)))
+                 (SETFILEPTR STREAM CSLOC)                   (* ; "Fill in the vector")
+                 (for CSNO from 0 to (MAXCHARSET FONT) do (\FIXPOUT STREAM (CL:SVREF CHARSETLOCS CSNO
+                                                                                  ]
+          (FULLNAME STREAM])
 
 (MEDLEYFONT.GETCHARSET
-  [LAMBDA (STREAM CHARSET FONT)                              (* ; "Edited 14-Feb-2026 00:36 by rmk")
+  [LAMBDA (STREAM CHARSET FONT)                              (* ; "Edited 15-Apr-2026 13:29 by rmk")
+                                                             (* ; "Edited 12-Apr-2026 22:14 by rmk")
+                                                             (* ; "Edited  6-Apr-2026 09:45 by rmk")
+                                                             (* ; "Edited 30-Mar-2026 08:42 by rmk")
+                                                             (* ; "Edited 24-Mar-2026 00:04 by rmk")
+                                                             (* ; "Edited 21-Mar-2026 15:28 by rmk")
+                                                             (* ; "Edited 17-Mar-2026 11:42 by rmk")
+                                                             (* ; "Edited 14-Feb-2026 00:36 by rmk")
                                                              (* ; "Edited  9-Oct-2025 15:18 by rmk")
                                                              (* ; "Edited  3-Sep-2025 11:32 by rmk")
                                                              (* ; "Edited 15-Jul-2025 17:09 by rmk")
                                                              (* ; "Edited  9-Jul-2025 15:45 by rmk")
                                                              (* ; "Edited 14-May-2025 17:46 by rmk")
 
-    (* ;; "If open, assume its a medleyfont stream, that the initial Me etc. has been checked, and we are positioned after the header information.  FONT is provided so that properties of the fontdescriptor can be read through this interface--ottherwise the fontcreate function of each device might have to also have a list of functions to try.")
+    (* ;; "If open, assume its a medleyfont stream, that the initial %"Medley...%" has been checked, FONT is consistent with information in the file, and we are positioned after the header information, at the location of CSLOC.")
 
-    (CL:UNLESS (<= 0 CHARSET \MAXCHARSET)
-           (\ILLEGAL.ARG CHARSET))
+    (SETQ CHARSET (CHARSET.DECODE CHARSET))
     (RESETLST
         (CL:UNLESS (\GETSTREAM STREAM 'INPUT T)
             [RESETSAVE (SETQ STREAM (OPENSTREAM STREAM 'INPUT))
-                   `(PROGN (CLOSEF? OLDVALUE]
-            (CL:UNLESS (MEDLEYFONT.FILEP STREAM)             (* ; 
-                                                             "Checks and positions, if reopening.")
-                (ERROR "NOT A MEDLEYFONT FILE" (FULLNAME STREAM))))
-        (LET ((CSVECTORLOC (\FIXPIN STREAM))
-              CSLOC)
-             (if (thereis CS from 0 to \MAXTHINCHAR suchthat (\GETCHARSETINFO FONT CS))
-                 then 
-                      (* ;; "Font fields have been initialized, just update for this charset")
+                   `(PROGN (CLOSEF? OLDVALUE])
+        (MEDLEYFONT.FILEVERSION STREAM 1)
+        (MEDLEYFONT.READ.ITEM STREAM 'MAXCHARSET)
+        (MEDLEYFONT.GETCHARSET.INTERNAL STREAM CHARSET FONT (\FIXPIN STREAM)))])
 
-                      (for P VAL in (MEDLEYFONT.READ.FONTPROPS STREAM)
-                         do (SETQ VAL (CADR P))
-                            (SELECTQ (CAR VAL)
-                                (\SFAscent (change (fetch (FONTDESCRIPTOR \SFAscent) of FONT)
-                                                  (IMAX VAL DATUM)))
-                                (\SFDescent (change (fetch (FONTDESCRIPTOR \SFDescent) of FONT)
-                                                   (IMAX VAL DATUM)))
-                                (\SFHeight (fetch (FONTDESCRIPTOR \SFHeight) of FONT))
-                                NIL))
-               else 
-                    (* ;; "First charset, probably 0: establish the overall font properties. ")
+(MEDLEYFONT.GETCHARSET.INTERNAL
+  [LAMBDA (STREAM CHARSET FONT CSLOC)                        (* ; "Edited 15-Apr-2026 11:09 by rmk")
+                                                             (* ; "Edited 12-Apr-2026 14:04 by rmk")
+                                                             (* ; "Edited 29-Mar-2026 22:42 by rmk")
 
-                    (MEDLEYFONT.READ.VERIFIEDFONT STREAM FONT))
-             (replace (FONTDESCRIPTOR FONTCOMPLETEP) of FONT with NIL)
+    (* ;; "Caller guarantees STREAM and CSLOC as the location of the charset info.  CHARSET is less than (MAXCHARSTE FONT).")
 
-             (* ;; 
-         "One charset doesn't %"complete%" a complete font--maybe that's only an incore property?   ")
+    (if (IGREATERP CHARSET (fetch (FONTDESCRIPTOR MAXCHARSET) of FONT))
+        then (SLUGCSINFO FONT)
+      else (LET (CSINFO FILECHARSET ALLOTHERS)
+                (if (ILESSP CSLOC 0)
+                    then 
+                         (* ;; 
+  "File contains at most one instantiated charset, others are either all empty or all uninstantiated")
 
-             (* ;; "We know now that this file has information about the requested charset, including NIL entries for empty/slugglish ones in the middle of populated ones.  A file that would have contain a single empty/sluggish charset cannot be created--the caller would recognize the case of a missing file and provide either NIL or a slug-vector.")
+                         (SETFILEPTR STREAM (IMINUS CSLOC))
+                         (SETQ FILECHARSET (\FIXPIN STREAM))
+                         (SETQ ALLOTHERS (BIN STREAM))       (* ; "If not the one we wanted")
+                         [SELECTQ FILECHARSET
+                             (-1                             (* ; "All empty")
+                                 (SLUGCSINFO FONT))
+                             (-2                             (* ; "All uninstantiated")
+                                 NIL)
+                             (PROGN (if (IEQP CHARSET FILECHARSET)
+                                        then (MEDLEYFONT.READ.CHARSET STREAM CHARSET)
+                                      elseif (EQ 1 ALLOTHERS)
+                                        then (SLUGCSINFO FONT]
+                  else 
+                       (* ;; 
+                       "CSLOC points to the vector, what does it say about the requested CHARSET?")
 
-             (CL:WHEN (if (ILESSP CSVECTORLOC 0)
-                          then 
-                               (* ;; "File contains only one charset. Is it the one we want? If the intended charset is empty/sluggish, the file would not have been constructed and we wouldn't be here.")
-
-                               (SETFILEPTR STREAM (IMINUS CSVECTORLOC))
-                               (EQ CHARSET (BIN STREAM))
-                        else 
-                             (* ;; "The vector-entry points to the one we want.  Is it there?")
-
-                             (SETFILEPTR STREAM (IPLUS CSVECTORLOC (UNFOLD CHARSET BYTESPERCELL)))
-                             (CL:UNLESS (EQ 0 (SETQ CSLOC (\FIXPIN STREAM)))
-                                    (SETFILEPTR STREAM CSLOC)))
-                    (MEDLEYFONT.READ.CHARSET STREAM CHARSET FONT))))])
+                       (SETFILEPTR STREAM (IPLUS CSLOC (UNFOLD CHARSET BYTESPERCELL)))
+                       (SELECTQ (SETQ CSLOC (\FIXPIN STREAM))
+                           (0 NIL)
+                           (-1 (SLUGCSINFO FONT))
+                           (PROGN (SETFILEPTR STREAM CSLOC)
+                                  (MEDLEYFONT.READ.CHARSET STREAM CHARSET FONT])
 
 (MEDLEYFONT.CHARSET?
-  [LAMBDA (FILE CHARSET)                                     (* ; "Edited 15-Jul-2025 15:21 by rmk")
+  [LAMBDA (FILE CHARSET)                                     (* ; "Edited 16-Mar-2026 00:31 by rmk")
+                                                             (* ; "Edited 15-Jul-2025 15:21 by rmk")
                                                              (* ; "Edited 25-May-2025 20:53 by rmk")
                                                              (* ; "Edited 21-May-2025 11:35 by rmk")
                                                              (* ; "Edited 17-May-2025 11:29 by rmk")
                                                              (* ; "Edited 14-May-2025 17:46 by rmk")
-
-    (* ;; "If CHARSET, returns CHARSET if FILE contains a non-slug entry for CHARSET.  If not CHARSET, returns the list of non-slug charsets in FILE.")
-
-    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :INPUT)
-           (CL:UNLESS (MEDLEYFONT.FILEP STREAM)
-                  (ERROR "Not a MEDLEYFONT file" FILE))
-           (LET ((CSVECTORLOC (\FIXPIN STREAM)))
-                (CL:WHEN (if (ILESSP CSVECTORLOC 0)
-                             then 
-                                  (* ;; "File contains only one charse, is it the one we want? ")
-
-                                  (SETFILEPTR STREAM (IMINUS CSVECTORLOC))
-                                  (EQ CHARSET (BIN STREAM))
-                           else (SETFILEPTR STREAM (IPLUS CSVECTORLOC (UNFOLD CHARSET BYTESPERCELL)))
-                                (NEQ 0 (\FIXPIN STREAM)))
-                       CHARSET])
+    (SETQ CHARSET (CHARSET.DECODE CHARSET))
+    (LET [(CHARSETS (MEDLEYFONT.GETFILEPROP FILE 'CHARSETS]
+         (CL:IF CHARSET
+             (CAR (MEMB CHARSET CHARSETS))
+             CHARSETS)])
 
 (MEDLEYFONT.GETFILEPROP
-  [LAMBDA (FILE PROP)                                        (* ; "Edited 27-Aug-2025 17:12 by rmk")
+  [LAMBDA (FILE PROP)                                        (* ; "Edited  4-May-2026 09:57 by rmk")
+                                                             (* ; "Edited 16-Apr-2026 22:30 by rmk")
+                                                             (* ; "Edited 15-Apr-2026 00:19 by rmk")
+                                                             (* ; "Edited 12-Apr-2026 19:31 by rmk")
+                                                             (* ; "Edited 31-Mar-2026 14:43 by rmk")
+                                                             (* ; "Edited 28-Mar-2026 22:59 by rmk")
+                                                             (* ; "Edited 24-Mar-2026 10:56 by rmk")
+                                                             (* ; "Edited 20-Mar-2026 13:23 by rmk")
+                                                             (* ; "Edited 27-Aug-2025 17:12 by rmk")
                                                              (* ; "Edited 15-Jul-2025 20:21 by rmk")
                                                              (* ; "Edited 10-Jul-2025 17:50 by rmk")
                                                              (* ; "Edited 25-May-2025 20:53 by rmk")
                                                              (* ; "Edited 21-May-2025 11:36 by rmk")
-                                                             (* ; "Edited 17-May-2025 19:07 by rmk")
-                                                             (* ; "Edited 14-May-2025 17:46 by rmk")
-    (CL:UNLESS (OR (LITATOM FILE)
-                   (STRINGP FILE))
-        [SETQ FILE (CAR (FONTFILES (FONTPROP (FONTCREATE FILE)
-                                          'SPEC])
-    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :INPUT)
-           (LET (HEADERPROPS CSVECTORLOC)
+                                                             (* ; "Edited 17-May-2025 19:07 by rmk")
+    (SETQ FILE (OR (MEDLEYFONT.FILENAME FILE)
+                   (ERROR "FILE NOT FOUND" FILE)))
+    (CL:WITH-OPEN-FILE (STREAM (OR (MEDLEYFONT.FILENAME FILE)
+                                   FILE)
+                              :DIRECTION :INPUT)
+           (LET (HEADERPROPS CSLOC SINGLECS MAXCHARSET)
                 (CL:UNLESS (SETQ HEADERPROPS (MEDLEYFONT.FILEP STREAM))
                     (ERROR "Not a MEDLEYFONT file" (FULLNAME STREAM)))
-                (SETQ CSVECTORLOC (\FIXPIN STREAM))
+                (SETQ MAXCHARSET (MEDLEYFONT.READ.ITEM STREAM 'MAXCHARSET))
+                (SETQ CSLOC (\FIXPIN STREAM))
                 (SELECTQ PROP
                     (OTHERPROPS (CDDR HEADERPROPS))
                     (DATE (CADR HEADERPROPS))
+                    (MAXCHARSET MAXCHARSET)
                     (FONTPROPS (MEDLEYFONT.READ.FONTPROPS STREAM))
-                    (CHARSETS (if (ILESSP CSVECTORLOC 0)
+                    (CHARSETS                                (* ; "Skips slugs and indirects")
+                              (if (ILESSP CSLOC 0)
                                   then 
-                                       (* ;; "File contains only one charset ")
+                                       (* ;; "File contains only one instantiated charset ")
 
-                                       (SETFILEPTR STREAM (IMINUS CSVECTORLOC))
-                                       (CONS (BIN STREAM))
-                                else (SETFILEPTR STREAM CSVECTORLOC)
-                                     (for CS from 0 to \MAXCHARSET unless (EQ 0 (\FIXPIN STREAM))
-                                        collect CS)))
+                                       (SETFILEPTR STREAM (IMINUS CSLOC))
+                                       (SETQ SINGLECS (\FIXPIN STREAM))
+                                       (CL:WHEN (IGEQ SINGLECS 0)
+                                              (CONS SINGLECS))
+                                else (SETFILEPTR STREAM CSLOC)
+                                     (for CS from 0 to MAXCHARSET when (IGREATERP (\FIXPIN STREAM)
+                                                                              0) collect CS)))
+                    (INDIRECTS 
+                               (* ;; 
+                               "These are fully spelled out FONTSPECS, no need to fill in defaults")
+
+                               (CADR (ASSOC 'ICS (MEDLEYFONT.READ.FONTPROPS STREAM))))
                     (ERROR "Unknown MEDLEYFONT property"])
 
 (MEDLEYFONT.FILEP
-  [LAMBDA (FILE)                                             (* ; "Edited  6-Jul-2025 11:44 by rmk")
+  [LAMBDA (FILE)                                             (* ; "Edited 30-Mar-2026 11:58 by rmk")
+                                                             (* ; "Edited 29-Mar-2026 10:50 by rmk")
+                                                             (* ; "Edited 24-Mar-2026 00:55 by rmk")
+                                                             (* ; "Edited  6-Jul-2025 11:44 by rmk")
                                                              (* ; "Edited 10-Jun-2025 18:19 by rmk")
                                                              (* ; "Edited  8-Jun-2025 22:55 by rmk")
                                                              (* ; "Edited 25-May-2025 20:54 by rmk")
@@ -258,7 +289,7 @@
     (* ;; "If FILE is an open stream, it is left open.  Otherwise it is opened and closed.")
 
     (RESETLST
-        [LET (STREAM VERSION DATE)
+        [LET (STREAM)
              [if (\GETSTREAM FILE 'INPUT T)
                  then (SETQ STREAM FILE)
                else (RESETSAVE (SETQ STREAM (OPENSTREAM FILE 'INPUT))
@@ -266,11 +297,26 @@
              (CL:UNLESS (ZEROP (GETFILEPTR STREAM))
                     (SETFILEPTR STREAM 0))
              (CL:WHEN (for C in (CONSTANT (CHCON "Medley font")) always (EQ C (READCCODE STREAM)))
-                 [CAR (NLSETQ [CL:WHEN (EQ 0 (SETQ VERSION (MEDLEYFONT.READ.ITEM STREAM 'VERSION]
-                             `(,(FULLNAME STREAM)
-                               ,(MEDLEYFONT.READ.ITEM STREAM 'DATE)
-                               ,VERSION
-                               ,@(MEDLEYFONT.READ.ITEM STREAM 'OTHERFONTPROPS])])])
+
+                 (* ;; "This sticks the file's MAXCHARSET on the stream, so MEDLEYFONT.GETCHARSET can do a bounds check even without decoding all the other font information. ")
+
+                 [CAR (NLSETQ `([VERSION ,(MKATOM (MEDLEYFONT.READ.ITEM STREAM 'VERSION]
+                                (FILE ,(FULLNAME STREAM))
+                                [DATE ,(MEDLEYFONT.READ.ITEM STREAM 'DATE]
+                                ,@(MEDLEYFONT.READ.ITEM STREAM 'OTHERFONTPROPS])])])
+
+(MEDLEYFONT.FILEVERSION
+  [LAMBDA (FILE REQUIRED)                                    (* ; "Edited 17-Apr-2026 09:32 by rmk")
+                                                             (* ; "Edited  4-Apr-2026 00:10 by rmk")
+                                                             (* ; "Edited 30-Mar-2026 12:08 by rmk")
+                                                             (* ; "Edited 29-Mar-2026 11:21 by rmk")
+    (LET* [(PROPS (OR (MEDLEYFONT.FILEP FILE)
+                      (ERROR "Not a Medley font" FILE)))
+           (FILEVERSION (CADR (ASSOC 'VERSION PROPS]
+          (CL:WHEN (AND REQUIRED (NEQ REQUIRED FILEVERSION))
+              (ERROR (CONCAT "Medley font version is " FILEVERSION ", " REQUIRED " is required")
+                     FILE))
+          FILEVERSION])
 )
 
 
@@ -280,97 +326,82 @@
 (DEFINEQ
 
 (MEDLEYFONT.READ.FONT
-  [LAMBDA (FILE CHARSETNOS FONT)                             (* ; "Edited 20-Jan-2026 22:31 by rmk")
+  [LAMBDA (FILE CHARSETS NOERROR DIRECTORY)                  (* ; "Edited  5-May-2026 11:05 by rmk")
+                                                             (* ; "Edited 15-Apr-2026 00:50 by rmk")
+                                                             (* ; "Edited 12-Apr-2026 00:30 by rmk")
+                                                             (* ; "Edited  6-Apr-2026 09:07 by rmk")
+                                                             (* ; "Edited  4-Apr-2026 15:29 by rmk")
+                                                             (* ; "Edited 31-Mar-2026 22:53 by rmk")
+                                                             (* ; "Edited 30-Mar-2026 12:08 by rmk")
+                                                             (* ; "Edited 26-Mar-2026 23:23 by rmk")
+                                                             (* ; "Edited 25-Mar-2026 00:07 by rmk")
+                                                             (* ; "Edited 21-Mar-2026 00:31 by rmk")
+                                                             (* ; "Edited 18-Mar-2026 23:51 by rmk")
+                                                             (* ; "Edited 17-Mar-2026 10:16 by rmk")
+                                                             (* ; "Edited  2-Mar-2026 20:40 by rmk")
+                                                             (* ; "Edited 20-Jan-2026 22:31 by rmk")
                                                              (* ; "Edited 31-Aug-2025 14:42 by rmk")
                                                              (* ; "Edited 15-Jul-2025 20:20 by rmk")
                                                              (* ; "Edited  9-Jul-2025 00:06 by rmk")
                                                              (* ; "Edited  6-Jul-2025 11:45 by rmk")
-    (SETQ FONT (CL:IF FONT
-                   (FONTCREATE FONT)
-                   (create FONTDESCRIPTOR)))
-    (SETQ FILE (MEDLEYFONT.FILENAME FILE FONT))
-    (SETQ CHARSETNOS (SORT (MKLIST CHARSETNOS)))
-    (CL:WITH-OPEN-FILE (STREAM FILE :DIRECTION :INPUT)
-           (CL:UNLESS (MEDLEYFONT.FILEP STREAM)
-               (ERROR "NOT A MEDLEYFONT FILE" (FULLNAME STREAM)))
-           (LET ((*READTABLE* (FIND-READTABLE "INTERLISP"))
-                 CSVECTORLOC NOTFOUND SINGLECSNO)
-                (SETQ CSVECTORLOC (\FIXPIN STREAM))          (* ; 
-                                                       "Byte location of the charset dispatch vector")
 
-                (* ;; "We know now that this file has information about all requested charsets, including NIL entries for empty/slugglish ones in the middle of populated ones.  A file that would have contain a single empty/sluggish charset cannot be created--the caller would recognize the case of a missing file and provide either NIL or a slug-vector.")
+    (* ;; "Returns a font descriptor containing the requested charsets from FILE.  If FILE is a FONTSPEC, it is coerced to a standard font name on DIRECTORY.")
 
-                (SETQ FONT (MEDLEYFONT.READ.VERIFIEDFONT STREAM FONT))
-                (CL:UNLESS (EQ CSVECTORLOC 0)                (* ; "Not empty")
-                    [if (ILESSP CSVECTORLOC 0)
-                        then 
-                             (* ;; 
-  "File contains only one charset and it's the one we want. Its CHARSET number is in the first byte.")
-
-                             (* ;; "If the intended charset is empty/sluggish, the file would not have been constructed and we wouldn't be here.")
-
-                             (SETFILEPTR STREAM (IMINUS CSVECTORLOC))
-                             (SETQ SINGLECSNO (BIN STREAM))
-                             (CL:WHEN CHARSETNOS
-                                 (CL:UNLESS (AND (EQ SINGLECSNO (CAR CHARSETNOS))
-                                                 (NULL (CDR CHARSETNOS)))
-                                     (ERROR (CONCAT FILE 
-                                                   " does not contain information for charsets "
-                                                   (REMOVE SINGLECSNO CHARSETNOS)))))
-                             (\SETCHARSETINFO FONT SINGLECSNO (MEDLEYFONT.READ.CHARSET STREAM 
-                                                                     SINGLECSNO))
-                      else 
-                           (* ;; 
-                           "Gather all of the CSLOCS before reading, so that we always move forward")
-
-                           (for CSNO CSLOC
-                              in (OR CHARSETNOS (for I from 0 to \MAXCHARSET collect I))
-                              eachtime (SETFILEPTR STREAM (IPLUS CSVECTORLOC (UNFOLD CSNO 
-                                                                                    BYTESPERCELL)))
-                                    (SETQ CSLOC (\FIXPIN STREAM))
-                                    (CL:WHEN (ZEROP CSLOC)
-                                           (push NOTFOUND CSNO)) unless (ZEROP CSLOC)
-                              collect (CONS CSNO CSLOC)
-                              finally (CL:WHEN (AND CHARSETNOS NOTFOUND)
-                                          (ERROR FILE (CONCAT 
-                                                        " does not contain information for charsets "
-                                                             (DREVERSE NOTFOUND))))
-                                    (for X CS in $$VAL do (SETQ CSNO (CAR X))
-                                                          (SETFILEPTR STREAM (CDR X))
-                                                          (\SETCHARSETINFO FONT CSNO (
-                                                                              MEDLEYFONT.READ.CHARSET
-                                                                                      STREAM CSNO])
-                FONT])
+    (CL:WHEN [OR (MEMB CHARSETS '(NIL ALL))
+                 (SETQ CHARSETS (SORT (CHARSET.DECODE (MKLIST CHARSETS)
+                                             NOERROR]
+        (RESETLST
+            (LET ((FILENAME (MEDLEYFONT.FILENAME FILE DIRECTORY))
+                  STREAM FONT CSLOC MAXCHARSET)              (* ; 
+                                                             "CL:OPEN-FILE doesn't exist in the init")
+                 (if FILENAME
+                     then [RESETSAVE (SETQ STREAM (OPENSTREAM FILENAME 'INPUT))
+                                 '(PROGN (CLOSEF? OLDVALUE]
+                          (MEDLEYFONT.FILEVERSION STREAM 1)
+                          (SETQ MAXCHARSET (MEDLEYFONT.READ.ITEM STREAM 'MAXCHARSET))
+                          (SETQ CSLOC (\FIXPIN STREAM))      (* ; 
+                                  "CSLOC here so MEDLEYFONT.GETCHARSET can skip over the font stuff.")
+                          (SETQ FONT (MEDLEYFONT.READ.VERIFIEDFONT STREAM))
+                          (for CSNO from 0 to MAXCHARSET while CHARSETS
+                             when (if (EQ CHARSETS 'ALL)
+                                    elseif (EQ CSNO (CAR CHARSETS))
+                                      then (pop CHARSETS))
+                             do (\SETCHARSETINFO FONT CSNO (MEDLEYFONT.GETCHARSET.INTERNAL STREAM 
+                                                                  CSNO FONT CSLOC)))
+                          FONT
+                   elseif NOERROR
+                     then NIL
+                   else (ERROR "FONT FILE NOT FOUND" FILE)))))])
 
 (MEDLEYFONT.READ.CHARSET
-  [LAMBDA (STREAM CHARSET FONT)                              (* ; "Edited 14-Feb-2026 00:36 by rmk")
+  [LAMBDA (STREAM CHARSET FONT)                              (* ; "Edited  4-May-2026 12:38 by rmk")
+                                                             (* ; "Edited 30-Apr-2026 08:56 by rmk")
+                                                             (* ; "Edited 14-Apr-2026 22:32 by rmk")
+                                                             (* ; "Edited 12-Apr-2026 13:59 by rmk")
+                                                             (* ; "Edited 30-Mar-2026 08:36 by rmk")
+                                                             (* ; "Edited 22-Mar-2026 00:21 by rmk")
+                                                             (* ; "Edited 17-Mar-2026 10:00 by rmk")
+                                                             (* ; "Edited 14-Feb-2026 00:36 by rmk")
                                                              (* ; "Edited  4-Sep-2025 10:39 by rmk")
-                                                             (* ; "Edited 28-Aug-2025 15:27 by rmk")
-                                                             (* ; "Edited 26-Aug-2025 23:36 by rmk")
                                                              (* ; "Edited 17-Aug-2025 13:01 by rmk")
                                                              (* ; "Edited 15-Jul-2025 11:27 by rmk")
-                                                             (* ; "Edited  9-Jul-2025 19:33 by rmk")
-                                                             (* ; "Edited  6-Jul-2025 10:11 by rmk")
-                                                             (* ; "Edited 25-May-2025 20:54 by rmk")
-                                                             (* ; "Edited 23-May-2025 11:01 by rmk")
-                                                             (* ; "Edited 21-May-2025 16:25 by rmk")
-                                                             (* ; "Edited 16-May-2025 20:19 by rmk")
-                                                             (* ; "Edited 14-May-2025 10:43 by rmk")
                                                              (* ; "Edited 12-May-2025 07:55 by rmk")
-
-    (* ;; "FONT is only needed for the \READCHARSET call below that interprets an INDIRECT and leads to a recursiving invocation of MEDLEYFONT.GETCHARSET and this function.  It is the font descriptor provided at the top-level call.   ")
-
-    (MEDLEYFONT.READ.ITEM STREAM 'CHARSETSTRING)             (* ; 
+                                                             (* ; 
                                                              "Throwaway for looking with text editor")
-    (LET (CSNO INDIRECT)
-         (CL:UNLESS [EQ CHARSET (SETQ CSNO (MEDLEYFONT.READ.ITEM STREAM 'CHARSET]
+    (LET (CSNO)
+         (CL:UNLESS [EQ CHARSET (SETQ CSNO (MKATOM (MEDLEYFONT.READ.ITEM STREAM 'CS]
              (ERROR "Charset mismatch" (LIST CHARSET CSNO)))
-         (if (EQ 'INDIRECTCHARSET (CAR (MEDLEYFONT.PEEK.ITEM STREAM)))
+         (if (EQ 'ICS (CAR (MEDLEYFONT.PEEK.ITEM STREAM)))
              then 
-                  (* ;; "Read what we peeked and use it to create a complete charset from another file (e.g. shared Kanji). ")
+                  (* ;; "Indirect: Read what we peeked and use it to create a complete charset from another file (e.g. shared Kanji). The indirect source is in the same directory and has the same extension as the starting file.")
 
-                  (SETQ INDIRECT (MEDLEYFONT.READ.ITEM STREAM 'INDIRECTCHARSET))
-                  (\READCHARSET INDIRECT CHARSET FONT)
+                  (MEDLEYFONT.GETCHARSET (MEDLEYFONT.FILENAME (MAKEFONTSPEC (MEDLEYFONT.READ.ITEM
+                                                                             STREAM
+                                                                             'ICS)
+                                                                     NIL NIL NIL NIL
+                                                                     (FONTPROP FONT 'DEVICESPEC))
+                                                (FULLNAME STREAM))
+                         CHARSET FONT)
            else (bind PAIR LABEL ITEM (CSINFO _ (create CHARSETINFO
                                                        WIDTHS _ NIL
                                                        OFFSETS _ NIL)) eachtime (SETQ PAIR
@@ -516,20 +547,31 @@
     (bind PAIR until [EQ 'STOP (CAR (SETQ PAIR (MEDLEYFONT.READ.ITEM STREAM] collect PAIR])
 
 (MEDLEYFONT.READ.VERIFIEDFONT
-  [LAMBDA (STREAM FONT)                                      (* ; "Edited 20-Jan-2026 22:31 by rmk")
+  [LAMBDA (STREAM FONT)                                      (* ; "Edited 15-Apr-2026 23:16 by rmk")
+                                                             (* ; "Edited 12-Apr-2026 12:51 by rmk")
+                                                             (* ; "Edited 28-Mar-2026 17:03 by rmk")
+                                                             (* ; "Edited 23-Mar-2026 11:37 by rmk")
+                                                             (* ; "Edited 19-Mar-2026 11:48 by rmk")
+                                                             (* ; "Edited 18-Mar-2026 08:18 by rmk")
+                                                             (* ; "Edited  2-Mar-2026 20:40 by rmk")
+                                                             (* ; "Edited 20-Jan-2026 22:31 by rmk")
                                                              (* ; "Edited  2-Sep-2025 23:52 by rmk")
                                                              (* ; "Edited 12-Aug-2025 17:57 by rmk")
                                                              (* ; "Edited 10-Jun-2025 20:57 by rmk")
                                                              (* ; "Edited 21-May-2025 22:55 by rmk")
                                                              (* ; "Edited 19-May-2025 17:42 by rmk")
                                                              (* ; "Edited 16-May-2025 10:28 by rmk")
-    (LET ((FONTPROPS (MEDLEYFONT.READ.FONTPROPS STREAM)))
+    (LET ((FONTPROPS (MEDLEYFONT.READ.FONTPROPS STREAM))
+          (FONT (create FONTDESCRIPTOR
+                       FONTCHARSETVECTOR _ NIL)))
          (for P VAL in FONTPROPS do (SETQ VAL (CADR P))
                                     (SELECTQ (CAR P)
                                         (FONTDEVICE (replace (FONTDESCRIPTOR FONTDEVICE) of FONT
                                                        with VAL))
                                         (FONTCOMPLETEP (replace (FONTDESCRIPTOR FONTCOMPLETEP)
                                                           of FONT with VAL))
+                                        (FONTCOERCEDP (replace (FONTDESCRIPTOR FONTCOERCEDP)
+                                                         of FONT with VAL))
                                         (FONTFAMILY (replace (FONTDESCRIPTOR FONTFAMILY) of FONT
                                                        with VAL))
                                         (FONTSIZE (replace (FONTDESCRIPTOR FONTSIZE) of FONT
@@ -544,6 +586,8 @@
                                                       with VAL))
                                         (ROTATION (replace (FONTDESCRIPTOR ROTATION) of FONT
                                                      with VAL))
+                                        (MAXCHARSET (replace (FONTDESCRIPTOR MAXCHARSET) of FONT
+                                                       with VAL))
                                         (FONTSLUGWIDTH (replace (FONTDESCRIPTOR FONTSLUGWIDTH)
                                                           of FONT with VAL))
                                         (FONTTOMCCSFN (replace (FONTDESCRIPTOR FONTTOMCCSFN)
@@ -556,16 +600,11 @@
                                                 of FONT with VAL))
                                         (FONTSCALE (replace (FONTDESCRIPTOR FONTSCALE) of FONT
                                                       with VAL))
-                                        (\SFFACECODE (replace (FONTDESCRIPTOR \SFFACECODE)
-                                                        of FONT with VAL))
                                         (FONTAVGCHARWIDTH 
                                              (replace (FONTDESCRIPTOR FONTAVGCHARWIDTH) of FONT
                                                 with VAL))
                                         (FONTCHARENCODING 
                                              (replace (FONTDESCRIPTOR FONTCHARENCODING) of FONT
-                                                with VAL))
-                                        (FONTCHARSETVECTOR 
-                                             (replace (FONTDESCRIPTOR FONTCHARSETVECTOR) of FONT
                                                 with VAL))
                                         (FONTHASLEFTKERNS 
                                              (replace (FONTDESCRIPTOR FONTHASLEFTKERNS) of FONT
@@ -573,7 +612,13 @@
                                         (FONTEXTRAFIELD2 
                                              (replace (FONTDESCRIPTOR FONTEXTRAFIELD2) of FONT
                                                 with VAL))
+                                        (INDIRECTS           (* ; "Only a file prop"))
+                                        (\SFFACECODE         (* ; "to be deprecated"))
                                         (HELP "UNKNOWN FONTDESCRIPTOR PROPERTY: P")))
+         (replace (FONTDESCRIPTOR FONTFILENAME) of FONT with (PSEUDOFILENAME (FULLNAME STREAM)))
+                                                             (* ; 
+     "PSEUDOFILENAME so that a deployed fontfile is redirected in a new sysout/makesys environment  ")
+         (replace (FONTDESCRIPTOR FONTCHARSETVECTOR) of FONT with (\CREATEFONTCHARSETVECTOR FONT))
          FONT])
 )
 
@@ -584,7 +629,9 @@
 (DEFINEQ
 
 (MEDLEYFONT.WRITE.CHARSET
-  [LAMBDA (FONT CHARSET STREAM NOINDIRECTS)                  (* ; "Edited  4-Sep-2025 11:41 by rmk")
+  [LAMBDA (FONT CHARSET STREAM NOINDIRECTS)                  (* ; "Edited  4-May-2026 11:53 by rmk")
+                                                             (* ; "Edited  1-Apr-2026 09:20 by rmk")
+                                                             (* ; "Edited  4-Sep-2025 11:41 by rmk")
                                                              (* ; "Edited 30-Aug-2025 23:44 by rmk")
                                                              (* ; "Edited 28-Aug-2025 21:00 by rmk")
                                                              (* ; "Edited  9-Jul-2025 19:14 by rmk")
@@ -593,10 +640,9 @@
                                                              (* ; "Edited 16-May-2025 20:18 by rmk")
                                                              (* ; "Edited 13-May-2025 23:26 by rmk")
     (LET ((CSINFO (\INSURECHARSETINFO FONT CHARSET))
-          CSCHARENCODING)
-         (MEDLEYFONT.WRITE.ITEM STREAM 'CHARSETSTRING (MKSTRING CHARSET))
-                                                             (* ; "For human file-scan")
-         (MEDLEYFONT.WRITE.ITEM STREAM 'CHARSET CHARSET)
+          CSCHARENCODING INDIRECT)
+         (MEDLEYFONT.WRITE.ITEM STREAM 'CS (MKSTRING CHARSET))
+                                                             (* ; "String for human file-scan")
          (CL:UNLESS (OR (NULL CSINFO)
                         (fetch (CHARSETINFO CSSLUGP) of CSINFO))
                                                              (* ; 
@@ -604,12 +650,21 @@
 
              (* ;; "Copy the fonts charencoding down to each charset info so that it is available when the charsetinfo is read.  The fontdescriptor isn't available at that point and coercion could lead to fonts of different encodings.  At least this would make it possible to fix things up.")
 
-             (if (CL:UNLESS NOINDIRECTS (INDIRECTCHARSETP CSINFO FONT))
+             (if (CL:UNLESS NOINDIRECTS
+                     (SETQ INDIRECT (INDIRECTCHARSETP CSINFO FONT)))
                  then 
-                      (* ;; 
-           "This charset is is taken entirely from on another file, no need to copy it to this file.")
+                      (* ;; "This charset is is taken entirely from another file, no need to copy it to this file. Leave off the redundant FONTSPEC stuff")
 
-                      (MEDLEYFONT.WRITE.ITEM STREAM 'INDIRECTCHARSET (CHARSETPROP CSINFO 'SOURCE)
+                      (MEDLEYFONT.WRITE.ITEM STREAM 'ICS (LIST* (fetch (FONTSPEC FSFAMILY)
+                                                                   of INDIRECT)
+                                                                (fetch (FONTSPEC FSSIZE) of INDIRECT)
+                                                                (fetch (FONTSPEC FSFACE) of INDIRECT)
+                                                                (CL:UNLESS 
+                                                                    (EQ (FONTPROP FONT 'ROTATION)
+                                                                        (fetch (FONTSPEC FSROTATION)
+                                                                           of INDIRECT))
+                                                                    (fetch (FONTSPEC FSROTATION)
+                                                                       of INDIRECT)))
                              NIL
                              'PRINT)
                else (MEDLEYFONT.WRITE.ITEM STREAM 'CSINFOPROPS (fetch (CHARSETINFO CSINFOPROPS)
@@ -774,7 +829,12 @@
              (TERPRI STREAM))])
 
 (MEDLEYFONT.WRITE.FONTPROPS
-  [LAMBDA (STREAM FONT)                                      (* ; "Edited 12-Aug-2025 17:55 by rmk")
+  [LAMBDA (STREAM FONT)                                      (* ; "Edited  4-May-2026 09:57 by rmk")
+                                                             (* ; "Edited 31-Mar-2026 14:53 by rmk")
+                                                             (* ; "Edited 23-Mar-2026 11:52 by rmk")
+                                                             (* ; "Edited 19-Mar-2026 11:48 by rmk")
+                                                             (* ; "Edited 18-Mar-2026 08:17 by rmk")
+                                                             (* ; "Edited 12-Aug-2025 17:55 by rmk")
                                                              (* ; "Edited 10-Jun-2025 20:50 by rmk")
                                                              (* ; "Edited 25-May-2025 20:50 by rmk")
                                                              (* ; "Edited 22-May-2025 10:31 by rmk")
@@ -785,13 +845,15 @@
 
     (* ;; "HPRINT would be obvious, but it would get charsetvector etc.")
 
-    (* ;; "Exclude FONTCHARSETVECTOR and \SFFACECODE")
+    (* ;; "Exclude FONTCHARSETVECTOR ")
 
     (* ;; "Write even NIL values for default overerides")
 
     (MEDLEYFONT.WRITE.ITEM STREAM 'FONTDEVICE (fetch (FONTDESCRIPTOR FONTDEVICE) of FONT)
            T)
     (MEDLEYFONT.WRITE.ITEM STREAM 'FONTCOMPLETEP (fetch (FONTDESCRIPTOR FONTCOMPLETEP) of FONT)
+           T)
+    (MEDLEYFONT.WRITE.ITEM STREAM 'FONTCOERCEDP (fetch (FONTDESCRIPTOR FONTCOMPLETEP) of FONT)
            T)
     (MEDLEYFONT.WRITE.ITEM STREAM 'FONTFAMILY (fetch (FONTDESCRIPTOR FONTFAMILY) of FONT)
            T)
@@ -806,6 +868,8 @@
     (MEDLEYFONT.WRITE.ITEM STREAM '\SFHeight (fetch (FONTDESCRIPTOR \SFHeight) of FONT)
            T)
     (MEDLEYFONT.WRITE.ITEM STREAM 'ROTATION (fetch (FONTDESCRIPTOR ROTATION) of FONT)
+           T)
+    (MEDLEYFONT.WRITE.ITEM STREAM 'MAXCHARSET (fetch (FONTDESCRIPTOR MAXCHARSET) of FONT)
            T)
     (MEDLEYFONT.WRITE.ITEM STREAM 'FONTSLUGWIDTH (fetch (FONTDESCRIPTOR FONTSLUGWIDTH) of FONT)
            T)
@@ -827,53 +891,54 @@
     (MEDLEYFONT.WRITE.ITEM STREAM 'FONTHASLEFTKERNS (fetch (FONTDESCRIPTOR FONTHASLEFTKERNS)
                                                        of FONT)
            T)
-    (MEDLEYFONT.WRITE.ITEM STREAM 'FONTEXTRAFIELD2 (fetch (FONTDESCRIPTOR FONTEXTRAFIELD2)
-                                                      of FONT)
+    (MEDLEYFONT.WRITE.ITEM STREAM 'INDIRECTS (for CS CSINFO INDIRECT (FSPEC _ (FONTPROP FONT
+                                                                                     'DEVICESPEC))
+                                                from 0 to (MAXCHARSET FONT)
+                                                when (SETQ CSINFO (\GETCHARSETINFO FONT CS))
+                                                when (SETQ INDIRECT (CHARSETPROP CSINFO 'SOURCE))
+                                                unless (EQUAL FSPEC INDIRECT)
+                                                unless (MEMBER INDIRECT $$VAL)
+                                                do (push $$VAL INDIRECT))
            T)
     (MEDLEYFONT.WRITE.ITEM STREAM 'STOP T])
 
 (MEDLEYFONT.WRITE.HEADER
-  [LAMBDA (STREAM OTHERFONTPROPS)                            (* ; "Edited 25-May-2025 20:51 by rmk")
+  [LAMBDA (STREAM OTHERFONTPROPS FONT)                       (* ; "Edited 29-Mar-2026 10:45 by rmk")
+                                                             (* ; "Edited 24-Mar-2026 00:55 by rmk")
+                                                             (* ; "Edited 25-May-2025 20:51 by rmk")
                                                              (* ; "Edited 16-May-2025 20:20 by rmk")
                                                              (* ; "Edited 14-May-2025 17:01 by rmk")
 
     (* ;; "Me in first 2 bytes distinguishes MEDLEYFONT format from others")
 
     (PRINTOUT STREAM "Medley font" T)
-    (MEDLEYFONT.WRITE.ITEM STREAM 'VERSION 0)
+    (MEDLEYFONT.WRITE.ITEM STREAM 'VERSION "1")
     (MEDLEYFONT.WRITE.ITEM STREAM 'DATE (DATE))
     (MEDLEYFONT.WRITE.ITEM STREAM 'OTHERFONTPROPS OTHERFONTPROPS T])
 )
 (DEFINEQ
 
 (MEDLEYFONT.FILENAME
-  [LAMBDA (FILE FONT CHARSET EXTENSION DIRECTORY)            (* ; "Edited 23-Jan-2026 15:10 by rmk")
-                                                             (* ; "Edited 20-Jan-2026 17:39 by rmk")
+  [LAMBDA (FILE DIRECTORY)                                   (* ; "Edited  5-May-2026 11:02 by rmk")
+                                                             (* ; "Edited  4-May-2026 09:01 by rmk")
+                                                             (* ; "Edited 30-Apr-2026 08:54 by rmk")
+                                                             (* ; "Edited 15-Apr-2026 00:41 by rmk")
+                                                             (* ; "Edited 23-Jan-2026 15:10 by rmk")
                                                              (* ; "Edited  7-Oct-2025 11:50 by rmk")
                                                              (* ; "Edited  4-Sep-2025 08:48 by rmk")
-                                                             (* ; "Edited 10-Jun-2025 11:02 by rmk")
-                                                             (* ; "Edited 25-May-2025 21:25 by rmk")
-                                                             (* ; "Edited 19-May-2025 17:42 by rmk")
-                                                             (* ; "Edited 16-May-2025 14:09 by rmk")
-    (LET [(FONTSPEC (AND FONT (\FONT.CHECKARGS FONT NIL NIL NIL NIL T]
-         (CL:UNLESS EXTENSION                                (* ; 
-                                                        "EXTENSION may be needed for DIRECTORY below")
-             (SETQ EXTENSION (OR (FILENAMEFIELD FILE 'EXTENSION)
-                                 (CONCAT "MEDLEY" (OR (AND FONTSPEC (fetch (FONTSPEC FSDEVICE)
-                                                                       of FONTSPEC))
-                                                      (ERROR "Font device not known"))
-                                        "FONT"))))
-         (PACKFILENAME.STRING `(BODY ,FILE ,@(UNPACKFILENAME.STRING (AND FONTSPEC
-                                                                         (\FONTFILENAME FONTSPEC NIL
-                                                                                NIL NIL CHARSET)))
-                                     DIRECTORY
-                                     ,(OR DIRECTORY (FILENAMEFIELD FILE 'DIRECTORY)
-                                          (PSEUDOFILENAME (CONCAT (MEDLEYDIR)
-                                                                 "fonts/"
-                                                                 (L-CASE EXTENSION)
-                                                                 "s")))
-                                     EXTENSION
-                                     ,EXTENSION])
+                                                             (* ; "Edited 10-Jun-2025 11:02 by rmk")
+    (CL:WHEN (\GETSTREAM FILE 'INPUT T)
+        (SETQ FILE (FULLNAME FILE)))
+    (CL:WHEN DIRECTORY                                       (* ; "Keep the host/directory.")
+        (SETQ DIRECTORY (PACKFILENAME 'NAME NIL 'EXTENSION NIL 'VERSION NIL 'BODY DIRECTORY)))
+    (if (type? FONTSPEC FILE)
+        then (SETQ FILE (\FONT.CHECKARGS FILE NIL NIL NIL NIL T))
+             (CL:UNLESS DIRECTORY
+                 [SETQ DIRECTORY (CAR (MKLIST (FONTDEVICEPROP FILE 'FONTDIRECTORIES])
+             (PACKFILENAME 'DIRECTORY DIRECTORY 'BODY (\FONTFILENAME FILE))
+      elseif FILE
+        then                                                 (* ; "File name")
+             (PACKFILENAME 'BODY FILE 'DIRECTORY DIRECTORY])
 )
 
 (ADDTOVAR DISPLAYFONTEXTENSIONS MEDLEYDISPLAYFONT)
@@ -924,11 +989,12 @@
 )
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (2152 16901 (MEDLEYFONT.WRITE.FONT 2162 . 7217) (MEDLEYFONT.GETCHARSET 7219 . 11360) (
-MEDLEYFONT.CHARSET? 11362 . 12831) (MEDLEYFONT.GETFILEPROP 12833 . 14933) (MEDLEYFONT.FILEP 14935 . 
-16899)) (16927 39618 (MEDLEYFONT.READ.FONT 16937 . 21473) (MEDLEYFONT.READ.CHARSET 21475 . 27190) (
-MEDLEYFONT.READ.ITEM 27192 . 33341) (MEDLEYFONT.PEEK.ITEM 33343 . 34205) (MEDLEYFONT.READ.FONTPROPS 
-34207 . 34672) (MEDLEYFONT.READ.VERIFIEDFONT 34674 . 39616)) (39644 57481 (MEDLEYFONT.WRITE.CHARSET 
-39654 . 44216) (MEDLEYFONT.WRITE.ITEM 44218 . 53271) (MEDLEYFONT.WRITE.FONTPROPS 53273 . 56826) (
-MEDLEYFONT.WRITE.HEADER 56828 . 57479)) (57482 59848 (MEDLEYFONT.FILENAME 57492 . 59846)))))
+  (FILEMAP (NIL (2199 20663 (MEDLEYFONT.WRITE.FONT 2209 . 8612) (MEDLEYFONT.GETCHARSET 8614 . 10695) (
+MEDLEYFONT.GETCHARSET.INTERNAL 10697 . 12950) (MEDLEYFONT.CHARSET? 12952 . 13830) (
+MEDLEYFONT.GETFILEPROP 13832 . 17396) (MEDLEYFONT.FILEP 17398 . 19826) (MEDLEYFONT.FILEVERSION 19828
+ . 20661)) (20689 44110 (MEDLEYFONT.READ.FONT 20699 . 24534) (MEDLEYFONT.READ.CHARSET 24536 . 30297) (
+MEDLEYFONT.READ.ITEM 30299 . 36448) (MEDLEYFONT.PEEK.ITEM 36450 . 37312) (MEDLEYFONT.READ.FONTPROPS 
+37314 . 37779) (MEDLEYFONT.READ.VERIFIEDFONT 37781 . 44108)) (44136 64607 (MEDLEYFONT.WRITE.CHARSET 
+44146 . 49791) (MEDLEYFONT.WRITE.ITEM 49793 . 58846) (MEDLEYFONT.WRITE.FONTPROPS 58848 . 63732) (
+MEDLEYFONT.WRITE.HEADER 63734 . 64605)) (64608 66260 (MEDLEYFONT.FILENAME 64618 . 66258)))))
 STOP

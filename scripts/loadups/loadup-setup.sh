@@ -256,8 +256,6 @@ process_maikodir() {
 
 export LOADUP_LOCKFILE="${LOADUP_WORKDIR}"/lock
 LOADUP_LOCK=""
-override_lock=false
-ignore_lock=false
 
 check_run_lock() {
   if [ "${ignore_lock}" = false ]

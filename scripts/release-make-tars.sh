@@ -64,7 +64,7 @@ tar -c -z -f "${release_dir}"/$tag-runtime.tgz                  \
     --exclude "*~"                                              \
     --exclude "*#*"                                             \
     --exclude exports.all                                       \
-    --exclude "venuesysouts"                                   \
+    --exclude "venuesysouts"                                    \
     ${name_xform}                                               \
     "${dirname}"/clos                                           \
     "${dirname}"/docs/dinfo                                     \
@@ -80,6 +80,7 @@ tar -c -z -f "${release_dir}"/$tag-runtime.tgz                  \
     "${dirname}"/fonts/adobe                                    \
     "${dirname}"/fonts/postscriptfonts                          \
     "${dirname}"/fonts/ipfonts                                  \
+    "${dirname}"/fonts/medleydisplayfonts                       \
     "${dirname}"/library                                        \
     "${dirname}"/lispusers                                      \
     "${dirname}"/sources                                        \

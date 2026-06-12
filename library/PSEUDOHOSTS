@@ -1,12 +1,14 @@
 (DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10)
 
-(FILECREATED "28-Apr-2026 08:31:30" {WMEDLEY}<library>PSEUDOHOSTS.;191 30987  
+(FILECREATED "11-Jun-2026 17:23:53" {MEDLEY}<library>PSEUDOHOSTS.;214 34913  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS PSEUDOHOST)
+      :CHANGES-TO (FNS PSEUDOHOST PSEUDOHOST.PREFIXMAP)
+                  (RECORDS PHDEVICE)
+                  (VARS PSEUDOHOSTSCOMS)
 
-      :PREVIOUS-DATE "27-Apr-2026 22:55:50" {MEDLEY}<library>PSEUDOHOSTS.;190)
+      :PREVIOUS-DATE "10-Jun-2026 23:56:06" {MEDLEY}<library>PSEUDOHOSTS.;206)
 
 
 (PRETTYCOMPRINT PSEUDOHOSTSCOMS)
@@ -21,11 +23,13 @@
         
         (* ;; "Internals")
 
-        (FNS EXPAND.PH CONTRACT.PH UNSLASHIT GETHOSTINFO.PH)
+        (FNS PSEUDOHOST.PREFIXMAP EXPAND.PH CONTRACT.PH UNSLASHIT GETHOSTINFO.PH)
         (FNS OPENFILE.PH GETFILENAME.PH DIRECTORYNAMEP.PH CLOSEFILE.PH REOPENFILE.PH DELETEFILE.PH 
              GENERATEFILES.PH GETFILEINFO.PH SETFILEINFO.PH NEXTFILEFN.PH FILEINFOFN.PH)
         (P (MOVD? 'GETHOSTINFO 'GETHOSTINFO.ORIG)
            (MOVD 'GETHOSTINFO.PH 'GETHOSTINFO))
+        (INITVARS PREFIXMAPS.PH)
+        (GLOBALVARS PREFIXMAPS.PH)
         (DECLARE%: EVAL@COMPILE DONTCOPY (RECORDS PHDEVICE PHGENFILESTATE TARGETDEVICE)
                (MACROS PSEUDOHOST.NAME PSEUDOHOST.TARGETVAL))))
 
@@ -37,6 +41,8 @@
 
 (PSEUDOHOST
   [LAMBDA (HOST PREFIX CDSUFFIX NOERROR)
+
+    (* ;; "Edited 11-Jun-2026 17:23 by rmk")
 
     (* ;; "Edited 28-Apr-2026 08:31 by rmk")
 
@@ -54,6 +60,7 @@
 
     (* ;; "Edited 24-Feb-2022 23:56 by rmk: Expand prefix so that it is rooted in a real host and not a previously defined pseudohost.")
 
+    (DECLARE (GLOBALVARS \FILEDEVICES))
     (CL:WHEN (AND (LISTP HOST)
                   (NULL PREFIX))
         (SETQ PREFIX (CADR HOST))
@@ -66,92 +73,95 @@
         (SETQ HOST (SUBSTRING HOST 1 -2)))
     (SETQ HOST (U-CASE (MKATOM HOST)))
     (if PREFIX
-        then (CL:UNLESS (SETQ PREFIX (TRUEFILENAME PREFIX NOERROR))
-                 (RETFROM (FUNCTION PSEUDOHOST)
-                        NIL))
-             (CL:WHEN (PSEUDOHOSTP HOST)                     (* ; 
-                                                       "Redefining: first clear out the previous one")
-                 (PSEUDOHOST HOST NIL))
-             [LET (TARGETHOST TARGETDEVICE PREFIXHOST PHDEV)
-                  (CL:UNLESS [SETQ PREFIXHOST (U-CASE (FILENAMEFIELD PREFIX 'HOST]
-                      (SETQ PREFIX (UNSLASHIT (PACKFILENAME 'HOST (SETQ PREFIXHOST 'DSK)
-                                                     'BODY PREFIX))))
+        then (LET (TARGETHOST TARGETDEVICE PREFIXHOST PHDEV TRUEPREFIX)
+                  (CL:UNLESS (SETQ TRUEPREFIX (TRUEFILENAME PREFIX NOERROR))
+                      (RETFROM (FUNCTION PSEUDOHOST)
+                             NIL))
+                  (CL:UNLESS [SETQ PREFIXHOST (U-CASE (FILENAMEFIELD TRUEPREFIX 'HOST]
+                      (SETQ TRUEPREFIX (UNSLASHIT (PACKFILENAME 'HOST (SETQ PREFIXHOST 'DSK)
+                                                         'BODY TRUEPREFIX))))
 
                   (* ;; "We want the maximal prefix. If {LI} is a pseudohost with prefix {DSK}<abc> and we are defining {FOO} with prefix {LI}<xyz>, we want FOO's prefix to be {DSK}<abc>xyz>. ,  And if FUM is then defined as {FOO}<mno>, we want its prefix to be {DSK}<abc>xyz>mno>.  This gives the true filenames.")
 
-                  (SETQ PREFIX (EXPAND.PH PREFIX PREFIXHOST))
-                  (CL:UNLESS (MEMB (NTHCHARCODE PREFIX -1)
+                  (SETQ TRUEPREFIX (EXPAND.PH TRUEPREFIX PREFIXHOST))
+                  (CL:UNLESS (MEMB (NTHCHARCODE TRUEPREFIX -1)
                                    (CHARCODE (> / <)))
-                      (SETQ PREFIX (CONCAT PREFIX (IF (STRPOS "/" PREFIX)
-                                                      THEN "/"
-                                                    ELSE ">"))))
-                  [SETQ TARGETHOST (U-CASE (FILENAMEFIELD PREFIX 'HOST]
+                      (SETQ TRUEPREFIX (CONCAT TRUEPREFIX (CL:IF (STRPOS "/" TRUEPREFIX)
+                                                              "/"
+                                                              ">"))))
+                  [SETQ TARGETHOST (U-CASE (FILENAMEFIELD TRUEPREFIX 'HOST]
 
-                  (* ;; "We know about the directory separators for these particular devices.  Maybe there should be separate list of slash-hosts somewhere that we can use.")
+                  (* ;; "We know about the directory separators for these particular devices.  Maybe there should be separate list of slash-hosts somewhere that we can use.  (Here we also default to <>, e.g. NS servers)")
 
                   (SELECTQ TARGETHOST
                       ((DSK CORE) 
-                           (SETQ PREFIX (UNSLASHIT PREFIX)))
-                      (UNIX (SETQ PREFIX (SLASHIT PREFIX)))
-                      NIL)
+                           (SETQ TRUEPREFIX (UNSLASHIT TRUEPREFIX)))
+                      (UNIX (SETQ TRUEPREFIX (SLASHIT TRUEPREFIX)))
+                      (SETQ TRUEPREFIX (UNSLASHIT TRUEPREFIX)))
                   (SETQ TARGETDEVICE (OR (\GETDEVICEFROMHOSTNAME TARGETHOST)
                                          (AND NOERROR (RETFROM (FUNCTION PSEUDOHOST)
                                                              NIL))
-                                         (ERROR "UNKNOWN TARGET HOST" TARGETHOST)))
+                                         (ERROR "Unknown target host" TARGETHOST)))
+                  (if (NULL (SETQ PHDEV (\GETDEVICEFROMNAME HOST T)))
+                      then (SETQ PHDEV
+                            (create FDEV
+                               using TARGETDEVICE DEVICENAME _ HOST FDEV1 _ TARGETDEVICE FDEV2 _ 
+                                     TRUEPREFIX FDEV4 _ PREFIX OPENFILELST _ NIL OPENFILE _
+                                     (FUNCTION OPENFILE.PH)
+                                     GETFILENAME _ (FUNCTION GETFILENAME.PH)
+                                     DIRECTORYNAMEP _ (FUNCTION DIRECTORYNAMEP.PH)
+                                     CLOSEFILE _ (FUNCTION CLOSEFILE.PH)
+                                     REOPENFILE _ (FUNCTION REOPENFILE.PH)
+                                     DELETEFILE _ (FUNCTION DELETEFILE.PH)
+                                     OPENP _ (FUNCTION \GENERIC.OPENP)
+                                     UNREGISTERFILE _ (FUNCTION \GENERIC-UNREGISTER-STREAM)
+                                     REGISTERFILE _ (FUNCTION \ADD-OPEN-STREAM)
+                                     GENERATEFILES _ (FUNCTION GENERATEFILES.PH)
+                                     GETFILEINFO _ (FUNCTION GETFILEINFO.PH)
+                                     SETFILEINFO _ (FUNCTION SETFILEINFO.PH)))
+                           (UNINTERRUPTABLY
+                               (\DEFINEDEVICE HOST PHDEV)
+                               (PSEUDOHOST.PREFIXMAP HOST TRUEPREFIX))
+                    elseif (type? PHDEVICE PHDEV)
+                      then 
+                           (* ;; "New prefix for an existing pseudohost")
 
-                  (* ;; "Save the last directory marker to pack on if needed.")
+                           (UNINTERRUPTABLY
+                               (replace (PHDEVICE TRUEPREFIX) of PHDEV with TRUEPREFIX)
+                               (replace (PHDEVICE PREFIX) of PHDEV with PREFIX)
+                               (replace (PHDEVICE TARGETDEV) of PHDEV with TARGETDEVICE)
+                               (PSEUDOHOST.PREFIXMAP HOST TRUEPREFIX)) 
 
-                  (\DEFINEDEVICE HOST
-                         (create FDEV
-                            using TARGETDEVICE DEVICENAME _ HOST FDEV1 _ TARGETDEVICE FDEV2 _ PREFIX
-                                  OPENFILELST _ NIL OPENFILE _ (FUNCTION OPENFILE.PH)
-                                  GETFILENAME _ (FUNCTION GETFILENAME.PH)
-                                  DIRECTORYNAMEP _ (FUNCTION DIRECTORYNAMEP.PH)
-                                  CLOSEFILE _ (FUNCTION CLOSEFILE.PH)
-                                  REOPENFILE _ (FUNCTION REOPENFILE.PH)
-                                  DELETEFILE _ (FUNCTION DELETEFILE.PH)
-                                  OPENP _ (FUNCTION \GENERIC.OPENP)
-                                  UNREGISTERFILE _ (FUNCTION \GENERIC-UNREGISTER-STREAM)
-                                  REGISTERFILE _ (FUNCTION \ADD-OPEN-STREAM)
-                                  GENERATEFILES _ (FUNCTION GENERATEFILES.PH)
-                                  GETFILEINFO _ (FUNCTION GETFILEINFO.PH)
-                                  SETFILEINFO _ (FUNCTION SETFILEINFO.PH)))
+                           (* ;; "If host MEDLEY is getting a new PREFIX, then the true prefix of every {MEDLEY}/foo/fie/ must be updated, recursively")
 
-                  (* ;; "The ultimate target device keeps a map of prefixes and the hostnames they map to.  If a PHOST preference isn't provided and two prefixes have common initial substrings, choose the one that provides the smallest file name.  ")
+                           (* ;; "Seems like a lot to make this scan be uninterruptable.  Should we?")
 
-                  (UNINTERRUPTABLY
-                      [change (fetch (TARGETDEVICE PREFIXMAPS) OF TARGETDEVICE)
-                             (SORT (CONS (LIST HOST PREFIX (CL:IF (EQ (CHARCODE /)
-                                                                      (NTHCHARCODE PREFIX -1))
-                                                               '/
-                                                               '<))
-                                         DATUM)
-                                   (FUNCTION (LAMBDA (P1 P2)
-
-                                 (* ;; "To give smallest file names, longest prefix comes first.  If same length (synonyms), the one with the smallest host comes first.  So MEDLEY before WMEDLEY")
-
-                                               (if (IGREATERP (NCHARS (CADR P1))
-                                                          (NCHARS (CADR P2)))
-                                                 elseif (EQ (NCHARS (CADR P1))
-                                                            (NCHARS (CADR P2)))
-                                                   then (ILESSP (NCHARS (CAR P1))
-                                                               (NCHARS (CAR P2])]
+                           (for FD in \FILEDEVICES
+                              when [AND (type? PHDEVICE FD)
+                                        (EQ HOST (FILENAMEFIELD (fetch (PHDEVICE PREFIX) of FD)
+                                                        'HOST]
+                              do (PSEUDOHOST (fetch (FDEV DEVICENAME) of FD)
+                                        (fetch (PHDEVICE PREFIX) of FD)
+                                        NIL T))
+                    elseif NOERROR
+                    else (ERROR HOST "cannot name a pseudohost")))
       elseif (PSEUDOHOSTP HOST)
         then 
-             (* ;; "\DEFINEDEVICE removes the name-mapping but doesn't remove the device.  Maybe that's on purpose for other devices, but not here.")
+             (* ;; "Remove/undefine a pseudohost.  \DEFINEDEVICE removes the name-mapping but doesn't remove the device.  Maybe that's on purpose for other devices, but not here.")
 
-             (LET* ((PHHOST (\GETDEVICEFROMNAME HOST \FILEDEVICES))
-                    (TARGETDEV (fetch (PHDEVICE TARGETDEV) of PHHOST)))
-                   (UNINTERRUPTABLY
-                       (CL:WHEN TARGETDEV                    (* ; 
-                                                             "Don't want to fail uninterruptably")
-                           (CHANGE (fetch (TARGETDEVICE PREFIXMAPS) of TARGETDEV)
-                                  (DREMOVE (ASSOC HOST DATUM)
-                                         DATUM)))
-                       (SETQ \FILEDEVICES (DREMOVE PHHOST \FILEDEVICES))
-                       (\DEFINEDEVICE HOST NIL)))
+             (UNINTERRUPTABLY
+                 (PSEUDOHOST.PREFIXMAP HOST NIL)
+                 (SETQ \FILEDEVICES (DREMOVE (\GETDEVICEFROMNAME 'HOST T)
+                                           \FILEDEVICES))
+                 (\DEFINEDEVICE HOST NIL))
+             (for FD in \FILEDEVICES when [AND (type? PHDEVICE FD)
+                                               (EQ HOST (FILENAMEFIELD (fetch (PHDEVICE PREFIX)
+                                                                          of FD)
+                                                               'HOST]
+                do (PSEUDOHOST (fetch (FDEV DEVICENAME) of FD)
+                          NIL NIL T))
       elseif NOERROR
-      else (ERROR (CONCAT "PREFIX FOR PSEUDOHOST " HOST " NOT FOUND")))
+      else (ERROR (CONCAT "Prefix for pseudohost " HOST " not found")))
     (CL:WHEN (AND PREFIX CDSUFFIX)
            (CDPSEUDO HOST CDSUFFIX))
     (CL:WHEN PREFIX                                          (* ; 
@@ -159,7 +169,8 @@
         HOST)])
 
 (PSEUDOHOSTP
-  [LAMBDA (HOST)                                             (* ; "Edited 27-Apr-2026 17:27 by rmk")
+  [LAMBDA (HOST)                                             (* ; "Edited 10-Jun-2026 22:55 by rmk")
+                                                             (* ; "Edited 27-Apr-2026 17:27 by rmk")
                                                              (* ; "Edited 16-Dec-2024 21:15 by rmk")
                                                              (* ; "Edited 24-Feb-2022 23:51 by rmk")
                                                              (* ; "Edited 18-Jan-2022 11:29 by rmk")
@@ -168,29 +179,32 @@
                  elseif (type? STREAM HOST)
                    then (fetch (STREAM DEVICE) of HOST)
                  else (\GETDEVICEFROMNAME HOST T T]
-         (CL:WHEN (AND DEV (type? FDEV (fetch (PHDEVICE TARGETDEV) OF DEV)))
+         (CL:WHEN (type? PHDEVICE DEV)
              (LIST (fetch (FDEV DEVICENAME) of DEV)
-                   (fetch (PHDEVICE PREFIX) of DEV)))])
+                   (fetch (PHDEVICE TRUEPREFIX) of DEV)))])
 
 (PSEUDOHOSTS
-  [LAMBDA NIL                                                (* ; "Edited 17-Jan-2022 18:15 by rmk")
-    (FOR DEV IN \FILEDEVICES WHEN (TYPE? FDEV (FETCH (PHDEVICE TARGETDEV) OF DEV))
-       COLLECT (LIST (FETCH (FDEV DEVICENAME) OF DEV)
-                     (FETCH (PHDEVICE PREFIX) OF DEV])
+  [LAMBDA NIL                                                (* ; "Edited 10-Jun-2026 23:03 by rmk")
+                                                             (* ; "Edited 17-Jan-2022 18:15 by rmk")
+    (DECLARE (GLOBALVARS \FILEDEVICES))
+    (for DEV in \FILEDEVICES when (type? PHDEVICE DEV) collect (LIST (fetch (FDEV DEVICENAME)
+                                                                        of DEV)
+                                                                     (fetch (PHDEVICE TRUEPREFIX)
+                                                                        of DEV])
 
 (TARGETHOST
-  [LAMBDA (HOST)                                             (* ; "Edited 14-Dec-2024 15:26 by rmk")
+  [LAMBDA (HOST)                                             (* ; "Edited 10-Jun-2026 22:50 by rmk")
+                                                             (* ; "Edited 14-Dec-2024 15:26 by rmk")
                                                              (* ; "Edited 12-Dec-2024 16:16 by rmk")
                                                              (* ; "Edited 22-Jan-2022 09:00 by rmk")
-    (if (STREAMP HOST)
-        then (CL:WHEN (type? FDEV (fetch (PHDEVICE TARGETDEV) of (fetch (STREAM DEVICE) of HOST)))
-                 (fetch (FDEV DEVICENAME) of (fetch (PHDEVICE TARGETDEV) of (fetch (STREAM DEVICE)
-                                                                               of HOST))))
-      elseif (PSEUDOHOSTP HOST)
-        then (fetch (FDEV DEVICENAME) of (fetch (PHDEVICE TARGETDEV) of (\GETDEVICEFROMNAME HOST T T])
+    (LET ((PH (PSEUDOHOSTP HOST)))
+         (CL:WHEN PH
+             (FILENAMEFIELD (CADR PH)
+                    'HOST))])
 
 (TRUEDEVICE
-  [LAMBDA (X)                                                (* ; "Edited 31-Dec-2024 11:44 by rmk")
+  [LAMBDA (X)                                                (* ; "Edited 10-Jun-2026 22:59 by rmk")
+                                                             (* ; "Edited 31-Dec-2024 11:44 by rmk")
                                                              (* ; "Edited 25-Dec-2024 07:37 by rmk")
                                                              (* ; "Edited 23-Dec-2024 22:56 by rmk")
                                                              (* ; "Edited 16-Dec-2024 17:36 by rmk")
@@ -200,12 +214,13 @@
                  elseif (STREAMP X)
                    then (fetch (STREAM DEVICE) of X)
                  else (\GETDEVICEFROMNAME X]
-         (if (type? FDEV (fetch (PHDEVICE TARGETDEV) of DEV))
+         (if (type? PHDEVICE DEV)
              then (fetch (PHDEVICE TARGETDEV) of DEV)
            else DEV])
 
 (TRUEFILENAME
-  [LAMBDA (FILE NOERROR)                                     (* ; "Edited  2-Feb-2025 09:12 by rmk")
+  [LAMBDA (FILE NOERROR)                                     (* ; "Edited 10-Jun-2026 23:06 by rmk")
+                                                             (* ; "Edited  2-Feb-2025 09:12 by rmk")
                                                              (* ; "Edited  1-Oct-2023 20:16 by rmk")
                                                              (* ; "Edited 26-Jul-2023 07:53 by rmk")
                                                              (* ; "Edited 26-Jan-2022 23:33 by rmk")
@@ -213,24 +228,25 @@
     (if (LISTP FILE)
         then (for F in FILE collect (TRUEFILENAME F))
       else (LET (FILENAME DEVICE)
-                (IF (STREAMP FILE)
-                    THEN (SETQ FILENAME (OR (FETCH (STREAM FULLFILENAME) OF FILE)
+                (if (STREAMP FILE)
+                    then (SETQ FILENAME (OR (fetch (STREAM FULLFILENAME) of FILE)
                                             FILE))
-                         (SETQ DEVICE (FETCH (STREAM DEVICE) OF FILE))
+                         (SETQ DEVICE (fetch (STREAM DEVICE) of FILE))
                   ELSE (SETQ FILENAME (\ADD.CONNECTED.DIR FILE))
                        (SETQ DEVICE (\GETDEVICEFROMNAME FILENAME NOERROR)))
-                (CL:WHEN DEVICE
-                    (CL:IF (TYPE? PHDEVICE DEVICE)
-                        (EXPAND.PH FILENAME DEVICE)
-                        FILENAME))])
+                (CL:IF (type? PHDEVICE DEVICE)
+                    (EXPAND.PH FILENAME DEVICE)
+                    FILENAME)])
 
 (PSEUDOFILENAME
-  [LAMBDA (FILE PHOST)                                       (* ; "Edited 27-Apr-2026 18:50 by rmk")
+  [LAMBDA (FILE PHOST)                                       (* ; "Edited 10-Jun-2026 23:07 by rmk")
+                                                             (* ; "Edited 27-Apr-2026 18:50 by rmk")
                                                   (* ; "Edited 26-Apr-2026 09:00 by rmk: If PHOST is non-NIL and a pseudohost, that's the one that the caller wants.")
                                                              (* ; "Edited 24-Apr-2026 22:52 by rmk")
                                                              (* ; "Edited 26-Jul-2023 12:34 by rmk")
                                                              (* ; "Edited 29-Jan-2022 23:08 by rmk")
                                                              (* ; "Edited 28-Jan-2022 09:06 by rmk")
+    (DECLARE (GLOBALVARS \FILEDEVICES))
     (if (LISTP FILE)
         then (for F in FILE collect (PSEUDOFILENAME F PHOST))
       else (for D PN (FILENAME _ (if (STREAMP FILE)
@@ -242,12 +258,14 @@
               finally (RETURN FILENAME])
 
 (PSEUDOFILENAMES
-  [LAMBDA (FILE)                                             (* ; "Edited 27-Apr-2026 19:23 by rmk")
+  [LAMBDA (FILE)                                             (* ; "Edited 10-Jun-2026 23:08 by rmk")
+                                                             (* ; "Edited 27-Apr-2026 19:23 by rmk")
                                                   (* ; 
                                    "Edited 27-Apr-2026 10:00 by rmk; Edited 27-Apr-2026 09:33 by rmk")
 
     (* ;; "Shows all the pseudohost synonyms for FILE (including its truename)")
 
+    (DECLARE (GLOBALVARS \FILEDEVICES))
     (for D PN (TRUENAME _ (TRUEFILENAME FILE)) in \FILEDEVICES when (type? PHDEVICE D)
        unless [EQ TRUENAME (SETQ PN (PSEUDOFILENAME TRUENAME (fetch (FDEV DEVICENAME) of D]
        collect PN finally (RETURN (CONS TRUENAME $$VAL])
@@ -280,8 +298,43 @@
 
 (DEFINEQ
 
+(PSEUDOHOST.PREFIXMAP
+  [LAMBDA (HOST TRUEPREFIX)                                  (* ; "Edited 11-Jun-2026 16:42 by rmk")
+
+    (* ;; "Associated with each target device (DSK, UNIX, FS1:...) is a mapping between the pseudohosts names and the true prefixes that they expand to.    This adds (or removes) TRUEPREFIX from the PREFIXMAPS of the target device of HOST.")
+
+    (LET* [(PHDEV (\GETDEVICEFROMNAME HOST \FILEDEVICES))
+           (TARGETDEV (AND (type? PHDEVICE PHDEV)
+                           (fetch (PHDEVICE TARGETDEV) of PHDEV]
+          (CL:WHEN TARGETDEV
+              (change (fetch (TARGETDEVICE PREFIXMAPS) of TARGETDEV)
+                     (if TRUEPREFIX
+                         then 
+                              (* ;; "If a HOST preference isn't provided and two prefixes have common initial substrings, choose the one that provides the smallest file name.")
+
+                              [SORT (CONS (LIST HOST TRUEPREFIX (CL:IF (EQ (CHARCODE /)
+                                                                           (NTHCHARCODE TRUEPREFIX -1
+                                                                                  ))
+                                                                    '/
+                                                                    '<))
+                                          DATUM)
+                                    (FUNCTION (LAMBDA (P1 P2)
+
+                                 (* ;; "To give smallest file names, longest prefix comes first.  If same length (synonyms), the one with the smallest host comes first.  So MEDLEY before WMEDLEY")
+
+                                                (if (IGREATERP (NCHARS (CADR P1))
+                                                           (NCHARS (CADR P2)))
+                                                  elseif (EQ (NCHARS (CADR P1))
+                                                             (NCHARS (CADR P2)))
+                                                    then (ILESSP (NCHARS (CAR P1))
+                                                                (NCHARS (CAR P2]
+                       else (DREMOVE (ASSOC HOST DATUM)
+                                   DATUM))))])
+
 (EXPAND.PH
   [LAMBDA (FILENAME PHDEV)
+
+    (* ;; "Edited 10-Jun-2026 12:18 by rmk")
 
     (* ;; "Edited 27-Apr-2026 17:27 by rmk")
 
@@ -303,12 +356,14 @@
                       (CL:WHEN (FMEMB (CHCON1 SUFFIX)
                                       (CHARCODE (< > /)))
                           (SETQ SUFFIX (SUBSTRING SUFFIX 2)))
-                      (CONCAT (fetch (PHDEVICE PREFIX) of PHDEV)
+                      (CONCAT (fetch (PHDEVICE TRUEPREFIX) of PHDEV)
                              SUFFIX)))
       else FILENAME])
 
 (CONTRACT.PH
   [LAMBDA (TRUENAME PHDEV PHOST)
+
+    (* ;; "Edited 10-Jun-2026 23:41 by rmk")
 
     (* ;; "Edited 27-Apr-2026 18:43 by rmk")
 
@@ -316,7 +371,7 @@
 
     (* ;; "Edited 22-Sep-2023 14:30 by rmk")
 
-    (* ;; "Finds the preferred pseudoname for TRUENAME, the name on PHOST if given, else the shortest one.  The PHDEV is used only to find its targetdev, that's where we scan for matching prefixes.  This replaces the chosen prefix of TRUENAME with the corresponding pseudohost.")
+    (* ;; "Finds the preferred pseudoname for TRUENAME, the name on PHOST if given, else the shortest one.  The PHDEV is used only to find its targetdev, that's where we scan for matching trueprefixes.  This replaces the chosen trueprefix of TRUENAME with the corresponding pseudohost.")
 
     (CL:WHEN TRUENAME
         (CL:UNLESS (type? FDEV PHDEV)
@@ -325,7 +380,7 @@
             (SETQ PHOST (fetch (FDEV DEVICENAME) of PHDEV)))
         (LET ((PREFIXMAPS (fetch (TARGETDEVICE PREFIXMAPS) of (fetch (PHDEVICE TARGETDEV)
                                                                  of PHDEV)))
-              PREFIXMNAP SUFFIX CONNECTOR)
+              PREFIXMAP PREFIX SUFFIX CONNECTOR)
 
              (* ;; 
         "PREFIXMAPs of PHDEVare sorted so that the longest one comes first, if PHOST isn't specified")
@@ -521,18 +576,29 @@
 (MOVD? 'GETHOSTINFO 'GETHOSTINFO.ORIG)
 
 (MOVD 'GETHOSTINFO.PH 'GETHOSTINFO)
+
+(RPAQ? PREFIXMAPS.PH NIL)
+(DECLARE%: DOEVAL@COMPILE DONTCOPY
+
+(GLOBALVARS PREFIXMAPS.PH)
+)
 (DECLARE%: EVAL@COMPILE DONTCOPY 
 (DECLARE%: EVAL@COMPILE
 
-(ACCESSFNS PHDEVICE ((PREFIX (FETCH (FDEV FDEV2) OF DATUM))
-                     (TARGETDEV (FETCH (FDEV FDEV1) OF DATUM)
-                            (REPLACE (FDEV FDEV1) OF DATUM WITH NEWVALUE)))
-                    (TYPE? (FETCH (PHDEVICE PREFIX) OF DATUM)))
+(ACCESSFNS PHDEVICE ((TRUEPREFIX (fetch (FDEV FDEV2) of DATUM)
+                            (replace (FDEV FDEV2) of DATUM with NEWVALUE))
+                     (PREFIX (fetch (FDEV FDEV4) of DATUM)
+                            (replace (FDEV FDEV4) of DATUM with NEWVALUE))
+                     (TARGETDEV (fetch (FDEV FDEV1) of DATUM)
+                            (replace (FDEV FDEV1) of DATUM with NEWVALUE)))
+                    [TYPE? (AND DATUM (EQ 'OPENFILE.PH (fetch (FDEV OPENFILE) of DATUM])
 
 (RECORD PHGENFILESTATE (PHDEVICE . TARGETGENFILESTATE))
 
-(ACCESSFNS TARGETDEVICE ((PREFIXMAPS (FETCH (FDEV FDEV3) OF DATUM)
-                                (REPLACE (FDEV FDEV3) OF DATUM WITH NEWVALUE))))
+(ACCESSFNS TARGETDEVICE ((PREFIXMAPS (CDR (ASSOC DATUM PREFIXMAPS.PH))
+                                (RPLACD [OR (ASSOC DATUM PREFIXMAPS.PH)
+                                            (CAR (PUSH PREFIXMAPS.PH (CONS DATUM]
+                                       NEWVALUE))))
 )
 
 (DECLARE%: EVAL@COMPILE 
@@ -573,12 +639,13 @@
 )
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (1128 14735 (PSEUDOHOST 1138 . 8248) (PSEUDOHOSTP 8250 . 9169) (PSEUDOHOSTS 9171 . 9532)
- (TARGETHOST 9534 . 10403) (TRUEDEVICE 10405 . 11361) (TRUEFILENAME 11363 . 12650) (PSEUDOFILENAME 
-12652 . 14064) (PSEUDOFILENAMES 14066 . 14733)) (14736 15885 (CDPSEUDO 14746 . 15883)) (15913 21797 (
-EXPAND.PH 15923 . 17229) (CONTRACT.PH 17231 . 19713) (UNSLASHIT 19715 . 21461) (GETHOSTINFO.PH 21463
- . 21795)) (21798 28419 (OPENFILE.PH 21808 . 22933) (GETFILENAME.PH 22935 . 23333) (DIRECTORYNAMEP.PH 
-23335 . 23959) (CLOSEFILE.PH 23961 . 24428) (REOPENFILE.PH 24430 . 25106) (DELETEFILE.PH 25108 . 25392
-) (GENERATEFILES.PH 25394 . 26588) (GETFILEINFO.PH 26590 . 27111) (SETFILEINFO.PH 27113 . 27422) (
-NEXTFILEFN.PH 27424 . 28140) (FILEINFOFN.PH 28142 . 28417)))))
+  (FILEMAP (NIL (1315 15791 (PSEUDOHOST 1325 . 8778) (PSEUDOHOSTP 8780 . 9766) (PSEUDOHOSTS 9768 . 10435
+) (TARGETHOST 10437 . 11016) (TRUEDEVICE 11018 . 12047) (TRUEFILENAME 12049 . 13400) (PSEUDOFILENAME 
+13402 . 14967) (PSEUDOFILENAMES 14969 . 15789)) (15792 16941 (CDPSEUDO 15802 . 16939)) (16969 25245 (
+PSEUDOHOST.PREFIXMAP 16979 . 19251) (EXPAND.PH 19253 . 20613) (CONTRACT.PH 20615 . 23161) (UNSLASHIT 
+23163 . 24909) (GETHOSTINFO.PH 24911 . 25243)) (25246 31867 (OPENFILE.PH 25256 . 26381) (
+GETFILENAME.PH 26383 . 26781) (DIRECTORYNAMEP.PH 26783 . 27407) (CLOSEFILE.PH 27409 . 27876) (
+REOPENFILE.PH 27878 . 28554) (DELETEFILE.PH 28556 . 28840) (GENERATEFILES.PH 28842 . 30036) (
+GETFILEINFO.PH 30038 . 30559) (SETFILEINFO.PH 30561 . 30870) (NEXTFILEFN.PH 30872 . 31588) (
+FILEINFOFN.PH 31590 . 31865)))))
 STOP

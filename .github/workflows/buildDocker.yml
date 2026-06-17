@@ -21,18 +21,18 @@ name: 'Build/Push Docker Image'
 on:
   workflow_dispatch:
     inputs:
+      github_release_tag:
+        description: "Tag of Github Release to be used for this Medley Docker image"
+        type: string
+        default: "Latest"
       draft:
         description: "Mark this as a draft release"
-        type: choice
-        options:
-        - 'false'
-        - 'true'
+        type: boolean
+        default: false
       force:
         description: "Force build even if build already successfully completed for this commit"
-        type: choice
-        options:
-        - 'false'
-        - 'true'
+        type: boolean
+        default: false
 
   workflow_call:
     outputs:
@@ -40,16 +40,21 @@ on:
         description: "'True' if medley docker build completed successully"
         value: ${{ jobs.complete.outputs.build_successful }}
     inputs:
+      github_release_tag:
+        description: "Tag of Github Release to be used for this Medley Docker image"
+        required: false
+        type: string
+        default: "Latest"
       draft:
         description: "Mark this as a draft release"
         required: false
-        type: string
-        default: 'false'
+        type: boolean
+        default: false
       force:
         description: "Force build even if build already successfully completed for this commit"
         required: false
-        type: string
-        default: 'false'
+        type: boolean
+        default: false
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -104,25 +109,27 @@ jobs:
     needs: [sentry]
     if: |
       needs.sentry.outputs.release_not_built == 'true'
-      || inputs.force == 'true'
+      || inputs.force == true
 
     steps:
       # Checkout latest commit
       - name: Checkout Medley
         uses: actions/checkout@v6
 
-      # Find latest release (draft or normal)
+      # Find named or latest release
       # and download its assets
-      - name: Download linux debs from latest (draft) release
+      - name: Download linux debs from named or latest release
         run: |
           tag=""
-          if [ "${{ inputs.draft }}" = "true" ];
-          then
-            tag=$(gh release list | grep Draft | head -n 1 | awk '{ print $3 }')
-          fi
-          if [ -z "${tag}" ];
+          if [ "${{ inputs.github_release_tag }}" = "Latest" ];
           then
             tag=$(gh release list | grep Latest | head -n 1 | awk '{ print $3 }')
+          else
+            tag=$(echo "${{ inputs.github_release_tag }}" | sed 's/[[:space:]]//g')
+            set +e
+            gh release view ${tag} --repo ${{ github.repository_owner }}/medley
+            if [ $? -ne 0 ]; then echo "!!!!!!! Error:  Cannot find Medley release ${tag} on github Medley repo. Exiting."; exit 1; fi
+            set -e
           fi
           mkdir -p release_debs
           gh release download ${tag} -D release_debs -p '*-linux-*.deb'
@@ -130,7 +137,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Get Maiko and Medley release information from name of deb files
-      # just downloaded from the Medley latest release
+      # just downloaded from the Medley github release
       - name: Get info about Miako and Medley releases
         id: release_info
         run: |
@@ -142,7 +149,7 @@ jobs:
           echo "MEDLEY_RELEASE=${medley_release}"     >> ${GITHUB_ENV}
           echo "MAIKO_RELEASE=${maiko_release}"       >> ${GITHUB_ENV}
 
-          # regex="^[^0-9]*\([^_]*\)_\([^-]*-[^-]*\)-\([^-]*\)-\([^.]*\).*\$"
+          # re gex="^[^0-9]*\([^_]*\)_\([^-]*-[^-]*\)-\([^-]*\)-\([^.]*\).*\$"
 
       # Set repo env variables
       - name: Set repo/docker env variables
@@ -157,7 +164,7 @@ jobs:
               platforms="linux/amd64"
               #,linux/arm64
           else
-              docker_tags="${docker_image}:draft"
+              docker_tags="${docker_image}:draft,${docker_image}:${MEDLEY_RELEASE#*-}_${MAIKO_RELEASE#*-}"
               platforms="linux/amd64"
           fi
           echo "REPO_NAME=${repo_name}"                       >> ${GITHUB_ENV}

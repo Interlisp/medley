@@ -6,31 +6,48 @@ main() {
 
 	loadup_start
 
-	export ROOMSDIR="${MEDLEYDIR}/rooms"
-	export CLOSDIR="${MEDLEYDIR}/clos"
-
-	export NOTECARDSDIR="${MEDLEYDIR}/notecards"
-	if [ ! -e "${NOTECARDSDIR}" ]
-	then
-	    NOTECARDSDIR=$(cd "${MEDLEYDIR}/../" && pwd)/notecards
-	    if [ ! -e "${NOTECARDSDIR}" ]
-	    then
-	        NOTECARDSDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/notecards
-	        if [ ! -e "${NOTECARDSDIR}" ]
-	        then
-	            NOTECARDSDIR=""
-	        fi
-	    fi
-	fi
+	if [ -z "${ROOMSDIR}" ]
+        then
+          export ROOMSDIR="${MEDLEYDIR}/rooms"
+        fi
+        if [ -z "${CLOSDIR}" ]
+        then
+	  export CLOSDIR="${MEDLEYDIR}/clos"
+        fi
 
 	if [ -z "${NOTECARDSDIR}" ]
-	then
-	    echo "Error: Cannot find the Notecards directory"
-	    echo "It should be located at ${MEDLEYDIR}/../notecards or"
-	    echo "${MEDLEYDIR}/../../notecards.  But its not."
-	    echo "Exiting"
-	    exit 1
-	fi
+        then
+          export NOTECARDSDIR="${MEDLEYDIR}/notecards"
+	  if [ ! -e "${NOTECARDSDIR}" ]
+	  then
+	      NOTECARDSDIR=$(cd "${MEDLEYDIR}/../" && pwd)/notecards
+	      if [ ! -e "${NOTECARDSDIR}" ]
+	      then
+	          NOTECARDSDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/notecards
+	          if [ ! -e "${NOTECARDSDIR}" ]
+	          then
+	              NOTECARDSDIR=""
+	          fi
+	      fi
+	  fi
+
+	  if [ -z "${NOTECARDSDIR}" ]
+	  then
+	      echo "Error: Cannot find the Notecards directory"
+	      echo "It should be located at ${MEDLEYDIR}/../notecards or"
+	      echo "${MEDLEYDIR}/../../notecards.  But its not."
+	      echo "Exiting"
+	      exit 1
+	  fi
+        fi
+
+        if [ ! -e "${NOTECARDSDIR}/system/NOTECARDS" ] && [ ! -e "${NOTECARDSDIR}/system/NOTECARDS.LCOM" ]
+        then
+          echo "Error NOTECARDSDIR is set to \"${NOTECARDSDIR}\"."
+          echo "But that does not appear to be a Notecards directory."
+          echo "Exiting"
+          exit 1
+        fi
 
 	git_commit_info "${NOTECARDSDIR}"
 	NOTECARDS_COMMIT_ID="${COMMIT_ID}"

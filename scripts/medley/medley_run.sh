@@ -410,11 +410,14 @@ start_maiko() {
 }
 
 
-# temp fix for cygwin to workaround issue #1685
-# 2024-04-29
 if [ "${cygwin}" = true ]
 then
+  # temp fix for cygwin to workaround issue #1685
+  # 2024-04-29
   MEDLEYDIR="${MEDLEYDIR}/"
+  #
+  if [ -z "${DISPLAY}" ]; then export DISPLAY=:0; fi
+  xmodmap -e "keycode 64 = Alt_L Meta_L Alt_L Meta_L" -e "keycode 107 = Delete"
 fi
 
 

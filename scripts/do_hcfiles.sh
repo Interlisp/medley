@@ -44,6 +44,7 @@ main() {
           touch "${MEDLEYDIR}/loadups/build/.skip"
         fi
 
+        echo "HCFILES processed at: $(date)" > ${logindir}/fails
 
         /bin/sh "${MEDLEYDIR}/scripts/medley/medley.command"     \
              --config -                                          \
@@ -59,9 +60,9 @@ main() {
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/HCFILES.DRIBBLE "${MEDLEYDIR}"/loadups/hcfiles.dribble
         if [ -f "$(command -v perl)" ] && [ -x "$(command -v perl)" ]
         then
-            perl "${MEDLEYDIR}"/scripts/getFails.pl '^[^\n]*IL:FAIL' 'DONE' "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
+            perl "${MEDLEYDIR}"/scripts/getFails.pl '^[^\n]*IL:FAIL' 'DONE' "${MEDLEYDIR}"/loadups/hcfiles.dribble >> ${logindir}/fails
         else
-            echo Unable to extract FAIL information from "${MEDLEYDIR}"/loadups/hcfiles.dribble > ${logindir}/fails
+            echo Unable to extract FAIL information from "${MEDLEYDIR}"/loadups/hcfiles.dribble >> ${logindir}/fails
         fi
         "${MEDLEYDIR}"/scripts/cpv ${logindir}/fails "${MEDLEYDIR}"/loadups/hcfiles-fails.txt
 

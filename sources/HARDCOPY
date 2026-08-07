@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10)
 
-(FILECREATED " 1-Aug-2026 08:37:31" {MEDLEY}<sources>HARDCOPY.;163 149747 
+(FILECREATED " 6-Aug-2026 22:36:32" {MEDLEY}<sources>HARDCOPY.;164 149642 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS HARDCOPYCOMS)
-                  (FNS CAN.PRINT.SOMEHOW)
+      :CHANGES-TO (FNS SEND.FILE.TO.PRINTER)
 
-      :PREVIOUS-DATE "28-Jul-2026 00:46:48" {MEDLEY}<sources>HARDCOPY.;161)
+      :PREVIOUS-DATE " 1-Aug-2026 08:37:31" {MEDLEY}<sources>HARDCOPY.;163)
 
 
 (PRETTYCOMPRINT HARDCOPYCOMS)
@@ -458,7 +457,8 @@
            X])
 
 (SEND.FILE.TO.PRINTER
-  [LAMBDA (IMAGESOURCE HOST OPTIONS)                         (* ; "Edited 19-Jan-2026 08:40 by rmk")
+  [LAMBDA (IMAGESOURCE HOST OPTIONS)                         (* ; "Edited  6-Aug-2026 21:39 by rmk")
+                                                             (* ; "Edited 19-Jan-2026 08:40 by rmk")
                                                              (* ; "Edited 17-Jan-2026 00:32 by rmk")
                                                              (* ; "Edited 27-Dec-2025 23:06 by rmk")
                                                              (* ; "Edited 23-Dec-2025 15:33 by rmk")
@@ -479,69 +479,63 @@
     (* ;; "The heuristics for finding the right printer with the right kind of imagefile are in FIND.PRINTER.FOR.IMAGETYPE.")
 
     (CL:WHEN (IMAGESOURCEFILEP IMAGESOURCE)
-        (SETQ IMAGESOURCE (FINDFILE IMAGESOURCE T)))
+        (SETQ IMAGESOURCE (OR (FINDFILE IMAGESOURCE T)
+                              IMAGESOURCE)))
+    (RESETLST                                                (* ; "Errors all at this level")
+        (LET ((IMAGESOURCETYPE (IMAGESOURCETYPE IMAGESOURCE))
+              PTYPE/PRINTER/ITYPE IMAGEFILE TYPETOPRINT PRINTERTYPE SENDFN)
+             (CL:UNLESS IMAGESOURCETYPE (ERROR IMAGESOURCE "is not an image source file"))
+             (CL:UNLESS HOST                                 (* ; 
+                                              "Not sure whether HOST or OPTIONS should have priority")
+                 [SETQ HOST (for X on OPTIONS by (CDDR X) when (MEMB (U-CASE (CAR X))
+                                                                     '(HOST SERVER))
+                               do (RETURN (CADR X])          (* ; 
+                                   "Maybe a type coercion in OPTIONS. e.g source type X as type Y ??")
+             (CL:WHEN (AND HOST (NOT (PRINTERNAME HOST)))
+                    (ERROR "Not a known printer" HOST))
+             (SETQ PTYPE/PRINTER/ITYPE (FIND.PRINTER.FOR.IMAGETYPE (OR (LISTGET OPTIONS 
+                                                                              'IMAGEFILETYPE)
+                                                                       IMAGESOURCETYPE)
+                                              HOST))
+             (SETQ PRINTERTYPE (pop PTYPE/PRINTER/ITYPE))
+             (SETQ PRINTER (pop PTYPE/PRINTER/ITYPE))
+             (CL:UNLESS PRINTER
+                 (ERROR (CONCAT (CL:IF HOST
+                                    (CONCAT "%"" HOST "%" can't print ")
+                                    "Can't find printer for ")
+                               IMAGESOURCETYPE " sources")))
+             (SETQ TYPETOPRINT (pop PTYPE/PRINTER/ITYPE))
+             (CL:UNLESS (SETQ SENDFN (PRINTERPROP PRINTERTYPE 'SEND))
+                                                             (* ; 
+                                                  "How can there be a printer without a send method?")
+                 (ERROR (CONCAT "Don't know how to send to a " PRINTERTYPE " printer")))
+             [if (EQ TYPETOPRINT IMAGESOURCETYPE)
+                 then (SETQ IMAGEFILE IMAGESOURCE)
+               else (RESETSAVE (SETQ IMAGEFILE (CONVERT.TO.IMAGEFILE IMAGESOURCE NIL TYPETOPRINT 
+                                                      OPTIONS))
+                           `(PROGN (DELFILE (CLOSEF? OLDVALUE]
 
-    (* ;; " ")
+             (* ;; "Now have the printer and proper imagefile.   ")
 
-    (CL:UNLESS HOST                                          (* ; 
-                                                "Not sure whether HOST or props should have priority")
-        [SETQ HOST (for X on OPTIONS by (CDDR X) when (MEMB (U-CASE (CAR X))
-                                                            '(HOST SERVER))
-                      do (RETURN (CADR X])
-
-    (* ;; "If HOST is still NIL, then it is clearly unspecified, we have to pick it based on the types.  The default here is the first of (PRINTERS)  that can print the type, not just the first printer.")
-
-    (RESETLST
-        [bind PTYPE/PRINTER/ITYPE IMAGEFILETYPE IMAGEFILE SENDFN (IMAGESOURCETYPE _ (IMAGESOURCETYPE
-                                                                                     IMAGESOURCE))
-           first (SETQ IMAGEFILETYPE (OR (LISTGET OPTIONS 'IMAGEFILETYPE)
-                                         IMAGESOURCETYPE))
-           do                                                (* ; "Errors all at this level")
-              (SETQ IMAGEFILE NIL)
-              (CL:UNLESS (SETQ PTYPE/PRINTER/ITYPE (FIND.PRINTER.FOR.IMAGETYPE IMAGEFILETYPE HOST))
-                  (ERROR (CONCAT "Can't find printer for " IMAGEFILETYPE " file")))
-              (CL:UNLESS (SETQ SENDFN (PRINTERPROP (PRINTERTYPE (CADR PTYPE/PRINTER/ITYPE))
-                                             'SEND))
-                  (ERROR (CONCAT "Don't know how to send to a " (PRINTERTYPE PTYPE/PRINTER/ITYPE)
-                                " printer")))
-              [RESETSAVE (SETQ IMAGEFILE (CONVERT.TO.IMAGEFILE IMAGESOURCE NIL (CADDR 
-                                                                                  PTYPE/PRINTER/ITYPE
-                                                                                      )
-                                                OPTIONS))
-                     `(PROGN (DELFILE (CLOSEF? OLDVALUE]
-              (CL:UNLESS IMAGEFILE
-                  (ERROR (CONCAT "Can't convert " IMAGESOURCETYPE " file to " (CADDR 
-                                                                                  PTYPE/PRINTER/ITYPE
-                                                                                     ))
-                         IMAGESOURCE)) 
-
-              (* ;; "Go around: maybe the user fixed something in an error break?")
- repeatuntil (AND PTYPE/PRINTER/ITYPE SENDFN IMAGEFILE)
-           finally 
-
-                 (* ;; "Now have the printer and proper imagefile.  Complexity here is because we want to say something meaningful about the image source, which may be a window, bitmap, tedit stream ")
-
-                 [SETQ OPTIONS `(HEADING ,(SELECTQ (LISTGET OPTIONS 'HEADING)
-                                              (T NIL)
-                                              (NIL           (* ; 
+             [SETQ OPTIONS `(HEADING ,(SELECTQ (LISTGET OPTIONS 'HEADING)
+                                          (T NIL)
+                                          (NIL               (* ; 
                                                        "If not a file, use the type or window title?")
-                                                   (CL:WHEN (IMAGESOURCEFILEP IMAGESOURCE)
-                                                       (CONCAT IMAGESOURCE "     "
-                                                              (GETFILEINFO IMAGESOURCE 'CREATIONDATE)
-                                                              )))
-                                              (LISTGET OPTIONS 'HEADING))
-                                       ,@OPTIONS %#COPIES 1 DOCUMENT.NAME ,(CL:IF (IMAGESOURCEFILEP
-                                                                                   IMAGESOURCE)
-                                                                               IMAGESOURCE
-                                                                               (TYPENAME IMAGESOURCE))
-                                       ]
-                 (CL:WHEN (LISTGET OPTIONS 'DELETE)
-                     [RESETSAVE IMAGEFILE '(PROGN (DELFILE OLDVALUE])
-                 (CL:WHEN (APPLY* SENDFN (CADR PTYPE/PRINTER/ITYPE)
-                                 IMAGEFILE OPTIONS)
-                     (RETURN (CL:IF (STREAMP IMAGESOURCE)
-                                 (FULLNAME IMAGESOURCE)
-                                 IMAGESOURCE)))])])
+                                               (CL:WHEN (IMAGESOURCEFILEP IMAGESOURCE)
+                                                   (CONCAT IMAGESOURCE "     " (GETFILEINFO
+                                                                                IMAGESOURCE
+                                                                                'CREATIONDATE))))
+                                          (LISTGET OPTIONS 'HEADING))
+                                   ,@OPTIONS %#COPIES 1 DOCUMENT.NAME ,(CL:IF (IMAGESOURCEFILEP
+                                                                               IMAGESOURCE)
+                                                                           IMAGESOURCE
+                                                                           (TYPENAME IMAGESOURCE))]
+             (CL:WHEN (LISTGET OPTIONS 'DELETE)
+                 [RESETSAVE IMAGEFILE '(PROGN (DELFILE OLDVALUE])
+             (CL:WHEN (APPLY* SENDFN HOST IMAGEFILE OPTIONS) (* ; "We want to return something meaningful about the image source, which may be a window, bitmap, tedit stream...")
+                 (CL:IF (STREAMP IMAGESOURCE)
+                     (FULLNAME IMAGESOURCE)
+                     IMAGESOURCE))))])
 
 (FIND.PRINTER.FOR.IMAGETYPE
   [LAMBDA (IMAGETYPE HOST)                                   (* ; "Edited 29-Jan-2026 10:29 by rmk")
@@ -2358,35 +2352,35 @@
 (ADDTOVAR LAMA )
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (6647 19372 (MakeMenuOfPrinters 6657 . 8146) (PRINTERS.WHENSELECTEDFN 8148 . 10079) (
-MakeMenuOfImageTypes 10081 . 10900) (GetNewPrinterFromUser 10902 . 11458) (PopUpWindowAndGetAtom 11460
- . 12911) (PopUpWindowAndGetList 12913 . 14483) (NewPrinter 14485 . 16099) (GetPrinterName 16101 . 
-16389) (GetImageFile 16391 . 19370)) (19427 37549 (HARDCOPYW 19437 . 20910) (LISTFILES1 20912 . 21089)
- (PRINTERPROP 21091 . 21341) (PRINTERSTATUS 21343 . 21618) (PRINTERTYPE 21620 . 24856) (PRINTERNAME 
-24858 . 26225) (PRINTFILETYPE 26227 . 26600) (PRINTERTYPEP 26602 . 26827) (SEND.FILE.TO.PRINTER 26829
- . 33078) (FIND.PRINTER.FOR.IMAGETYPE 33080 . 35734) (CAN.PRINT.SOMEHOW 35736 . 37120) (
-CAN.PRINT.DIRECTLY 37122 . 37547)) (37550 47162 (PRINTERDEVICE 37560 . 39169) (PRINTERDEVICE.OPENFN 
-39171 . 43144) (PRINTERDEVICE.CLOSEFN 43146 . 44865) (PRINTERDEVICEP 44867 . 45791) (PRINTERNAME 45793
- . 47160)) (47224 49648 (DEFAULTPRINTERS 47234 . 49646)) (50047 51344 (VIEWERPRINT 50057 . 51342)) (
-51462 52292 (SCALEREGION 51472 . 52290)) (52775 60597 (TEXT.TO.IMAGEFILE 52785 . 53998) (
-COPY.TEXT.TO.IMAGE 54000 . 60348) (TEXTTOIMAGEFILE 60350 . 60595)) (60749 62492 (
-\BLTSHADE.GENERICPRINTER 60759 . 62490)) (62559 99725 (MAKEHARDCOPYSTREAM 62569 . 64285) (
-UNMAKEHARDCOPYSTREAM 64287 . 65217) (HARDCOPYSTREAMTYPE 65219 . 65626) (\CHARWIDTH.HDCPYDISPLAY 65628
- . 66448) (\DSPFONT.HDCPYDISPLAY 66450 . 69245) (\DSPRIGHTMARGIN.HDCPYDISPLAY 69247 . 70102) (
-\DSPXPOSITION.HDCPYDISPLAY 70104 . 70479) (\DSPYPOSITION.HDCPYDISPLAY 70481 . 70856) (
-\STRINGWIDTH.HDCPYDISPLAY 70858 . 71813) (\STRINGWIDTH.HCPYDISPLAYAUX 71815 . 77155) (\HDCPYBLTCHAR 
-77157 . 82054) (\HDCPYDISPLAY.FIX.XPOS 82056 . 82813) (\HDCPYDISPLAY.FIX.YPOS 82815 . 83556) (
-\HDCPYDISPLAYINIT 83558 . 85248) (\HDCPYDSPPRINTCHAR 85250 . 91163) (\SLOWHDCPYBLTCHAR 91165 . 97781) 
-(\CHANGECHARSET.HDCPYDISPLAY 97783 . 99723)) (100040 149591 (MAKEHARDCOPYMODESTREAM 100050 . 102771) (
-UNMAKEHARDCOPYMODESTREAM 102773 . 104363) (\HCPYDISPLAYIMAGEOPS 104365 . 107185) (\BLTSHADE.HCPYMODE 
-107187 . 107853) (\BITBLT.HCPYMODE 107855 . 108603) (\BRUSHCONVERT.HCPYMODE 108605 . 109154) (
-\CHANGECHARSET.HCPYMODE 109156 . 112418) (\DASHINGCONVERT.HCPYMODE 112420 . 112761) (
-\CHARWIDTH.HCPYMODE 112763 . 113200) (\DRAWLINE.HCPYMODE 113202 . 113731) (\DRAWCURVE.HCPYMODE 113733
- . 114320) (\DRAWCIRCLE.HCPYMODE 114322 . 114807) (\DRAWELLIPSE.HCPYMODE 114809 . 115493) (
-\DSPFONT.HCPYMODE 115495 . 118179) (\DSPLEFTMARGIN.HCPYMODE 118181 . 118923) (\DSPLINEFEED.HCPYMODE 
-118925 . 119558) (\DSPRIGHTMARGIN.HCPYMODE 119560 . 120628) (\DSPSPACEFACTOR.HCPYMODE 120630 . 121405)
- (\DSPXPOSITION.HCPYMODE 121407 . 122425) (\DSPYPOSITION.HCPYMODE 122427 . 123077) (\MOVETO.HCPYMODE 
-123079 . 123293) (\FONTCREATE.HCPYMODE 123295 . 125252) (\CREATECHARSET.HCPYMODE 125254 . 126977) (
-\STRINGWIDTH.HCPYMODE 126979 . 127774) (\HCPYMODEBLTCHAR 127776 . 133526) (\HCPYMODEDSPPRINTCHAR 
-133528 . 139462) (\SLOWHCPYMODEBLTCHAR 139464 . 146093) (\SFFixY.HCPYMODE 146095 . 149589)))))
+  (FILEMAP (NIL (6612 19337 (MakeMenuOfPrinters 6622 . 8111) (PRINTERS.WHENSELECTEDFN 8113 . 10044) (
+MakeMenuOfImageTypes 10046 . 10865) (GetNewPrinterFromUser 10867 . 11423) (PopUpWindowAndGetAtom 11425
+ . 12876) (PopUpWindowAndGetList 12878 . 14448) (NewPrinter 14450 . 16064) (GetPrinterName 16066 . 
+16354) (GetImageFile 16356 . 19335)) (19392 37444 (HARDCOPYW 19402 . 20875) (LISTFILES1 20877 . 21054)
+ (PRINTERPROP 21056 . 21306) (PRINTERSTATUS 21308 . 21583) (PRINTERTYPE 21585 . 24821) (PRINTERNAME 
+24823 . 26190) (PRINTFILETYPE 26192 . 26565) (PRINTERTYPEP 26567 . 26792) (SEND.FILE.TO.PRINTER 26794
+ . 32973) (FIND.PRINTER.FOR.IMAGETYPE 32975 . 35629) (CAN.PRINT.SOMEHOW 35631 . 37015) (
+CAN.PRINT.DIRECTLY 37017 . 37442)) (37445 47057 (PRINTERDEVICE 37455 . 39064) (PRINTERDEVICE.OPENFN 
+39066 . 43039) (PRINTERDEVICE.CLOSEFN 43041 . 44760) (PRINTERDEVICEP 44762 . 45686) (PRINTERNAME 45688
+ . 47055)) (47119 49543 (DEFAULTPRINTERS 47129 . 49541)) (49942 51239 (VIEWERPRINT 49952 . 51237)) (
+51357 52187 (SCALEREGION 51367 . 52185)) (52670 60492 (TEXT.TO.IMAGEFILE 52680 . 53893) (
+COPY.TEXT.TO.IMAGE 53895 . 60243) (TEXTTOIMAGEFILE 60245 . 60490)) (60644 62387 (
+\BLTSHADE.GENERICPRINTER 60654 . 62385)) (62454 99620 (MAKEHARDCOPYSTREAM 62464 . 64180) (
+UNMAKEHARDCOPYSTREAM 64182 . 65112) (HARDCOPYSTREAMTYPE 65114 . 65521) (\CHARWIDTH.HDCPYDISPLAY 65523
+ . 66343) (\DSPFONT.HDCPYDISPLAY 66345 . 69140) (\DSPRIGHTMARGIN.HDCPYDISPLAY 69142 . 69997) (
+\DSPXPOSITION.HDCPYDISPLAY 69999 . 70374) (\DSPYPOSITION.HDCPYDISPLAY 70376 . 70751) (
+\STRINGWIDTH.HDCPYDISPLAY 70753 . 71708) (\STRINGWIDTH.HCPYDISPLAYAUX 71710 . 77050) (\HDCPYBLTCHAR 
+77052 . 81949) (\HDCPYDISPLAY.FIX.XPOS 81951 . 82708) (\HDCPYDISPLAY.FIX.YPOS 82710 . 83451) (
+\HDCPYDISPLAYINIT 83453 . 85143) (\HDCPYDSPPRINTCHAR 85145 . 91058) (\SLOWHDCPYBLTCHAR 91060 . 97676) 
+(\CHANGECHARSET.HDCPYDISPLAY 97678 . 99618)) (99935 149486 (MAKEHARDCOPYMODESTREAM 99945 . 102666) (
+UNMAKEHARDCOPYMODESTREAM 102668 . 104258) (\HCPYDISPLAYIMAGEOPS 104260 . 107080) (\BLTSHADE.HCPYMODE 
+107082 . 107748) (\BITBLT.HCPYMODE 107750 . 108498) (\BRUSHCONVERT.HCPYMODE 108500 . 109049) (
+\CHANGECHARSET.HCPYMODE 109051 . 112313) (\DASHINGCONVERT.HCPYMODE 112315 . 112656) (
+\CHARWIDTH.HCPYMODE 112658 . 113095) (\DRAWLINE.HCPYMODE 113097 . 113626) (\DRAWCURVE.HCPYMODE 113628
+ . 114215) (\DRAWCIRCLE.HCPYMODE 114217 . 114702) (\DRAWELLIPSE.HCPYMODE 114704 . 115388) (
+\DSPFONT.HCPYMODE 115390 . 118074) (\DSPLEFTMARGIN.HCPYMODE 118076 . 118818) (\DSPLINEFEED.HCPYMODE 
+118820 . 119453) (\DSPRIGHTMARGIN.HCPYMODE 119455 . 120523) (\DSPSPACEFACTOR.HCPYMODE 120525 . 121300)
+ (\DSPXPOSITION.HCPYMODE 121302 . 122320) (\DSPYPOSITION.HCPYMODE 122322 . 122972) (\MOVETO.HCPYMODE 
+122974 . 123188) (\FONTCREATE.HCPYMODE 123190 . 125147) (\CREATECHARSET.HCPYMODE 125149 . 126872) (
+\STRINGWIDTH.HCPYMODE 126874 . 127669) (\HCPYMODEBLTCHAR 127671 . 133421) (\HCPYMODEDSPPRINTCHAR 
+133423 . 139357) (\SLOWHCPYMODEBLTCHAR 139359 . 145988) (\SFFixY.HCPYMODE 145990 . 149484)))))
 STOP

@@ -410,13 +410,28 @@ start_maiko() {
 }
 
 
-# temp fix for cygwin to workaround issue #1685
-# 2024-04-29
+
+# if on cygwin, then start up X server (if required) and set the keymap as needed
 if [ "${cygwin}" = true ]
 then
+  # temp fix for cygwin to workaround issue #1685
+  # 2024-04-29
   MEDLEYDIR="${MEDLEYDIR}/"
+  #
+  if [ -z "${DISPLAY}" ] || [ ! "${DISPLAY}" = ":3333" ]
+    then
+      export DISPLAY=":3333"
+  fi
+  if ! xdpyinfo -display :3333 >/dev/null 2>/dev/null
+  then
+    startxwin -- :3333 &
+    until xdpyinfo -display :3333 >/dev/null 2>/dev/null
+    do
+      sleep 1
+    done
+    xmodmap -e "keycode 64 = Alt_L Meta_L Alt_L Meta_L" -e "keycode 107 = Delete"
+  fi
 fi
-
 
 # Repeatedly run medley as long as there is a repeat_cm file called for and it exists and is not zero length
 # In most cases, there will be no repeat_cm and hence medley will only run once

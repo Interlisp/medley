@@ -21,9 +21,11 @@ main() {
 	  if [ ! -e "${NOTECARDSDIR}" ]
 	  then
 	      NOTECARDSDIR=$(cd "${MEDLEYDIR}/../" && pwd)/notecards
+              NOTECARDSDIR=$(echo "${NOTECARDSDIR}" | sed "s+^//+/+")
 	      if [ ! -e "${NOTECARDSDIR}" ]
 	      then
 	          NOTECARDSDIR=$(cd "${MEDLEYDIR}/../../" && pwd)/notecards
+                  NOTECARDSDIR=$(echo "${NOTECARDSDIR}" | sed "s+^//+/+")
 	          if [ ! -e "${NOTECARDSDIR}" ]
 	          then
 	              NOTECARDSDIR=""

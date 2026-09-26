@@ -1053,11 +1053,16 @@ done
 # Process run_id
 # if it doesn't end in #, make sure that there is not another instance currently running with this same id
 # If it does end in #, find the right number to fill in for the #
+ps_flags="ax"
+if [ "${cygwin}" = true ]
+then
+  ps_flags="-f"
+fi
 run_id_base="${run_id%+}"
 run_id_has_plus="${run_id#"${run_id_base}"}"
 if [ -z "${run_id_has_plus}" ]
 then
-  matching=$(ps ax | sed -e "/sed/d" -e "/ldex.*-id ${run_id_base}/p" -e "/ldesdl.*-id ${run_id_base}/p" -e d)
+  matching=$(ps "${ps_flags}" | sed -e "/sed/d" -e "/ldex.*-id ${run_id_base}/p" -e "/ldesdl.*-id ${run_id_base}/p" -e d)
   if [ -n "${matching}" ]
   then
     err_msg="Another instance of Medley Interlisp is already running with the id \"${run_id}\".
@@ -1069,7 +1074,7 @@ Exiting"
   fi
 else
   matching=$( \
-      ps ax | \
+      ps "${ps_flags}" | \
       sed -e "/ldex.*-id ${run_id_base}[0-9]/s/^.*-id ${run_id_base}\([0-9]*\).*$/\\1/p" \
           -e "/ldesdl.*-id ${run_id_base}[0-9]/s/^.*-id ${run_id_base}\([0-9]*\).*$/\\1/p" \
           -e d \
@@ -1576,13 +1581,28 @@ start_maiko() {
 }
 
 
-# temp fix for cygwin to workaround issue #1685
-# 2024-04-29
+
+# if on cygwin, then start up X server (if required) and set the keymap as needed
 if [ "${cygwin}" = true ]
 then
+  # temp fix for cygwin to workaround issue #1685
+  # 2024-04-29
   MEDLEYDIR="${MEDLEYDIR}/"
+  #
+  if [ -z "${DISPLAY}" ] || [ ! "${DISPLAY}" = ":3333" ]
+    then
+      export DISPLAY=":3333"
+  fi
+  if ! xdpyinfo -display :3333 >/dev/null 2>/dev/null
+  then
+    startxwin -- :3333 &
+    until xdpyinfo -display :3333 >/dev/null 2>/dev/null
+    do
+      sleep 1
+    done
+    xmodmap -e "keycode 64 = Alt_L Meta_L Alt_L Meta_L" -e "keycode 107 = Delete"
+  fi
 fi
-
 
 # Repeatedly run medley as long as there is a repeat_cm file called for and it exists and is not zero length
 # In most cases, there will be no repeat_cm and hence medley will only run once

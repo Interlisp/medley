@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10 :FORMAT :UTF-8)
 
-(FILECREATED "15-Sep-2026 08:31:43" {MEDLEY}<sources>FONT.;909 271125 
+(FILECREATED "30-Sep-2026 09:35:43" {MEDLEY}<sources>FONT.;919 276034 
 
       :EDIT-BY rmk
 
       :CHANGES-TO (VARS FONTCOMS)
 
-      :PREVIOUS-DATE "14-Sep-2026 01:08:28" {MEDLEY}<sources>FONT.;908)
+      :PREVIOUS-DATE "22-Sep-2026 10:06:21" {MEDLEY}<sources>FONT.;918)
 
 
 (PRETTYCOMPRINT FONTCOMS)
@@ -73,8 +73,7 @@
         (FNS \CREATEKERNELEMENT \FSETLEFTKERN \FGETLEFTKERN)
         (FNS \CREATEFONT \CREATECHARSET \INSTALLCHARSETINFO \INSTALLCHARSETINFO.CHARENCODING 
              \COPYCHARSETINFO)
-        (DECLARE%: DONTCOPY (MACROS FIRSTCHARSETCODE LASTCHARSETCODE))
-        (FNS)
+        (DECLARE%: DONTCOPY (EXPORT (MACROS FIRSTCHARSETCODE LASTCHARSETCODE)))
         (MACROS \FGETCHARIMAGEWIDTH)
         
         (* ;; "")
@@ -409,6 +408,7 @@
 
 (FONTCREATE
   [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE NOERRORFLG CHARSET)
+                                                             (* ; "Edited 22-Sep-2026 00:25 by rmk")
                                                              (* ; "Edited 28-Aug-2025 14:39 by rmk")
                                                              (* ; "Edited 15-Aug-2025 23:48 by rmk")
                                                              (* ; "Edited 12-Aug-2025 21:02 by rmk")
@@ -428,30 +428,27 @@
 
     (* ;; "Original code picked off and returned a fontclass for (CLASS ...).  That's now handled in \FONT.CHECKARGS, and it coerces to a fontdescriptor for DEVICE, not a class.")
 
-    (PROG (FONTSPEC)
-      RETRY
+    (if (AND (type? FONTDESCRIPTOR FAMILY)
+             (NOT (OR SIZE FACE ROTATION DEVICE))
+             (\GETCHARSETINFO FAMILY (\CHARSET.CHECK CHARSET)))
+        then 
+             (* ;; "Pretest for a fontdescriptor with no modification, the common case of just calling FONTCREATE to check validity.  Avoid cost of \FONT.CHECKARGS, also makes it possible to break/trace/change \FONT.CHECKARGS. Presumably already in \FONTSINCORE.")
+
+             FAMILY
+      else (PROG (FONTSPEC)
+             RETRY
                                                              (* ; "Back to here if ERROR returns")
-          (SETQ CHARSET (\CHARSET.CHECK CHARSET))
-          (SETQ FONTSPEC (if (AND (type? FONTDESCRIPTOR FAMILY)
-                                  (NULL SIZE)
-                                  (NULL FACE)
-                                  (NULL ROTATION)
-                                  (NULL DEVICE))
-                             then 
-                                  (* ;; "Pretest for a fontdescriptor with no modification--makes it possible to break/trace/change \FONT.CHECKARGS")
+                 (SETQ FONTSPEC (\FONT.CHECKARGS FAMILY SIZE FACE ROTATION DEVICE))
 
-                                  FAMILY
-                           else (\FONT.CHECKARGS FAMILY SIZE FACE ROTATION DEVICE)))
+            (* ;; "If FONTSPEC is a fontdescriptor, it's what we want")
 
-     (* ;; "If FONTSPEC is a fontdescriptor, it's what we want")
-
-          (RETURN (if (type? FONTDESCRIPTOR FONTSPEC)
-                      then FONTSPEC
-                    elseif (FONTCREATE1 FONTSPEC CHARSET)
-                    elseif NOERRORFLG
-                      then NIL
-                    else (ERROR "FONT NOT FOUND" FONTSPEC)
-                         (GO RETRY])
+                 (RETURN (if (type? FONTDESCRIPTOR FONTSPEC)
+                             then FONTSPEC
+                           elseif (FONTCREATE1 FONTSPEC CHARSET)
+                           elseif NOERRORFLG
+                             then NIL
+                           else (ERROR "FONT NOT FOUND" FONTSPEC)
+                                (GO RETRY])
 
 (FONTCREATE1
   [LAMBDA (FONTSPEC CHARSET)                                 (* ; "Edited 17-Mar-2026 23:41 by rmk")
@@ -693,7 +690,8 @@
 (DEFINEQ
 
 (\FONT.CHECKARGS
-  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE ALWAYSFONTSPEC)  (* ; "Edited  1-Sep-2026 14:56 by rmk")
+  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE ALWAYSFONTSPEC)  (* ; "Edited 19-Sep-2026 23:11 by rmk")
+                                                             (* ; "Edited  1-Sep-2026 14:56 by rmk")
                                                              (* ; "Edited 26-Aug-2026 21:05 by rmk")
                                                              (* ; "Edited 20-Aug-2026 23:59 by rmk")
                                                              (* ; "Edited 22-Nov-2025 11:31 by rmk")
@@ -719,87 +717,97 @@
 
     (* ;; "If FAMILY can be coerced to a font descriptor and none of its properties are overwritten by the other aguments, then that font descriptor is returned.  Otherwise the value is the coerced fontspec (family size face rotation device).")
 
-    (LET (FONTX)
-         (CL:WHEN (AND (EQ 'CLASS (CAR (LISTP FAMILY)))
-                       (LITATOM (CADR FAMILY)))
+    (if (AND (type? FONTDESCRIPTOR FAMILY)
+             (NOT (OR SIZE FACE ROTATION DEVICE)))
+        then (CL:IF ALWAYSFONTSPEC
+                 (create FONTSPEC
+                        FSFAMILY ← (fetch (FONTDESCRIPTOR FONTFAMILY) of FAMILY)
+                        FSSIZE ← (fetch (FONTDESCRIPTOR FONTSIZE) of FAMILY)
+                        FSFACE ← (COPY (fetch (FONTDESCRIPTOR FONTFACE) of FAMILY))
+                        FSROTATION ← (fetch (FONTDESCRIPTOR ROTATION) of FAMILY)
+                        FSDEVICE ← (fetch (FONTDESCRIPTOR FONTDEVICE) of FAMILY))
+                 FAMILY)
+      else (LET (FONTX)
+                (CL:WHEN (AND (EQ 'CLASS (CAR (LISTP FAMILY)))
+                              (LITATOM (CADR FAMILY)))
 
-             (* ;; "This used to be at the entry to FONTCREATE, and it returned the FONTCLASS.  That seemed wrong--FONTCREATE should always return a fontdescriptor.  So here we build a throwaway fontclass, coerce it to its device font, and fall through.")
+                    (* ;; "This used to be at the entry to FONTCREATE, and it returned the FONTCLASS.  That seemed wrong--FONTCREATE should always return a fontdescriptor.  So here we build a throwaway fontclass, coerce it to its device font, and fall through.")
 
-             (SETQ FAMILY (\FONT.CHECKARGS1 (FONTCLASS (CADR FAMILY)
-                                                   (CDDR FAMILY))
-                                 DEVICE)))
-         (CL:UNLESS (AND FAMILY (LITATOM FAMILY)
-                         (NEQ FAMILY T))
+                    (SETQ FAMILY (\FONT.CHECKARGS1 (FONTCLASS (CADR FAMILY)
+                                                          (CDDR FAMILY))
+                                        DEVICE)))
+                (CL:UNLESS (AND FAMILY (LITATOM FAMILY)
+                                (NEQ FAMILY T))
 
-             (* ;; "FAMILY T or NIL produces an error below")
+                    (* ;; "FAMILY T or NIL produces an error below")
 
-             [if (LISTP FAMILY)
-                 then 
-                      (* ;; "Presumably a FONTSPEC.  The variables here override the FONTX properties, as with the fontdescriptor below ")
+                    [if (LISTP FAMILY)
+                        then 
+                             (* ;; "Presumably a FONTSPEC.  The variables here override the FONTX properties, as with the fontdescriptor below ")
 
-                      (SETQ FONTX (CL:IF (EQ 'FONT (CAR FAMILY))
-                                      (CDR FAMILY)
-                                      FAMILY))
-                      (SETQ FAMILY (fetch (FONTSPEC FSFAMILY) of FONTX))
-                      (SETQ SIZE (OR SIZE (fetch (FONTSPEC FSSIZE) of FONTX)))
-                      (SETQ FACE (OR FACE (fetch (FONTSPEC FSFACE) of FONTX)))
-                      (SETQ ROTATION (OR ROTATION (fetch (FONTSPEC FSROTATION) of FONTX)))
-                      (SETQ DEVICE (OR DEVICE (fetch (FONTSPEC FSDEVICE) of FONTX)))
-                      (SETQ FONTX NIL)
-               elseif (SETQ FONTX (CL:IF (type? FONTDESCRIPTOR FAMILY)
-                                      FAMILY
-                                      (\FONT.CHECKARGS1 FAMILY DEVICE T)))
-                 then 
-                      (* ;; 
+                             (SETQ FONTX (CL:IF (EQ 'FONT (CAR FAMILY))
+                                             (CDR FAMILY)
+                                             FAMILY))
+                             (SETQ FAMILY (fetch (FONTSPEC FSFAMILY) of FONTX))
+                             (SETQ SIZE (OR SIZE (fetch (FONTSPEC FSSIZE) of FONTX)))
+                             (SETQ FACE (OR FACE (fetch (FONTSPEC FSFACE) of FONTX)))
+                             (SETQ ROTATION (OR ROTATION (fetch (FONTSPEC FSROTATION) of FONTX)))
+                             (SETQ DEVICE (OR DEVICE (fetch (FONTSPEC FSDEVICE) of FONTX)))
+                             (SETQ FONTX NIL)
+                      elseif (SETQ FONTX (CL:IF (type? FONTDESCRIPTOR FAMILY)
+                                             FAMILY
+                                             (\FONT.CHECKARGS1 FAMILY DEVICE T)))
+                        then 
+                             (* ;; 
                     "FAMILY was a spec for a font descriptor. Are any of its properties overwritten?")
 
-                      (SETQ FAMILY (fetch (FONTDESCRIPTOR FONTFAMILY) of FONTX))
-                      (CL:UNLESS SIZE
-                          (SETQ SIZE (fetch (FONTDESCRIPTOR FONTSIZE) of FONTX)))
-                      (CL:UNLESS FACE
-                          (SETQ FACE (fetch (FONTDESCRIPTOR FONTFACE) of FONTX)))
-                      (CL:UNLESS ROTATION
-                          (SETQ ROTATION (fetch (FONTDESCRIPTOR ROTATION) of FONTX)))
-                      (CL:UNLESS DEVICE
-                          (SETQ DEVICE (fetch (FONTDESCRIPTOR FONTDEVICE) of FONTX)))])
+                             (SETQ FAMILY (fetch (FONTDESCRIPTOR FONTFAMILY) of FONTX))
+                             (CL:UNLESS SIZE
+                                 (SETQ SIZE (fetch (FONTDESCRIPTOR FONTSIZE) of FONTX)))
+                             (CL:UNLESS FACE
+                                 (SETQ FACE (fetch (FONTDESCRIPTOR FONTFACE) of FONTX)))
+                             (CL:UNLESS ROTATION
+                                 (SETQ ROTATION (fetch (FONTDESCRIPTOR ROTATION) of FONTX)))
+                             (CL:UNLESS DEVICE
+                                 (SETQ DEVICE (fetch (FONTDESCRIPTOR FONTDEVICE) of FONTX)))])
 
-         (* ;; "We have decoded the arguments, fill in defaults and validate")
+                (* ;; "We have decoded the arguments, fill in defaults and validate")
 
-         (SETQ DEVICE (if (NULL DEVICE)
-                          then 'DISPLAY
-                        elseif (OR (AND (LITATOM DEVICE)
-                                        (NEQ DEVICE T))
-                                   (STRINGP DEVICE))
-                          then (\DEVICESYMBOL DEVICE)
-                        elseif [AND (SETQ DEVICE (\GETSTREAM DEVICE 'OUTPUT T))
-                                    (CAR (MKLIST (IMAGESTREAMTYPE DEVICE]
-                        else (\ILLEGAL.ARG DEVICE)))
-         (CL:UNLESS (AND FAMILY (LITATOM FAMILY)
-                         (NEQ FAMILY T))
-                (ERROR "Illegal font family" FAMILY))
-         (SETQ FAMILY (U-CASE FAMILY))
-         (CL:UNLESS (OR (AND (FIXP SIZE)
-                             (IGEQ SIZE 0))
-                        (EQ SIZE '*))
-                (ERROR "Illegal font size" SIZE))
-         (CL:UNLESS (EQ FACE '*)
-             (SETQ FACE (\FONTFACE FACE NIL DEVICE)))
-         (if (NULL ROTATION)
-             then (SETQ ROTATION 0)
-           elseif (EQ ROTATION '*)
-           elseif (NUMBERP ROTATION)
-           else (\ILLEGAL.ARG ROTATION))
-         (CL:WHEN FONTX
+                (SETQ DEVICE (if (NULL DEVICE)
+                                 then 'DISPLAY
+                               elseif (OR (AND (LITATOM DEVICE)
+                                               (NEQ DEVICE T))
+                                          (STRINGP DEVICE))
+                                 then (\DEVICESYMBOL DEVICE)
+                               elseif [AND (SETQ DEVICE (\GETSTREAM DEVICE 'OUTPUT T))
+                                           (CAR (MKLIST (IMAGESTREAMTYPE DEVICE]
+                               else (\ILLEGAL.ARG DEVICE)))
+                (CL:UNLESS (AND FAMILY (LITATOM FAMILY)
+                                (NEQ FAMILY T))
+                       (ERROR "Illegal font family" FAMILY))
+                (SETQ FAMILY (U-CASE FAMILY))
+                (CL:UNLESS (OR (AND (FIXP SIZE)
+                                    (IGEQ SIZE 0))
+                               (EQ SIZE '*))
+                       (ERROR "Illegal font size" SIZE))
+                (CL:UNLESS (EQ FACE '*)
+                    (SETQ FACE (\FONTFACE FACE NIL DEVICE)))
+                (if (NULL ROTATION)
+                    then (SETQ ROTATION 0)
+                  elseif (EQ ROTATION '*)
+                  elseif (NUMBERP ROTATION)
+                  else (\ILLEGAL.ARG ROTATION))
+                (CL:WHEN FONTX
 
-             (* ;; "Return FONTX only if no fields were overwritten")
+                    (* ;; "Return FONTX only if no fields were overwritten")
 
-             (CL:UNLESS (AND (NOT ALWAYSFONTSPEC)
-                             (EQ SIZE (fetch (FONTDESCRIPTOR FONTSIZE) of FONTX))
-                             (EQUAL FACE (fetch (FONTDESCRIPTOR FONTFACE) of FONTX))
-                             (EQ ROTATION (fetch (FONTDESCRIPTOR ROTATION) of FONTX))
-                             (EQ DEVICE (fetch (FONTDESCRIPTOR FONTDEVICE) of FONTX)))
-                    (SETQ FONTX NIL)))
-         (OR FONTX (MAKEFONTSPEC FAMILY SIZE FACE ROTATION DEVICE])
+                    (CL:UNLESS (AND (NOT ALWAYSFONTSPEC)
+                                    (EQ SIZE (fetch (FONTDESCRIPTOR FONTSIZE) of FONTX))
+                                    (EQUAL FACE (fetch (FONTDESCRIPTOR FONTFACE) of FONTX))
+                                    (EQ ROTATION (fetch (FONTDESCRIPTOR ROTATION) of FONTX))
+                                    (EQ DEVICE (fetch (FONTDESCRIPTOR FONTDEVICE) of FONTX)))
+                           (SETQ FONTX NIL)))
+                (OR FONTX (MAKEFONTSPEC FAMILY SIZE FACE ROTATION DEVICE])
 
 (\CHARSET.CHECK
   [LAMBDA (CHARSET)                                          (* ; "Edited 28-Aug-2025 14:35 by rmk")
@@ -959,7 +967,8 @@
 (DEFINEQ
 
 (MAKEFONTSPEC
-  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE BASE)            (* ; "Edited  3-Sep-2026 23:24 by rmk")
+  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE BASE)            (* ; "Edited 22-Sep-2026 00:06 by rmk")
+                                                             (* ; "Edited  3-Sep-2026 23:24 by rmk")
                                                              (* ; "Edited  4-May-2026 12:38 by rmk")
                                                              (* ; "Edited 15-Apr-2026 00:25 by rmk")
                                                              (* ; "Edited  7-Nov-2025 07:52 by rmk")
@@ -972,6 +981,13 @@
 
     (CL:WHEN (type? FONTSPEC FAMILY)
            (SPREADFONTSPEC FAMILY))
+    (CL:WHEN (type? FONTDESCRIPTOR BASE)
+        (SETQ BASE (create FONTSPEC
+                          FSFAMILY ← (fetch (FONTDESCRIPTOR FONTFAMILY) of BASE)
+                          FSSIZE ← (fetch (FONTDESCRIPTOR FONTSIZE) of BASE)
+                          FSFACE ← (fetch (FONTDESCRIPTOR FONTFACE) of BASE)
+                          FSROTATION ← (fetch (FONTDESCRIPTOR ROTATION) of BASE)
+                          FSDEVICE ← (fetch (FONTDESCRIPTOR FONTDEVICE) of BASE))))
     (CL:WHEN FACE
         (SETQ FACE (\FONTFACE FACE)))
     (create FONTSPEC
@@ -1319,16 +1335,14 @@
            else 1])
 )
 (* "FOLLOWING DEFINITIONS EXPORTED")
-(DEFOPTIMIZER FONTPROP (FONT PROP &REST REST)
+(DEFOPTIMIZER FONTPROP (FONT PROP &REST REST)                (* ; 
+                                                    "Other fields would require FONTCREATE call here")
                        (SELECTQ (AND (EQ (CAR PROP)
                                          'QUOTE)
                                      (CADR PROP))
                            (ASCENT `(FONTASCENT ,FONT))
                            (DESCENT `(FONTDESCENT ,FONT))
                            (HEIGHT `(FONTHEIGHT ,FONT))
-                           (FONTTOMCCSFN `(fetch (FONTDESCRIPTOR FONTTOMCCSFN) of ,FONT))
-                           (MAXCHARSET `(MAXCHARSET ,FONT))
-                           (FILENAME `(fetch (FONTDESCRIPTOR FONTFILENAME) of ,FONT))
                            'IGNOREMACRO))
 (DECLARE%: EVAL@COMPILE 
 
@@ -2181,82 +2195,94 @@
 (DEFINEQ
 
 (FONTCOPY
-  [LAMBDA FONTSPECS                                          (* ; "Edited 14-Jul-2025 23:04 by rmk")
+  [LAMBDA NARGS                                              (* ; "Edited 22-Sep-2026 09:43 by rmk")
+                                                             (* ; "Edited 14-Jul-2025 23:04 by rmk")
                                                              (* ; "Edited  5-Jul-2025 18:54 by rmk")
                                                              (* ; "Edited 10-Nov-87 17:12 by FS")
                                                              (* ; 
                                               "makes a copy of a font changing the specified fields.")
-    (PROG (NOERROR ERROR FAMILY FACE SIZE ROTATION DEVICE OLDFONT)
+    (PROG (NOERROR FAMILY FACE SIZE ROTATION DEVICE OLDFONT WEIGHT SLOPE EXPANSION FORECOLOR 
+                 BACKCOLOR)
 
-     (* ;; "Set NOERROR if we find it as a prop, but set ERROR if we find a PROP which is illegal.  Then just return NIL if NOERROR and ERROR, otherwise, call FONTCREATE.")
+     (* ;; "Set NOERROR if we find it as a prop")
 
-          [SETQ OLDFONT (FONTCREATE (ARG FONTSPECS 1)
-                               NIL NIL NIL
-                               (CL:WHEN (type? FONTCLASS (ARG FONTSPECS 1))
-                                   [COND
-                                      ((AND (EQ FONTSPECS 2)
-                                            (LISTP (ARG FONTSPECS 2)))
-                                       (LISTGET (ARG FONTSPECS 2)
-                                              'DEVICE))
-                                      (T (for I from 2 by 2 to FONTSPECS
-                                            do (COND
-                                                  ((AND (NEQ I FONTSPECS)
-                                                        (EQ (ARG FONTSPECS I)
-                                                            'DEVICE))
-                                                   (RETURN (ARG FONTSPECS (ADD1 I])]
-          (SETQ FAMILY (fetch (FONTDESCRIPTOR FONTFAMILY) of OLDFONT))
-          (SETQ SIZE (fetch (FONTDESCRIPTOR FONTSIZE) of OLDFONT))
-          (SETQ FACE (fetch (FONTDESCRIPTOR FONTFACE) of OLDFONT))
-          (SETQ ROTATION (fetch (FONTDESCRIPTOR ROTATION) of OLDFONT))
-          (SETQ DEVICE (fetch (FONTDESCRIPTOR FONTDEVICE) of OLDFONT))
-          [for I VAL from 2 by 2 to FONTSPECS
-             do [SETQ VAL (COND
-                             ((NOT (EQ I FONTSPECS))
-                              (ARG FONTSPECS (ADD1 I]
-                (SELECTQ (ARG FONTSPECS I)
-                    (FAMILY (SETQ FAMILY VAL))
-                    (SIZE (SETQ SIZE VAL))
-                    (FACE (SETQ FACE (\FONTFACE VAL)))
-                    (WEIGHT (SETQ FACE (create FONTFACE using FACE WEIGHT ← VAL)))
-                    (SLOPE (SETQ FACE (create FONTFACE using FACE SLOPE ← VAL)))
-                    (EXPANSION (SETQ FACE (create FONTFACE using FACE EXPANSION ← VAL)))
-                    (BACKCOLOR (SETQ FACE (create FONTFACE using FACE BACKCOLOR ← VAL)))
-                    (FORECOLOR (SETQ FACE (create FONTFACE using FACE FORECOLOR ← VAL)))
-                    (ROTATION (SETQ ROTATION VAL))
-                    (DEVICE (SETQ DEVICE VAL))
-                    (NOERROR (SETQ NOERROR VAL))
-                    (COND
-                       [(AND (EQ I 2)
-                             (EQ FONTSPECS 2)
-                             (LISTP (ARG FONTSPECS 2)))
-                        (for J on (ARG FONTSPECS 2) by (CDDR J)
-                           do (SETQ VAL (CADR J))
-                              (SELECTQ (CAR J)
-                                  (FAMILY (SETQ FAMILY VAL))
-                                  (SIZE (SETQ SIZE VAL))
-                                  (FACE (SETQ FACE (\FONTFACE VAL)))
-                                  (WEIGHT (SETQ FACE (create FONTFACE using FACE WEIGHT ← VAL)))
-                                  (SLOPE (SETQ FACE (create FONTFACE using FACE SLOPE ← VAL)))
-                                  (EXPANSION (SETQ FACE (create FONTFACE using FACE EXPANSION ← VAL)))
-                                  (BACKCOLOR (SETQ FACE (create FONTFACE using FACE BACKCOLOR ← VAL)))
-                                  (FORECOLOR (SETQ FACE (create FONTFACE using FACE FORECOLOR ← VAL)))
-                                  (ROTATION (SETQ ROTATION VAL))
-                                  (DEVICE (SETQ DEVICE VAL))
-                                  (NOERROR (SETQ NOERROR VAL))
-                                  (COND
-                                     (NOERROR 
+     (* ;; "Originally, don't cause an illegal prop error if NOERROR, just return NIL.  But an error in the property is really a big mistake, always an illegal arg.  Now (rmk) NOERROR just applies to the FONTCREATEs. ")
 
-                                            (* ;; 
-    "Fell through the SELECTQ, so an illegal PROP.  But, if NOERROR, just note the error, otherwise ")
+          [if (AND (EQ NARGS 2)
+                   (LISTP (ARG NARGS 2)))
+              then [for J VAL on (ARG NARGS 2) by (CDDR J)
+                      do (SETQ VAL (CADR J))                 (* ; "Later values override")
+                         (SELECTQ (CAR J)
+                             (FAMILY (SETQ FAMILY VAL))
+                             (SIZE (SETQ SIZE VAL))
+                             (FACE (SETQ FACE (\FONTFACE VAL))
+                                   (SETQ WEIGHT (fetch (FONTFACE WEIGHT) of FACE))
+                                   (SETQ SLOPE (fetch (FONTFACE SLOPE) of FACE))
+                                   (SETQ EXPANSION (fetch (FONTFACE EXPANSION) of FACE))
+                                   (SETQ FORECOLOR (fetch (FONTFACE FORECOLOR) of FACE))
+                                   (SETQ BACKCOLOR (fetch (FONTFACE BACKCOLOR) of FACE)))
+                             (ROTATION (SETQ ROTATION VAL))
+                             (DEVICE (SETQ DEVICE VAL))
+                             (WEIGHT (SETQ WEIGHT VAL))
+                             (SLOPE (SETQ SLOPE VAL))
+                             (EXPANSION (SETQ EXPANSION VAL))
+                             (FORECOLOR (SETQ FORECOLOR VAL))
+                             (BACKCOLOR (SETQ BACKCOLOR VAL))
+                             (COLOR                          (* ; "Is there a declaration?")
+                                    (SETQ FORECOLOR (CAR VAL))
+                                    (SETQ BACKCOLOR (CADR VAL)))
+                             (NOERROR (SETQ NOERROR VAL))
+                             (\ILLEGAL.ARG (CAR J]
+            else (for I VAL from 2 by 2 to NARGS do [SETQ VAL (CL:IF (NEQ I NARGS)
+                                                                  (ARG NARGS (ADD1 I)))] 
+                                                             (* ; 
+                                                  "SELECTQ is same as above, except for error at end")
+                                                    (SELECTQ (ARG NARGS I)
+                                                        (FAMILY (SETQ FAMILY VAL))
+                                                        (SIZE (SETQ SIZE VAL))
+                                                        (FACE (SETQ FACE (\FONTFACE VAL))
+                                                              (SETQ WEIGHT (fetch (FONTFACE WEIGHT)
+                                                                              of FACE))
+                                                              (SETQ SLOPE (fetch (FONTFACE SLOPE)
+                                                                             of FACE))
+                                                              (SETQ EXPANSION (fetch (FONTFACE 
+                                                                                            EXPANSION
+                                                                                            )
+                                                                                 of FACE))
+                                                              (SETQ FORECOLOR (fetch (FONTFACE 
+                                                                                            FORECOLOR
+                                                                                            )
+                                                                                 of FACE))
+                                                              (SETQ BACKCOLOR (fetch (FONTFACE 
+                                                                                            BACKCOLOR
+                                                                                            )
+                                                                                 of FACE)))
+                                                        (ROTATION (SETQ ROTATION VAL))
+                                                        (DEVICE (SETQ DEVICE VAL))
+                                                        (WEIGHT (SETQ WEIGHT VAL))
+                                                        (SLOPE (SETQ SLOPE VAL))
+                                                        (EXPANSION (SETQ EXPANSION VAL))
+                                                        (FORECOLOR (SETQ FORECOLOR VAL))
+                                                        (BACKCOLOR (SETQ BACKCOLOR VAL))
+                                                        (COLOR (SETQ FORECOLOR (CAR VAL))
+                                                               (SETQ BACKCOLOR (CADR VAL)))
+                                                        (NOERROR (SETQ NOERROR VAL))
+                                                        (\ILLEGAL.ARG (ARG NARGS I]
 
-                                            (SETQ ERROR T))
-                                     (T (\ILLEGAL.ARG (CAR J]
-                       (T (if NOERROR
-                              then (SETQ ERROR T)
-                            else (\ILLEGAL.ARG (ARG FONTSPECS I]
-          (RETURN (if (AND NOERROR ERROR)
-                      then NIL
-                    else (FONTCREATE FAMILY SIZE FACE ROTATION DEVICE NOERROR])
+     (* ;; "DEVICE to get the the right font from the FONTCLASS, otherwise no need for an intermediate device font")
+
+          (CL:WHEN (SETQ OLDFONT (FONTCREATE (ARG NARGS 1)
+                                        NIL NIL NIL (CL:IF (type? FONTCLASS (ARG NARGS 1))
+                                                           DEVICE)
+                                        NOERROR))
+              (RETURN (FONTCREATE (OR FAMILY (fetch (FONTDESCRIPTOR FONTFAMILY) of OLDFONT))
+                             (OR SIZE (fetch (FONTDESCRIPTOR FONTSIZE) of OLDFONT))
+                             (MAKEFONTFACE WEIGHT SLOPE EXPANSION (fetch (FONTDESCRIPTOR FONTFACE)
+                                                                     of OLDFONT)
+                                    NIL FORECOLOR BACKCOLOR)
+                             (OR ROTATION (fetch (FONTDESCRIPTOR ROTATION) of OLDFONT))
+                             (OR DEVICE (fetch (FONTDESCRIPTOR FONTDEVICE) of OLDFONT))
+                             NOERROR)))])
 
 (FONTP
   [LAMBDA (X)                                                (* rmk%: "13-Sep-84 09:04")
@@ -2998,7 +3024,9 @@
                          (EQ PEXPANSION '*])
 
 (MAKEFONTFACE
-  [LAMBDA (WEIGHT SLOPE EXPANSION BASE COLOR)                (* ; "Edited  7-Nov-2025 08:50 by rmk")
+  [LAMBDA (WEIGHT SLOPE EXPANSION BASE COLOR FORECOLOR BACKCOLOR)
+                                                             (* ; "Edited 22-Sep-2026 09:41 by rmk")
+                                                             (* ; "Edited  7-Nov-2025 08:50 by rmk")
                                                              (* ; "Edited 30-Aug-2025 10:22 by rmk")
     (CL:WHEN (FONTP BASE)
         (SETQ BASE (FONTPROP BASE 'FACE)))
@@ -3014,13 +3042,23 @@
         (SETQ EXPANSION (CL:IF BASE
                             (fetch (FONTFACE EXPANSION) of BASE)
                             'REGULAR)))
-    (CL:UNLESS COLOR
-        (SETQ COLOR (COPY (fetch (FONTFACE COLOR) of BASE))))
-    (create FONTFACE
-           WEIGHT ← WEIGHT
-           SLOPE ← SLOPE
-           EXPANSION ← EXPANSION
-           COLOR ← COLOR])
+
+    (* ;; "COLOR isn't a separate object, so can't create it separately and can't pull it apart")
+
+    (if COLOR
+        then (CL:WHEN (OR FORECOLOR BACKCOLOR)
+                    (ERROR "Can't specify COLOR and also FORECOLOR or BACKCOLOR"))
+             (create FONTFACE
+                    WEIGHT ← WEIGHT
+                    SLOPE ← SLOPE
+                    EXPANSION ← EXPANSION
+                    COLOR ← COLOR)
+      else (create FONTFACE
+                  WEIGHT ← WEIGHT
+                  SLOPE ← SLOPE
+                  EXPANSION ← EXPANSION
+                  FORECOLOR ← (OR FORECOLOR (fetch (FONTFACE FORECOLOR) of BASE))
+                  BACKCOLOR ← (OR BACKCOLOR (fetch (FONTFACE BACKCOLOR) of BASE])
 
 (FONTFACETOATOM
   [LAMBDA (FACE NOERROR)                                     (* ; "Edited 22-Jan-2026 08:13 by rmk")
@@ -3649,7 +3687,8 @@
              then (FONTSPEC.TO.FONTDESCRIPTOR FONTSPEC (MAXCHARSET (\CREATEFONT COERCIONSPEC])
 
 (\CREATECHARSET
-  [LAMBDA (CHARSET FONT GETCHARSETFN)                        (* ; "Edited 13-Sep-2026 22:29 by rmk")
+  [LAMBDA (CHARSET FONT GETCHARSETFN)                        (* ; "Edited 22-Sep-2026 00:07 by rmk")
+                                                             (* ; "Edited 13-Sep-2026 22:29 by rmk")
                                                              (* ; "Edited  2-Sep-2026 14:16 by rmk")
                                                              (* ; "Edited 31-Aug-2026 10:55 by rmk")
                                                              (* ; "Edited 12-Apr-2026 18:47 by rmk")
@@ -3676,7 +3715,9 @@
                                                                                       FONTDEVICE)
                                                                                  of FONT)
                                                                               'CREATECHARSET]
-                              then (APPLY* GETCHARSETFN (FONTPROP FONT 'DEVICESPEC)
+                              then (APPLY* GETCHARSETFN (OR (ffetch (FONTDESCRIPTOR FONTDEVICESPEC)
+                                                               of FONT)
+                                                            (MAKEFONTSPEC NIL NIL NIL NIL NIL FONT))
                                           FONT CHARSET)
                             else (\READCHARSET FONT CHARSET)))
 
@@ -3761,7 +3802,7 @@
          NEW])
 )
 (DECLARE%: DONTCOPY 
-(DECLARE%: EVAL@COMPILE 
+(* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE 
 
 (PUTPROPS FIRSTCHARSETCODE MACRO ((CHARSET)
                                   (LLSH CHARSET 8)))
@@ -3770,6 +3811,9 @@
                                  (LOGOR (LLSH CHARSET 8)
                                         \MAXTHINCHAR)))
 )
+
+(* "END EXPORTED DEFINITIONS")
+
 )
 (DECLARE%: EVAL@COMPILE 
 
@@ -4232,41 +4276,41 @@
 (ADDTOVAR LAMA FONTCOPY FONTDEVICEPROP)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (6505 16172 (CHARWIDTH 6515 . 7304) (CHARWIDTHY 7306 . 8823) (STRINGWIDTH 8825 . 9862) (
-\CHARWIDTH.DISPLAY 9864 . 10279) (\STRINGWIDTH.DISPLAY 10281 . 10709) (\STRINGWIDTH.GENERIC 10711 . 
-16170)) (16173 22805 (DEFAULTFONT 16183 . 17468) (FONTCLASS 17470 . 19742) (FONTCLASSUNPARSE 19744 . 
-20645) (FONTCLASSCOMPONENT 20647 . 21235) (SETFONTCLASSCOMPONENT 21237 . 21679) (GETFONTCLASSCOMPONENT
- 21681 . 22803)) (24253 43768 (FONTCREATE 24263 . 27508) (FONTCREATE1 27510 . 30169) (
-FONTCREATE.SLUGFD 30171 . 32315) (\FONT.CHECKARGS1 32317 . 37022) (\FONTCREATE1.NOFN 37024 . 37238) (
-FONTFILEP 37240 . 38128) (\READCHARSET 38130 . 43348) (FONTCHARSETS 43350 . 43766)) (43769 51123 (
-\FONT.CHECKARGS 43779 . 50806) (\CHARSET.CHECK 50808 . 51121)) (51124 59259 (COERCEFONTSPEC 51134 . 
-58570) (COERCEFONTSPEC.TARGETFACE 58572 . 59257)) (61454 66187 (MAKEFONTSPEC 61464 . 63239) (
-FONTSPEC.TO.FONTDESCRIPTOR 63241 . 65410) (FONT.CHANGESPEC 65412 . 66185)) (66188 76177 (COMPLETE.FONT
- 66198 . 68223) (COMPLETEFONTP 68225 . 68963) (COMPLETE.CHARSET 68965 . 73249) (PRUNESLUGCSINFOS 73251
- . 74562) (MONOSPACEFONTP 74564 . 76175)) (76216 88196 (FONTASCENT 76226 . 76737) (FONTDESCENT 76739
- . 77460) (FONTHEIGHT 77462 . 77974) (FONTPROP 77976 . 87473) (\AVGCHARWIDTH 87475 . 88194)) (89080 
-90950 (FONTDEVICEPROP 89090 . 90948)) (91067 91921 (EDITCHAR 91077 . 91919)) (91967 105129 (
-GETCHARBITMAP 91977 . 93231) (PUTCHARBITMAP 93233 . 95505) (\GETCHARBITMAP.CSINFO 95507 . 98166) (
-\PUTCHARBITMAP.CSINFO 98168 . 105127)) (105130 122037 (MOVECHARBITMAP 105140 . 107034) (MOVEFONTCHARS 
-107036 . 111742) (\MOVEFONTCHAR 111744 . 116265) (\MOVEFONTCHARS.SOURCEDATA 116267 . 122035)) (122695 
-131985 (SLUGCHARP 122705 . 123752) (\SLUGSETUP 123754 . 126242) (\BUILDSLUGCSINFO 126244 . 129623) (
-\MAKESLUGCHAR 129625 . 131983)) (132662 143979 (FONTFILES 132672 . 135901) (FONTSPECFROMFILENAME 
-135903 . 140672) (FILENAMEFROMFONTSPEC 140674 . 143977)) (143980 176836 (FONTCOPY 143990 . 149073) (
-FONTP 149075 . 149374) (FONTUNPARSE 149376 . 151099) (SETFONTDESCRIPTOR 151101 . 152565) (
-\STREAMCHARWIDTH 152567 . 156578) (\COERCECHARSET 156580 . 160187) (\FONTSYMBOL 160189 . 160843) (
-\DEVICESYMBOL 160845 . 161629) (\FONTFACE 161631 . 168835) (\FONTFACE.COLOR 168837 . 175619) (
-SETFONTCHARENCODING 175621 . 176834)) (176837 195524 (FONTSAVAILABLE 176847 . 182211) (FONTEXISTS? 
-182213 . 186378) (\SEARCHFONTFILES 186380 . 190110) (FLUSHFONTCACHE 190112 . 192817) (SORTFONTSPECS 
-192819 . 195522)) (195525 201063 (MATCHFONTFACE 195535 . 196610) (MAKEFONTFACE 196612 . 197646) (
-FONTFACETOATOM 197648 . 199898) (FONTFACE.STARS 199900 . 201061)) (201410 201902 (\UNITWIDTHSVECTOR 
-201420 . 201900)) (219849 222247 (FONTDESCRIPTOR.DEFPRINT 219859 . 221769) (FONTCLASS.DEFPRINT 221771
- . 222245)) (226114 229243 (\CREATEKERNELEMENT 226124 . 226482) (\FSETLEFTKERN 226484 . 227314) (
-\FGETLEFTKERN 227316 . 229241)) (229244 241087 (\CREATEFONT 229254 . 232780) (\CREATECHARSET 232782 . 
-235583) (\INSTALLCHARSETINFO 235585 . 239358) (\INSTALLCHARSETINFO.CHARENCODING 239360 . 240433) (
-\COPYCHARSETINFO 240435 . 241085)) (241931 252646 (\CREATEFONT.DISPLAY 241941 . 245270) (
-\CREATECHARSET.DISPLAY 245272 . 248928) (\FONTEXISTS?.DISPLAY 248930 . 251926) (FONTSAVAILABLE.DISPLAY
- 251928 . 252644)) (252647 261693 (FAKEFACE.CHARSET 252657 . 256941) (MAKEBOLD.CHAR 256943 . 259019) (
-MAKEITALIC.CHAR 259021 . 261691)) (261724 269090 (\SFROTATECSINFO 261734 . 265489) (
-\SFROTATECSINFOBITMAP 265491 . 266204) (\SFROTATECSINFOOFFSETS 266206 . 268098) (
-\SFROTATECSINFOIMAGEWIDTHS 268100 . 269088)) (269091 270265 (\SFMAKECOLOR 269101 . 270263)))))
+  (FILEMAP (NIL (6500 16167 (CHARWIDTH 6510 . 7299) (CHARWIDTHY 7301 . 8818) (STRINGWIDTH 8820 . 9857) (
+\CHARWIDTH.DISPLAY 9859 . 10274) (\STRINGWIDTH.DISPLAY 10276 . 10704) (\STRINGWIDTH.GENERIC 10706 . 
+16165)) (16168 22800 (DEFAULTFONT 16178 . 17463) (FONTCLASS 17465 . 19737) (FONTCLASSUNPARSE 19739 . 
+20640) (FONTCLASSCOMPONENT 20642 . 21230) (SETFONTCLASSCOMPONENT 21232 . 21674) (GETFONTCLASSCOMPONENT
+ 21676 . 22798)) (24248 43866 (FONTCREATE 24258 . 27606) (FONTCREATE1 27608 . 30267) (
+FONTCREATE.SLUGFD 30269 . 32413) (\FONT.CHECKARGS1 32415 . 37120) (\FONTCREATE1.NOFN 37122 . 37336) (
+FONTFILEP 37338 . 38226) (\READCHARSET 38228 . 43446) (FONTCHARSETS 43448 . 43864)) (43867 52483 (
+\FONT.CHECKARGS 43877 . 52166) (\CHARSET.CHECK 52168 . 52481)) (52484 60619 (COERCEFONTSPEC 52494 . 
+59930) (COERCEFONTSPEC.TARGETFACE 59932 . 60617)) (62814 68191 (MAKEFONTSPEC 62824 . 65243) (
+FONTSPEC.TO.FONTDESCRIPTOR 65245 . 67414) (FONT.CHANGESPEC 67416 . 68189)) (68192 78181 (COMPLETE.FONT
+ 68202 . 70227) (COMPLETEFONTP 70229 . 70967) (COMPLETE.CHARSET 70969 . 75253) (PRUNESLUGCSINFOS 75255
+ . 76566) (MONOSPACEFONTP 76568 . 78179)) (78220 90200 (FONTASCENT 78230 . 78741) (FONTDESCENT 78743
+ . 79464) (FONTHEIGHT 79466 . 79978) (FONTPROP 79980 . 89477) (\AVGCHARWIDTH 89479 . 90198)) (90964 
+92834 (FONTDEVICEPROP 90974 . 92832)) (92951 93805 (EDITCHAR 92961 . 93803)) (93851 107013 (
+GETCHARBITMAP 93861 . 95115) (PUTCHARBITMAP 95117 . 97389) (\GETCHARBITMAP.CSINFO 97391 . 100050) (
+\PUTCHARBITMAP.CSINFO 100052 . 107011)) (107014 123921 (MOVECHARBITMAP 107024 . 108918) (MOVEFONTCHARS
+ 108920 . 113626) (\MOVEFONTCHAR 113628 . 118149) (\MOVEFONTCHARS.SOURCEDATA 118151 . 123919)) (124579
+ 133869 (SLUGCHARP 124589 . 125636) (\SLUGSETUP 125638 . 128126) (\BUILDSLUGCSINFO 128128 . 131507) (
+\MAKESLUGCHAR 131509 . 133867)) (134546 145863 (FONTFILES 134556 . 137785) (FONTSPECFROMFILENAME 
+137787 . 142556) (FILENAMEFROMFONTSPEC 142558 . 145861)) (145864 180654 (FONTCOPY 145874 . 152891) (
+FONTP 152893 . 153192) (FONTUNPARSE 153194 . 154917) (SETFONTDESCRIPTOR 154919 . 156383) (
+\STREAMCHARWIDTH 156385 . 160396) (\COERCECHARSET 160398 . 164005) (\FONTSYMBOL 164007 . 164661) (
+\DEVICESYMBOL 164663 . 165447) (\FONTFACE 165449 . 172653) (\FONTFACE.COLOR 172655 . 179437) (
+SETFONTCHARENCODING 179439 . 180652)) (180655 199342 (FONTSAVAILABLE 180665 . 186029) (FONTEXISTS? 
+186031 . 190196) (\SEARCHFONTFILES 190198 . 193928) (FLUSHFONTCACHE 193930 . 196635) (SORTFONTSPECS 
+196637 . 199340)) (199343 205597 (MATCHFONTFACE 199353 . 200428) (MAKEFONTFACE 200430 . 202180) (
+FONTFACETOATOM 202182 . 204432) (FONTFACE.STARS 204434 . 205595)) (205944 206436 (\UNITWIDTHSVECTOR 
+205954 . 206434)) (224383 226781 (FONTDESCRIPTOR.DEFPRINT 224393 . 226303) (FONTCLASS.DEFPRINT 226305
+ . 226779)) (230648 233777 (\CREATEKERNELEMENT 230658 . 231016) (\FSETLEFTKERN 231018 . 231848) (
+\FGETLEFTKERN 231850 . 233775)) (233778 245927 (\CREATEFONT 233788 . 237314) (\CREATECHARSET 237316 . 
+240423) (\INSTALLCHARSETINFO 240425 . 244198) (\INSTALLCHARSETINFO.CHARENCODING 244200 . 245273) (
+\COPYCHARSETINFO 245275 . 245925)) (246840 257555 (\CREATEFONT.DISPLAY 246850 . 250179) (
+\CREATECHARSET.DISPLAY 250181 . 253837) (\FONTEXISTS?.DISPLAY 253839 . 256835) (FONTSAVAILABLE.DISPLAY
+ 256837 . 257553)) (257556 266602 (FAKEFACE.CHARSET 257566 . 261850) (MAKEBOLD.CHAR 261852 . 263928) (
+MAKEITALIC.CHAR 263930 . 266600)) (266633 273999 (\SFROTATECSINFO 266643 . 270398) (
+\SFROTATECSINFOBITMAP 270400 . 271113) (\SFROTATECSINFOOFFSETS 271115 . 273007) (
+\SFROTATECSINFOIMAGEWIDTHS 273009 . 273997)) (274000 275174 (\SFMAKECOLOR 274010 . 275172)))))
 STOP

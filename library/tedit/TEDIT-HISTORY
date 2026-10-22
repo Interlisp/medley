@@ -1,13 +1,12 @@
 (DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10)
 
-(FILECREATED "18-May-2026 23:31:39" {MEDLEY}<library>tedit>TEDIT-HISTORY.;255 59962  
+(FILECREATED "16-Oct-2026 17:14:39" {MEDLEY}<library>tedit>TEDIT-HISTORY.;259 58608  
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS TEDIT.UNDO \TEDIT.UNDO1 TEDIT.REDO \TEDIT.UNDO.CHARLOOKS \TEDIT.UNDO.PARALOOKS
-                       \TEDIT.UNDO.COMPOSITE \TEDIT.UNDO.SEL \TEDIT.UNDO.MOVE)
+      :CHANGES-TO (FNS \TEDIT.UNDO.CHARLOOKS)
 
-      :PREVIOUS-DATE "19-Feb-2026 12:39:37" {MEDLEY}<library>tedit>TEDIT-HISTORY.;253)
+      :PREVIOUS-DATE "16-Oct-2026 14:09:07" {MEDLEY}<library>tedit>TEDIT-HISTORY.;256)
 
 
 (PRETTYCOMPRINT TEDIT-HISTORYCOMS)
@@ -683,7 +682,8 @@
                 THACTION ACTION])
 
 (\TEDIT.UNDO.CHARLOOKS
-  [LAMBDA (TSTREAM EVENT)                                    (* ; "Edited 18-May-2026 23:30 by rmk")
+  [LAMBDA (TSTREAM EVENT)                                    (* ; "Edited 16-Oct-2026 17:14 by rmk")
+                                                             (* ; "Edited 18-May-2026 23:30 by rmk")
                                                              (* ; "Edited  1-Aug-2025 14:58 by rmk")
                                                              (* ; "Edited 28-Jul-2025 23:47 by rmk")
                                                              (* ; "Edited 21-Apr-2025 20:31 by rmk")
@@ -701,56 +701,42 @@
                                                              (* ; "Edited 18-Apr-2023 23:56 by rmk")
                                                              (* ; "Edited 30-May-91 21:44 by jds")
 
-    (* ;; "Undo the setting of character looks. The undolist is a list of (NEXTCHNO . OLDCHARLOOKS) pairs, where OLDCHARLOOKS NIL means nothing changed.  We have to track the character numbers because pieces may have been split by future events that were then undone. NEXTCHNO is the first character number of the next original piece")
+    (* ;; "Undo the setting of character looks. The undolist is a list of (FIRSTCHARNO . OLDCHARLOOKS) pairs.  We have to track the character numbers because pieces may have been split by future events that were then undone. FIRSTCHARNO is the first character number of the next changed piece")
 
-    (LET ((TEXTOBJ (FTEXTOBJ TSTREAM)))
-         (for U OLDLOOKS NEWUNDOLIST NEXTCHNO (PC _ (\TEDIT.CHTOPC (GETTH EVENT THCH#)
-                                                           TEXTOBJ))
-              (CHNO _ (GETTH EVENT THCH#))
+    (LET ((TEXTOBJ (FTEXTOBJ TSTREAM))
+          (CHNO (GETTH EVENT THCH#)))
+         (for U OLDLOOKS NEWUNDOLIST FIRSTCHARNO (PC _ (\TEDIT.CHTOPC CHNO TEXTOBJ))
               (SEL _ (FGETTOBJ TEXTOBJ SEL))
               (CARETPC _ (\TEDIT.CARETPIECE TEXTOBJ)) in (CDR (GETTH EVENT THOLDINFO))
-            do 
-               (* ;; "Revert changes until we see the character number of the next changed piece. The initial NEXTCHNO is ")
+            eachtime (SETQ FIRSTCHARNO (CAR U))
+                  (for old PC inpieces PC until (IEQP CHNO FIRSTCHARNO)
+                     do (add CHNO (PLEN PC))) when PC do (SETQ OLDLOOKS (CDR U))
+                                                         (push NEWUNDOLIST (CONS FIRSTCHARNO
+                                                                                 (PCHARLOOKS PC)))
+                                                         (FSETPC PC PCHARLOOKS OLDLOOKS)
+                                                         (CL:WHEN (EQ PC CARETPC)
+                                                             (FSETTOBJ TEXTOBJ CARETLOOKS
+                                                                    (\TEDIT.CARETLOOKS.VERIFY TEXTOBJ
+                                                                           OLDLOOKS)))
+            finally 
 
-               (* ;; "Perhaps we should also save the CHNO of the CARETPC")
+                  (* ;; 
+                  "Remember the previous looks in case we UNDO the UNDO. (CAR DATUM) is for redo.")
 
-               (SETQ NEXTCHNO (CAR U))
-               (SETQ OLDLOOKS (CDR U))
-               (CL:WHEN (AND OLDLOOKS (EQ PC CARETPC))
-                   (FSETTOBJ TEXTOBJ CARETLOOKS (\TEDIT.CARETLOOKS.VERIFY TEXTOBJ OLDLOOKS)))
-               [push NEWUNDOLIST (CONS NEXTCHNO (CL:IF OLDLOOKS (PCHARLOOKS PC] 
+                  (CL:WHEN NEWUNDOLIST
+                      (change (GETTH EVENT THOLDINFO)
+                             (CONS (CAR DATUM)
+                                   (DREVERSE NEWUNDOLIST)))
+                      (\TEDIT.SEL.OFF TSTREAM)
+                      (\TEDIT.UPDATE.SEL SEL EVENT NIL NIL 'NORMAL)
+                      (\TEDIT.UPDATE.LINES TSTREAM 'LOOKS (GETTH EVENT THCH#)
+                             (GETTH EVENT THLEN))
+                      (\TEDIT.SEL.ON TSTREAM)
+                      (TEDIT.PROMPTPRINT TEXTOBJ "Character looks restored" T)) 
 
-               (* ;; "U starts at the first piece.  We want CHNO to be the start of the next piece, i.e. initialize to (CAR(CDR ...))  But then, what about the last piece.  Maybe we have to do our own popping, or look at UTAIL.  Or end in (NEXTPC-CHNO . NIL ).  Or text for IGEQ THCHLIM")
+                  (* ;; "Save the event for REDO, even if these pieces didn't change")
 
-               (for P inpieces PC do (FSETPC P PCHARLOOKS OLDLOOKS)
-                                     (add CHNO (PLEN P))
-                                     (CL:WHEN (IEQP CHNO NEXTCHNO)
-                                                             (* ; "First piece of the next run")
-                                         (SETQ PC P)
-                                         (RETURN))) finally 
-
-                                                          (* ;; 
-                     "Remember the previous looks in case we UNDO the UNDO. (CAR DATUM) is for redo.")
-
-                                                          (CL:WHEN NEWUNDOLIST
-                                                              (change (GETTH EVENT THOLDINFO)
-                                                                     (CONS (CAR DATUM)
-                                                                           (DREVERSE NEWUNDOLIST)))
-                                                              (\TEDIT.SEL.OFF TSTREAM)
-                                                              (\TEDIT.UPDATE.SEL SEL EVENT NIL NIL
-                                                                     'NORMAL)
-                                                              (\TEDIT.UPDATE.LINES TSTREAM
-                                                                     'LOOKS
-                                                                     (GETTH EVENT THCH#)
-                                                                     (GETTH EVENT THLEN))
-                                                              (\TEDIT.SEL.ON TSTREAM SEL SEL)
-                                                              (TEDIT.PROMPTPRINT TEXTOBJ 
-                                                                     "Character looks restored" T)) 
-
-                                                          (* ;; 
-                                        "Save the event for REDO, even if these pieces didn't change")
-
-                                                          (\TEDIT.HISTORYADD TEXTOBJ EVENT])
+                  (\TEDIT.HISTORYADD TEXTOBJ EVENT])
 
 (\TEDIT.UNDO.PARALOOKS
   [LAMBDA (TSTREAM EVENT)                                    (* ; "Edited 18-May-2026 23:30 by rmk")
@@ -926,15 +912,15 @@
     (\TEDIT.THELP 'Redo-composite])
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (5073 6094 (\TEDIT.HISTORYEVENT.DEFPRINT 5083 . 6092)) (7184 18438 (\TEDIT.HISTORYADD 
-7194 . 12456) (\TEDIT.HISTORYADD.COMPOSITE 12458 . 13490) (\TEDIT.CUMULATE.EVENTS 13492 . 15086) (
-\TEDIT.COMPOSITE.EVENT 15088 . 15824) (\TEDIT.HISTORY.PROP 15826 . 17189) (\TEDIT.HISTORY.EVENT 17191
- . 18262) (\TEDIT.POPEVENT 18264 . 18436)) (18491 37919 (TEDIT.UNDO 18501 . 23485) (\TEDIT.UNDO1 23487
- . 28044) (TEDIT.REDO 28046 . 35073) (\TEDIT.UNDO.UNDO 35075 . 37917)) (37920 56965 (
-\TEDIT.UNDO.INSERT 37930 . 39055) (\TEDIT.UNDO.DELETE 39057 . 40069) (\TEDIT.UNDO.MOVE 40071 . 41718) 
-(\TEDIT.UNDO.REPLACE 41720 . 43230) (\TEDIT.UNDO.CHARLOOKS 43232 . 48807) (\TEDIT.UNDO.PARALOOKS 48809
- . 52746) (\TEDIT.UNDO.PAGELOOKS 52748 . 53306) (\TEDIT.UNDO.COMPOSITE 53308 . 54927) (
-\TEDIT.UNDO.REPLACECODE 54929 . 55263) (\TEDIT.UNDO.WRAP 55265 . 56194) (\TEDIT.UNDO.SEL 56196 . 56963
-)) (56966 59939 (\TEDIT.REDO.INSERT 56976 . 57938) (\TEDIT.REDO.REPLACE 57940 . 59546) (
-\TEDIT.REDO.COMPOSITE 59548 . 59937)))))
+  (FILEMAP (NIL (4938 5959 (\TEDIT.HISTORYEVENT.DEFPRINT 4948 . 5957)) (7049 18303 (\TEDIT.HISTORYADD 
+7059 . 12321) (\TEDIT.HISTORYADD.COMPOSITE 12323 . 13355) (\TEDIT.CUMULATE.EVENTS 13357 . 14951) (
+\TEDIT.COMPOSITE.EVENT 14953 . 15689) (\TEDIT.HISTORY.PROP 15691 . 17054) (\TEDIT.HISTORY.EVENT 17056
+ . 18127) (\TEDIT.POPEVENT 18129 . 18301)) (18356 37784 (TEDIT.UNDO 18366 . 23350) (\TEDIT.UNDO1 23352
+ . 27909) (TEDIT.REDO 27911 . 34938) (\TEDIT.UNDO.UNDO 34940 . 37782)) (37785 55611 (
+\TEDIT.UNDO.INSERT 37795 . 38920) (\TEDIT.UNDO.DELETE 38922 . 39934) (\TEDIT.UNDO.MOVE 39936 . 41583) 
+(\TEDIT.UNDO.REPLACE 41585 . 43095) (\TEDIT.UNDO.CHARLOOKS 43097 . 47453) (\TEDIT.UNDO.PARALOOKS 47455
+ . 51392) (\TEDIT.UNDO.PAGELOOKS 51394 . 51952) (\TEDIT.UNDO.COMPOSITE 51954 . 53573) (
+\TEDIT.UNDO.REPLACECODE 53575 . 53909) (\TEDIT.UNDO.WRAP 53911 . 54840) (\TEDIT.UNDO.SEL 54842 . 55609
+)) (55612 58585 (\TEDIT.REDO.INSERT 55622 . 56584) (\TEDIT.REDO.REPLACE 56586 . 58192) (
+\TEDIT.REDO.COMPOSITE 58194 . 58583)))))
 STOP

@@ -1,12 +1,15 @@
 (DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10 :FORMAT :UTF-8)
 
-(FILECREATED " 7-Oct-2026 12:02:29" {MEDLEY}<sources>FONT.;934 279153 
+(FILECREATED "20-Oct-2026 16:21:32" {MEDLEY}<sources>FONT.;956 284015 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (VARS FONTCOMS)
+      :CHANGES-TO (FNS \ROTATECSINFO \ROTATECSINFO.BITMAP \ROTATECSINFO.OFFSETS 
+                       \ROTATECSINFO.IMAGEWIDTHS FONTCREATE FONTFACE.STARS MAKEFONTFACE \MAKESLUGCHAR
+                       )
+                  (RECORDS FONTFACE)
 
-      :PREVIOUS-DATE " 5-Oct-2026 22:28:37" {MEDLEY}<sources>FONT.;933)
+      :PREVIOUS-DATE "19-Oct-2026 12:47:08" {MEDLEY}<sources>FONT.;950)
 
 
 (PRETTYCOMPRINT FONTCOMS)
@@ -35,7 +38,7 @@
         (COMS 
               (* ;; "Property extraction:")
 
-              (FNS FONTASCENT FONTDESCENT FONTHEIGHT FONTPROP \AVGCHARWIDTH)
+              (FNS FONTASCENT FONTDESCENT FONTHEIGHT FONTPROP \AVGCHARWIDTH FONTPROP.MACROFN)
               (DECLARE%: DONTCOPY                            (* ; "FONTDESCRIPTOR is not in loadup")
                      (EXPORT (MACROS FONTPROP)))
               (MACROS FSPROP)
@@ -89,8 +92,8 @@
                    FONTSAVAILABLE.DISPLAY)
               (FNS FAKEFACE.CHARSET MAKEBOLD.CHAR MAKEITALIC.CHAR))
         (COMS                                                (* ; "Bitmap faking")
-              (FNS \SFROTATECSINFO \SFROTATECSINFOBITMAP \SFROTATECSINFOOFFSETS 
-                   \SFROTATECSINFOIMAGEWIDTHS)
+              (FNS \ROTATECSINFO \ROTATECSINFO.BITMAP \ROTATECSINFO.OFFSETS \ROTATECSINFO.IMAGEWIDTHS
+                   )
               (FNS \SFMAKECOLOR))
         [DECLARE%: DONTEVAL@LOAD DOCOPY (INITVARS (DISPLAYFONTDIRECTORIES (LIST 
                                                                   "{MEDLEY}/fonts/medleydisplayfonts"
@@ -409,6 +412,7 @@
 
 (FONTCREATE
   [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE NOERRORFLG CHARSET)
+                                                             (* ; "Edited 20-Oct-2026 08:54 by rmk")
                                                              (* ; "Edited 22-Sep-2026 00:25 by rmk")
                                                              (* ; "Edited 28-Aug-2025 14:39 by rmk")
                                                              (* ; "Edited 15-Aug-2025 23:48 by rmk")
@@ -436,7 +440,8 @@
              (* ;; "Pretest for a fontdescriptor with no modification, the common case of just calling FONTCREATE to check validity.  Avoid cost of \FONT.CHECKARGS, also makes it possible to break/trace/change \FONT.CHECKARGS. Presumably already in \FONTSINCORE.")
 
              FAMILY
-      else (PROG (FONTSPEC)
+      else (SETQ CHARSET (\CHARSET.CHECK CHARSET))
+           (PROG (FONTSPEC)
              RETRY
                                                              (* ; "Back to here if ERROR returns")
                  (SETQ FONTSPEC (\FONT.CHECKARGS FAMILY SIZE FACE ROTATION DEVICE))
@@ -1226,7 +1231,8 @@
     (fetch (FONTDESCRIPTOR FONTHEIGHT) of (FONTCREATE FONTSPEC])
 
 (FONTPROP
-  [LAMBDA (FONT PROP)                                        (* ; "Edited  2-Oct-2026 21:54 by rmk")
+  [LAMBDA (FONT PROP)                                        (* ; "Edited 19-Oct-2026 08:50 by rmk")
+                                                             (* ; "Edited  2-Oct-2026 21:54 by rmk")
                                                              (* ; "Edited 30-Sep-2026 16:44 by rmk")
                                                              (* ; "Edited  4-Sep-2026 11:10 by rmk")
                                                              (* ; "Edited  2-Sep-2026 22:41 by rmk")
@@ -1301,10 +1307,12 @@
                                                                                of FONT))
                                                 (ffetch (FONTDESCRIPTOR FONTFACE) of FONT))))
         (SCALE (ffetch (FONTDESCRIPTOR FONTSCALE) of FONT))
+        (SLUGWIDTH (ffetch (FONTDESCRIPTOR FONTSLUGWIDTH) of FONT))
         (CHARSETS (for CS CSINFO from 0 to (MAXCHARSET FONT) eachtime (SETQ CSINFO (\GETCHARSETINFO
                                                                                     FONT CS))
                      when CSINFO unless (fetch (CHARSETINFO CSSLUGP) of CSINFO) collect CS))
         (MAXCHARSET (MAXCHARSET FONT))
+        (HASLEFTKERN (fetch (FONTDESCRIPTOR FONTHASLEFTKERNS) of FONT))
         (NEMPTYCHARSETS 
              (for CS CSINFO from 0 to (MAXCHARSET FONT) eachtime (SETQ CSINFO (\GETCHARSETINFO FONT 
                                                                                      CS))
@@ -1335,59 +1343,69 @@
            elseif [NEQ 0 (SETQ W (FIXR (FTIMES 0.6 (FONTPROP FONT 'HEIGHT]
              then W
            else 1])
+
+(FONTPROP.MACROFN
+  [LAMBDA (FONT PROP)                                        (* ; "Edited 18-Oct-2026 09:28 by rmk")
+                                                             (* ; "Edited  9-Oct-2026 09:04 by rmk")
+
+    (* ;; "FONTPROP compiles open when EXPORTS.ALL is loaded and FONTDESCRIPTOR is defined.  For a field to avoid the FONTPROP SELECTQ in a non-FONTDESCRIPTOR environment, it must be embedded in a separate function that compiles that field reference (like ASCENT below).")
+
+    (LET (FORM)
+         (if (EQ (CAR PROP)
+                 'QUOTE)
+             then (SETQ PROP (CADR PROP))                    (* ; 
+                                                 "fetch forces type check, don't replace with ffetch")
+                  [SELECTQ PROP
+                      (HEIGHT `(FONTHEIGHT ,FONT))
+                      (ASCENT `(FONTASCENT ,FONT))
+                      (DESCENT `(FONTDESCENT ,FONT))
+                      (PROGN [SETQ FORM (CADR (ASSOC PROP '((FAMILY FONTFAMILY)
+                                                            (SIZE FONTSIZE)
+                                                            (FACE (COPY (fetch (FONTDESCRIPTOR 
+                                                                                      FONTFACE)
+                                                                           of FD)))
+                                                            (WEIGHT (fetch (FONTFACE WEIGHT)
+                                                                       of (fetch (FONTDESCRIPTOR
+                                                                                  FONTFACE)
+                                                                             of FD)))
+                                                            (SLOPE (fetch (FONTFACE SLOPE)
+                                                                      of (fetch (FONTDESCRIPTOR
+                                                                                 FONTFACE)
+                                                                            of FD)))
+                                                            (EXPANSION (fetch (FONTFACE EXPANSION)
+                                                                          of (fetch (FONTDESCRIPTOR
+                                                                                     FONTFACE)
+                                                                                of FD)))
+                                                            (ROTATION FONTROTATION)
+                                                            (DEVICE FONTDEVICE)
+                                                            (SCALE FONTSCALE)
+                                                            (CHARENCODING FONTCHARENCODING)
+                                                            (OTHERDEVICEFONTPROPS 
+                                                                   OTHERDEVICEFONTPROPS)
+                                                            (AVGCHARWIDTH FONTAVGCHARWIDTH)
+                                                            (SLUGCSINFO SLUGCSINFO)
+                                                            (FONTSLUGWIDTH FONTSLUGWIDTH)
+                                                            (HASLEFTKERNS FONTHASLEFTKERNS]
+                             (if FORM
+                                 then (CL:IF (LITATOM FORM)
+                                          (SETQ FORM `(fetch (FONTDESCRIPTOR ,FORM) of FD))) 
+
+                                      (* ;; 
+                     "No need for FONTCREATE, it would just duplicate the type test from the fetches")
+
+                                      (SUBST (CL:IF (EQ (CAR FONT)
+                                                        'FONTCREATE)
+                                                 (CADR FONT)
+                                                 FONT)
+                                             'FD FORM)
+                               else 'IGNOREMACRO]
+           else 'IGNOREMACRO])
 )
 (DECLARE%: DONTCOPY 
 (* "FOLLOWING DEFINITIONS EXPORTED")(DECLARE%: EVAL@COMPILE 
 
-(PUTPROPS FONTPROP MACRO
-          [ARGS (LET ((FONT (CAR ARGS))
-                      (PROP (CADR ARGS))
-                      FORM)
-                     (if (EQ (CAR PROP)
-                             'QUOTE)
-                         then (SETQ PROP (CADR PROP))        (* ; 
-                                                 "fetch forces type check, don't replace with ffetch")
-                              [SETQ FORM (CADR (ASSOC PROP '((HEIGHT FONTHEIGHT)
-                                                             (ASCENT FONTASCENT)
-                                                             (DESCENT FONTDESCENT)
-                                                             (FAMILY FONTFAMILY)
-                                                             (SIZE FONTSIZE)
-                                                             (FACE (COPY (fetch (FONTDESCRIPTOR
-                                                                                 FONTFACE)
-                                                                            of FD)))
-                                                             (WEIGHT (fetch (FONTFACE WEIGHT)
-                                                                        of (fetch (FONTDESCRIPTOR
-                                                                                   FONTFACE)
-                                                                              of FD)))
-                                                             (SLOPE (fetch (FONTFACE SLOPE)
-                                                                       of (fetch (FONTDESCRIPTOR
-                                                                                  FONTFACE)
-                                                                             of FD)))
-                                                             (EXPANSION (fetch (FONTFACE EXPANSION)
-                                                                           of (fetch (FONTDESCRIPTOR
-                                                                                      FONTFACE)
-                                                                                 of FD)))
-                                                             (ROTATION FONTROTATION)
-                                                             (DEVICE FONTDEVICE)
-                                                             (SCALE FONTSCALE)
-                                                             (CHARENCODING FONTCHARENCODING)
-                                                             (OTHERDEVICEFONTPROPS 
-                                                                    OTHERDEVICEFONTPROPS)
-                                                             (AVGCHARWIDTH FONTAVGCHARWIDTH]
-                              (if FORM
-                                  then (CL:IF (LITATOM FORM)
-                                           (SETQ FORM `(fetch (FONTDESCRIPTOR ,FORM) of FD))) 
-
-                                       (* ;; 
-                     "No need for FONTCREATE, it would just duplicate the type test from the fetches")
-
-                                       (SUBST (CL:IF (EQ (CAR FONT)
-                                                         'FONTCREATE)
-                                                  (CADR FONT)
-                                                  FONT)
-                                              'FD FORM)
-                                else 'IGNOREMACRO)
-                       else 'IGNOREMACRO])
+(PUTPROPS FONTPROP MACRO (ARGS (FONTPROP.MACROFN (CAR ARGS)
+                                      (CADR ARGS))))
 )
 
 (* "END EXPORTED DEFINITIONS")
@@ -1514,7 +1532,8 @@
          NIL NEWCHARBITMAP])
 
 (\GETCHARBITMAP.CSINFO
-  [LAMBDA (THINCODE CSINFO FONT)                             (* ; "Edited 30-Sep-2026 16:45 by rmk")
+  [LAMBDA (THINCODE CSINFO FONT)                             (* ; "Edited  8-Oct-2026 23:20 by rmk")
+                                                             (* ; "Edited 30-Sep-2026 16:45 by rmk")
                                                              (* ; "Edited 25-Aug-2026 20:14 by rmk")
                                                              (* ; "Edited 22-Aug-2026 13:03 by rmk")
                                                              (* ; "Edited  3-Aug-2025 20:59 by rmk")
@@ -1542,7 +1561,9 @@
                                  THINCODE))
              (SETQ CBM (BITMAPCREATE IMAGEWIDTH IMAGEHEIGHT (fetch (BITMAP BITMAPBITSPERPIXEL)
                                                                of CSBITMAP)))
-             (SELECTQ (fetch (FONTDESCRIPTOR FONTROTATION) of FONT)
+             (SELECTQ (CL:IF (type? FONTSPEC FONT)
+                          (FSPROP FONT FSROTATION)
+                          (FONTPROP FONT 'ROTATION))
                  ((0 180) 
                       (BITBLT CSBITMAP OFFSET 0 CBM 0 0 IMAGEWIDTH IMAGEHEIGHT))
                  ((90 270)                                   (* ; "offset is source bottom, not left")
@@ -2008,7 +2029,8 @@
          CSINFO])
 
 (\MAKESLUGCHAR
-  [LAMBDA (CODE FONT)                                        (* ; "Edited 10-Sep-2026 23:20 by rmk")
+  [LAMBDA (CODE FONT)                                        (* ; "Edited 19-Oct-2026 22:43 by rmk")
+                                                             (* ; "Edited 10-Sep-2026 23:20 by rmk")
                                                              (* ; "Edited 30-Aug-2025 23:20 by rmk")
                                                              (* ; "Edited 24-Aug-2025 09:55 by rmk")
 
@@ -2016,31 +2038,32 @@
 
     (LET ((CSINFO (\INSURECHARSETINFO FONT (\CHARSET CODE)))
           (THINCODE (\CHAR8CODE CODE))
-          OFFSETS WIDTHS)
-         (CL:UNLESS (GETSLUGFLAG CSINFO THINCODE)
-             (SETQ OFFSETS (fetch (CHARSETINFO OFFSETS) of CSINFO))
-             (CL:WHEN OFFSETS
+          EXISTINGSLUG)
+         (CL:UNLESS (AND (GETSLUGFLAG CSINFO THINCODE)
+                         (BITMAPP (fetch (CHARSETINFO CHARSETBITMAP) of CSINFO)))
 
-                 (* ;; "Must be a display. W e remove the character's current bitmap, then change the vectors to point to the existing slug. Otherwise we might end up with multiple slug bitmaps interspersed.")
+             (* ;; "Must be a display. We remove the character's current bitmap, then change the vectors to point to the existing slug. Otherwise we might end up with multiple slug bitmaps interspersed.")
 
-                 (\PUTCHARBITMAP.CSINFO THINCODE CSINFO (BITMAPCREATE 0 0))
-                 (\FSETOFFSET OFFSETS THINCODE (for C from 0 to \MAXTHINCHAR
-                                                  when (GETSLUGFLAG CSINFO C)
-                                                  do (RETURN (\FGETOFFSET OFFSETS C))
-                                                  finally 
-
-                                                        (* ;; 
-                                                     "We need to make a slug bitmap and stick it in.")
-
-                                                        (HELP "No slug bitmap"))))
+             (\PUTCHARBITMAP.CSINFO THINCODE CSINFO (BITMAPCREATE 0 0))
+             (SETQ EXISTINGSLUG (find C from 0 to \MAXTHINCHAR suchthat (GETSLUGFLAG CSINFO C)))
+             (CL:UNLESS EXISTINGSLUG (HELP "No existing slug to use"))
+             (\FSETOFFSET (fetch (CHARSETINFO OFFSETS) of CSINFO)
+                    THINCODE
+                    (\FGETOFFSET (fetch (CHARSETINFO OFFSETS) of CSINFO)
+                           EXISTINGSLUG))
              (\FSETWIDTH (fetch (CHARSETINFO WIDTHS) of CSINFO)
                     THINCODE
-                    (fetch (FONTDESCRIPTOR FONTSLUGWIDTH) of FONT))
+                    (\FGETWIDTH (fetch (CHARSETINFO WIDTHS) of CSINFO)
+                           EXISTINGSLUG))
              (\FSETIMAGEWIDTH (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO)
                     THINCODE
-                    (fetch (FONTDESCRIPTOR FONTSLUGWIDTH) of FONT))
+                    (\FGETIMAGEWIDTH (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO)
+                           EXISTINGSLUG))
              (CL:WHEN (fetch (CHARSETINFO YWIDTHS) of CSINFO)
                  (\FSETWIDTH (fetch (CHARSETINFO YWIDTHS) of CSINFO)
+                        THINCODE 0))
+             (CL:WHEN (fetch (CHARSETINFO YWIDTHS) of CSINFO)
+                 (\FSETWIDTH (fetch (CHARSETINFO YIMAGEWIDTHS) of CSINFO)
                         THINCODE 0))
              (CL:WHEN (fetch (CHARSETINFO LEFTKERN) of CSINFO)
                  (SETA (fetch (CHARSETINFO LEFTKERN) of CSINFO)
@@ -2191,7 +2214,8 @@
                        FSDEVICE ← DEVICE])
 
 (FILENAMEFROMFONTSPEC
-  [LAMBDA (FONTSPEC CHARSET ALL FORMATS)                     (* ; "Edited  4-Sep-2026 23:01 by rmk")
+  [LAMBDA (FONTSPEC CHARSET ALL FORMATS)                     (* ; "Edited 18-Oct-2026 20:12 by rmk")
+                                                             (* ; "Edited  4-Sep-2026 23:01 by rmk")
                                                              (* ; "Edited 28-Aug-2026 09:46 by rmk")
                                                              (* ; "Edited 15-Apr-2026 00:44 by rmk")
                                                              (* ; "Edited 22-Jan-2026 14:25 by rmk")
@@ -2218,7 +2242,9 @@
                     eachtime (SETQ SUB (SUBPAIR '(FAMILY SIZE FACE CHARSET)
                                               (LIST FAMILY SIZE FACE CHARSET)
                                               TEMPLATE T)) unless (MEMB NIL SUB)
-                    collect (SETQ FILENAME (CONCATLIST SUB)) 
+                    collect (SETQ FILENAME (CONCATLIST SUB))
+                          (CL:UNLESS (EQ 0 ROTATION)
+                              (SETQ FILENAME (CONCAT FILENAME "-" ROTATION))) 
 
                           (* ;; 
          " Avoid adjacent wildcards because some devices (notably old DSK) get exponentially slower.")
@@ -2786,7 +2812,8 @@
 (DEFINEQ
 
 (FONTSAVAILABLE
-  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE CHECKFILESTOO?)  (* ; "Edited 22-Nov-2025 11:32 by rmk")
+  [LAMBDA (FAMILY SIZE FACE ROTATION DEVICE CHECKFILESTOO?)  (* ; "Edited 13-Oct-2026 23:21 by rmk")
+                                                             (* ; "Edited 22-Nov-2025 11:32 by rmk")
                                                              (* ; "Edited  6-Nov-2025 13:50 by rmk")
                                                              (* ; "Edited 25-Sep-2025 18:39 by rmk")
                                                              (* ; "Edited 30-Aug-2025 13:55 by rmk")
@@ -2851,10 +2878,10 @@
 
                                          (* ;; "Until all the device functions take a FONTSPEC")
 
-                                         (SETQ FILEFONTS (CL:IF (EQ 1 (NARGS FN))
-                                                             (APPLY* FN FONTSPEC)
+                                         (SETQ FILEFONTS (CL:IF (EQ 5 (NARGS FN))
                                                              (APPLY* FN FAMILY SIZE FACE ROTATION 
-                                                                    DEVICE)))
+                                                                    DEVICE)
+                                                             (APPLY* FN FONTSPEC)))
                                          (SPUTMULTI \FONTSAVAILABLEFILECACHE FAMILY SIZE FACE 
                                                 ROTATION DEVICE (OR FILEFONTS 'NONE))
                                          FILEFONTS)
@@ -2862,7 +2889,8 @@
                                then FILEFONTS)))])
 
 (FONTEXISTS?
-  [LAMBDA (FONTSPEC NOCOERCIONS)                             (* ; "Edited  3-Sep-2026 18:54 by rmk")
+  [LAMBDA (FONTSPEC NOCOERCIONS)                             (* ; "Edited 14-Oct-2026 00:44 by rmk")
+                                                             (* ; "Edited  3-Sep-2026 18:54 by rmk")
                                                              (* ; "Edited  1-Sep-2026 23:25 by rmk")
                                                              (* ; "Edited 29-Aug-2026 09:28 by rmk")
                                                              (* ; "Edited 26-Aug-2026 23:40 by rmk")
@@ -2888,7 +2916,7 @@
 
     (DECLARE (GLOBALVARS \FONTSINCORE \FONTEXISTS?-CACHE IMAGESTREAMTYPES))
     (SETQ FONTSPEC (\FONT.CHECKARGS FONTSPEC NIL NIL NIL NIL T))
-    (LET (VAL DEVICE COERCED)
+    (LET (VAL FN DEVICE COERCED)
 
          (* ;; "SASSOC everywhere because of face")
 
@@ -2908,12 +2936,17 @@
                               (APPLY* (OR (CAR (GETMULTI IMAGESTREAMTYPES DEVICE 'FONTEXISTS?))
                                           (FUNCTION \SEARCHFONTFILES))
                                      FONTSPEC NOCOERCIONS)
-                              (AND (NOT NOCOERCIONS)
-                                   (SETQ COERCED (CAR (OR (COERCEFONTSPEC FONTSPEC 'FONTCOERCIONS)
-                                                          (COERCEFONTSPEC FONTSPEC 'FACECOERCIONS] 
+                              (CL:UNLESS NOCOERCIONS
+                                  [SETQ COERCED (CAR (\SEARCHFONTFILES (OR (COERCEFONTSPEC
+                                                                            FONTSPEC
+                                                                            'FONTCOERCIONS T T)
+                                                                           (COERCEFONTSPEC
+                                                                            FONTSPEC
+                                                                            'FACECOERCIONS])] 
 
                 (* ;; "Don't cache NO if the font isn't found and coercion is suppressed.  A later coercive call might produce a different result.")
 
+                (CL:UNLESS VAL (SETQ VAL COERCED))
                 (CL:WHEN (OR VAL COERCED)
                     (STOREMULTI \FONTEXISTS?-CACHE FONTSPEC (OR VAL 'NO)
                            'SASSOC))
@@ -3143,9 +3176,10 @@
                         then (\ILLEGAL.ARG FACE])
 
 (FONTFACE.STARS
-  [LAMBDA (FACE)                                             (* ; "Edited 19-Mar-2026 23:31 by rmk")
+  [LAMBDA (FACE)                                             (* ; "Edited 19-Oct-2026 23:22 by rmk")
+                                                             (* ; "Edited 19-Mar-2026 23:31 by rmk")
 
-    (* ;; "Produces a list of font faces formed by expanding eacy of the starred components of FACE")
+    (* ;; "Produces a list of font faces formed by expanding each of the starred components of FACE")
 
     (CL:WHEN (EQ FACE '*)
         (SETQ FACE (create FONTFACE
@@ -3245,28 +3279,23 @@
                                             (replace (FONTDESCRIPTOR FONTROTATION) of DATUM
                                                with NEWVALUE])
 
-(RECORD FONTFACE (WEIGHT SLOPE EXPANSION)
-                 [ACCESSFNS ((COLOR (CDDDR DATUM)
-                                    (RPLACD (CDDR DATUM)
-                                           NEWVALUE))
-                             (BACKCOLOR [COND
-                                           ((CDDDR DATUM)
-                                            (CAR (CDDDR DATUM]
-                                    (PROGN [COND
-                                              ((NULL (CDDDR DATUM))
-                                               (RPLACD (CDDR DATUM)
-                                                      (LIST NIL NIL]
-                                           (RPLACA (CDDDR DATUM)
-                                                  NEWVALUE)))
-                             (FORECOLOR [COND
-                                           ((CDDDR DATUM)
-                                            (CADR (CDDDR DATUM]
-                                    (PROGN [COND
-                                              ((NULL (CDDDR DATUM))
-                                               (RPLACD (CDDR DATUM)
-                                                      (LIST NIL NIL]
-                                           (RPLACA (CDR (CDDDR DATUM))
-                                                  NEWVALUE]
+(RECORD FONTFACE (WEIGHT SLOPE EXPANSION . COLORS)
+                 [ACCESSFNS ((COLOR (fetch (FONTFACE COLORS) of DATUM)
+                                    (replace (FONTFACE COLORS) of DATUM with NEWVALUE))
+                             [BACKCOLOR (CAR (fetch (FONTFACE COLORS) of DATUM))
+                                    (COND
+                                       ((LISTP (fetch (FONTFACE COLORS) of DATUM))
+                                        (RPLACA (fetch (FONTFACE COLORS) of DATUM)
+                                               NEWVALUE))
+                                       (NEWVALUE (replace (FONTFACE COLORS) of DATUM
+                                                    with (LIST NEWVALUE NIL]
+                             (FORECOLOR (CADR (fetch (FONTFACE COLORS) of DATUM))
+                                    (COND
+                                       ((LISTP (fetch (FONTFACE COLORS) of DATUM))
+                                        (RPLACA (CDR (fetch (FONTFACE COLORS) of DATUM))
+                                               NEWVALUE))
+                                       (NEWVALUE (replace (FONTFACE COLORS) of DATUM
+                                                    with (LIST NIL NEWVALUE]
                  WEIGHT ← 'MEDIUM SLOPE ← 'REGULAR EXPANSION ← 'REGULAR (TYPE? LISTP))
 
 (DATATYPE CHARSETINFO (WIDTHS                                (* ; "The advance-width of each character, an array indexed by charcode.  Usually the same as the imagewidth, but can differ for accents, kerns kerns.  This is what should be used for stringwidth calculations.")
@@ -3694,7 +3723,8 @@
 (DEFINEQ
 
 (\CREATEFONT
-  [LAMBDA (FONTSPEC)                                         (* ; "Edited  3-Sep-2026 19:08 by rmk")
+  [LAMBDA (FONTSPEC)                                         (* ; "Edited 18-Oct-2026 19:59 by rmk")
+                                                             (* ; "Edited  3-Sep-2026 19:08 by rmk")
                                                              (* ; "Edited 18-Aug-2026 22:27 by rmk")
                                                              (* ; "Edited 15-Apr-2026 00:13 by rmk")
                                                              (* ; "Edited  4-Apr-2026 23:29 by rmk")
@@ -3935,7 +3965,9 @@
       else FONTSPEC])
 
 (\CREATECHARSET.DISPLAY
-  [LAMBDA (FONTSPEC FONT CHARSET)                            (* ; "Edited 26-Aug-2026 11:40 by rmk")
+  [LAMBDA (FONTSPEC FONT CHARSET)                            (* ; "Edited 18-Oct-2026 23:26 by rmk")
+                                                             (* ; "Edited  9-Oct-2026 09:26 by rmk")
+                                                             (* ; "Edited 26-Aug-2026 11:40 by rmk")
                                                              (* ; "Edited 12-Apr-2026 18:52 by rmk")
                                                              (* ; "Edited  5-Apr-2026 10:02 by rmk")
                                                              (* ; "Edited  1-Apr-2026 10:32 by rmk")
@@ -3959,8 +3991,6 @@
       else 
            (* ;; "Successful transformations must set the CSINFO so that it can be returned.")
 
-           (CL:UNLESS (EQ 0 (fetch (FONTSPEC FSROTATION) of FONTSPEC))
-               (\SETCHARSETINFO FONT CHARSET (\SFROTATECSINFO FONTSPEC CHARSET)))
            (COMPLETE.CHARSET FONT CHARSET)
            (CL:WHEN (FONTDEVICEPROP FONTSPEC 'FACECOERCIONS) (* ; 
                                                    "Suppresses face-faking in offline COMPLETE phase")
@@ -3976,6 +4006,8 @@
                (CL:WHEN (EQ 'COMPRESSED (fetch (FONTSPEC FSEXPANSION) of FONTSPEC))
                    (FAKEFACE.CHARSET FONT CHARSET (FUNCTION MOVEFONTCHARS)
                           (create FONTSPEC using FONTSPEC FSEXPANSION ← 'REGULAR))))
+           (CL:UNLESS (EQ 0 (fetch (FONTSPEC FSROTATION) of FONTSPEC))
+               (\SETCHARSETINFO FONT CHARSET (\ROTATECSINFO FONTSPEC CHARSET)))
            (\GETCHARSETINFO FONT CHARSET])
 
 (\FONTEXISTS?.DISPLAY
@@ -4162,8 +4194,11 @@
 
 (DEFINEQ
 
-(\SFROTATECSINFO
-  [LAMBDA (FONTSPEC CHARSET)                                 (* ; "Edited  1-Sep-2026 11:26 by rmk")
+(\ROTATECSINFO
+  [LAMBDA (FONTSPEC CHARSET)                                 (* ; "Edited 20-Oct-2026 13:57 by rmk")
+                                                             (* ; "Edited 18-Oct-2026 23:35 by rmk")
+                                                             (* ; "Edited  9-Oct-2026 09:32 by rmk")
+                                                             (* ; "Edited  1-Sep-2026 11:26 by rmk")
                                                              (* ; "Edited 26-Aug-2026 11:31 by rmk")
                                                              (* ; "Edited 22-Aug-2026 17:49 by rmk")
                                                              (* ; "Edited 21-Aug-2026 00:27 by rmk")
@@ -4177,46 +4212,62 @@
 
     (* ;; "Only non-zero rotations are coerced here, since it isn't worth creating and storing rotated versions of all fonts.  So in that case, it rotates the charset from the otherwise complete font.")
 
-    (LET ((ROTATION (fetch (FONTSPEC FSROTATION) of FONTSPEC))
-          (CSINFO (\INSURECHARSETINFO (FONTCREATE (create FONTSPEC using FONTSPEC FSROTATION ← 0))
+    (LET ((ROTATION (FSPROP FONTSPEC FSROTATION))
+          (CSINFO (\GETCHARSETINFO (FONTCREATE FONTSPEC NIL NIL 0 NIL NIL CHARSET)
                          CHARSET))
-          NEWCSINFO)
+          NEWCSINFO YWIDTHS)
          (SELECTQ ROTATION
-             ((90 270) 
+             ((90 270)                                       (* ; 
+                                                           "Make sure all data structures are copied")
+                  (SETQ YWIDTHS (\COPYARRAYBLOCK (fetch (CHARSETINFO WIDTHS) of CSINFO)))
                   (SETQ NEWCSINFO (create CHARSETINFO using CSINFO CHARSETBITMAP ← (
-                                                                                \SFROTATECSINFOBITMAP
+                                                                                 \ROTATECSINFO.BITMAP
                                                                                     CSINFO ROTATION)
-                                                            YWIDTHS ← (fetch (CHARSETINFO WIDTHS)
-                                                                         of CSINFO)
-                                                            OFFSETS ← (\SFROTATECSINFOOFFSETS CSINFO
-                                                                             ROTATION)
-                                                            IMAGEWIDTHS ← (\SFROTATECSINFOIMAGEWIDTHS
+                                                            YWIDTHS ← YWIDTHS OFFSETS ←
+                                                            (\ROTATECSINFO.OFFSETS CSINFO ROTATION)
+                                                            IMAGEWIDTHS ← (\ROTATECSINFO.IMAGEWIDTHS
                                                                            CSINFO ROTATION)
-                                                            WIDTHS ← (\CREATECSINFOELEMENT)
-                                                            YIMAGEWIDTHS ← (fetch (CHARSETINFO 
-                                                                                         IMAGEWIDTHS)
-                                                                              of CSINFO))))
-             (180 (SETQ NEWCSINFO (create CHARSETINFO using CSINFO CHARSETBITMAP ← (
-                                                                                \SFROTATECSINFOBITMAP
+                                                            CSINFOPROPS ← (COPYALL
+                                                                           (fetch (CHARSETINFO 
+                                                                                         CSINFOPROPS)
+                                                                              of CSINFO))
+                                                            WIDTHS ← (\CREATECSINFOELEMENT)))
+
+                  (* ;; 
+                  "YIMAGEWIDTHS is a property of CSINFOPROPS, do this after that has been copied.")
+
+                  [replace (CHARSETINFO YIMAGEWIDTHS) of NEWCSINFO
+                     with (CL:IF (EQ (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO)
+                                     (fetch (CHARSETINFO WIDTHS) of CSINFO))
+                              YWIDTHS
+                              (\COPYARRAYBLOCK (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO)))])
+             (180 [SETQ NEWCSINFO (create CHARSETINFO using CSINFO CHARSETBITMAP ← (
+                                                                                 \ROTATECSINFO.BITMAP
                                                                                     CSINFO ROTATION)
-                                                            OFFSETS ← (\SFROTATECSINFOOFFSETS CSINFO
-                                                                             ROTATION)))
+                                                            OFFSETS ← (\ROTATECSINFO.OFFSETS CSINFO 
+                                                                             ROTATION)
+                                                            CSINFOPROPS ← (COPYALL
+                                                                           (fetch (CHARSETINFO 
+                                                                                         CSINFOPROPS)
+                                                                              of CSINFO]
 
                   (* ;; "Do the offsets a second time")
 
-                  (freplace (CHARSETINFO OFFSETS) of NEWCSINFO with (\SFROTATECSINFOOFFSETS NEWCSINFO
+                  (freplace (CHARSETINFO OFFSETS) of NEWCSINFO with (\ROTATECSINFO.OFFSETS NEWCSINFO
                                                                            270))
                   (swap (ffetch (CHARSETINFO CHARSETASCENT) of NEWCSINFO)
                         (ffetch (CHARSETINFO CHARSETDESCENT) of NEWCSINFO)))
              NIL)
+         (CHARSETPROP NEWCSINFO 'SOURCE FONTSPEC)            (* ; "Suppress indirects")
          NEWCSINFO])
 
-(\SFROTATECSINFOBITMAP
-  [LAMBDA (CSINFO ROTATION)                                  (* ; "Edited 25-Aug-2026 15:32 by rmk")
+(\ROTATECSINFO.BITMAP
+  [LAMBDA (CSINFO ROTATION)                                  (* ; "Edited 20-Oct-2026 12:49 by rmk")
+                                                             (* ; "Edited 25-Aug-2026 15:32 by rmk")
                                                              (* ; "Edited 20-Aug-2026 00:46 by rmk")
                                                              (* ; "Edited 22-Sep-87 10:38 by Snow")
 
-(* ;;; "rotate a bitmap either 90 or 270 for fonts.")
+(* ;;; "Rotate a bitmap either 90 or 270 for fonts. Rotation does a copy")
 
     (LET ((CHARBITMAP (fetch (CHARSETINFO CHARSETBITMAP) of CSINFO)))
          (CASE ROTATION
@@ -4225,8 +4276,10 @@
              (180 (ROTATE-BITMAP-LEFT (ROTATE-BITMAP-LEFT CHARBITMAP)))
              (270 (ROTATE-BITMAP CHARBITMAP)))])
 
-(\SFROTATECSINFOOFFSETS
-  [LAMBDA (CSINFO ROTATION)                                  (* ; "Edited 10-Sep-2026 23:25 by rmk")
+(\ROTATECSINFO.OFFSETS
+  [LAMBDA (CSINFO ROTATION)                                  (* ; "Edited 20-Oct-2026 16:19 by rmk")
+                                                             (* ; "Edited 18-Oct-2026 22:25 by rmk")
+                                                             (* ; "Edited 10-Sep-2026 23:25 by rmk")
                                                              (* ; "Edited 22-Aug-2026 12:25 by rmk")
                                                              (* ; "Edited 28-Aug-2025 15:10 by rmk")
                                                              (* ; "Edited 24-Aug-2025 11:42 by rmk")
@@ -4235,7 +4288,7 @@
     (* ;; "This is the CSINFO before the bitmap has been rotated, which happens in parallel. This is run before the imagewidths are transformed.")
 
     (if (EQ ROTATION 270)
-        then (for CHARCODE (OFFSETS ← (fetch (CHARSETINFO OFFSETS) of CSINFO))
+        then (for CHARCODE X (OFFSETS ← (fetch (CHARSETINFO OFFSETS) of CSINFO))
                   (WIDTHS ← (fetch (CHARSETINFO WIDTHS) of CSINFO))
                   (IMAGEWIDTHS ← (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO))
                   (BITMAPHEIGHT ← (BITMAPWIDTH (fetch (CHARSETINFO CHARSETBITMAP) of CSINFO)))
@@ -4247,14 +4300,12 @@
                                                                                       IMAGEWIDTHS 
                                                                                       CHARCODE]
                 finally (RETURN NEWOFFSETS))
-      else (fetch (CHARSETINFO OFFSETS) of CSINFO])
+      else (\COPYARRAYBLOCK (fetch (CHARSETINFO OFFSETS) of CSINFO])
 
-(\SFROTATECSINFOIMAGEWIDTHS
-  [LAMBDA (CSINFO ROTATION)                                  (* ; "Edited 10-Sep-2026 23:25 by rmk")
+(\ROTATECSINFO.IMAGEWIDTHS
+  [LAMBDA (CSINFO ROTATION)                                  (* ; "Edited 20-Oct-2026 13:51 by rmk")
+                                                             (* ; "Edited 10-Sep-2026 23:25 by rmk")
                                                              (* ; "Edited 22-Aug-2026 12:04 by rmk")
-
-    (* ;; "This is the CSINFO before the bitmap has been rotated, which happens in parallel")
-
     (if (MEMB ROTATION '(90 270))
         then 
              (* ;; "All the characters have the same image width, the original height")
@@ -4264,7 +4315,7 @@
                                        (fetch (CHARSETINFO CHARSETDESCENT) of CSINFO))) from 0
                 to \MAXTHINCHAR do (\FSETOFFSET NEWIMAGEWIDTHS CHARCODE IMAGEWIDTH)
                 finally (RETURN NEWIMAGEWIDTHS))
-      else (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO])
+      else (\COPYARRAYBLOCK (fetch (CHARSETINFO IMAGEWIDTHS) of CSINFO])
 )
 (DEFINEQ
 
@@ -4326,41 +4377,41 @@
 (ADDTOVAR LAMA FONTCOPY FONTDEVICEPROP)
 )
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (6607 16274 (CHARWIDTH 6617 . 7406) (CHARWIDTHY 7408 . 8925) (STRINGWIDTH 8927 . 9964) (
-\CHARWIDTH.DISPLAY 9966 . 10381) (\STRINGWIDTH.DISPLAY 10383 . 10811) (\STRINGWIDTH.GENERIC 10813 . 
-16272)) (16275 22907 (DEFAULTFONT 16285 . 17570) (FONTCLASS 17572 . 19844) (FONTCLASSUNPARSE 19846 . 
-20747) (FONTCLASSCOMPONENT 20749 . 21337) (SETFONTCLASSCOMPONENT 21339 . 21781) (GETFONTCLASSCOMPONENT
- 21783 . 22905)) (24355 44086 (FONTCREATE 24365 . 27713) (FONTCREATE1 27715 . 30374) (
-FONTCREATE.SLUGFD 30376 . 32633) (\FONT.CHECKARGS1 32635 . 37340) (\FONTCREATE1.NOFN 37342 . 37556) (
-FONTFILEP 37558 . 38446) (\READCHARSET 38448 . 43666) (FONTCHARSETS 43668 . 44084)) (44087 52689 (
-\FONT.CHECKARGS 44097 . 52372) (\CHARSET.CHECK 52374 . 52687)) (52690 60825 (COERCEFONTSPEC 52700 . 
-60136) (COERCEFONTSPEC.TARGETFACE 60138 . 60823)) (63280 68996 (MAKEFONTSPEC 63290 . 65822) (
-FONTSPEC.TO.FONTDESCRIPTOR 65824 . 68106) (FONT.CHANGESPEC 68108 . 68994)) (68997 78986 (COMPLETE.FONT
- 69007 . 71032) (COMPLETEFONTP 71034 . 71772) (COMPLETE.CHARSET 71774 . 76058) (PRUNESLUGCSINFOS 76060
- . 77371) (MONOSPACEFONTP 77373 . 78984)) (79025 89608 (FONTASCENT 79035 . 79546) (FONTDESCENT 79548
- . 80269) (FONTHEIGHT 80271 . 80783) (FONTPROP 80785 . 88885) (\AVGCHARWIDTH 88887 . 89606)) (93516 
-95386 (FONTDEVICEPROP 93526 . 95384)) (95503 96357 (EDITCHAR 95513 . 96355)) (96403 109678 (
-GETCHARBITMAP 96413 . 97667) (PUTCHARBITMAP 97669 . 99941) (\GETCHARBITMAP.CSINFO 99943 . 102715) (
-\PUTCHARBITMAP.CSINFO 102717 . 109676)) (109679 126586 (MOVECHARBITMAP 109689 . 111583) (MOVEFONTCHARS
- 111585 . 116291) (\MOVEFONTCHAR 116293 . 120814) (\MOVEFONTCHARS.SOURCEDATA 120816 . 126584)) (127244
- 136534 (SLUGCHARP 127254 . 128301) (\SLUGSETUP 128303 . 130791) (\BUILDSLUGCSINFO 130793 . 134172) (
-\MAKESLUGCHAR 134174 . 136532)) (137211 148528 (FONTFILES 137221 . 140450) (FONTSPECFROMFILENAME 
-140452 . 145221) (FILENAMEFROMFONTSPEC 145223 . 148526)) (148529 183432 (FONTCOPY 148539 . 155669) (
-FONTP 155671 . 155970) (FONTUNPARSE 155972 . 157695) (SETFONTDESCRIPTOR 157697 . 159161) (
-\STREAMCHARWIDTH 159163 . 163174) (\COERCECHARSET 163176 . 166783) (\FONTSYMBOL 166785 . 167439) (
-\DEVICESYMBOL 167441 . 168225) (\FONTFACE 168227 . 175431) (\FONTFACE.COLOR 175433 . 182215) (
-SETFONTCHARENCODING 182217 . 183430)) (183433 202120 (FONTSAVAILABLE 183443 . 188807) (FONTEXISTS? 
-188809 . 192974) (\SEARCHFONTFILES 192976 . 196706) (FLUSHFONTCACHE 196708 . 199413) (SORTFONTSPECS 
-199415 . 202118)) (202121 208375 (MATCHFONTFACE 202131 . 203206) (MAKEFONTFACE 203208 . 204958) (
-FONTFACETOATOM 204960 . 207210) (FONTFACE.STARS 207212 . 208373)) (208722 209214 (\UNITWIDTHSVECTOR 
-208732 . 209212)) (227434 229949 (FONTDESCRIPTOR.DEFPRINT 227444 . 229471) (FONTCLASS.DEFPRINT 229473
- . 229947)) (233820 236949 (\CREATEKERNELEMENT 233830 . 234188) (\FSETLEFTKERN 234190 . 235020) (
-\FGETLEFTKERN 235022 . 236947)) (236950 249099 (\CREATEFONT 236960 . 240486) (\CREATECHARSET 240488 . 
-243595) (\INSTALLCHARSETINFO 243597 . 247370) (\INSTALLCHARSETINFO.CHARENCODING 247372 . 248445) (
-\COPYCHARSETINFO 248447 . 249097)) (250012 260727 (\CREATEFONT.DISPLAY 250022 . 253351) (
-\CREATECHARSET.DISPLAY 253353 . 257009) (\FONTEXISTS?.DISPLAY 257011 . 260007) (FONTSAVAILABLE.DISPLAY
- 260009 . 260725)) (260728 269774 (FAKEFACE.CHARSET 260738 . 265022) (MAKEBOLD.CHAR 265024 . 267100) (
-MAKEITALIC.CHAR 267102 . 269772)) (269805 277171 (\SFROTATECSINFO 269815 . 273570) (
-\SFROTATECSINFOBITMAP 273572 . 274285) (\SFROTATECSINFOOFFSETS 274287 . 276179) (
-\SFROTATECSINFOIMAGEWIDTHS 276181 . 277169)) (277172 278346 (\SFMAKECOLOR 277182 . 278344)))))
+  (FILEMAP (NIL (6830 16497 (CHARWIDTH 6840 . 7629) (CHARWIDTHY 7631 . 9148) (STRINGWIDTH 9150 . 10187) 
+(\CHARWIDTH.DISPLAY 10189 . 10604) (\STRINGWIDTH.DISPLAY 10606 . 11034) (\STRINGWIDTH.GENERIC 11036 . 
+16495)) (16498 23130 (DEFAULTFONT 16508 . 17793) (FONTCLASS 17795 . 20067) (FONTCLASSUNPARSE 20069 . 
+20970) (FONTCLASSCOMPONENT 20972 . 21560) (SETFONTCLASSCOMPONENT 21562 . 22004) (GETFONTCLASSCOMPONENT
+ 22006 . 23128)) (24578 44473 (FONTCREATE 24588 . 28100) (FONTCREATE1 28102 . 30761) (
+FONTCREATE.SLUGFD 30763 . 33020) (\FONT.CHECKARGS1 33022 . 37727) (\FONTCREATE1.NOFN 37729 . 37943) (
+FONTFILEP 37945 . 38833) (\READCHARSET 38835 . 44053) (FONTCHARSETS 44055 . 44471)) (44474 53076 (
+\FONT.CHECKARGS 44484 . 52759) (\CHARSET.CHECK 52761 . 53074)) (53077 61212 (COERCEFONTSPEC 53087 . 
+60523) (COERCEFONTSPEC.TARGETFACE 60525 . 61210)) (63667 69383 (MAKEFONTSPEC 63677 . 66209) (
+FONTSPEC.TO.FONTDESCRIPTOR 66211 . 68493) (FONT.CHANGESPEC 68495 . 69381)) (69384 79373 (COMPLETE.FONT
+ 69394 . 71419) (COMPLETEFONTP 71421 . 72159) (COMPLETE.CHARSET 72161 . 76445) (PRUNESLUGCSINFOS 76447
+ . 77758) (MONOSPACEFONTP 77760 . 79371)) (79412 94462 (FONTASCENT 79422 . 79933) (FONTDESCENT 79935
+ . 80656) (FONTHEIGHT 80658 . 81170) (FONTPROP 81172 . 89537) (\AVGCHARWIDTH 89539 . 90258) (
+FONTPROP.MACROFN 90260 . 94460)) (94844 96714 (FONTDEVICEPROP 94854 . 96712)) (96831 97685 (EDITCHAR 
+96841 . 97683)) (97731 111202 (GETCHARBITMAP 97741 . 98995) (PUTCHARBITMAP 98997 . 101269) (
+\GETCHARBITMAP.CSINFO 101271 . 104239) (\PUTCHARBITMAP.CSINFO 104241 . 111200)) (111203 128110 (
+MOVECHARBITMAP 111213 . 113107) (MOVEFONTCHARS 113109 . 117815) (\MOVEFONTCHAR 117817 . 122338) (
+\MOVEFONTCHARS.SOURCEDATA 122340 . 128108)) (128768 138261 (SLUGCHARP 128778 . 129825) (\SLUGSETUP 
+129827 . 132315) (\BUILDSLUGCSINFO 132317 . 135696) (\MAKESLUGCHAR 135698 . 138259)) (138938 150495 (
+FONTFILES 138948 . 142177) (FONTSPECFROMFILENAME 142179 . 146948) (FILENAMEFROMFONTSPEC 146950 . 
+150493)) (150496 185399 (FONTCOPY 150506 . 157636) (FONTP 157638 . 157937) (FONTUNPARSE 157939 . 
+159662) (SETFONTDESCRIPTOR 159664 . 161128) (\STREAMCHARWIDTH 161130 . 165141) (\COERCECHARSET 165143
+ . 168750) (\FONTSYMBOL 168752 . 169406) (\DEVICESYMBOL 169408 . 170192) (\FONTFACE 170194 . 177398) (
+\FONTFACE.COLOR 177400 . 184182) (SETFONTCHARENCODING 184184 . 185397)) (185400 204707 (FONTSAVAILABLE
+ 185410 . 190883) (FONTEXISTS? 190885 . 195561) (\SEARCHFONTFILES 195563 . 199293) (FLUSHFONTCACHE 
+199295 . 202000) (SORTFONTSPECS 202002 . 204705)) (204708 211071 (MATCHFONTFACE 204718 . 205793) (
+MAKEFONTFACE 205795 . 207545) (FONTFACETOATOM 207547 . 209797) (FONTFACE.STARS 209799 . 211069)) (
+211418 211910 (\UNITWIDTHSVECTOR 211428 . 211908)) (230153 232668 (FONTDESCRIPTOR.DEFPRINT 230163 . 
+232190) (FONTCLASS.DEFPRINT 232192 . 232666)) (236539 239668 (\CREATEKERNELEMENT 236549 . 236907) (
+\FSETLEFTKERN 236909 . 237739) (\FGETLEFTKERN 237741 . 239666)) (239669 251927 (\CREATEFONT 239679 . 
+243314) (\CREATECHARSET 243316 . 246423) (\INSTALLCHARSETINFO 246425 . 250198) (
+\INSTALLCHARSETINFO.CHARENCODING 250200 . 251273) (\COPYCHARSETINFO 251275 . 251925)) (252840 263771 (
+\CREATEFONT.DISPLAY 252850 . 256179) (\CREATECHARSET.DISPLAY 256181 . 260053) (\FONTEXISTS?.DISPLAY 
+260055 . 263051) (FONTSAVAILABLE.DISPLAY 263053 . 263769)) (263772 272818 (FAKEFACE.CHARSET 263782 . 
+268066) (MAKEBOLD.CHAR 268068 . 270144) (MAKEITALIC.CHAR 270146 . 272816)) (272849 282033 (
+\ROTATECSINFO 272859 . 278042) (\ROTATECSINFO.BITMAP 278044 . 278886) (\ROTATECSINFO.OFFSETS 278888 . 
+281016) (\ROTATECSINFO.IMAGEWIDTHS 281018 . 282031)) (282034 283208 (\SFMAKECOLOR 282044 . 283206)))))
 STOP

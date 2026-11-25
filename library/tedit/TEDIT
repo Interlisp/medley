@@ -1,12 +1,12 @@
 (DEFINE-FILE-INFO :PACKAGE "INTERLISP" :READTABLE "INTERLISP" :BASE 10)
 
-(FILECREATED "16-Nov-2026 12:35:50" {MEDLEY}<library>tedit>TEDIT.;875 149694 
+(FILECREATED "24-Nov-2026 21:10:28" {MEDLEY}<library>tedit>TEDIT.;882 150059 
 
       :EDIT-BY rmk
 
-      :CHANGES-TO (FNS TEDIT.KILL)
+      :CHANGES-TO (FNS TEDIT.INSERT.OBJECT)
 
-      :PREVIOUS-DATE "12-Nov-2026 23:11:25" {MEDLEY}<library>tedit>TEDIT.;874)
+      :PREVIOUS-DATE "19-Nov-2026 12:26:48" {MEDLEY}<library>TEDIT>TEDIT.;876)
 
 
 (PRETTYCOMPRINT TEDITCOMS)
@@ -780,7 +780,8 @@
 (DEFINEQ
 
 (TEDIT.INSERT.OBJECT
-  [LAMBDA (OBJECT TSTREAM CH# LOOKS)                         (* ; "Edited  2-Aug-2026 22:22 by rmk")
+  [LAMBDA (OBJECT TSTREAM CH# LOOKS)                         (* ; "Edited 24-Nov-2026 21:09 by rmk")
+                                                             (* ; "Edited  2-Aug-2026 22:22 by rmk")
                                                              (* ; "Edited 18-May-2026 23:05 by rmk")
                                                              (* ; "Edited  6-Sep-2025 08:54 by rmk")
                                                              (* ; "Edited 28-Jul-2025 23:48 by rmk")
@@ -792,69 +793,62 @@
                                                              (* ; "Edited 19-May-2023 00:18 by rmk")
                                                              (* ; "Edited 21-Apr-93 00:52 by jds")
 
-    (* ;; "Inserts the Image-object OBJECT into text STREAM in front of character CH#.")
+    (* ;; "Inserts the Image-object OBJECT into text STREAM in front of character CH#. Note that an object can get into a stream by copying or moving, but those are not considered to be insertions.  This and TEDIT.RPLCHARCODE are the only bona fide ways.")
 
     (SETQ TSTREAM (TEXTSTREAM TSTREAM))
+    (CL:WHEN (OR (NULL CH#)
+                 (type? SELECTION CH#))
+        (SETQ CH# (TEDIT.GETPOINT TSTREAM CH#)))
     (PROG ((TEXTOBJ (TEXTOBJ TSTREAM))
-           SEL OBJPC OBJSELPIECES SUBSTREAM)
-
-     (* ;; "We construct and copy a trivial SELPIECES so that we can share the basic insertion code.")
-
-          (CL:UNLESS CH#
-              (SETQ CH# (TEXTSEL TEXTOBJ)))
-          (CL:WHEN (type? SELECTION CH#)
-              (SETQ CH# (TEDIT.GETPOINT TSTREAM CH#)))
+           SEL OBJPC OBJSELPIECES)
+          (CL:UNLESS [AND (FIXP CH#)
+                          (<= 1 CH# (ADD1 (TEXTLEN TEXTOBJ]
+              (TEDIT.PROMPTPRINT TEXTOBJ (CONCAT CH# " is not a valid character number" T)))
           (CL:WHEN (\TEDIT.READONLY TSTREAM NIL CH#)
                  (RETURN))
           (CL:UNLESS (SETQ OBJECT (\TEDIT.APPLY.OBJFN OBJECT 'INSERT NIL TSTREAM))
                  (RETURN))
+
+     (* ;; "The object has approved of its insertion, now do the work")
+
+          (SETQ SEL (TEXTSEL TEXTOBJ))
+          (\TEDIT.SEL.OFF TSTREAM)
+
+     (* ;; "Install a new piece for the object into a trivial SELPIECES so that we can share the basic insertion code. ")
+
           (SETQ OBJPC (create PIECE
                              PTYPE _ OBJECT.PTYPE
                              PCONTENTS _ OBJECT
                              PLEN _ 1
                              PCHARLOOKS _ (FGETTOBJ TEXTOBJ CARETLOOKS)))
-                                                             (* ; "The new piece we're inserting")
-          (CL:WHEN (SETQ SUBSTREAM (IMAGEOBJPROP OBJECT 'SUBSTREAM))
-                                                             (* ; 
-                                                  "If this is computed text in bulk, fix the length.")
-              (\TEDIT.THELP "SUBSTREAM NOT IMPLEMENTED")
-              (FSETPC OBJPC PTYPE SUBSTREAM.PTYPE)
-              (FSETPC OBJPC PLEN (TEXTLEN (FTEXTOBJ SUBSTREAM))))
           (SETQ OBJSELPIECES
-           (\TEDIT.SELPIECES.COPY (create SELPIECES
-                                         SPLEN _ 1
-                                         SPFIRST _ OBJPC
-                                         SPLAST _ OBJPC
-                                         SPFIRSTCHAR _ CH#
-                                         SPLASTCHAR _ CH#)
-                  'INSERT TSTREAM))
-          (CL:UNLESS OBJSELPIECES                            (* ; "Copy may not be allowed")
-              (RETURN))
-
-     (* ;; "")
-
-     (* ;; 
-     " OBJSELPIECES contains (a copy of) the object piece, and the object approved of insertion.")
-
-          (SETQ SEL (TEXTSEL TEXTOBJ))
-          (\TEDIT.SEL.OFF TSTREAM)
-          (CL:WHEN (type? SELECTION CH#)
-              (SETQ CH# (FGETSEL CH# CH#)))
-          (CL:WHEN (EQ 'PENDINGDEL (FGETSEL SEL SELOPERATION))
-                 (\TEDIT.DELETE TSTREAM SEL))
-          (CL:WHEN CH#
-              (\TEDIT.UPDATE.SEL SEL (IMIN CH# (ADD1 (TEXTLEN TEXTOBJ)))
-                     0
-                     'LEFT)
-              (\TEDIT.FIXSEL SEL TSTREAM))
-          (\TEDIT.INSERT.SELPIECES OBJSELPIECES TSTREAM SEL)
+           (create SELPIECES
+                  SPLEN _ 1
+                  SPFIRST _ OBJPC
+                  SPLAST _ OBJPC
+                  SPFIRSTCHAR _ 1
+                  SPLASTCHAR _ 1))
+          (if (EQ 'PENDINGDEL (FGETSEL SEL SELOPERATION))
+              then                                           (* ; 
+                                                             "Adjust CH# to reflect the deletion.")
+                   (if (<= (FGETSEL SEL CH#)
+                           CH#
+                           (SUB1 (FGETSEL SEL CHLIM)))
+                       then (\TEDIT.REPLACE.SELPIECES OBJSELPIECES TSTREAM SEL) 
+                                                             (* ; 
+                                                             "Object replaces, single history event")
+                     else (CL:WHEN (IGEQ CH# (FGETSEL SEL CHLIM))
+                                                             (* ; "CH# is after SEL, move it down")
+                              (add CH# (IMINUS (FGETSEL SEL DCH))))
+                          (\TEDIT.DELETE TSTREAM SEL)        (* ; "2 events")
+                          (\TEDIT.UPDATE.SEL SEL CH# 0 'LEFT)
+                          (\TEDIT.INSERT.SELPIECES OBJSELPIECES TSTREAM SEL))
+            else (\TEDIT.UPDATE.SEL SEL CH# 0 'LEFT)
+                 (\TEDIT.INSERT.SELPIECES OBJSELPIECES TSTREAM SEL))
+                                                             (* ; "Point to the insertion target:")
           (CL:WHEN LOOKS (\TEDIT.CHANGE.CHARLOOKS TSTREAM LOOKS SEL))
-          (\TEDIT.APPLY.OBJFN OBJECT 'INSERT NIL TSTREAM)
-
-     (* ;; "Note that an object can get into a stream by copying or moving, but those are not considered to be insertions.  This and TEDIT.RPLCHARCODE are the only bona fide ways.")
-
-          (\TEDIT.SCROLL.CARET TSTREAM)
-          (\TEDIT.SEL.ON TSTREAM])
+          (\TEDIT.SEL.ON TSTREAM)
+          (\TEDIT.SCROLL.CARET TSTREAM])
 
 (TEDIT.EDIT.OBJECT
   [LAMBDA (TSTREAM OBJ)                                      (* ; "Edited 14-Aug-2026 20:48 by rmk")
@@ -1826,7 +1820,8 @@
           (RETURN NEWPC])
 
 (\TEDIT.APPLY.OBJFN
-  [LAMBDA (OBJ OPERATION FROMTSTREAM TOTSTREAM PROMPTSTREAM) (* ; "Edited  7-Aug-2026 00:16 by rmk")
+  [LAMBDA (OBJ OPERATION FROMTSTREAM TOTSTREAM PROMPTSTREAM) (* ; "Edited 19-Nov-2026 12:26 by rmk")
+                                                             (* ; "Edited  7-Aug-2026 00:16 by rmk")
                                                              (* ; "Edited  2-Aug-2026 22:13 by rmk")
                                                              (* ; "Edited 21-Apr-2025 21:07 by rmk")
                                                              (* ; "Edited 25-Jun-2024 11:59 by rmk")
@@ -1855,7 +1850,8 @@
                                 (* ;; "Documented arguments are goofy, confusing targetwindow, targetwindow ds, and tstream.  Maybe they all should take the targetwindow's DS")
 
                                 (SELECTQ OPERATION
-                                    (DELETE (APPLY* OBJFN OBJ (\TEDIT.PRIMARYPANE FROMTSTREAM)))
+                                    (DELETE (APPLY* OBJFN OBJ (\TEDIT.PRIMARYPANE FROMTSTREAM)
+                                                   FROMTSTREAM))
                                     (INSERT 
 
                                  (* ;; "Documentation says that 2nd arg is the windows stream, not the window.  But sketech passes the window.  Third documented arg doesn't make sense (source), Sketch passes NIL.")
@@ -2385,27 +2381,27 @@
 
 (DEFAULT.IMAGETYPE.CONVERSIONS '(TEDIT TEDIT.TO.IMAGEFILE))
 (DECLARE%: DONTCOPY
-  (FILEMAP (NIL (4736 7130 (MAKE-TEDIT-EXPORTS.ALL 4746 . 5292) (UPDATE-TEDIT 5294 . 6223) (EDIT-TEDIT 
-6225 . 7128)) (8466 37657 (TEDIT 8476 . 11090) (TEXTSTREAM 11092 . 12981) (TEXTSTREAMP 12983 . 13367) 
-(COERCETEXTSTREAM 13369 . 17580) (TEDIT.CONCAT 17582 . 20884) (TEDITSTRING 20886 . 21800) (TEDIT-SEE 
-21802 . 22566) (TEDIT.COPY 22568 . 24713) (TEDIT.DELETE 24715 . 26076) (TEDIT.INSERT 26078 . 29047) (
-TEDIT.TERPRI 29049 . 30163) (TEDIT.KILL 30165 . 31259) (TEDIT.QUIT 31261 . 32627) (TEDIT.MOVE 32629 . 
-33517) (TEDIT.STRINGWIDTH 33519 . 34190) (TEDIT.CHARWIDTH 34192 . 36434) (TEDIT.PARAGRAPH.BOUNDARIES 
-36436 . 37655)) (37658 39599 (TEXTOBJ 37668 . 38133) (COERCETEXTOBJ 38135 . 39597)) (41051 43050 (
-TDRIBBLE 41061 . 43048)) (43091 55875 (TEDIT.INSERT.OBJECT 43101 . 47398) (TEDIT.EDIT.OBJECT 47400 . 
-50451) (TEDIT.OBJECT.CHANGED 50453 . 53746) (TEDIT.MAP.OBJECTS 53748 . 55403) (\TEDIT.FIRST.OBJPIECE 
-55405 . 55638) (\TEDIT.NEXT.OBJPIECE 55640 . 55873)) (55898 63341 (\TEDIT.CONCAT.PAGEFRAMES 55908 . 
-60975) (\TEDIT.GET.PAGE.HEADINGS 60977 . 62006) (\TEDIT.CONCAT.INSTALL.HEADINGS 62008 . 63339)) (63342
- 67069 (\TEDIT.MOVE.MSG 63352 . 65433) (\TEDIT.READONLY 65435 . 67067)) (67070 73835 (TEDIT.NCHARS 
-67080 . 67453) (TEDIT.RPLCHARCODE 67455 . 71319) (TEDIT.NTHCHARCODE 71321 . 73364) (TEDIT.NTHCHAR 
-73366 . 73833)) (73881 131444 (\TEDIT1 73891 . 75968) (\TEDIT.INSERT 75970 . 82169) (\TEDIT.MOVE 82171
- . 90485) (\TEDIT.COPY 90487 . 94366) (\TEDIT.REPLACE.SELPIECES 94368 . 98904) (
-\TEDIT.INSERT.SELPIECES 98906 . 101903) (\TEDIT.RESTARTFN 101905 . 104410) (\TEDIT.CHARDELETE 104412
- . 107457) (\TEDIT.COPYPIECE 107459 . 112621) (\TEDIT.APPLY.OBJFN 112623 . 116712) (\TEDIT.DELETE 
-116714 . 121082) (\TEDIT.DIFFUSE.PARALOOKS 121084 . 123355) (\TEDIT.WORDDELETE 123357 . 124972) (
-\TEDIT.WORDDELETE.FORWARD 124974 . 126763) (\TEDIT.FINISHEDIT? 126765 . 131442)) (131445 132104 (
-\TEDIT.THELP 131455 . 132102)) (132138 141568 (\TEDIT.PARAPIECES 132148 . 134421) (\TEDIT.PARACHNOS 
-134423 . 135315) (\TEDIT.PARA.FIRST 135317 . 138418) (\TEDIT.PARA.LAST 138420 . 141566)) (141569 
-148664 (\TEDIT.WORD.FIRST 141579 . 145583) (\TEDIT.WORD.LAST 145585 . 148662)) (148865 149142 (
-TEDITSYSTEMDATE 148875 . 149140)) (149278 149485 (TEDIT.IMAGESOURCEP 149288 . 149483)))))
+  (FILEMAP (NIL (4745 7139 (MAKE-TEDIT-EXPORTS.ALL 4755 . 5301) (UPDATE-TEDIT 5303 . 6232) (EDIT-TEDIT 
+6234 . 7137)) (8475 37666 (TEDIT 8485 . 11099) (TEXTSTREAM 11101 . 12990) (TEXTSTREAMP 12992 . 13376) 
+(COERCETEXTSTREAM 13378 . 17589) (TEDIT.CONCAT 17591 . 20893) (TEDITSTRING 20895 . 21809) (TEDIT-SEE 
+21811 . 22575) (TEDIT.COPY 22577 . 24722) (TEDIT.DELETE 24724 . 26085) (TEDIT.INSERT 26087 . 29056) (
+TEDIT.TERPRI 29058 . 30172) (TEDIT.KILL 30174 . 31268) (TEDIT.QUIT 31270 . 32636) (TEDIT.MOVE 32638 . 
+33526) (TEDIT.STRINGWIDTH 33528 . 34199) (TEDIT.CHARWIDTH 34201 . 36443) (TEDIT.PARAGRAPH.BOUNDARIES 
+36445 . 37664)) (37667 39608 (TEXTOBJ 37677 . 38142) (COERCETEXTOBJ 38144 . 39606)) (41060 43059 (
+TDRIBBLE 41070 . 43057)) (43100 56068 (TEDIT.INSERT.OBJECT 43110 . 47591) (TEDIT.EDIT.OBJECT 47593 . 
+50644) (TEDIT.OBJECT.CHANGED 50646 . 53939) (TEDIT.MAP.OBJECTS 53941 . 55596) (\TEDIT.FIRST.OBJPIECE 
+55598 . 55831) (\TEDIT.NEXT.OBJPIECE 55833 . 56066)) (56091 63534 (\TEDIT.CONCAT.PAGEFRAMES 56101 . 
+61168) (\TEDIT.GET.PAGE.HEADINGS 61170 . 62199) (\TEDIT.CONCAT.INSTALL.HEADINGS 62201 . 63532)) (63535
+ 67262 (\TEDIT.MOVE.MSG 63545 . 65626) (\TEDIT.READONLY 65628 . 67260)) (67263 74028 (TEDIT.NCHARS 
+67273 . 67646) (TEDIT.RPLCHARCODE 67648 . 71512) (TEDIT.NTHCHARCODE 71514 . 73557) (TEDIT.NTHCHAR 
+73559 . 74026)) (74074 131809 (\TEDIT1 74084 . 76161) (\TEDIT.INSERT 76163 . 82362) (\TEDIT.MOVE 82364
+ . 90678) (\TEDIT.COPY 90680 . 94559) (\TEDIT.REPLACE.SELPIECES 94561 . 99097) (
+\TEDIT.INSERT.SELPIECES 99099 . 102096) (\TEDIT.RESTARTFN 102098 . 104603) (\TEDIT.CHARDELETE 104605
+ . 107650) (\TEDIT.COPYPIECE 107652 . 112814) (\TEDIT.APPLY.OBJFN 112816 . 117077) (\TEDIT.DELETE 
+117079 . 121447) (\TEDIT.DIFFUSE.PARALOOKS 121449 . 123720) (\TEDIT.WORDDELETE 123722 . 125337) (
+\TEDIT.WORDDELETE.FORWARD 125339 . 127128) (\TEDIT.FINISHEDIT? 127130 . 131807)) (131810 132469 (
+\TEDIT.THELP 131820 . 132467)) (132503 141933 (\TEDIT.PARAPIECES 132513 . 134786) (\TEDIT.PARACHNOS 
+134788 . 135680) (\TEDIT.PARA.FIRST 135682 . 138783) (\TEDIT.PARA.LAST 138785 . 141931)) (141934 
+149029 (\TEDIT.WORD.FIRST 141944 . 145948) (\TEDIT.WORD.LAST 145950 . 149027)) (149230 149507 (
+TEDITSYSTEMDATE 149240 . 149505)) (149643 149850 (TEDIT.IMAGESOURCEP 149653 . 149848)))))
 STOP
